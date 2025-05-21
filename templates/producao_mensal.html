@@ -33,7 +33,7 @@
             <select class="form-select" id="usina_id" required>
                 <option value="">Selecione</option>
                 {% for usina in usinas %}
-                    <option value="{{ usina[0] }}" {% if usina[0] == usina_id %}selected{% endif %}>{{ usina[1] }}</option>
+                    <option value="{{ usina.id }}" {% if usina_id|int == usina.id %}selected{% endif %}>{{ usina.nome }}</option>
                 {% endfor %}
             </select>
         </div>

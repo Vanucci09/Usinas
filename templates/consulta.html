@@ -18,7 +18,7 @@
                 <select name="usina_id" id="usina_id" class="form-select">
                     <option value="">Todas</option>
                     {% for usina in usinas %}
-                        <option value="{{ usina[0] }}" {% if usina_id|int == usina[0] %}selected{% endif %}>{{ usina[2] }}</option>
+                        <option value="{{ usina.id }}" {% if usina_id|int == usina.id %}selected{% endif %}>{{ usina.nome }}</option>
                     {% endfor %}
                 </select>
             </div>

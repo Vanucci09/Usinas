@@ -1,85 +1,41 @@
-import sqlite3
 from flask import Flask, render_template, request, redirect, url_for
-from datetime import date
+from datetime import date, datetime
 from calendar import monthrange
 import os
 import pandas as pd
 from werkzeug.utils import secure_filename
-import openpyxl
+from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
 
+# Configuração do banco de dados PostgreSQL
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:Fl%40mengo09@localhost:5432/usinas_db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+
+# Modelos
+class Usina(db.Model):
+    __tablename__ = 'usinas'
+    id = db.Column(db.Integer, primary_key=True)
+    cc = db.Column(db.String, nullable=False)
+    nome = db.Column(db.String, nullable=False)
+    previsao_mensal = db.Column(db.Float)
+
+class Geracao(db.Model):
+    __tablename__ = 'geracoes'
+    id = db.Column(db.Integer, primary_key=True)
+    usina_id = db.Column(db.Integer, db.ForeignKey('usinas.id'))
+    data = db.Column(db.Date, nullable=False)
+    energia_kwh = db.Column(db.Float)
+
+# Pasta para uploads
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# Inicializa o banco de dados (executa apenas uma vez)
-def init_db():
-    with sqlite3.connect('usinas.db') as conn:
-        cursor = conn.cursor()
-        cursor.execute('''CREATE TABLE IF NOT EXISTS usinas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            cc TEXT NOT NULL,
-            nome TEXT NOT NULL,
-            previsao_mensal REAL
-        )''')
-        cursor.execute('''CREATE TABLE IF NOT EXISTS geracoes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            usina_id INTEGER,
-            data TEXT,
-            energia_kwh REAL,
-            FOREIGN KEY (usina_id) REFERENCES usinas(id)
-        )''')
-        conn.commit()
-
 @app.route('/')
 def index():
     return redirect(url_for('cadastrar_usina'))
-
-@app.route('/producao_mensal/<int:usina_id>/<int:ano>/<int:mes>')
-def producao_mensal(usina_id, ano, mes):
-    with sqlite3.connect('usinas.db') as conn:
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
-        usina_nome = cursor.execute("SELECT nome FROM usinas WHERE id = ?", (usina_id,)).fetchone()[0]
-        cursor.execute("""
-            SELECT data, energia_kwh 
-            FROM geracoes 
-            WHERE usina_id = ? AND strftime('%Y-%m', data) = ?
-            ORDER BY data
-        """, (usina_id, f"{ano:04d}-{mes:02d}"))
-        resultados = cursor.fetchall()
-
-        dias_mes = monthrange(ano, mes)[1]
-        totais = [0] * dias_mes
-        detalhes = []
-        soma = 0
-
-        for data_str, energia in resultados:
-            dia = int(data_str[-2:])
-            totais[dia - 1] = energia
-            soma += energia
-            detalhes.append({'data': data_str, 'energia_kwh': energia})
-
-        dias_com_dado = len(resultados)
-        media_diaria = soma / dias_com_dado if dias_com_dado > 0 else 0
-        previsao_total = round(media_diaria * dias_mes, 2)
-
-        usinas = cursor.execute("SELECT id, nome FROM usinas").fetchall()
-
-    return render_template('producao_mensal.html',
-                           usina_nome=usina_nome,
-                           usina_id=usina_id,
-                           ano=ano,
-                           mes=mes,
-                           usinas=usinas,
-                           meses=[str(i+1) for i in range(dias_mes)],
-                           totais=totais,
-                           detalhes=detalhes,
-                           previsao_total=previsao_total,
-                           media_diaria=round(media_diaria, 2),
-                           soma_total=soma)
 
 @app.route('/cadastrar_usina', methods=['GET', 'POST'])
 def cadastrar_usina():
@@ -87,106 +43,63 @@ def cadastrar_usina():
         cc = request.form['cc']
         nome = request.form['nome']
         previsao_mensal = request.form['previsao_mensal']
-        with sqlite3.connect('usinas.db') as conn:
-            conn.execute("INSERT INTO usinas (cc, nome, previsao_mensal) VALUES (?, ?, ?)", (cc, nome, previsao_mensal))
-            conn.commit()
+        nova_usina = Usina(cc=cc, nome=nome, previsao_mensal=previsao_mensal)
+        db.session.add(nova_usina)
+        db.session.commit()
         return redirect(url_for('cadastrar_usina'))
     return render_template('cadastrar_usina.html')
 
 @app.route('/cadastrar_geracao', methods=['GET', 'POST'])
 def cadastrar_geracao():
-    with sqlite3.connect('usinas.db') as conn:
-        conn.row_factory = sqlite3.Row
-        usinas = conn.execute("SELECT * FROM usinas").fetchall()
-
+    usinas = Usina.query.all()
     if request.method == 'POST':
         usina_id = request.form['usina_id']
-        data = request.form['data']
-        energia = request.form['energia']
+        data = datetime.strptime(request.form['data'], '%Y-%m-%d').date()
+        energia = float(request.form['energia'])
 
-        with sqlite3.connect('usinas.db') as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT id FROM geracoes WHERE usina_id = ? AND data = ?", (usina_id, data))
-            existente = cursor.fetchone()
+        existente = Geracao.query.filter_by(usina_id=usina_id, data=data).first()
+        if existente:
+            return render_template('cadastrar_geracao.html', usinas=usinas, mensagem="Já existe um registro para esta usina nesta data.")
 
-            if existente:
-                return render_template('cadastrar_geracao.html', usinas=usinas,
-                                       mensagem="Já existe um registro para esta usina nesta data.")
-
-            cursor.execute("INSERT INTO geracoes (usina_id, data, energia_kwh) VALUES (?, ?, ?)",
-                           (usina_id, data, energia))
-            conn.commit()
+        nova_geracao = Geracao(usina_id=usina_id, data=data, energia_kwh=energia)
+        db.session.add(nova_geracao)
+        db.session.commit()
         return redirect(url_for('cadastrar_geracao'))
 
     return render_template('cadastrar_geracao.html', usinas=usinas)
 
 @app.route('/listar_geracoes')
 def listar_geracoes():
-    data_inicio_default = date.today().replace(day=1).isoformat()
-    data_fim_default = date.today().isoformat()
+    data_inicio = request.args.get('data_inicio', date.today().replace(day=1).isoformat())
+    data_fim = request.args.get('data_fim', date.today().isoformat())
+    usina_id = request.args.get('usina_id')
 
-    usinas = []
-    geracoes = []
+    query = db.session.query(Geracao, Usina).join(Usina).filter(Geracao.data.between(data_inicio, data_fim))
+    if usina_id:
+        query = query.filter(Usina.id == usina_id)
 
-    with sqlite3.connect('usinas.db') as conn:
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        usinas = cursor.execute("SELECT * FROM usinas").fetchall()
+    geracoes = query.order_by(Geracao.data.asc()).all()
+    usinas = Usina.query.all()
 
-        data_inicio = request.args.get('data_inicio', data_inicio_default)
-        data_fim = request.args.get('data_fim', data_fim_default)
-        usina_id = request.args.get('usina_id')
-
-        query = '''
-            SELECT g.id, u.nome, g.data, g.energia_kwh
-            FROM geracoes g
-            JOIN usinas u ON g.usina_id = u.id
-            WHERE g.data BETWEEN ? AND ?
-        '''
-        params = [data_inicio, data_fim]
-
-        if usina_id:
-            query += " AND u.id = ?"
-            params.append(usina_id)
-
-        query += " ORDER BY g.data ASC"
-        geracoes = cursor.execute(query, params).fetchall()
-
-    return render_template(
-        'listar_geracoes.html',
-        geracoes=geracoes,
-        usinas=usinas,
-        data_inicio_default=data_inicio_default,
-        data_fim_default=data_fim_default
-    )
+    return render_template('listar_geracoes.html', geracoes=geracoes, usinas=usinas, data_inicio_default=data_inicio, data_fim_default=data_fim)
 
 @app.route('/editar_geracao/<int:id>', methods=['GET', 'POST'])
 def editar_geracao(id):
-    with sqlite3.connect('usinas.db') as conn:
-        cursor = conn.cursor()
+    geracao = Geracao.query.get_or_404(id)
+    if request.method == 'POST':
+        nova_energia = float(request.form['energia'])
+        geracao.energia_kwh = nova_energia
+        db.session.commit()
+        return redirect(url_for('listar_geracoes'))
 
-        if request.method == 'POST':
-            nova_energia = request.form['energia']
-            cursor.execute("UPDATE geracoes SET energia_kwh = ? WHERE id = ?", (nova_energia, id))
-            conn.commit()
-            return redirect(url_for('listar_geracoes'))
-
-        cursor.execute('''
-            SELECT g.id, u.nome, g.data, g.energia_kwh
-            FROM geracoes g
-            JOIN usinas u ON g.usina_id = u.id
-            WHERE g.id = ?
-        ''', (id,))
-        geracao = cursor.fetchone()
-
-    return render_template('editar_geracao.html', geracao=geracao)
+    usina = Usina.query.get(geracao.usina_id)
+    return render_template('editar_geracao.html', geracao=geracao, usina=usina)
 
 @app.route('/excluir_geracao/<int:id>', methods=['GET'])
 def excluir_geracao(id):
-    with sqlite3.connect('usinas.db') as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM geracoes WHERE id = ?", (id,))
-        conn.commit()
+    geracao = Geracao.query.get_or_404(id)
+    db.session.delete(geracao)
+    db.session.commit()
     return redirect(url_for('listar_geracoes'))
 
 @app.route('/consulta')
@@ -195,24 +108,12 @@ def consulta():
     data_inicio = request.args.get('data_inicio', date.today().replace(day=1).isoformat())
     data_fim = request.args.get('data_fim', date.today().isoformat())
 
-    with sqlite3.connect('usinas.db') as conn:
-        cursor = conn.cursor()
+    query = db.session.query(Geracao, Usina).join(Usina).filter(Geracao.data.between(data_inicio, data_fim))
+    if usina_id:
+        query = query.filter(Usina.id == usina_id)
 
-        query = '''
-            SELECT u.id, u.nome, u.previsao_mensal, g.data, g.energia_kwh
-            FROM geracoes g
-            JOIN usinas u ON g.usina_id = u.id
-            WHERE g.data BETWEEN ? AND ?
-        '''
-        params = [data_inicio, data_fim]
-
-        if usina_id:
-            query += " AND u.id = ?"
-            params.append(usina_id)
-
-        query += " ORDER BY g.data ASC"
-        resultados = cursor.execute(query, params).fetchall()
-        usinas = conn.execute("SELECT * FROM usinas").fetchall()
+    resultados = query.order_by(Geracao.data.asc()).all()
+    usinas = Usina.query.all()
 
     total = 0
     data = []
@@ -220,48 +121,74 @@ def consulta():
     geracoes = []
     previsoes = []
 
-    for id_usina, nome, previsao_mensal, data_geracao, energia in resultados:
-        dias_no_mes = monthrange(int(data_geracao[:4]), int(data_geracao[5:7]))[1]
-        previsao_diaria = previsao_mensal / dias_no_mes
-        producao_negativa = energia < previsao_diaria
+    for geracao, usina in resultados:
+        dias_no_mes = monthrange(geracao.data.year, geracao.data.month)[1]
+        previsao_diaria = usina.previsao_mensal / dias_no_mes
+        producao_negativa = geracao.energia_kwh < previsao_diaria
 
         data.append({
-            'nome': nome,
-            'data': data_geracao,
-            'energia_kwh': energia,
+            'nome': usina.nome,
+            'data': geracao.data,
+            'energia_kwh': geracao.energia_kwh,
             'previsao_diaria': previsao_diaria,
             'producao_negativa': producao_negativa,
         })
 
-        dias.append(data_geracao)
-        geracoes.append(energia)
+        dias.append(geracao.data.day)
+        geracoes.append(geracao.energia_kwh)
         previsoes.append(previsao_diaria)
-        total += energia
+        total += geracao.energia_kwh
+
+    return render_template('consulta.html', resultados=data, total=total, usinas=usinas, usina_id=usina_id,
+                           data_inicio=data_inicio, data_fim=data_fim, dias=dias, geracoes=geracoes, previsoes=previsoes)
+
+@app.route('/producao_mensal/<int:usina_id>/<int:ano>/<int:mes>')
+def producao_mensal(usina_id, ano, mes):
+    usina = Usina.query.get_or_404(usina_id)
+    data_inicio = date(ano, mes, 1)
+    data_fim = date(ano + 1, 1, 1) if mes == 12 else date(ano, mes + 1, 1)
+
+    resultados = Geracao.query.filter(
+        Geracao.usina_id == usina_id,
+        Geracao.data >= data_inicio,
+        Geracao.data < data_fim
+    ).order_by(Geracao.data).all()
+
+    dias_mes = monthrange(ano, mes)[1]
+    totais = [0] * dias_mes
+    detalhes = []
+    soma = 0
+
+    for r in resultados:
+        dia = r.data.day
+        totais[dia - 1] = r.energia_kwh
+        soma += r.energia_kwh
+        detalhes.append({'data': r.data, 'energia_kwh': r.energia_kwh})
+
+    dias_com_dado = len(resultados)
+    media_diaria = soma / dias_com_dado if dias_com_dado > 0 else 0
+    previsao_total = round(media_diaria * dias_mes, 2)
+    usinas = Usina.query.all()
 
     return render_template(
-        'consulta.html',
-        resultados=data,
-        total=total,
-        usinas=usinas,
+        'producao_mensal.html',
+        usina_nome=usina.nome,
         usina_id=usina_id,
-        data_inicio=data_inicio,
-        data_fim=data_fim,
-        dias=dias,
-        geracoes=geracoes,
-        previsoes=previsoes
+        ano=ano,
+        mes=mes,
+        usinas=usinas,
+        meses=[str(i + 1) for i in range(dias_mes)],
+        totais=totais,
+        detalhes=detalhes,
+        previsao_total=previsao_total,
+        media_diaria=round(media_diaria, 2),
+        soma_total=soma
     )
-
-def formato_brasileiro(valor):
-    return f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
-
-app.jinja_env.filters['formato_brasileiro'] = formato_brasileiro
 
 @app.route('/importar_planilha', methods=['GET', 'POST'])
 def importar_planilha():
     mensagem = ''
-    with sqlite3.connect('usinas.db') as conn:
-        conn.row_factory = sqlite3.Row
-        usinas = conn.execute("SELECT * FROM usinas").fetchall()
+    usinas = Usina.query.all()
 
     if request.method == 'POST':
         arquivo = request.files.get('arquivo')
@@ -278,24 +205,22 @@ def importar_planilha():
                 if not {'data', 'energia_kwh'}.issubset(df.columns):
                     mensagem = "A planilha deve conter as colunas 'data' e 'energia_kwh'."
                 else:
-                    with sqlite3.connect('usinas.db') as conn:
-                        cursor = conn.cursor()
-                        inseridos = 0
-                        duplicados = 0
+                    inseridos = 0
+                    duplicados = 0
 
-                        for _, linha in df.iterrows():
-                            data = str(linha['data'])[:10]
-                            energia = linha['energia_kwh']
-                            cursor.execute("SELECT id FROM geracoes WHERE usina_id = ? AND data = ?", (usina_id, data))
-                            if cursor.fetchone():
-                                duplicados += 1
-                                continue
+                    for _, linha in df.iterrows():
+                        data = pd.to_datetime(linha['data']).date()
+                        energia = linha['energia_kwh']
+                        existente = Geracao.query.filter_by(usina_id=usina_id, data=data).first()
+                        if existente:
+                            duplicados += 1
+                            continue
 
-                            cursor.execute("INSERT INTO geracoes (usina_id, data, energia_kwh) VALUES (?, ?, ?)",
-                                           (usina_id, data, energia))
-                            inseridos += 1
-                        conn.commit()
+                        nova_geracao = Geracao(usina_id=usina_id, data=data, energia_kwh=energia)
+                        db.session.add(nova_geracao)
+                        inseridos += 1
 
+                    db.session.commit()
                     mensagem = f"{inseridos} registros inseridos. {duplicados} ignorados por já existirem."
             except Exception as e:
                 mensagem = f"Erro ao processar a planilha: {str(e)}"
@@ -304,6 +229,13 @@ def importar_planilha():
 
     return render_template('importar_planilha.html', mensagem=mensagem, usinas=usinas)
 
+# Filtro customizado
+def formato_brasileiro(valor):
+    return f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+
+app.jinja_env.filters['formato_brasileiro'] = formato_brasileiro
+
 if __name__ == '__main__':
-    init_db()
+    with app.app_context():
+        db.create_all()
     app.run(debug=True)
