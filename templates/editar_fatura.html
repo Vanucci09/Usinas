@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Editar Fatura</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+<div class="container mt-5 p-4 bg-white rounded shadow">
+    <h2 class="mb-4 text-primary text-center">Editar Fatura</h2>
+
+    <form method="POST" class="needs-validation" novalidate>
+        <div class="mb-3">
+            <label class="form-label">Usina</label>
+            <select name="usina_id" id="usina_id" class="form-select" required>
+                {% for usina in usinas %}
+                    <option value="{{ usina.id }}" {% if usina.id == fatura.cliente.usina_id %}selected{% endif %}>{{ usina.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Cliente</label>
+            <select name="cliente_id" id="cliente_id" class="form-select" required>
+                {% for cliente in clientes %}
+                    <option value="{{ cliente.id }}" {% if cliente.id == fatura.cliente_id %}selected{% endif %}>{{ cliente.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Mês</label>
+                <input type="number" class="form-control" name="mes" value="{{ fatura.mes_referencia }}" min="1" max="12" required>
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Ano</label>
+                <input type="number" class="form-control" name="ano" value="{{ fatura.ano_referencia }}" min="2000" max="2100" required>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Início da Leitura</label>
+                <input type="date" class="form-control" name="inicio_leitura" value="{{ fatura.inicio_leitura }}" required>
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Fim da Leitura</label>
+                <input type="date" class="form-control" name="fim_leitura" value="{{ fatura.fim_leitura }}" required>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Tarifa Neoenergia (R$/kWh)</label>
+                <input type="text" class="form-control" name="tarifa_neoenergia" value="{{ fatura.tarifa_neoenergia }}" required>
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">ICMS (%)</label>
+                <input type="text" class="form-control" name="icms" value="{{ fatura.icms }}" required>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Consumo Total</label>
+                <input type="text" class="form-control" name="consumo_total" value="{{ fatura.consumo_total }}" required>
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Consumo Neoenergia</label>
+                <input type="text" class="form-control" name="consumo_neoenergia" value="{{ fatura.consumo_neoenergia }}" required>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Consumo da Usina</label>
+                <input type="text" class="form-control" name="consumo_usina" value="{{ fatura.consumo_usina }}" required>
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Saldo na Unidade</label>
+                <input type="text" class="form-control" name="saldo_unidade" value="{{ fatura.saldo_unidade }}" required>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Energia Injetada</label>
+                <input type="text" class="form-control" name="injetado" value="{{ fatura.injetado }}" required>
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Valor da Conta Neoenergia</label>
+                <input type="text" class="form-control" name="valor_conta_neoenergia" value="{{ fatura.valor_conta_neoenergia }}" required>
+            </div>
+        </div>
+
+        <div class="d-grid">
+            <button class="btn btn-primary btn-lg" type="submit">Salvar Alterações</button>
+        </div>
+    </form>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

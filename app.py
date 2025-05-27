@@ -1,10 +1,16 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, jsonify, make_response, send_file
 from datetime import date, datetime
 from calendar import monthrange
 import os
 import pandas as pd
 from werkzeug.utils import secure_filename
 from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
+from sqlalchemy import Numeric
+from decimal import Decimal, ROUND_HALF_UP
+import fitz
+from PIL import Image
+
 
 app = Flask(__name__)
 
@@ -16,9 +22,9 @@ if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
-
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 
 
 # Modelos
@@ -28,6 +34,7 @@ class Usina(db.Model):
     cc = db.Column(db.String, nullable=False)
     nome = db.Column(db.String, nullable=False)
     previsao_mensal = db.Column(db.Float)
+    rateios = db.relationship('Rateio', backref='usina', cascade="all, delete-orphan")
 
 class Geracao(db.Model):
     __tablename__ = 'geracoes'
@@ -36,6 +43,47 @@ class Geracao(db.Model):
     data = db.Column(db.Date, nullable=False)
     energia_kwh = db.Column(db.Float)
 
+class Cliente(db.Model):
+    __tablename__ = 'clientes'
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String, nullable=False)
+    cpf_cnpj = db.Column(db.String, nullable=False)
+    endereco = db.Column(db.String, nullable=False)
+    codigo_unidade = db.Column(db.String, nullable=False)
+    usina_id = db.Column(db.Integer, db.ForeignKey('usinas.id'), nullable=False)
+
+    rateios = db.relationship('Rateio', backref='cliente', cascade="all, delete-orphan")
+    usina = db.relationship('Usina')
+
+class Rateio(db.Model):
+    __tablename__ = 'rateios'
+    id = db.Column(db.Integer, primary_key=True)
+    usina_id = db.Column(db.Integer, db.ForeignKey('usinas.id'), nullable=False)
+    cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=False)
+    percentual = db.Column(db.Float, nullable=False)
+    tarifa_kwh = db.Column(db.Float, nullable=False)
+    
+class FaturaMensal(db.Model):
+    __tablename__ = 'faturas_mensais'
+    id = db.Column(db.Integer, primary_key=True)
+    cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=False)
+    mes_referencia = db.Column(db.Integer, nullable=False)
+    ano_referencia = db.Column(db.Integer, nullable=False)
+    inicio_leitura = db.Column(db.Date, nullable=False)
+    fim_leitura = db.Column(db.Date, nullable=False)
+    tarifa_neoenergia = db.Column(Numeric(10, 7), nullable=False)
+    icms = db.Column(db.Float, nullable=False)
+    consumo_total = db.Column(db.Float, nullable=False)
+    consumo_neoenergia = db.Column(db.Float, nullable=False)
+    consumo_usina = db.Column(db.Float, nullable=False)
+    saldo_unidade = db.Column(db.Float, nullable=False)
+    injetado = db.Column(db.Float, nullable=False)
+    valor_conta_neoenergia = db.Column(db.Float, nullable=False)
+    identificador = db.Column(db.String, unique=True, nullable=False)
+
+    cliente = db.relationship('Cliente', backref='faturas')
+
+
 # Pasta para uploads
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -43,7 +91,7 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 @app.route('/')
 def index():
-    return redirect(url_for('cadastrar_usina'))
+    return render_template('index.html')
 
 @app.route('/cadastrar_usina', methods=['GET', 'POST'])
 def cadastrar_usina():
@@ -239,9 +287,439 @@ def importar_planilha():
 
 # Filtro customizado
 def formato_brasileiro(valor):
-    return f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+    try:
+        return f"R$ {float(valor):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+    except (ValueError, TypeError):
+        return "R$ 0,00"
+
+def formato_tarifa(valor):
+    try:
+        return f"R$ {float(valor):,.7f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+    except (ValueError, TypeError):
+        return "R$ 0,0000000"
 
 app.jinja_env.filters['formato_brasileiro'] = formato_brasileiro
+app.jinja_env.filters['formato_tarifa'] = formato_tarifa
+
+
+@app.route('/clientes', methods=['GET', 'POST'])
+def cadastrar_cliente():
+    usinas = Usina.query.all()
+
+    if request.method == 'POST':
+        nome = request.form['nome']
+        cpf_cnpj = request.form['cpf_cnpj']
+        endereco = request.form['endereco']
+        codigo_unidade = request.form['codigo_unidade']
+        usina_id = request.form['usina_id']
+
+        cliente = Cliente(
+            nome=nome,
+            cpf_cnpj=cpf_cnpj,
+            endereco=endereco,
+            codigo_unidade=codigo_unidade,
+            usina_id=usina_id
+        )
+        db.session.add(cliente)
+        db.session.commit()
+        return redirect(url_for('cadastrar_cliente'))
+
+    clientes = Cliente.query.all()
+    return render_template('clientes.html', clientes=clientes, usinas=usinas)
+
+@app.route('/rateios', methods=['GET', 'POST'])
+def cadastrar_rateio():
+    usinas = Usina.query.all()
+    clientes = Cliente.query.all()
+
+    if request.method == 'POST':
+        usina_id = request.form['usina_id']
+        cliente_id = request.form['cliente_id']
+        percentual = float(request.form['percentual'])
+        tarifa_kwh = float(request.form['tarifa_kwh'])
+
+        rateio = Rateio(usina_id=usina_id, cliente_id=cliente_id,
+                        percentual=percentual, tarifa_kwh=tarifa_kwh)
+        db.session.add(rateio)
+        db.session.commit()
+        return redirect(url_for('cadastrar_rateio'))
+
+    rateios = Rateio.query.all()
+    return render_template('rateios.html', rateios=rateios, usinas=usinas, clientes=clientes)
+
+@app.route('/editar_rateio/<int:id>', methods=['GET', 'POST'])
+def editar_rateio(id):
+    rateio = Rateio.query.get_or_404(id)
+    usinas = Usina.query.all()
+    clientes = Cliente.query.all()
+
+    if request.method == 'POST':
+        rateio.usina_id = request.form['usina_id']
+        rateio.cliente_id = request.form['cliente_id']
+        rateio.percentual = float(request.form['percentual'])
+        rateio.tarifa_kwh = float(request.form['tarifa_kwh'])
+        db.session.commit()
+        return redirect(url_for('cadastrar_rateio'))
+
+    return render_template('editar_rateio.html', rateio=rateio, usinas=usinas, clientes=clientes)
+
+@app.route('/excluir_rateio/<int:id>', methods=['POST'])
+def excluir_rateio(id):
+    rateio = Rateio.query.get_or_404(id)
+    db.session.delete(rateio)
+    db.session.commit()
+    return redirect(url_for('cadastrar_rateio'))
+
+@app.route('/editar_cliente/<int:id>', methods=['GET', 'POST'])
+def editar_cliente(id):
+    cliente = Cliente.query.get_or_404(id)
+    usinas = Usina.query.all()
+
+    if request.method == 'POST':
+        cliente.nome = request.form['nome']
+        cliente.cpf_cnpj = request.form['cpf_cnpj']
+        cliente.endereco = request.form['endereco']
+        cliente.codigo_unidade = request.form['codigo_unidade']
+        cliente.usina_id = request.form['usina_id']
+        db.session.commit()
+        return redirect(url_for('cadastrar_cliente'))
+
+    return render_template('editar_cliente.html', cliente=cliente, usinas=usinas)
+
+@app.route('/excluir_cliente/<int:id>')
+def excluir_cliente(id):
+    cliente = Cliente.query.get_or_404(id)
+    db.session.delete(cliente)
+    db.session.commit()
+    return redirect(url_for('cadastrar_cliente'))
+
+import traceback  # adicione no topo do seu arquivo se ainda não tiver
+
+@app.route('/faturamento', methods=['GET', 'POST'])
+def faturamento():
+    usinas = Usina.query.all()
+    clientes = Cliente.query.all()
+    mensagem = ''
+
+    def limpar_valor(valor):
+        if not valor:
+            return 0.0
+        return float(
+            valor.replace('R$', '')
+                 .replace('%', '')
+                 .replace('.', '')
+                 .replace(',', '.')
+                 .strip()
+        )
+
+    if request.method == 'POST':
+        try:
+            cliente_id = int(request.form['cliente_id'])
+            usina_id = int(request.form['usina_id'])
+            mes = int(request.form['mes'])
+            ano = int(request.form['ano'])
+
+            inicio_leitura = datetime.strptime(request.form['inicio_leitura'], '%Y-%m-%d').date()
+            fim_leitura = datetime.strptime(request.form['fim_leitura'], '%Y-%m-%d').date()
+
+            tarifa_neoenergia = limpar_valor(request.form['tarifa_neoenergia'])
+            icms = limpar_valor(request.form['icms'])
+            consumo_total = limpar_valor(request.form['consumo_total'])
+            consumo_neoenergia = limpar_valor(request.form['consumo_neoenergia'])
+            consumo_usina = limpar_valor(request.form['consumo_usina'])
+            saldo_unidade = limpar_valor(request.form['saldo_unidade'])
+            injetado = limpar_valor(request.form['injetado'])
+            valor_conta_neoenergia = limpar_valor(request.form['valor_conta_neoenergia'])
+
+            identificador = f"{cliente_id}-{mes:02d}-{ano}"
+
+            existente = FaturaMensal.query.filter_by(identificador=identificador).first()
+            if existente:
+                mensagem = 'Já existe uma fatura para esse cliente neste mês.'
+            else:
+                fatura = FaturaMensal(
+                    cliente_id=cliente_id,
+                    mes_referencia=mes,
+                    ano_referencia=ano,
+                    inicio_leitura=inicio_leitura,
+                    fim_leitura=fim_leitura,
+                    tarifa_neoenergia=tarifa_neoenergia,
+                    icms=icms,
+                    consumo_total=consumo_total,
+                    consumo_neoenergia=consumo_neoenergia,
+                    consumo_usina=consumo_usina,
+                    saldo_unidade=saldo_unidade,
+                    injetado=injetado,
+                    valor_conta_neoenergia=valor_conta_neoenergia,
+                    identificador=identificador
+                )
+                db.session.add(fatura)
+                db.session.commit()
+                mensagem = 'Fatura cadastrada com sucesso.'
+        except Exception as e:
+            db.session.rollback()
+            mensagem = f"Erro ao salvar fatura: {str(e)}"
+
+    return render_template('faturamento.html', usinas=usinas, clientes=clientes, mensagem=mensagem)
+
+@app.route('/clientes_por_usina/<int:usina_id>')
+def clientes_por_usina(usina_id):
+    clientes = Cliente.query.filter_by(usina_id=usina_id).all()
+    return jsonify([{'id': c.id, 'nome': c.nome} for c in clientes])
+
+@app.route('/faturas')
+def listar_faturas():
+    faturas = FaturaMensal.query.join(Cliente).order_by(FaturaMensal.ano_referencia.desc(), FaturaMensal.mes_referencia.desc()).all()
+    return render_template('listar_faturas.html', faturas=faturas)
+
+@app.route('/editar_fatura/<int:id>', methods=['GET', 'POST'])
+def editar_fatura(id):
+    fatura = FaturaMensal.query.get_or_404(id)
+    clientes = Cliente.query.all()
+    usinas = Usina.query.all()
+
+    if request.method == 'POST':
+        fatura.mes_referencia = int(request.form['mes'])
+        fatura.ano_referencia = int(request.form['ano'])
+        fatura.inicio_leitura = datetime.strptime(request.form['inicio_leitura'], '%Y-%m-%d').date()
+        fatura.fim_leitura = datetime.strptime(request.form['fim_leitura'], '%Y-%m-%d').date()
+        fatura.tarifa_neoenergia = float(request.form['tarifa_neoenergia'].replace(',', '.'))
+        fatura.icms = float(request.form['icms'].replace(',', '.'))
+        fatura.consumo_total = float(request.form['consumo_total'].replace(',', '.'))
+        fatura.consumo_neoenergia = float(request.form['consumo_neoenergia'].replace(',', '.'))
+        fatura.consumo_usina = float(request.form['consumo_usina'].replace(',', '.'))
+        fatura.saldo_unidade = float(request.form['saldo_unidade'].replace(',', '.'))
+        fatura.injetado = float(request.form['injetado'].replace(',', '.'))
+        fatura.valor_conta_neoenergia = float(request.form['valor_conta_neoenergia'].replace(',', '.'))
+        db.session.commit()
+        return redirect(url_for('listar_faturas'))
+
+    return render_template('editar_fatura.html', fatura=fatura, clientes=clientes, usinas=usinas)
+
+@app.route('/relatorio/<int:fatura_id>')
+def relatorio_fatura(fatura_id):
+    
+    fatura = FaturaMensal.query.get_or_404(fatura_id)
+    cliente = Cliente.query.get(fatura.cliente_id)
+    usina = Usina.query.get(cliente.usina_id)
+
+    # Tarifas e dados da fatura atual
+    tarifa_base = Decimal(str(fatura.tarifa_neoenergia))
+    tarifa_neoenergia_aplicada = tarifa_base if fatura.icms == 20 else tarifa_base * Decimal('1.1023232323')
+    consumo_usina = Decimal(str(fatura.consumo_usina))
+    valor_conta = Decimal(str(fatura.valor_conta_neoenergia))
+
+    # Tarifa do cliente
+    rateio = Rateio.query.filter_by(cliente_id=cliente.id, usina_id=usina.id).first()
+    tarifa_cliente = Decimal(str(rateio.tarifa_kwh)) if rateio else Decimal('0')
+
+    # Economia da fatura atual
+    valor_usina = consumo_usina * tarifa_cliente
+    com_desconto = valor_conta + valor_usina
+    sem_desconto = consumo_usina * tarifa_neoenergia_aplicada + valor_conta
+    economia = sem_desconto - com_desconto
+
+    # Buscar todas as faturas anteriores do mesmo cliente (exceto a atual)
+    faturas_anteriores = FaturaMensal.query.filter(
+        FaturaMensal.cliente_id == cliente.id,
+        FaturaMensal.id != fatura.id,
+        (FaturaMensal.ano_referencia < fatura.ano_referencia) |
+        ((FaturaMensal.ano_referencia == fatura.ano_referencia) &
+         (FaturaMensal.mes_referencia < fatura.mes_referencia))
+    ).all()
+
+    # Somar a economia de cada fatura anterior
+    economia_total = Decimal('0')
+    for f in faturas_anteriores:
+        try:
+            tarifa_base_ant = Decimal(str(f.tarifa_neoenergia))
+            tarifa_aplicada_ant = tarifa_base_ant if f.icms == 20 else tarifa_base_ant * Decimal('1.1023232323')
+            consumo_usina_ant = Decimal(str(f.consumo_usina))
+            valor_conta_ant = Decimal(str(f.valor_conta_neoenergia))
+
+            valor_usina_ant = consumo_usina_ant * tarifa_cliente
+            com_desconto_ant = valor_conta_ant + valor_usina_ant
+            sem_desconto_ant = consumo_usina_ant * tarifa_aplicada_ant + valor_conta_ant
+
+            economia_ant = sem_desconto_ant - com_desconto_ant
+            economia_total += economia_ant
+        except Exception as e:
+            continue  # Ignora se algum dado estiver incompleto
+
+    economia_acumulada = economia + economia_total
+
+    # Ficha de compensação, se houver
+    pdf_path = f'boletos/boleto_{fatura.id}.pdf'
+    ficha_path = f'static/ficha_compensacao_{fatura.id}.png'
+    ficha_compensacao_img = extrair_ficha_compensacao(pdf_path, ficha_path) if os.path.exists(pdf_path) else None
+
+    return render_template(
+        'relatorio_fatura.html',
+        fatura=fatura,
+        cliente=cliente,
+        usina=usina,
+        tarifa_neoenergia_aplicada=tarifa_neoenergia_aplicada,
+        tarifa_cliente=tarifa_cliente,
+        valor_usina=valor_usina,
+        com_desconto=com_desconto,
+        sem_desconto=sem_desconto,
+        economia=economia,
+        economia_acumulada=economia_acumulada,
+        ficha_compensacao_img=ficha_compensacao_img
+    )
+
+    
+def extrair_ficha_compensacao(pdf_path, output_path='static/ficha_compensacao.png'):
+    doc = fitz.open(pdf_path)
+    page = doc.load_page(-1)  
+    pix = page.get_pixmap(dpi=300)
+    temp_img = "static/temp_page.png"
+    pix.save(temp_img)
+
+    imagem = Image.open(temp_img)
+    largura, altura = imagem.size
+    top = int(altura * 0.37)  
+    bottom = int(altura * 0.75)
+    ficha = imagem.crop((0, top, largura, bottom))
+    ficha.save(output_path)
+    return output_path
+
+@app.route('/upload_boleto', methods=['GET', 'POST'])
+def upload_boleto():
+    faturas = FaturaMensal.query.join(Cliente).order_by(FaturaMensal.ano_referencia.desc(), FaturaMensal.mes_referencia.desc()).all()
+    mensagem = ''
+
+    if request.method == 'POST':
+        fatura_id = request.form.get('fatura_id')
+        arquivo = request.files.get('boleto_pdf')
+
+        if not fatura_id or not arquivo:
+            mensagem = "Selecione uma fatura e envie um arquivo."
+        elif not arquivo.filename.endswith('.pdf'):
+            mensagem = "O arquivo deve ser um PDF."
+        else:
+            nome_arquivo = f"boleto_{fatura_id}.pdf"
+            caminho = os.path.join('boletos', nome_arquivo)
+            os.makedirs('boletos', exist_ok=True)
+            arquivo.save(caminho)
+            mensagem = f"Boleto da fatura {fatura_id} enviado com sucesso."
+
+    return render_template('upload_boleto.html', faturas=faturas, mensagem=mensagem)
+
+@app.route('/excluir_fatura/<int:id>', methods=['POST'])
+def excluir_fatura(id):
+    fatura = FaturaMensal.query.get_or_404(id)
+    db.session.delete(fatura)
+    db.session.commit()
+    return redirect(url_for('listar_faturas'))
+
+@app.route('/extrair_dados_fatura', methods=['POST'])
+def extrair_dados_fatura():
+    import re
+
+    arquivo = request.files.get('arquivo')
+    if not arquivo or not arquivo.filename.endswith('.pdf'):
+        return jsonify({'erro': 'Arquivo inválido.'}), 400
+
+    caminho_pdf = os.path.join('uploads', secure_filename(arquivo.filename))
+    os.makedirs('uploads', exist_ok=True)
+    arquivo.save(caminho_pdf)
+
+    # Ler PDF
+    doc = fitz.open(caminho_pdf)
+    texto = "\n".join([pagina.get_text() for pagina in doc])
+    linhas = texto.splitlines()
+    doc.close()
+
+    def encontrar_valor_com_rotulo(rotulo):
+        for linha in linhas:
+            if rotulo in linha:
+                partes = linha.split(":")
+                if len(partes) > 1:
+                    return partes[-1].strip().replace('.', '').replace(',', '.')
+        return None
+
+    def buscar_datas():
+        for i in range(len(linhas) - 1):
+            d1 = linhas[i].strip()
+            d2 = linhas[i + 1].strip()
+            if re.match(r'\d{2}/\d{2}/\d{4}', d1) and re.match(r'\d{2}/\d{2}/\d{4}', d2):
+                return d1, d2
+        return '', ''
+
+    def buscar_tarifa():
+        match = re.search(r'KWh\s+\d+\s+([\d.,]+)', texto)
+        return match.group(1).replace('.', '').replace(',', '.') if match else None
+
+    def buscar_aliquota_icms():
+        for linha in linhas:
+            if "12,00" in linha or "12.00" in linha:
+                return "12.00"
+        return None
+
+    def buscar_consumo_total():
+        for i, linha in enumerate(linhas):
+            if "ENERGIA ATIVA" in linha.upper() and i + 5 < len(linhas):
+                valor = linhas[i + 5].strip()
+                if re.match(r'^[\d.]+,\d{2}$', valor):
+                    return valor.replace('.', '').replace(',', '.')
+        return None
+
+    def buscar_consumo_neoenergia():
+        for i, linha in enumerate(linhas):
+            if "CONSUMO" in linha.upper():
+                for j in range(i + 1, min(i + 5, len(linhas))):
+                    if linhas[j].strip() == "KWh" and j + 1 < len(linhas):
+                        prox = linhas[j + 1].strip()
+                        if re.match(r'^\d+$', prox):
+                            return prox
+        return None
+
+    def buscar_valor_conta():
+        for i, linha in enumerate(linhas):
+            if "TOTAL A PAGAR" in linha.upper() and i >= 1:
+                valor = linhas[i - 1].strip()
+                if re.match(r'^[\d.]+,\d{2}$', valor):
+                    return valor.replace('.', '').replace(',', '.')
+        return None
+
+    # Buscar dados
+    inicio_leitura, fim_leitura = buscar_datas()
+
+    dados = {
+        'inicio_leitura': inicio_leitura,
+        'fim_leitura': fim_leitura,
+        'mes': fim_leitura.split('/')[1] if fim_leitura else '',
+        'ano': fim_leitura.split('/')[2] if fim_leitura else '',
+        'consumo_total': buscar_consumo_total(),
+        'consumo_neoenergia': buscar_consumo_neoenergia(),
+        'tarifa': buscar_tarifa(),
+        'valor_conta': buscar_valor_conta(),
+        'icms': buscar_aliquota_icms(),
+        'injetado': encontrar_valor_com_rotulo("INJETADO") or "0",
+        'consumo_usina': encontrar_valor_com_rotulo("COMPENSADO") or "0",
+        'saldo_unidade': encontrar_valor_com_rotulo("SALDO ATUAL") or "0"
+    }
+
+    return jsonify(dados)
+
+@app.route('/visualizar_pdf_temp/<nome_arquivo>')
+def visualizar_pdf_temp(nome_arquivo):
+    caminho = os.path.join('uploads', nome_arquivo)
+    if os.path.exists(caminho):
+        return send_file(caminho)
+    return "Arquivo não encontrado", 404
+
+@app.route('/salvar_pdf_temp', methods=['POST'])
+def salvar_pdf_temp():
+    arquivo = request.files.get('arquivo')
+    if not arquivo or not arquivo.filename.endswith('.pdf'):
+        return "Arquivo inválido", 400
+    caminho = os.path.join('uploads', 'temp_preview.pdf')
+    os.makedirs('uploads', exist_ok=True)
+    arquivo.save(caminho)
+    return "OK"
+
 
 if __name__ == '__main__':
     with app.app_context():

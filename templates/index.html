@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Sistema de Gestão de Usinas</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body {
+            background: #f8f9fa;
+        }
+        .card-custom {
+            transition: transform 0.3s, box-shadow 0.3s;
+            border-radius: 1rem;
+        }
+        .card-custom:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1);
+        }
+        .card-icon {
+            font-size: 2rem;
+            color: #0d6efd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container py-5">
+        <h1 class="text-center text-primary mb-5">🌞 Sistema de Gestão de Usinas</h1>
+        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+
+            {% set botoes = [
+                {'titulo': 'Cadastrar Usina', 'icone': 'bi-geo-alt-fill', 'texto': 'Adicione uma nova usina ao sistema.', 'rota': 'cadastrar_usina'},
+                {'titulo': 'Cadastrar Geração', 'icone': 'bi-lightning-charge-fill', 'texto': 'Registrar dados diários de geração.', 'rota': 'cadastrar_geracao'},
+                {'titulo': 'Consulta de Geração', 'icone': 'bi-graph-up', 'texto': 'Consultar geração detalhada por data.', 'rota': 'consulta'},
+                {'titulo': 'Clientes', 'icone': 'bi-people-fill', 'texto': 'Gerenciar cadastro de clientes.', 'rota': 'cadastrar_cliente'},
+                {'titulo': 'Rateios', 'icone': 'bi-percent', 'texto': 'Definir rateio de energia entre clientes.', 'rota': 'cadastrar_rateio'},
+                {'titulo': 'Faturamento', 'icone': 'bi-file-earmark-text-fill', 'texto': 'Cadastrar e consultar faturas mensais.', 'rota': 'faturamento'},
+                {'titulo': 'Faturas Cadastradas', 'icone': 'bi-archive-fill', 'texto': 'Ver todas as faturas salvas.', 'rota': 'listar_faturas'},
+                {'titulo': 'Upload de Boletos', 'icone': 'bi-upload', 'texto': 'Enviar boleto PDF vinculado à fatura.', 'rota': 'upload_boleto'},
+            ] %}
+
+            {% for botao in botoes %}
+            <div class="col">
+                <div class="card card-custom shadow-sm h-100">
+                    <div class="card-body d-flex flex-column justify-content-between">
+                        <div>
+                            <div class="mb-3"><i class="card-icon bi {{ botao.icone }}"></i></div>
+                            <h5 class="card-title">{{ botao.titulo }}</h5>
+                            <p class="card-text">{{ botao.texto }}</p>
+                        </div>
+                        <a href="{{ url_for(botao.rota) }}" class="btn btn-outline-primary mt-3">Acessar</a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+
+        </div>
+    </div>
+</body>
+</html>

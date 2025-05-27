@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Relatório de Faturamento</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .card-relatorio {
+            max-width: 850px;
+            margin: 30px auto;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.05);
+        }
+        .logo {
+            height: 40px;
+        }
+        .info-header {
+            font-size: 14px;
+            line-height: 1.2;
+        }
+        .info-header strong {
+            display: block;
+        }
+        .bg-light-green {
+            background-color: #e9f7ef;
+        }
+        .bg-light-yellow {
+            background-color: #fffbe6;
+        }
+        .valor {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2e7d32;
+        }
+        .section-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #ccc;
+            padding-bottom: 5px;
+        }
+        .icon {
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="card-relatorio">
+    <!-- Cabeçalho com logos -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <img src="{{ url_for('static', filename='img/logo_cgr.png') }}" alt="CGR Energia" class="logo">
+        <h5 class="text-center flex-grow-1">Relatório de Faturamento {{ usina.nome }}</h5>
+        <img src="{{ url_for('static', filename='img/logo_supernova.png') }}" alt="Supernova" class="logo">
+    </div>
+
+    <!-- Dados do cliente e fatura -->
+    <div class="row mb-3">
+        <div class="col-md-6 info-header">
+            <strong>Nome / Razão:</strong> {{ cliente.nome }}
+            <strong>Endereço:</strong> {{ cliente.endereco }}
+            <strong>CNPJ:</strong> {{ cliente.cpf_cnpj }}
+        </div>
+        <div class="col-md-6 info-header text-end">
+            <strong>Mês de Referência:</strong> {{ fatura.mes_referencia }}/{{ fatura.ano_referencia }}
+            <strong>ID:</strong> {{ fatura.identificador }}
+            <strong>UC:</strong> {{ cliente.codigo_unidade }}
+            <strong>Bandeira Tarifária:</strong> Verde
+        </div>
+    </div>
+
+    <!-- Tabela de consumo -->
+    <div class="section-title text-center">Informações da unidade consumidora</div>
+    <table class="table table-bordered text-center">
+        <thead class="table-light">
+            <tr>
+                <th>Descrição</th>
+                <th>Quantidade</th>
+                <th>Unidade</th>
+                <th>Tarifa R$</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Energia Ativa</td>
+                <td>{{ fatura.consumo_total }}</td>
+                <td>kWh</td>
+                <td>-</td>
+            </tr>
+            <tr>
+                <td>Energia Injetada</td>
+                <td>{{ fatura.injetado }}</td>
+                <td>kWh</td>
+                <td>-</td>
+            </tr>
+            <tr>
+                <td>Faturado Neoenergia</td>
+                <td>{{ fatura.consumo_neoenergia }}</td>
+                <td>kWh</td>
+                <td>{{ tarifa_neoenergia_aplicada|formato_tarifa }}</td>
+            </tr>
+            <tr>
+                <td>Faturado {{ usina.nome }}</td>
+                <td>{{ fatura.consumo_usina }}</td>
+                <td>kWh</td>
+                <td>{{ tarifa_cliente|formato_tarifa }}</td>
+            </tr>
+            <tr>
+                <td>Saldo Acumulado</td>
+                <td>{{ fatura.saldo_unidade }}</td>
+                <td>kWh</td>
+                <td>-</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- Valores finais -->
+    <div class="row text-center mt-4">
+        <div class="col bg-light-yellow rounded p-3 me-2">
+            <p class="mb-1"><strong>Conta Neoenergia:</strong></p>
+            <p class="valor">R$ {{ fatura.valor_conta_neoenergia|formato_brasileiro }}</p>
+        </div>
+        <div class="col bg-light-green rounded p-3">
+            <p class="mb-1"><strong>Conta {{ usina.nome }}:</strong></p>
+            <p class="valor">{{ valor_usina|formato_brasileiro }}</p>
+        </div>
+    </div>
+
+    <!-- Seção de economia -->
+    <div class="section-title text-center">Sua Fatura {{ usina.nome }}</div>
+    <div class="row text-center">
+        <div class="col">
+            <div class="icon text-warning">💰</div>
+            <p><strong>Sem Desconto:</strong></p>
+            <p class="valor">{{ sem_desconto|formato_brasileiro }}</p>
+        </div>
+        <div class="col">
+            <div class="icon text-success">💵</div>
+            <p><strong>Com Desconto:</strong></p>
+            <p class="valor">{{ com_desconto|formato_brasileiro }}</p>
+        </div>
+        <div class="col">
+            <div class="icon text-dark">🏦</div>
+            <p><strong>Economia:</strong></p>
+            <p class="valor">{{ economia|formato_brasileiro }}</p>
+        </div>
+        <div class="col">
+            <div class="icon text-dark">📈</div>
+            <p><strong>Economia Acumulada:</strong></p>
+            <p class="valor">{{ economia_acumulada|formato_brasileiro }}</p>
+        </div>
+    </div>
+
+    <!-- Ficha de compensação -->
+    {% if ficha_compensacao_img %}
+        <hr class="my-5">
+        <h5 class="text-center text-secondary">Ficha de Compensação</h5>
+        <div class="text-center">
+            <img src="{{ url_for('static', filename=ficha_compensacao_img.split('static/')[-1]) }}"
+                 class="img-fluid rounded border" alt="Ficha de Compensação do Boleto">
+        </div>
+    {% endif %}
+</div>
+</body>
+</html>
