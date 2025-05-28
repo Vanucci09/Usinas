@@ -6,7 +6,7 @@ import pandas as pd
 from werkzeug.utils import secure_filename
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-from sqlalchemy import Numeric
+from sqlalchemy import Numeric, text
 from decimal import Decimal, ROUND_HALF_UP
 import fitz
 from PIL import Image
@@ -126,18 +126,29 @@ def cadastrar_geracao():
 
 @app.route('/listar_geracoes')
 def listar_geracoes():
-    data_inicio = request.args.get('data_inicio', date.today().replace(day=1).isoformat())
-    data_fim = request.args.get('data_fim', date.today().isoformat())
+    data_inicio = request.args.get('data_inicio', date.today().replace(day=1))
+    data_fim = request.args.get('data_fim', date.today())
     usina_id = request.args.get('usina_id')
 
-    query = db.session.query(Geracao, Usina).join(Usina).filter(Geracao.data.between(data_inicio, data_fim))
-    if usina_id:
-        query = query.filter(Usina.id == usina_id)
+    query = """
+        SELECT g.id as id_geracao, u.nome, g.data, g.energia_kwh
+        FROM geracoes g
+        JOIN usinas u ON g.usina_id = u.id
+        WHERE g.data BETWEEN :data_inicio AND :data_fim
+        {filtro_usina}
+        ORDER BY g.data DESC
+    """.format(filtro_usina="AND u.id = :usina_id" if usina_id else "")
 
-    geracoes = query.order_by(Geracao.data.asc()).all()
+    params = {'data_inicio': data_inicio, 'data_fim': data_fim}
+    if usina_id:
+        params['usina_id'] = usina_id
+
+    result = db.session.execute(text(query), params)
+    geracoes = result.fetchall()
     usinas = Usina.query.all()
 
-    return render_template('listar_geracoes.html', geracoes=geracoes, usinas=usinas, data_inicio_default=data_inicio, data_fim_default=data_fim)
+    return render_template('listar_geracoes.html', geracoes=geracoes, usinas=usinas,
+                           data_inicio_default=data_inicio, data_fim_default=data_fim)
 
 @app.route('/editar_geracao/<int:id>', methods=['GET', 'POST'])
 def editar_geracao(id):
