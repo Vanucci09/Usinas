@@ -69,7 +69,7 @@
                 <i class="bi bi-lightning-charge text-warning fs-1 me-3"></i>
                 <div>
                     <h5 class="card-title text-warning">Geração Total</h5>
-                    <p class="card-text fs-4">{{ totais_faturamento.geracao_total }} kWh</p>
+                    <p class="card-text fs-4">{{ '%.2f' | format(totais_faturamento.geracao_total) }} kWh</p>
                 </div>
             </div>
         </div>
@@ -107,7 +107,7 @@
     <!-- Informações -->
     <div class="mt-5">
         <div class="alert alert-info">
-            <strong>Geração total até agora:</strong> {{ soma_total }} kWh<br>
+            <strong>Geração total até agora:</strong> {{ '%.2f' | format(soma_total) }} kWh<br>
             <strong>Média diária atual:</strong> {{ media_diaria }} kWh<br>
             <strong>Previsão para o mês inteiro:</strong> {{ previsao_total }} kWh
         </div>

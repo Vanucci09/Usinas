@@ -59,7 +59,7 @@
         </table>
 
         <div class="text-end mt-4">
-            <strong>Total da Geração: </strong>{{ total }} kWh
+            <strong>Total da Geração: </strong>{{'%.2f' | format(total) }} kWh
         </div>
 
         {% if usina_id %}
