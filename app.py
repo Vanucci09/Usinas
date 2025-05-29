@@ -33,7 +33,7 @@ class Usina(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     cc = db.Column(db.String, nullable=False)
     nome = db.Column(db.String, nullable=False)
-    previsao_mensal = db.Column(db.Float)
+    potencia_kw = db.Column(db.Float, nullable=True)
     rateios = db.relationship('Rateio', backref='usina', cascade="all, delete-orphan")
 
 class Geracao(db.Model):
@@ -82,6 +82,16 @@ class FaturaMensal(db.Model):
     identificador = db.Column(db.String, unique=True, nullable=False)
 
     cliente = db.relationship('Cliente', backref='faturas')
+    
+class PrevisaoMensal(db.Model):
+    __tablename__ = 'previsoes_mensais'
+    id = db.Column(db.Integer, primary_key=True)
+    usina_id = db.Column(db.Integer, db.ForeignKey('usinas.id'), nullable=False)
+    ano = db.Column(db.Integer, nullable=False)
+    mes = db.Column(db.Integer, nullable=False)  # 1 a 12
+    previsao_kwh = db.Column(db.Float, nullable=False)
+
+    usina = db.relationship('Usina', backref='previsoes')
 
 
 # Pasta para uploads
@@ -98,11 +108,29 @@ def cadastrar_usina():
     if request.method == 'POST':
         cc = request.form['cc']
         nome = request.form['nome']
-        previsao_mensal = request.form['previsao_mensal']
-        nova_usina = Usina(cc=cc, nome=nome, previsao_mensal=previsao_mensal)
+        potencia = request.form['potencia']
+        ano_atual = date.today().year
+
+        nova_usina = Usina(cc=cc, nome=nome, potencia_kw=potencia)
         db.session.add(nova_usina)
         db.session.commit()
+
+        # Previsões mensais
+        for mes in range(1, 13):
+            chave = f'previsoes[{mes}]'
+            valor = request.form.get(chave)
+            if valor:
+                previsao = PrevisaoMensal(
+                    usina_id=nova_usina.id,
+                    ano=ano_atual,
+                    mes=mes,
+                    previsao_kwh=float(valor.replace(',', '.'))
+                )
+                db.session.add(previsao)
+
+        db.session.commit()
         return redirect(url_for('cadastrar_usina'))
+
     return render_template('cadastrar_usina.html')
 
 @app.route('/cadastrar_geracao', methods=['GET', 'POST'])
@@ -480,8 +508,25 @@ def clientes_por_usina(usina_id):
 
 @app.route('/faturas')
 def listar_faturas():
-    faturas = FaturaMensal.query.join(Cliente).order_by(FaturaMensal.ano_referencia.desc(), FaturaMensal.mes_referencia.desc()).all()
-    return render_template('listar_faturas.html', faturas=faturas)
+    usina_id = request.args.get('usina_id', type=int)
+    mes = request.args.get('mes', type=int)
+    ano = request.args.get('ano', type=int)
+
+    query = FaturaMensal.query.join(Cliente).join(Usina)
+
+    if usina_id:
+        query = query.filter(Usina.id == usina_id)
+    if mes:
+        query = query.filter(FaturaMensal.mes_referencia == mes)
+    if ano:
+        query = query.filter(FaturaMensal.ano_referencia == ano)
+
+    faturas = query.order_by(FaturaMensal.ano_referencia.desc(), FaturaMensal.mes_referencia.desc()).all()
+    usinas = Usina.query.all()
+    anos = sorted({f.ano_referencia for f in FaturaMensal.query.all()}, reverse=True)
+
+    return render_template('listar_faturas.html', faturas=faturas, usinas=usinas, anos=anos,
+                           usina_id=usina_id, mes=mes, ano=ano)
 
 @app.route('/editar_fatura/<int:id>', methods=['GET', 'POST'])
 def editar_fatura(id):
@@ -730,6 +775,46 @@ def salvar_pdf_temp():
     os.makedirs('uploads', exist_ok=True)
     arquivo.save(caminho)
     return "OK"
+
+@app.route('/editar_previsoes/<int:usina_id>', methods=['GET', 'POST'])
+def editar_previsoes(usina_id):
+    usina = Usina.query.get_or_404(usina_id)
+    ano = request.args.get('ano', date.today().year, type=int)
+
+    if request.method == 'POST':
+        # Atualiza potência da usina
+        potencia = request.form.get('potencia_kw')
+        if potencia:
+            usina.potencia_kw = float(potencia.replace(',', '.'))
+
+        # Atualiza previsões mensais
+        for mes in range(1, 13):
+            campo = f'previsoes[{mes}]'
+            valor = request.form.get(campo)
+            if valor:
+                previsao = PrevisaoMensal.query.filter_by(usina_id=usina.id, ano=ano, mes=mes).first()
+                if not previsao:
+                    previsao = PrevisaoMensal(usina_id=usina.id, ano=ano, mes=mes)
+                    db.session.add(previsao)
+                previsao.previsao_kwh = float(valor.replace(',', '.'))
+
+        db.session.commit()
+        return redirect(url_for('editar_previsoes', usina_id=usina.id, ano=ano))
+
+    # Preenche os valores existentes no formulário
+    previsoes = {p.mes: p.previsao_kwh for p in PrevisaoMensal.query.filter_by(usina_id=usina.id, ano=ano).all()}
+
+    return render_template(
+        'editar_previsoes.html',
+        usina=usina,
+        previsoes=previsoes,
+        ano=ano
+    )
+
+@app.route('/usinas')
+def listar_usinas():
+    usinas = Usina.query.all()
+    return render_template('listar_usinas_previsao.html', usinas=usinas)
 
 
 if __name__ == '__main__':
