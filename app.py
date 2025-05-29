@@ -218,7 +218,13 @@ def consulta():
 
     for geracao, usina in resultados:
         dias_no_mes = monthrange(geracao.data.year, geracao.data.month)[1]
-        previsao_diaria = usina.previsao_mensal / dias_no_mes
+        previsao_registro = PrevisaoMensal.query.filter_by(
+            usina_id=usina.id,
+            ano=geracao.data.year,
+            mes=geracao.data.month
+        ).first()
+        previsao_mensal = previsao_registro.previsao_kwh if previsao_registro else 0
+        previsao_diaria = previsao_mensal / dias_no_mes if dias_no_mes else 0
         producao_negativa = geracao.energia_kwh < previsao_diaria
 
         data.append({
