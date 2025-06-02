@@ -10,9 +10,12 @@ from sqlalchemy import Numeric, text
 from decimal import Decimal, ROUND_HALF_UP
 import fitz
 from PIL import Image
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 
 
 app = Flask(__name__)
+app.secret_key = os.getenv("SECRET_KEY", "12345678-1")
 
 # Configuração do banco de dados PostgreSQL
 db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:Fl%40mengo09@localhost:5432/usinas_db')
@@ -26,6 +29,12 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
+login_manager = LoginManager(app)
+login_manager.login_view = 'login'
+
+@login_manager.user_loader
+def load_user(user_id):
+    return Usuario.query.get(int(user_id))
 
 # Modelos
 class Usina(db.Model):
@@ -92,6 +101,22 @@ class PrevisaoMensal(db.Model):
     previsao_kwh = db.Column(db.Float, nullable=False)
 
     usina = db.relationship('Usina', backref='previsoes')
+    
+class Usuario(db.Model, UserMixin):
+    __tablename__ = 'usuarios'
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String, nullable=False)
+    email = db.Column(db.String, unique=True, nullable=False)
+    senha_hash = db.Column(db.String, nullable=False)
+    pode_cadastrar_geracao = db.Column(db.Boolean, default=False)
+    pode_cadastrar_cliente = db.Column(db.Boolean, default=False)
+    pode_cadastrar_fatura = db.Column(db.Boolean, default=False)
+
+    def set_senha(self, senha):
+        self.senha_hash = generate_password_hash(senha)
+
+    def verificar_senha(self, senha):
+        return check_password_hash(self.senha_hash, senha)
 
 
 # Pasta para uploads
@@ -100,6 +125,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 @app.route('/')
+@login_required
 def index():
     return render_template('index.html')
 
@@ -134,7 +160,10 @@ def cadastrar_usina():
     return render_template('cadastrar_usina.html')
 
 @app.route('/cadastrar_geracao', methods=['GET', 'POST'])
+@login_required
 def cadastrar_geracao():
+    if not current_user.pode_cadastrar_geracao:
+        return "Acesso negado", 403
     usinas = Usina.query.all()
     if request.method == 'POST':
         usina_id = request.form['usina_id']
@@ -346,9 +375,11 @@ def formato_tarifa(valor):
 app.jinja_env.filters['formato_brasileiro'] = formato_brasileiro
 app.jinja_env.filters['formato_tarifa'] = formato_tarifa
 
-
 @app.route('/clientes', methods=['GET', 'POST'])
+@login_required
 def cadastrar_cliente():
+    if not current_user.pode_cadastrar_cliente:
+        return "Acesso negado", 403
     usinas = Usina.query.all()
 
     if request.method == 'POST':
@@ -438,10 +469,11 @@ def excluir_cliente(id):
     db.session.commit()
     return redirect(url_for('cadastrar_cliente'))
 
-import traceback  # adicione no topo do seu arquivo se ainda não tiver
-
 @app.route('/faturamento', methods=['GET', 'POST'])
+@login_required
 def faturamento():
+    if not current_user.pode_cadastrar_fatura:
+        return "Acesso negado", 403
     usinas = Usina.query.all()
     clientes = Cliente.query.all()
     mensagem = ''
@@ -821,6 +853,96 @@ def editar_previsoes(usina_id):
 def listar_usinas():
     usinas = Usina.query.all()
     return render_template('listar_usinas_previsao.html', usinas=usinas)
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        email = request.form['email']
+        senha = request.form['senha']
+        usuario = Usuario.query.filter_by(email=email).first()
+        if usuario and usuario.verificar_senha(senha):
+            login_user(usuario)
+            return redirect(url_for('index'))
+        else:
+            return render_template('login.html', erro='Credenciais inválidas.')
+
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
+@app.route('/cadastrar_usuario', methods=['GET', 'POST'])
+@login_required
+def cadastrar_usuario():
+    if current_user.email != 'master@admin.com':
+        return "Acesso negado", 403
+    
+    if request.method == 'POST':
+        nome = request.form['nome']
+        email = request.form['email']
+        senha = request.form['senha']
+        pode_geracao = 'pode_cadastrar_geracao' in request.form
+        pode_cliente = 'pode_cadastrar_cliente' in request.form
+        pode_fatura = 'pode_cadastrar_fatura' in request.form
+
+        novo_usuario = Usuario(
+            nome=nome,
+            email=email,
+            pode_cadastrar_geracao=pode_geracao,
+            pode_cadastrar_cliente=pode_cliente,
+            pode_cadastrar_fatura=pode_fatura
+        )
+        novo_usuario.set_senha(senha)
+        db.session.add(novo_usuario)
+        db.session.commit()
+        return redirect(url_for('cadastrar_usuario'))
+
+    return render_template('cadastrar_usuario.html')
+
+@app.route('/usuarios')
+@login_required
+def listar_usuarios():
+    if current_user.email != 'master@admin.com':
+        return "Acesso negado", 403
+    usuarios = Usuario.query.all()
+    return render_template('usuarios_admin.html', usuarios=usuarios)
+
+@app.route('/editar_usuario/<int:id>', methods=['GET', 'POST'])
+@login_required
+def editar_usuario(id):
+    if current_user.email != 'master@admin.com':
+        return "Acesso negado", 403
+
+    usuario = Usuario.query.get_or_404(id)
+
+    if request.method == 'POST':
+        usuario.nome = request.form['nome']
+        usuario.email = request.form['email']
+        usuario.pode_cadastrar_geracao = 'pode_cadastrar_geracao' in request.form
+        usuario.pode_cadastrar_cliente = 'pode_cadastrar_cliente' in request.form
+        usuario.pode_cadastrar_fatura = 'pode_cadastrar_fatura' in request.form
+
+        if request.form.get('senha'):
+            usuario.set_senha(request.form['senha'])
+
+        db.session.commit()
+        return redirect(url_for('listar_usuarios'))
+
+    return render_template('editar_usuario.html', usuario=usuario)
+
+@app.route('/excluir_usuario/<int:id>', methods=['POST'])
+@login_required
+def excluir_usuario(id):
+    if current_user.email != 'master@admin.com':
+        return "Acesso negado", 403
+
+    usuario = Usuario.query.get_or_404(id)
+    db.session.delete(usuario)
+    db.session.commit()
+    return redirect(url_for('listar_usuarios'))
 
 
 if __name__ == '__main__':

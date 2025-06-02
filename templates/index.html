@@ -22,40 +22,275 @@
             font-size: 2rem;
             color: #0d6efd;
         }
+        .accordion-button {
+            font-weight: 600;
+            color: #0d6efd;
+        }
     </style>
 </head>
 <body>
-    <div class="container py-5">
-        <h1 class="text-center text-primary mb-5">🌞 Sistema de Gestão de Usinas</h1>
-        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+    <!-- Navbar -->
+    <nav class="navbar navbar-light bg-white shadow-sm mb-4">
+        <div class="container d-flex justify-content-between align-items-center">
+            <span class="navbar-text text-primary fw-bold d-flex align-items-center">
+                <img src="{{ url_for('static', filename='img/LogoEmpresa.jpg') }}"
+                     alt="Logo da Empresa"
+                     style="height: 40px; width: auto;"
+                     class="me-2">
+                Sistema de Gestão de Usinas
+            </span>
+            <div class="d-flex align-items-center gap-3">
+                <span class="text-muted">👤 {{ current_user.nome }}</span>
+                <a href="{{ url_for('logout') }}" class="btn btn-outline-danger btn-sm">Sair</a>
+            </div>
+        </div>
+    </nav>
 
-            {% set botoes = [
-                {'titulo': 'Cadastrar Usina', 'icone': 'bi-geo-alt-fill', 'texto': 'Adicione uma nova usina ao sistema.', 'rota': 'cadastrar_usina'},
-                {'titulo': 'Cadastrar Geração', 'icone': 'bi-lightning-charge-fill', 'texto': 'Registrar dados diários de geração.', 'rota': 'cadastrar_geracao'},
-                {'titulo': 'Consulta de Geração', 'icone': 'bi-graph-up', 'texto': 'Consultar geração detalhada por data.', 'rota': 'consulta'},
-                {'titulo': 'Clientes', 'icone': 'bi-people-fill', 'texto': 'Gerenciar cadastro de clientes.', 'rota': 'cadastrar_cliente'},
-                {'titulo': 'Rateios', 'icone': 'bi-percent', 'texto': 'Definir rateio de energia entre clientes.', 'rota': 'cadastrar_rateio'},
-                {'titulo': 'Faturamento', 'icone': 'bi-file-earmark-text-fill', 'texto': 'Cadastrar e consultar faturas mensais.', 'rota': 'faturamento'},
-                {'titulo': 'Faturas Cadastradas', 'icone': 'bi-archive-fill', 'texto': 'Ver todas as faturas salvas.', 'rota': 'listar_faturas'},
-                {'titulo': 'Upload de Boletos', 'icone': 'bi-upload', 'texto': 'Enviar boleto PDF vinculado à fatura.', 'rota': 'upload_boleto'},
-            ] %}
+    <div class="container mb-5">
+        <div class="accordion" id="accordionGrupos">
 
-            {% for botao in botoes %}
-            <div class="col">
-                <div class="card card-custom shadow-sm h-100">
-                    <div class="card-body d-flex flex-column justify-content-between">
-                        <div>
-                            <div class="mb-3"><i class="card-icon bi {{ botao.icone }}"></i></div>
-                            <h5 class="card-title">{{ botao.titulo }}</h5>
-                            <p class="card-text">{{ botao.texto }}</p>
+            <!-- Grupo: Geração -->
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="headingGeracao">
+                    <button class="accordion-button collapsed" 
+                            type="button" 
+                            data-bs-toggle="collapse" 
+                            data-bs-target="#collapseGeracao" 
+                            aria-expanded="false" 
+                            aria-controls="collapseGeracao">
+                        <i class="bi bi-lightning-charge-fill me-2"></i> Geração
+                    </button>
+                </h2>
+                <div id="collapseGeracao" 
+                     class="accordion-collapse collapse" 
+                     aria-labelledby="headingGeracao" 
+                     data-bs-parent="#accordionGrupos">
+                    <div class="accordion-body">
+                        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+
+                            <!-- Cadastrar Usina -->
+                            <div class="col">
+                                <div class="card card-custom shadow-sm h-100">
+                                    <div class="card-body d-flex flex-column justify-content-between">
+                                        <div>
+                                            <div class="mb-3">
+                                                <i class="card-icon bi bi-geo-alt-fill"></i>
+                                            </div>
+                                            <h5 class="card-title">Cadastrar Usina</h5>
+                                            <p class="card-text">Adicione uma nova usina ao sistema.</p>
+                                        </div>
+                                        <a href="{{ url_for('cadastrar_usina') }}" class="btn btn-outline-primary mt-3">Acessar</a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Cadastrar Geração -->
+                            <div class="col">
+                                <div class="card card-custom shadow-sm h-100">
+                                    <div class="card-body d-flex flex-column justify-content-between">
+                                        <div>
+                                            <div class="mb-3">
+                                                <i class="card-icon bi bi-lightning-charge-fill"></i>
+                                            </div>
+                                            <h5 class="card-title">Cadastrar Geração</h5>
+                                            <p class="card-text">Registrar dados diários de geração.</p>
+                                        </div>
+                                        <a href="{{ url_for('cadastrar_geracao') }}" class="btn btn-outline-primary mt-3">Acessar</a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Consulta de Geração -->
+                            <div class="col">
+                                <div class="card card-custom shadow-sm h-100">
+                                    <div class="card-body d-flex flex-column justify-content-between">
+                                        <div>
+                                            <div class="mb-3">
+                                                <i class="card-icon bi bi-graph-up"></i>
+                                            </div>
+                                            <h5 class="card-title">Consulta de Geração</h5>
+                                            <p class="card-text">Consultar geração detalhada por data.</p>
+                                        </div>
+                                        <a href="{{ url_for('consulta') }}" class="btn btn-outline-primary mt-3">Acessar</a>
+                                    </div>
+                                </div>
+                            </div>
+
                         </div>
-                        <a href="{{ url_for(botao.rota) }}" class="btn btn-outline-primary mt-3">Acessar</a>
                     </div>
                 </div>
             </div>
-            {% endfor %}
+
+            <!-- Grupo: Gestão de consórcios -->
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="headingConsorcios">
+                    <button class="accordion-button collapsed" 
+                            type="button" 
+                            data-bs-toggle="collapse" 
+                            data-bs-target="#collapseConsorcios" 
+                            aria-expanded="false" 
+                            aria-controls="collapseConsorcios">
+                        <i class="bi bi-people-fill me-2"></i> Gestão de consórcios
+                    </button>
+                </h2>
+                <div id="collapseConsorcios" 
+                     class="accordion-collapse collapse" 
+                     aria-labelledby="headingConsorcios" 
+                     data-bs-parent="#accordionGrupos">
+                    <div class="accordion-body">
+                        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+
+                            <!-- Clientes -->
+                            <div class="col">
+                                <div class="card card-custom shadow-sm h-100">
+                                    <div class="card-body d-flex flex-column justify-content-between">
+                                        <div>
+                                            <div class="mb-3">
+                                                <i class="card-icon bi bi-people-fill"></i>
+                                            </div>
+                                            <h5 class="card-title">Clientes</h5>
+                                            <p class="card-text">Gerenciar cadastro de clientes.</p>
+                                        </div>
+                                        <a href="{{ url_for('cadastrar_cliente') }}" class="btn btn-outline-primary mt-3">Acessar</a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Rateios -->
+                            <div class="col">
+                                <div class="card card-custom shadow-sm h-100">
+                                    <div class="card-body d-flex flex-column justify-content-between">
+                                        <div>
+                                            <div class="mb-3">
+                                                <i class="card-icon bi bi-percent"></i>
+                                            </div>
+                                            <h5 class="card-title">Rateios</h5>
+                                            <p class="card-text">Definir rateio de energia entre clientes.</p>
+                                        </div>
+                                        <a href="{{ url_for('cadastrar_rateio') }}" class="btn btn-outline-primary mt-3">Acessar</a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Faturamento -->
+                            <div class="col">
+                                <div class="card card-custom shadow-sm h-100">
+                                    <div class="card-body d-flex flex-column justify-content-between">
+                                        <div>
+                                            <div class="mb-3">
+                                                <i class="card-icon bi bi-file-earmark-text-fill"></i>
+                                            </div>
+                                            <h5 class="card-title">Faturamento</h5>
+                                            <p class="card-text">Cadastrar e consultar faturas mensais.</p>
+                                        </div>
+                                        <a href="{{ url_for('faturamento') }}" class="btn btn-outline-primary mt-3">Acessar</a>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Grupo: Financeiro -->
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="headingFinanceiro">
+                    <button class="accordion-button collapsed"
+                            type="button" 
+                            data-bs-toggle="collapse" 
+                            data-bs-target="#collapseFinanceiro" 
+                            aria-expanded="false" 
+                            aria-controls="collapseFinanceiro">
+                        <i class="bi bi-currency-dollar me-2"></i> Financeiro
+                    </button>
+                </h2>
+                <div id="collapseFinanceiro" 
+                     class="accordion-collapse collapse" 
+                     aria-labelledby="headingFinanceiro" 
+                     data-bs-parent="#accordionGrupos">
+                    <div class="accordion-body">
+                        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+
+                            <!-- Faturas Cadastradas -->
+                            <div class="col">
+                                <div class="card card-custom shadow-sm h-100">
+                                    <div class="card-body d-flex flex-column justify-content-between">
+                                        <div>
+                                            <div class="mb-3">
+                                                <i class="card-icon bi bi-archive-fill"></i>
+                                            </div>
+                                            <h5 class="card-title">Faturas Cadastradas</h5>
+                                            <p class="card-text">Ver todas as faturas salvas.</p>
+                                        </div>
+                                        <a href="{{ url_for('listar_faturas') }}" class="btn btn-outline-primary mt-3">Acessar</a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Upload de Boletos -->
+                            <div class="col">
+                                <div class="card card-custom shadow-sm h-100">
+                                    <div class="card-body d-flex flex-column justify-content-between">
+                                        <div>
+                                            <div class="mb-3">
+                                                <i class="card-icon bi bi-upload"></i>
+                                            </div>
+                                            <h5 class="card-title">Upload de Boletos</h5>
+                                            <p class="card-text">Enviar boleto PDF vinculado à fatura.</p>
+                                        </div>
+                                        <a href="{{ url_for('upload_boleto') }}" class="btn btn-outline-primary mt-3">Acessar</a>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Grupo: Usuários (apenas master) -->
+            {% if current_user.email == 'master@admin.com' %}
+            <div class="accordion-item">
+                <h2 class="accordion-header" id="headingUsuarios">
+                    <button class="accordion-button collapsed" 
+                            type="button" 
+                            data-bs-toggle="collapse" 
+                            data-bs-target="#collapseUsuarios" 
+                            aria-expanded="false" 
+                            aria-controls="collapseUsuarios">
+                        <i class="bi bi-person-plus-fill me-2"></i> Administração de Usuários
+                    </button>
+                </h2>
+                <div id="collapseUsuarios" 
+                     class="accordion-collapse collapse" 
+                     aria-labelledby="headingUsuarios" 
+                     data-bs-parent="#accordionGrupos">
+                    <div class="accordion-body">
+                        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+                            <div class="col">
+                                <div class="card card-custom shadow-sm h-100">
+                                    <div class="card-body d-flex flex-column justify-content-between">
+                                        <div>
+                                            <div class="mb-3">
+                                                <i class="card-icon bi bi-person-plus-fill"></i>
+                                            </div>
+                                            <h5 class="card-title">Usuários</h5>
+                                            <p class="card-text">Cadastrar e gerenciar usuários do sistema.</p>
+                                        </div>
+                                        <a href="{{ url_for('cadastrar_usuario') }}" class="btn btn-outline-primary mt-3">Acessar</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
 
         </div>
     </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
