@@ -19,196 +19,199 @@
                 transform: translateY(0);
             }
         }
-        /* Garante que o sidebar fique fixo em telas maiores */
-        @media (min-width: 768px) {
-            .sidebar {
-                position: sticky;
-                top: 1rem;
-            }
-        }
     </style>
 </head>
-<body class="container-fluid mt-4">
+<body>
+    <!-- Trocamos container-fluid por container -->
+    <div class="container mt-4">
 
-    <div class="row">
-        
-        <aside class="col-md-3 mb-4 sidebar">
-            <div class="card shadow-sm">
-                <div class="card-header bg-white">
-                    <h5 class="mb-0">Filtros</h5>
-                </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label for="usina_id" class="form-label">Usina</label>
-                        <select class="form-select" id="usina_id">
-                            <option value="">Selecione</option>
-                            {% for usina in usinas %}
-                                <option value="{{ usina.id }}" {% if usina_id|int == usina.id %}selected{% endif %}>
-                                    {{ usina.nome }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label for="ano" class="form-label">Ano</label>
-                        <input type="number" class="form-control" id="ano" value="{{ ano }}" min="2000" max="2100">
-                    </div>
-                    <div class="mb-3">
-                        <label for="mes" class="form-label">Mês</label>
-                        <input type="number" class="form-control" id="mes" value="{{ mes }}" min="1" max="12">
-                    </div>
-                    <small class="text-muted">As informações serão atualizadas automaticamente quando você alterar algum filtro.</small>
-                </div>
-            </div>
-        </aside>
-        
-        <main class="col-md-9">
-            <h2 class="mb-4 text-primary">Produção Mensal – {{ usina_nome }}</h2>
+        <!-- Título -->
+        <h2 class="mb-4 text-primary">Produção Mensal – {{ usina_nome }}</h2>
 
-            
-            <div class="row mb-4">
-                <div class="col-md-4 fade-in">
-                    <div class="card border-secondary shadow-sm">
-                        <div class="card-body d-flex align-items-center">
-                            <i class="bi bi-calendar fs-1 me-3"></i>
-                            <div>
-                                <h5 class="card-title text-secondary">Geração Anual</h5>
-                                <p class="card-text fs-4">{{ ano_geracao_total }} kWh</p>
-                            </div>
-                        </div>
+        <!-- ===== FILTROS CENTRALIZADOS EM UMA COLUNA INTERMEDIÁRIA ===== -->
+        <div class="row justify-content-center mb-4">
+            <div class="col-lg-8">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-white">
+                        <h5 class="mb-0">Filtros</h5>
                     </div>
-                </div>
-                <div class="col-md-4 fade-in" style="animation-delay: 0.2s;">
-                    <div class="card border-info shadow-sm">
-                        <div class="card-body d-flex align-items-center">
-                            <i class="bi bi-currency-dollar fs-1 text-info me-3"></i>
-                            <div>
-                                <h5 class="card-title text-info">Faturamento Bruto Anual</h5>
-                                <p class="card-text fs-4">{{ ano_faturamento_bruto | formato_brasileiro }}</p>
-                            </div>
+                    <div class="card-body row g-3">
+                        <div class="col-md-4">
+                            <label for="usina_id" class="form-label">Usina</label>
+                            <select class="form-select" id="usina_id">
+                                <option value="">Selecione</option>
+                                {% for usina in usinas %}
+                                    <option value="{{ usina.id }}" {% if usina_id|int == usina.id %}selected{% endif %}>
+                                        {{ usina.nome }}
+                                    </option>
+                                {% endfor %}
+                            </select>
                         </div>
-                    </div>
-                </div>
-                <div class="col-md-4 fade-in" style="animation-delay: 0.4s;">
-                    <div class="card border-dark shadow-sm">
-                        <div class="card-body d-flex align-items-center">
-                            <i class="bi bi-cash-stack fs-1 text-dark me-3"></i>
-                            <div>
-                                <h5 class="card-title text-dark">Faturamento Líquido Anual</h5>
-                                <p class="card-text fs-4">{{ ano_faturamento_liquido | formato_brasileiro }}</p>
-                            </div>
+                        <div class="col-md-2">
+                            <label for="ano" class="form-label">Ano</label>
+                            <input type="number" class="form-control" id="ano" value="{{ ano }}" min="2000" max="2100">
+                        </div>
+                        <div class="col-md-2">
+                            <label for="mes" class="form-label">Mês</label>
+                            <input type="number" class="form-control" id="mes" value="{{ mes }}" min="1" max="12">
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <small class="text-muted">
+                                As informações serão atualizadas automaticamente ao alterar algum filtro.
+                            </small>
                         </div>
                     </div>
                 </div>
             </div>
-            
+        </div>
+        <!-- ===== FIM DOS FILTROS ===== -->
 
-            <!-- ===== Totais Mensais ===== -->
-            {% set totais_faturamento = {'bruto': 0, 'liquido': 0, 'geracao_total': 0} %}
-            {% for item in detalhes %}
-                {% set faturamento = item.energia_kwh * 0.83 %}
-                {% set liquido = faturamento * 0.80 %}
-                {% set _ = totais_faturamento.update({
-                    'bruto': totais_faturamento.bruto + faturamento,
-                    'liquido': totais_faturamento.liquido + liquido,
-                    'geracao_total': totais_faturamento.geracao_total + item.energia_kwh
-                }) %}
-            {% endfor %}
-            <div class="row mb-5">
-                <div class="col-md-4 fade-in">
-                    <div class="card border-warning shadow-sm">
-                        <div class="card-body d-flex align-items-center">
-                            <i class="bi bi-lightning-charge text-warning fs-1 me-3"></i>
-                            <div>
-                                <h5 class="card-title text-warning">Geração Total</h5>
-                                <p class="card-text fs-4">{{ '%.2f' | format(totais_faturamento.geracao_total) }} kWh</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-4 fade-in" style="animation-delay: 0.2s;">
-                    <div class="card border-success shadow-sm">
-                        <div class="card-body d-flex align-items-center">
-                            <i class="bi bi-currency-dollar text-success fs-1 me-3"></i>
-                            <div>
-                                <h5 class="card-title text-success">Previsão Faturamento Bruto</h5>
-                                <p class="card-text fs-4">{{ totais_faturamento.bruto | formato_brasileiro }}</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-4 fade-in" style="animation-delay: 0.4s;">
-                    <div class="card border-primary shadow-sm">
-                        <div class="card-body d-flex align-items-center">
-                            <i class="bi bi-cash-stack text-primary fs-1 me-3"></i>
-                            <div>
-                                <h5 class="card-title text-primary">Previsão Valor Líquido</h5>
-                                <p class="card-text fs-4">{{ totais_faturamento.liquido | formato_brasileiro }}</p>
-                            </div>
+
+        <!-- ===== Totais Anuais ===== -->
+        <div class="row mb-4">
+            <div class="col-md-4 fade-in">
+                <div class="card border-secondary shadow-sm">
+                    <div class="card-body d-flex align-items-center">
+                        <i class="bi bi-calendar fs-1 me-3"></i>
+                        <div>
+                            <h5 class="card-title text-secondary">Geração Anual</h5>
+                            <p class="card-text fs-4">{{ ano_geracao_total }} kWh</p>
                         </div>
                     </div>
                 </div>
             </div>
-            
-
-            <!-- Gráfico -->
-            <canvas id="graficoProducao" height="100"></canvas>
-
-            <!-- Informações -->
-            <div class="mt-5">
-                <div class="alert alert-info">
-                    <strong>Geração total até agora:</strong> {{ '%.2f'|format(soma_total) }} kWh<br>
-                    <strong>Média diária atual:</strong> {{ media_diaria }} kWh<br>
-                    <strong>Previsão Mensal:</strong> {{ previsao_mensal }} kWh<br>
-                    <strong>Percentual da previsão mensal atingido:</strong>
-                    {% if previsao_mensal and previsao_mensal > 0 %}
-                        {{ ((soma_total / previsao_mensal * 100) | round(2)) }}%
-                    {% else %}
-                        0%
-                    {% endif %}
+            <div class="col-md-4 fade-in" style="animation-delay: 0.2s;">
+                <div class="card border-info shadow-sm">
+                    <div class="card-body d-flex align-items-center">
+                        <i class="bi bi-currency-dollar fs-1 text-info me-3"></i>
+                        <div>
+                            <h5 class="card-title text-info">Faturamento Bruto Anual</h5>
+                            <p class="card-text fs-4">{{ ano_faturamento_bruto | formato_brasileiro }}</p>
+                        </div>
+                    </div>
                 </div>
             </div>
+            <div class="col-md-4 fade-in" style="animation-delay: 0.4s;">
+                <div class="card border-dark shadow-sm">
+                    <div class="card-body d-flex align-items-center">
+                        <i class="bi bi-cash-stack fs-1 text-dark me-3"></i>
+                        <div>
+                            <h5 class="card-title text-dark">Faturamento Líquido Anual</h5>
+                            <p class="card-text fs-4">{{ ano_faturamento_liquido | formato_brasileiro }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- ===== Fim dos Totais Anuais ===== -->
 
-            <!-- Tabela de detalhes diários -->
-            <div class="mt-4">
-                <h5>Detalhes Diários</h5>
-                <table class="table table-bordered table-striped">
-                    <thead class="table-light">
+
+        <!-- ===== Totais Mensais ===== -->
+        {% set totais_faturamento = {'bruto': 0, 'liquido': 0, 'geracao_total': 0} %}
+        {% for item in detalhes %}
+            {% set faturamento = item.energia_kwh * 0.83 %}
+            {% set liquido = faturamento * 0.80 %}
+            {% set _ = totais_faturamento.update({
+                'bruto': totais_faturamento.bruto + faturamento,
+                'liquido': totais_faturamento.liquido + liquido,
+                'geracao_total': totais_faturamento.geracao_total + item.energia_kwh
+            }) %}
+        {% endfor %}
+        <div class="row mb-5">
+            <div class="col-md-4 fade-in">
+                <div class="card border-warning shadow-sm">
+                    <div class="card-body d-flex align-items-center">
+                        <i class="bi bi-lightning-charge text-warning fs-1 me-3"></i>
+                        <div>
+                            <h5 class="card-title text-warning">Geração Total</h5>
+                            <p class="card-text fs-4">{{ '%.2f' | format(totais_faturamento.geracao_total) }} kWh</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 fade-in" style="animation-delay: 0.2s;">
+                <div class="card border-success shadow-sm">
+                    <div class="card-body d-flex align-items-center">
+                        <i class="bi bi-currency-dollar text-success fs-1 me-3"></i>
+                        <div>
+                            <h5 class="card-title text-success">Previsão Faturamento Bruto</h5>
+                            <p class="card-text fs-4">{{ totais_faturamento.bruto | formato_brasileiro }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 fade-in" style="animation-delay: 0.4s;">
+                <div class="card border-primary shadow-sm">
+                    <div class="card-body d-flex align-items-center">
+                        <i class="bi bi-cash-stack text-primary fs-1 me-3"></i>
+                        <div>
+                            <h5 class="card-title text-primary">Previsão Valor Líquido</h5>
+                            <p class="card-text fs-4">{{ totais_faturamento.liquido | formato_brasileiro }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- ===== Fim dos Totais Mensais ===== -->
+
+
+        <!-- Gráfico -->
+        <canvas id="graficoProducao" height="100"></canvas>
+
+
+        <!-- Informações (alert) -->
+        <div class="mt-5">
+            <div class="alert alert-info">
+                <strong>Geração total até agora:</strong> {{ '%.2f'|format(soma_total) }} kWh<br>
+                <strong>Média diária atual:</strong> {{ media_diaria }} kWh<br>
+                <strong>Previsão Mensal:</strong> {{ previsao_mensal }} kWh<br>
+                <strong>Percentual da previsão mensal atingido:</strong>
+                {% if previsao_mensal and previsao_mensal > 0 %}
+                    {{ ((soma_total / previsao_mensal * 100) | round(2)) }}%
+                {% else %}
+                    0%
+                {% endif %}
+            </div>
+        </div>
+
+
+        <!-- Tabela de detalhes diários -->
+        <div class="mt-4">
+            <h5>Detalhes Diários</h5>
+            <table class="table table-bordered table-striped">
+                <thead class="table-light">
+                    <tr>
+                        <th>Data</th>
+                        <th>Energia Gerada (kWh)</th>
+                        <th>Faturamento Bruto</th>
+                        <th>Valor Líquido</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in detalhes %}
+                        {% set faturamento = item.energia_kwh * 0.83 %}
+                        {% set liquido = faturamento * 0.80 %}
                         <tr>
-                            <th>Data</th>
-                            <th>Energia Gerada (kWh)</th>
-                            <th>Faturamento Bruto</th>
-                            <th>Valor Líquido</th>
+                            <td>{{ item.data }}</td>
+                            <td>{{ item.energia_kwh }}</td>
+                            <td>{{ faturamento|formato_brasileiro }}</td>
+                            <td>{{ liquido|formato_brasileiro }}</td>
                         </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in detalhes %}
-                            {% set faturamento = item.energia_kwh * 0.83 %}
-                            {% set liquido = faturamento * 0.80 %}
-                            <tr>
-                                <td>{{ item.data }}</td>
-                                <td>{{ item.energia_kwh }}</td>
-                                <td>{{ faturamento|formato_brasileiro }}</td>
-                                <td>{{ liquido|formato_brasileiro }}</td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                    <tfoot class="table-light">
-                        <tr>
-                            <th colspan="2">Totais</th>
-                            <th>{{ totais_faturamento.bruto|formato_brasileiro }}</th>
-                            <th>{{ totais_faturamento.liquido|formato_brasileiro }}</th>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-
-        </main>
-    </div>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="table-light">
+                    <tr>
+                        <th colspan="2">Totais</th>
+                        <th>{{ totais_faturamento.bruto|formato_brasileiro }}</th>
+                        <th>{{ totais_faturamento.liquido|formato_brasileiro }}</th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div> <!-- fim container -->
 
     <!-- ===== Script de gráfico e atualização automática ===== -->
     <script>
-        // Função para recarregar a página conforme filtros
         function irParaProducao() {
             const usina = document.getElementById('usina_id').value;
             const ano = document.getElementById('ano').value;
@@ -218,17 +221,15 @@
             }
         }
 
-        
         document.getElementById('usina_id').addEventListener('change', irParaProducao);
         document.getElementById('ano').addEventListener('change', irParaProducao);
         document.getElementById('mes').addEventListener('change', irParaProducao);
 
-        // Dados para o Chart.js
+        // Dados do Chart.js
         const dias = {{ meses | tojson }};
         const producao = {{ totais | tojson }};
         const previsoes = {{ previsoes | tojson }};
 
-        // Define cores com base em cada dia comparado à previsão diária
         const cores = producao.map((valor, idx) => {
             const previsao = previsoes[idx] || 0;
             if (valor >= previsao) {
@@ -250,7 +251,6 @@
             }
         });
 
-        // Inicializa o gráfico
         const ctx = document.getElementById('graficoProducao').getContext('2d');
         new Chart(ctx, {
             type: 'bar',
