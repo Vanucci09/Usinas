@@ -20,6 +20,14 @@
                     <input type="text" class="form-control" id="cpf_cnpj" name="cpf_cnpj" value="{{ cliente.cpf_cnpj }}" required>
                 </div>
                 <div class="col-md-6">
+                    <label for="email" class="form-label">E-mail</label>
+                    <input type="email" class="form-control" id="email" name="email" value="{{ cliente.email }}" required>
+                </div>
+                <div class="col-md-6">
+                    <label for="telefone" class="form-label">Telefone</label>
+                    <input type="text" class="form-control" id="telefone" name="telefone" value="{{ cliente.telefone }}" required>
+                </div>
+                <div class="col-md-6">
                     <label for="endereco" class="form-label">Endereço</label>
                     <input type="text" class="form-control" id="endereco" name="endereco" value="{{ cliente.endereco }}" required>
                 </div>
@@ -31,7 +39,9 @@
                     <label for="usina_id" class="form-label">Usina</label>
                     <select class="form-select" id="usina_id" name="usina_id" required>
                         {% for usina in usinas %}
-                            <option value="{{ usina.id }}" {% if cliente.usina_id == usina.id %}selected{% endif %}>{{ usina.nome }}</option>
+                            <option value="{{ usina.id }}" {% if cliente.usina_id == usina.id %}selected{% endif %}>
+                                {{ usina.nome }}
+                            </option>
                         {% endfor %}
                     </select>
                 </div>

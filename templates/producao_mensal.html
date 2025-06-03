@@ -22,13 +22,16 @@
     </style>
 </head>
 <body>
-    <!-- Trocamos container-fluid por container -->
+    
     <div class="container mt-4">
 
-        <!-- Título -->
-        <h2 class="mb-4 text-primary">Produção Mensal – {{ usina_nome }}</h2>
-
-        <!-- ===== FILTROS CENTRALIZADOS EM UMA COLUNA INTERMEDIÁRIA ===== -->
+        <h2 class="mb-4 text-primary">
+            Produção Mensal – {{ usina_nome }} 
+            {% if potencia_kw is not none %}
+                ({{ potencia_kw }} kWp)
+            {% endif %}
+        </h2>
+        
         <div class="row justify-content-center mb-4">
             <div class="col-lg-8">
                 <div class="card shadow-sm">

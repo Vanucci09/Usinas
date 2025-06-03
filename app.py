@@ -60,6 +60,8 @@ class Cliente(db.Model):
     endereco = db.Column(db.String, nullable=False)
     codigo_unidade = db.Column(db.String, nullable=False)
     usina_id = db.Column(db.Integer, db.ForeignKey('usinas.id'), nullable=False)
+    email = db.Column(db.String, nullable=True)
+    telefone = db.Column(db.String, nullable=True)
 
     rateios = db.relationship('Rateio', backref='cliente', cascade="all, delete-orphan")
     usina = db.relationship('Usina')
@@ -329,6 +331,7 @@ def producao_mensal(usina_id, ano, mes):
     return render_template(
         'producao_mensal.html',
         usina_nome=usina.nome,
+        potencia_kw=usina.potencia_kw,
         usina_id=usina_id,
         ano=ano,
         mes=mes,
@@ -412,28 +415,46 @@ app.jinja_env.filters['formato_tarifa'] = formato_tarifa
 def cadastrar_cliente():
     if not current_user.pode_cadastrar_cliente:
         return "Acesso negado", 403
+
+    # Lista de usinas para popular os dropdowns
     usinas = Usina.query.all()
 
+    # Se houve POST, cadastra normalmente
     if request.method == 'POST':
         nome = request.form['nome']
         cpf_cnpj = request.form['cpf_cnpj']
         endereco = request.form['endereco']
         codigo_unidade = request.form['codigo_unidade']
         usina_id = request.form['usina_id']
+        email = request.form['email']
+        telefone = request.form['telefone']
 
         cliente = Cliente(
             nome=nome,
             cpf_cnpj=cpf_cnpj,
             endereco=endereco,
             codigo_unidade=codigo_unidade,
-            usina_id=usina_id
+            usina_id=usina_id,
+            email=email,
+            telefone=telefone
         )
         db.session.add(cliente)
         db.session.commit()
         return redirect(url_for('cadastrar_cliente'))
 
-    clientes = Cliente.query.all()
-    return render_template('clientes.html', clientes=clientes, usinas=usinas)
+    # Se for GET, aplicamos filtro por usina (se fornecido)
+    usina_id_filtro = request.args.get('usina_id', type=int)
+    if usina_id_filtro:
+        clientes = Cliente.query.filter_by(usina_id=usina_id_filtro).all()
+    else:
+        clientes = Cliente.query.all()
+
+    return render_template(
+        'clientes.html',
+        clientes=clientes,
+        usinas=usinas,
+        usina_id_filtro=usina_id_filtro
+    )
 
 @app.route('/rateios', methods=['GET', 'POST'])
 def cadastrar_rateio():
@@ -489,6 +510,8 @@ def editar_cliente(id):
         cliente.endereco = request.form['endereco']
         cliente.codigo_unidade = request.form['codigo_unidade']
         cliente.usina_id = request.form['usina_id']
+        cliente.email = request.form['email']
+        cliente.telefone = request.form['telefone']
         db.session.commit()
         return redirect(url_for('cadastrar_cliente'))
 
