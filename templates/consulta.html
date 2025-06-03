@@ -50,7 +50,12 @@
                     <td>{{ item.nome }}</td>
                     <td>{{ item.data }}</td>
                     <td>{{ item.previsao_diaria|round(2) }}</td>
-                    <td class="{% if item.energia_kwh < item.previsao_diaria %}text-danger{% else %}text-success{% endif %}">
+                    <td class="
+                        {% if item.energia_kwh >= item.previsao_diaria %} text-success 
+                        {% elif item.energia_kwh >= (item.previsao_diaria * 0.9) %} text-warning 
+                        {% else %} text-danger 
+                        {% endif %}
+                    ">
                         {{ item.energia_kwh }}
                     </td>
                 </tr>

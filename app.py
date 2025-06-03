@@ -1,12 +1,12 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify, make_response, send_file
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from calendar import monthrange
 import os
 import pandas as pd
 from werkzeug.utils import secure_filename
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-from sqlalchemy import Numeric, text
+from sqlalchemy import Numeric, text, func, extract
 from decimal import Decimal, ROUND_HALF_UP
 import fitz
 from PIL import Image
@@ -275,9 +275,12 @@ def consulta():
 @app.route('/producao_mensal/<int:usina_id>/<int:ano>/<int:mes>')
 def producao_mensal(usina_id, ano, mes):
     usina = Usina.query.get_or_404(usina_id)
+
+    # Define intervalo do mês
     data_inicio = date(ano, mes, 1)
     data_fim = date(ano + 1, 1, 1) if mes == 12 else date(ano, mes + 1, 1)
 
+    # := Busca todas as gerações do mês para esta usina
     resultados = Geracao.query.filter(
         Geracao.usina_id == usina_id,
         Geracao.data >= data_inicio,
@@ -285,9 +288,9 @@ def producao_mensal(usina_id, ano, mes):
     ).order_by(Geracao.data).all()
 
     dias_mes = monthrange(ano, mes)[1]
-    totais = [0] * dias_mes
+    totais = [0.0] * dias_mes
     detalhes = []
-    soma = 0
+    soma = 0.0
 
     for r in resultados:
         dia = r.data.day
@@ -295,9 +298,32 @@ def producao_mensal(usina_id, ano, mes):
         soma += r.energia_kwh
         detalhes.append({'data': r.data, 'energia_kwh': r.energia_kwh})
 
+    # Média diária (apenas para exibição no alert)
     dias_com_dado = len(resultados)
-    media_diaria = soma / dias_com_dado if dias_com_dado > 0 else 0
+    media_diaria = soma / dias_com_dado if dias_com_dado > 0 else 0.0
     previsao_total = round(media_diaria * dias_mes, 2)
+
+    # := Monta lista de previsões diárias (igual para cada dia do mês)
+    previsao_registro = PrevisaoMensal.query.filter_by(
+        usina_id=usina_id, ano=ano, mes=mes
+    ).first()
+    valor_mensal = previsao_registro.previsao_kwh if previsao_registro else 0.0
+    previsao_diaria_padrao = (valor_mensal / dias_mes) if dias_mes else 0.0
+    previsoes = [round(previsao_diaria_padrao, 2) for _ in range(dias_mes)]
+
+    # := Cálculo dos totais anuais até o fim do mês
+    inicio_ano = date(ano, 1, 1)
+    fim_periodo = data_fim - timedelta(days=1)  # último dia do mês selecionado
+    ano_sum = db.session.query(func.coalesce(func.sum(Geracao.energia_kwh), 0.0)).filter(
+        Geracao.usina_id == usina_id,
+        Geracao.data >= inicio_ano,
+        Geracao.data <= fim_periodo
+    ).scalar() or 0.0
+
+    # Receita bruta e líquida acumuladas no ano
+    ano_bruto = round(ano_sum * 0.83, 2)
+    ano_liquido = round(ano_bruto * 0.80, 2)
+
     usinas = Usina.query.all()
 
     return render_template(
@@ -310,10 +336,16 @@ def producao_mensal(usina_id, ano, mes):
         meses=[str(i + 1) for i in range(dias_mes)],
         totais=totais,
         detalhes=detalhes,
-        previsao_total=previsao_total,
+        soma_total=soma,
         media_diaria=round(media_diaria, 2),
-        soma_total=soma
+        previsao_total=previsao_total,
+        previsoes=previsoes,
+        previsao_mensal=round(valor_mensal, 2),
+        ano_geracao_total=round(ano_sum, 2),
+        ano_faturamento_bruto=ano_bruto,
+        ano_faturamento_liquido=ano_liquido
     )
+
 
 @app.route('/importar_planilha', methods=['GET', 'POST'])
 def importar_planilha():
