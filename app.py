@@ -281,8 +281,7 @@ def producao_mensal(usina_id, ano, mes):
     # Define intervalo do mês
     data_inicio = date(ano, mes, 1)
     data_fim = date(ano + 1, 1, 1) if mes == 12 else date(ano, mes + 1, 1)
-
-    # := Busca todas as gerações do mês para esta usina
+    
     resultados = Geracao.query.filter(
         Geracao.usina_id == usina_id,
         Geracao.data >= data_inicio,
@@ -299,13 +298,11 @@ def producao_mensal(usina_id, ano, mes):
         totais[dia - 1] = r.energia_kwh
         soma += r.energia_kwh
         detalhes.append({'data': r.data, 'energia_kwh': r.energia_kwh})
-
-    # Média diária (apenas para exibição no alert)
+    
     dias_com_dado = len(resultados)
     media_diaria = soma / dias_com_dado if dias_com_dado > 0 else 0.0
     previsao_total = round(media_diaria * dias_mes, 2)
-
-    # := Monta lista de previsões diárias (igual para cada dia do mês)
+    
     previsao_registro = PrevisaoMensal.query.filter_by(
         usina_id=usina_id, ano=ano, mes=mes
     ).first()
@@ -313,9 +310,8 @@ def producao_mensal(usina_id, ano, mes):
     previsao_diaria_padrao = (valor_mensal / dias_mes) if dias_mes else 0.0
     previsoes = [round(previsao_diaria_padrao, 2) for _ in range(dias_mes)]
 
-    # := Cálculo dos totais anuais até o fim do mês
     inicio_ano = date(ano, 1, 1)
-    fim_periodo = data_fim - timedelta(days=1)  # último dia do mês selecionado
+    fim_periodo = data_fim - timedelta(days=1)  
     ano_sum = db.session.query(func.coalesce(func.sum(Geracao.energia_kwh), 0.0)).filter(
         Geracao.usina_id == usina_id,
         Geracao.data >= inicio_ano,
@@ -394,7 +390,6 @@ def importar_planilha():
 
     return render_template('importar_planilha.html', mensagem=mensagem, usinas=usinas)
 
-# Filtro customizado
 def formato_brasileiro(valor):
     try:
         return f"R$ {float(valor):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
@@ -415,11 +410,9 @@ app.jinja_env.filters['formato_tarifa'] = formato_tarifa
 def cadastrar_cliente():
     if not current_user.pode_cadastrar_cliente:
         return "Acesso negado", 403
-
-    # Lista de usinas para popular os dropdowns
+    
     usinas = Usina.query.all()
-
-    # Se houve POST, cadastra normalmente
+    
     if request.method == 'POST':
         nome = request.form['nome']
         cpf_cnpj = request.form['cpf_cnpj']
@@ -442,7 +435,6 @@ def cadastrar_cliente():
         db.session.commit()
         return redirect(url_for('cadastrar_cliente'))
 
-    # Se for GET, aplicamos filtro por usina (se fornecido)
     usina_id_filtro = request.args.get('usina_id', type=int)
     if usina_id_filtro:
         clientes = Cliente.query.filter_by(usina_id=usina_id_filtro).all()
@@ -698,9 +690,13 @@ def relatorio_fatura(fatura_id):
     economia_acumulada = economia + economia_total
 
     # Ficha de compensação, se houver
-    pdf_path = f'boletos/boleto_{fatura.id}.pdf'
-    ficha_path = f'static/ficha_compensacao_{fatura.id}.png'
-    ficha_compensacao_img = extrair_ficha_compensacao(pdf_path, ficha_path) if os.path.exists(pdf_path) else None
+    pasta_boletos = os.getenv('BOLETOS_PATH', '/data/boletos')
+    pdf_path = os.path.join(pasta_boletos, f"boleto_{fatura.id}.pdf")
+    ficha_path = f"static/ficha_compensacao_{fatura.id}.png"
+
+    ficha_compensacao_img = None
+    if os.path.exists(pdf_path):
+        ficha_compensacao_img = extrair_ficha_compensacao(pdf_path, ficha_path)
 
     return render_template(
         'relatorio_fatura.html',
@@ -735,7 +731,9 @@ def extrair_ficha_compensacao(pdf_path, output_path='static/ficha_compensacao.pn
 
 @app.route('/upload_boleto', methods=['GET', 'POST'])
 def upload_boleto():
-    faturas = FaturaMensal.query.join(Cliente).order_by(FaturaMensal.ano_referencia.desc(), FaturaMensal.mes_referencia.desc()).all()
+    faturas = FaturaMensal.query.order_by(
+        FaturaMensal.ano_referencia.desc(), FaturaMensal.mes_referencia.desc()
+    ).all()
     mensagem = ''
 
     if request.method == 'POST':
@@ -744,13 +742,17 @@ def upload_boleto():
 
         if not fatura_id or not arquivo:
             mensagem = "Selecione uma fatura e envie um arquivo."
-        elif not arquivo.filename.endswith('.pdf'):
+        elif not arquivo.filename.lower().endswith('.pdf'):
             mensagem = "O arquivo deve ser um PDF."
         else:
+            # Lê da variável de ambiente (ou usa '/data/boletos' por padrão)
+            pasta_boletos = os.getenv('BOLETOS_PATH', '/data/boletos')
+            os.makedirs(pasta_boletos, exist_ok=True)
+
             nome_arquivo = f"boleto_{fatura_id}.pdf"
-            caminho = os.path.join('boletos', nome_arquivo)
-            os.makedirs('boletos', exist_ok=True)
+            caminho = os.path.join(pasta_boletos, nome_arquivo)
             arquivo.save(caminho)
+
             mensagem = f"Boleto da fatura {fatura_id} enviado com sucesso."
 
     return render_template('upload_boleto.html', faturas=faturas, mensagem=mensagem)
