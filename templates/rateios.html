@@ -12,7 +12,7 @@
     <form method="POST" action="{{ url_for('cadastrar_rateio') }}">
         <div class="mb-3">
             <label for="usina_id" class="form-label">Usina</label>
-            <select class="form-select" id="usina_id" name="usina_id" required>
+            <select class="form-select" id="usina_id" name="usina_id" required onchange="carregarClientes()">
                 <option value="" disabled selected>Selecione a usina</option>
                 {% for usina in usinas %}
                     <option value="{{ usina.id }}">{{ usina.nome }}</option>
@@ -23,10 +23,7 @@
         <div class="mb-3">
             <label for="cliente_id" class="form-label">Cliente</label>
             <select class="form-select" id="cliente_id" name="cliente_id" required>
-                <option value="" disabled selected>Selecione o cliente</option>
-                {% for cliente in clientes %}
-                    <option value="{{ cliente.id }}">{{ cliente.nome }}</option>
-                {% endfor %}
+                <option value="">Selecione uma usina primeiro</option>
             </select>
         </div>
 
@@ -47,20 +44,56 @@
     <ul class="list-group">
         {% for rateio in rateios %}
             <li class="list-group-item d-flex justify-content-between align-items-center">
-    <div>
-        {{ rateio.usina.nome }} → {{ rateio.cliente.nome }} — {{ rateio.percentual }}% @ {{ rateio.tarifa_kwh|formato_tarifa }}
-    </div>
-    <div>
-        <a href="{{ url_for('editar_rateio', id=rateio.id) }}" class="btn btn-sm btn-warning">Editar</a>
-        <form action="{{ url_for('excluir_rateio', id=rateio.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Tem certeza que deseja excluir este rateio?');">
-            <button type="submit" class="btn btn-sm btn-danger">Excluir</button>
-        </form>
-    </div>
-</li>
+                <div>
+                    {{ rateio.usina.nome }} → {{ rateio.cliente.nome }} (ID: {{ rateio.cliente.id }}) —
+                    {{ rateio.percentual }}% @ {{ rateio.tarifa_kwh|formato_tarifa }}
+                </div>
+                <div>
+                    <a href="{{ url_for('editar_rateio', id=rateio.id) }}" class="btn btn-sm btn-warning">Editar</a>
+                    <form action="{{ url_for('excluir_rateio', id=rateio.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Tem certeza que deseja excluir este rateio?');">
+                        <button type="submit" class="btn btn-sm btn-danger">Excluir</button>
+                    </form>
+                </div>
+            </li>
         {% else %}
             <li class="list-group-item text-muted">Nenhum rateio cadastrado.</li>
         {% endfor %}
     </ul>
 </div>
+
+<script>
+function carregarClientes() {
+    const usinaId = document.getElementById("usina_id").value;
+    const clienteSelect = document.getElementById("cliente_id");
+    clienteSelect.innerHTML = '<option value="">Carregando...</option>';
+
+    fetch(`/clientes_da_usina/${usinaId}`)
+        .then(response => response.json())
+        .then(data => {
+            clienteSelect.innerHTML = "";
+
+            if (data.length === 0) {
+                clienteSelect.innerHTML = '<option value="">Nenhum cliente encontrado</option>';
+                return;
+            }
+
+            const defaultOption = document.createElement("option");
+            defaultOption.textContent = "Selecione o cliente";
+            defaultOption.disabled = true;
+            defaultOption.selected = true;
+            clienteSelect.appendChild(defaultOption);
+
+            data.forEach(cliente => {
+                const option = document.createElement("option");
+                option.value = cliente.id;
+                option.textContent = `${cliente.nome} (ID: ${cliente.id})`;
+                clienteSelect.appendChild(option);
+            });
+        })
+        .catch(() => {
+            clienteSelect.innerHTML = '<option value="">Erro ao carregar clientes</option>';
+        });
+}
+</script>
 </body>
 </html>

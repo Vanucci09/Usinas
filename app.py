@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify, make_response, send_file
+from flask import Flask, render_template, request, redirect, url_for, jsonify, make_response, send_file, flash
 from datetime import date, datetime, timedelta
 from calendar import monthrange
 import os
@@ -12,6 +12,9 @@ import fitz
 from PIL import Image
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+import time, hashlib, json, hmac, requests, base64, atexit
+from email.utils import formatdate
+from apscheduler.schedulers.background import BackgroundScheduler
 
 
 app = Flask(__name__)
@@ -32,6 +35,14 @@ migrate = Migrate(app, db)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
+SOLIS_KEY_ID     = os.getenv("SOLIS_KEY_ID")
+SOLIS_KEY_SECRET = os.getenv("SOLIS_KEY_SECRET")
+SOLIS_BASE_URL   = os.getenv("SOLIS_BASE_URL", "https://www.soliscloud.com:13333")
+
+if not SOLIS_KEY_ID or not SOLIS_KEY_SECRET:
+    raise RuntimeError("As variáveis de ambiente SOLIS_KEY_ID e SOLIS_KEY_SECRET precisam estar definidas.")
+
+
 @login_manager.user_loader
 def load_user(user_id):
     return Usuario.query.get(int(user_id))
@@ -44,6 +55,18 @@ class Usina(db.Model):
     nome = db.Column(db.String, nullable=False)
     potencia_kw = db.Column(db.Float, nullable=True)
     rateios = db.relationship('Rateio', backref='usina', cascade="all, delete-orphan")
+    
+class Inversor(db.Model):
+    """
+    Cada registro aqui representa um inversor (device) da Solis,
+    vinculado a uma única usina. Uma usina pode ter vários inversores.
+    """
+    __tablename__ = 'inversores'
+    id = db.Column(db.Integer, primary_key=True)
+    inverter_sn = db.Column(db.String, unique=True, nullable=False)
+    usina_id = db.Column(db.Integer, db.ForeignKey('usinas.id'), nullable=False)
+
+    usina = db.relationship('Usina', backref='inversores')
 
 class Geracao(db.Model):
     __tablename__ = 'geracoes'
@@ -51,6 +74,15 @@ class Geracao(db.Model):
     usina_id = db.Column(db.Integer, db.ForeignKey('usinas.id'))
     data = db.Column(db.Date, nullable=False)
     energia_kwh = db.Column(db.Float)
+    
+class GeracaoInversor(db.Model):
+    __tablename__ = 'geracoes_inversores'
+    id = db.Column(db.Integer, primary_key=True)
+    data = db.Column(db.Date, nullable=False)
+    inverter_sn = db.Column(db.String, nullable=False)
+    etoday = db.Column(db.Float)
+    etotal = db.Column(db.Float)
+    usina_id = db.Column(db.Integer, db.ForeignKey('usinas.id'))
 
 class Cliente(db.Model):
     __tablename__ = 'clientes'
@@ -345,6 +377,10 @@ def producao_mensal(usina_id, ano, mes):
         ano_faturamento_liquido=ano_liquido
     )
 
+@app.route('/clientes_da_usina/<int:usina_id>')
+def clientes_da_usina(usina_id):
+    clientes = Cliente.query.filter_by(usina_id=usina_id).all()
+    return jsonify([{"id": c.id, "nome": c.nome} for c in clientes])
 
 @app.route('/importar_planilha', methods=['GET', 'POST'])
 def importar_planilha():
@@ -712,7 +748,6 @@ def relatorio_fatura(fatura_id):
         economia_acumulada=economia_acumulada,
         ficha_compensacao_img=ficha_compensacao_img
     )
-
     
 def extrair_ficha_compensacao(pdf_path, output_path='static/ficha_compensacao.png'):
     doc = fitz.open(pdf_path)
@@ -1000,6 +1035,587 @@ def excluir_usuario(id):
     db.session.delete(usuario)
     db.session.commit()
     return redirect(url_for('listar_usuarios'))
+
+def montar_headers_solis(path: str, body_dict: dict) -> (dict, str):
+    # 1) JSON “compacto”
+    body_json = json.dumps(body_dict, separators=(",", ":"))
+    body_bytes = body_json.encode("utf-8")
+
+    # 2) MD5 em base64
+    md5_digest = hashlib.md5(body_bytes).digest()
+    content_md5 = base64.b64encode(md5_digest).decode()
+
+    # 3) Date GMT
+    date_str = formatdate(timeval=None, localtime=False, usegmt=True)
+
+    # 4) Content-Type exato
+    content_type = "application/json"
+
+    # 5) Montagem da string canônica
+    canonical_str = "\n".join([
+        "POST",
+        content_md5,
+        content_type,
+        date_str,
+        path
+    ])
+
+    # 6) Cálculo do HMAC-SHA1 e Base64
+    hmac_sha1 = hmac.new(
+        SOLIS_KEY_SECRET.encode("utf-8"),
+        canonical_str.encode("utf-8"),
+        hashlib.sha1
+    ).digest()
+    signature_b64 = base64.b64encode(hmac_sha1).decode()
+
+    # 7) Authorization
+    authorization_header = f"API {SOLIS_KEY_ID}:{signature_b64}"
+
+    # 8) Monta dicionário de headers
+    headers = {
+        "Content-MD5": content_md5,
+        "Content-Type": content_type,
+        "Date": date_str,
+        "Authorization": authorization_header
+    }
+    return headers, body_json
+
+def solis_listar_inversores():
+    """
+    Faz POST para /v1/api/inverterList com os headers corretos.
+    Retorna lista de inverter_sn (strings) ou lança RuntimeError se status != 200.
+    """
+    path = "/v1/api/inverterList"
+    endpoint = f"{SOLIS_BASE_URL}{path}"
+
+    # inverterList costuma aceitar corpo vazio:
+    body = {}
+    headers, body_json = montar_headers_solis(path, body)
+
+    resp = requests.post(endpoint, headers=headers, data=body_json, timeout=10)
+    if resp.status_code != 200:
+        raise RuntimeError(f"[Solis] Erro {resp.status_code} ao listar inversores: {resp.text}")
+
+    dados = resp.json()
+    
+    pagina = dados.get("data", {}).get("page", {})
+    registros = pagina.get("records", []) or []
+    
+    return [item.get("sn") for item in registros if item.get("sn")]
+
+def solis_obter_dados_dia(inverter_sn, dia_str):
+    """
+    Faz POST para /v1/api/inverterDay e retorna o JSON de geração diária.
+    Parâmetros:
+      - inverter_sn: string do número de série do inversor
+      - dia_str: data no formato "YYYY-MM-DD"
+    Retorna: dict (resp.json()), ou lança RuntimeError em caso de erro HTTP.
+    """
+    path = "/v1/api/inverterDay"
+    endpoint = f"{SOLIS_BASE_URL}{path}"
+
+    body = {
+        "inverter_sn": inverter_sn,
+        "day": dia_str
+    }
+    headers, body_json = montar_headers_solis(path, body)
+
+    resp = requests.post(endpoint, headers=headers, data=body_json, timeout=10)
+    if resp.status_code != 200:
+        raise RuntimeError(f"[Solis] Erro {resp.status_code} ao obter dados do dia: {resp.text}")
+    return resp.json()
+
+@app.route('/sync_solis/<string:dia>', methods=['GET'])
+@login_required
+def sync_solis(dia):
+    try:
+        data_obj = datetime.strptime(dia, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'erro': 'Formato de data inválido. Use YYYY-MM-DD.'}), 400
+
+    inversores = Inversor.query.all()
+    registros_inseridos = 0
+    registros_pulos = 0
+    erros = []
+
+    for inv in inversores:
+        try:
+            resp_json = solis_obter_dados_dia(inv.inverter_sn, dia)
+            lista_dados = resp_json.get("dataList") or resp_json.get("data") or []
+
+            energia_kwh = float(lista_dados[-1].get("dayEnergy", 0.0)) if lista_dados else 0.0
+
+            existente = Geracao.query.filter_by(usina_id=inv.usina_id, data=data_obj).first()
+            if existente:
+                registros_pulos += 1
+                continue
+
+            nova = Geracao(usina_id=inv.usina_id, data=data_obj, energia_kwh=energia_kwh)
+            db.session.add(nova)
+            registros_inseridos += 1
+        except Exception as e:
+            erros.append(f"{inv.inverter_sn}: {str(e)}")
+            continue
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'erro': f'Falha ao salvar: {str(e)}'}), 500
+
+    return jsonify({
+        'status': 'ok',
+        'dia': dia,
+        'inseridos': registros_inseridos,
+        'pulados': registros_pulos,
+        'total_inversores': len(inversores),
+        'erros': erros
+    })
+    
+@app.route('/portal_usinas')
+@login_required
+def portal_usinas():
+    try:
+        todos_records = listar_todos_inversores()
+    except Exception as e:
+        return render_template(
+            'portal_usinas.html',
+            usinas_info=[],
+            detalhe_por_plant={},
+            erro=f"Falha ao chamar API Solis: {str(e)}",
+            hoje="",
+            usinas=[]  
+        ), 500
+
+    # Agrupar inversores por planta
+    detalhe_por_plant = {}
+    for rec in todos_records:
+        station_id = rec.get("stationId") or ""
+        station_name = rec.get("stationName") or "Sem Nome"
+        nome_plant = f"{station_id} - {station_name}"
+        detalhe_por_plant.setdefault(nome_plant, []).append(rec)
+
+    # Resumo por planta
+    usinas_info = []
+    for nome_plant, lista in detalhe_por_plant.items():
+        total_inversores = len(lista)
+        online_inversores = sum(1 for r in lista if r.get("state") == 1)
+        rendimento_diario = sum(float(r.get("etoday", 0) or 0) for r in lista)
+        rendimento_total = sum(float(r.get("etotal", 0) or 0) for r in lista)
+
+        usinas_info.append({
+            "nome": nome_plant,
+            "total": total_inversores,
+            "online": online_inversores,
+            "rendimento_diario": rendimento_diario,
+            "rendimento_total": rendimento_total
+        })
+
+    usinas_info.sort(key=lambda x: x["nome"])
+    hoje = date.today().strftime("%Y-%m-%d")
+    
+    usinas = Usina.query.all()
+
+    return render_template(
+        'portal_usinas.html',
+        usinas_info=usinas_info,
+        detalhe_por_plant=detalhe_por_plant,
+        erro=None,
+        hoje=hoje,
+        usinas=usinas  
+    )
+    
+def listar_todos_inversores():
+    path = "/v1/api/inverterList"
+    todos = []
+    pagina = 1
+    MAX_PAGINAS = 5  # limite alto, mas seguro
+
+    while pagina <= MAX_PAGINAS:
+        body = {"currentPage": pagina, "pageSize": 50}
+        headers, body_json = montar_headers_solis(path, body)
+
+        try:
+            resp = requests.post(f"{SOLIS_BASE_URL}{path}", headers=headers, data=body_json, timeout=10)
+            resp.raise_for_status()
+            dados = resp.json()
+        except Exception as e:
+            print(f"Erro na página {pagina}: {e}")
+            break
+
+        registros = dados.get("data", {}).get("page", {}).get("records", [])
+        
+        if not registros:
+            break
+
+        todos.extend(registros)
+        pagina += 1
+
+    # Remover duplicados por SN (caso a API esteja replicando)
+    vistos = set()
+    unicos = []
+    for r in todos:
+        sn = r.get("sn")
+        if sn and sn not in vistos:
+            vistos.add(sn)
+            unicos.append(r)
+
+    print(f"Total de inversores únicos: {len(unicos)}")
+    return unicos
+
+@app.route('/cadastrar_inversor', methods=['GET', 'POST'])
+@login_required
+def cadastrar_inversor():
+    usinas = Usina.query.all()
+    mensagem = ''
+
+    if request.method == 'POST':
+        inverter_sn = request.form['inverter_sn']
+        usina_id = request.form['usina_id']
+
+        if Inversor.query.filter_by(inverter_sn=inverter_sn).first():
+            mensagem = "Este inversor já está cadastrado."
+        else:
+            novo = Inversor(inverter_sn=inverter_sn, usina_id=usina_id)
+            db.session.add(novo)
+            db.session.commit()
+            mensagem = "Inversor vinculado com sucesso."
+
+    return render_template('cadastrar_inversor.html', usinas=usinas, mensagem=mensagem)
+
+@app.route('/vincular_inversores', methods=['GET', 'POST'])
+@login_required
+def vincular_inversores():
+    try:
+        # Lista todos os inversores da Solis
+        registros = registros = listar_todos_inversores()  # função já existente no seu código
+    except Exception as e:
+        return render_template('vincular_inversores.html', erro=str(e), inversores=[], usinas=[])
+
+    # Remove duplicados pelo serial (caso a API tenha registros repetidos)
+    vistos = set()
+    unicos = []
+    for r in registros:
+        sn = r.get("sn")
+        if sn and sn not in vistos:
+            unicos.append(r)
+            vistos.add(sn)
+
+    usinas = Usina.query.all()
+
+    if request.method == 'POST':
+        sn = request.form.get('inverter_sn')
+        usina_id = request.form.get('usina_id')
+
+        if sn and usina_id:
+            # Verifica se já está vinculado
+            existente = Inversor.query.filter_by(inverter_sn=sn).first()
+            if not existente:
+                novo = Inversor(inverter_sn=sn, usina_id=usina_id)
+                db.session.add(novo)
+                db.session.commit()
+                flash(f"Inversor {sn} vinculado com sucesso!", "success")
+            else:
+                flash(f"Inversor {sn} já está vinculado.", "warning")
+
+        return redirect(url_for('vincular_inversores'))
+
+    return render_template('vincular_inversores.html', inversores=unicos, usinas=usinas)
+
+@app.route('/vincular_estacoes', methods=['GET', 'POST'])
+@login_required
+def vincular_estacoes():
+    try:
+        registros = listar_todos_inversores()
+    except Exception as e:
+        return render_template('vincular_estacoes.html', erro=str(e), estacoes=[], usinas=[])
+
+    # Agrupar inversores por estação válida (com stationId e stationName)
+    detalhe_por_plant = {}
+    for rec in registros:
+        station_id = rec.get("stationId")
+        station_name = rec.get("stationName")
+        if not station_id or not station_name:
+            continue
+        nome_plant = f"{station_id} - {station_name}"
+        detalhe_por_plant.setdefault(nome_plant, []).append(rec)
+
+    usinas = Usina.query.all()
+
+    if request.method == 'POST':
+        nome_plant = request.form.get('nome_plant')
+        usina_id = request.form.get('usina_id')
+
+        if nome_plant and usina_id and nome_plant in detalhe_por_plant:
+            inversores_da_estacao = detalhe_por_plant[nome_plant]
+            novos = 0
+            for rec in inversores_da_estacao:
+                sn = rec.get("sn")
+                if sn:
+                    ja_existe = Inversor.query.filter_by(inverter_sn=sn).first()
+                    if not ja_existe:
+                        novo = Inversor(inverter_sn=sn, usina_id=usina_id)
+                        db.session.add(novo)
+                        novos += 1
+            db.session.commit()
+            flash(f"{novos} inversores da estação \"{nome_plant}\" foram vinculados com sucesso!", "success")
+        else:
+            flash("Estação ou usina inválida.", "danger")
+
+        return redirect(url_for('vincular_estacoes'))
+
+    
+    return render_template(
+        'vincular_estacoes.html',
+        estacoes=sorted(detalhe_por_plant.keys()),  # <-- sem acento
+        usinas=usinas
+    )
+    
+@app.route('/atualizar_geracao')
+@login_required
+def atualizar_geracao():
+    registros = listar_todos_inversores()
+    hoje = date.today()
+
+    # Dicionário para acumular por usina
+    soma_por_usina = {}
+
+    for r in registros:
+        sn = r.get("sn")
+        if not sn:
+            continue
+
+        etoday = float(r.get("etoday", 0) or 0)
+        etotal = float(r.get("etotal", 0) or 0)
+
+        # Atualiza/inclui na tabela geracoes_inversores (opcional)
+        existente = GeracaoInversor.query.filter_by(inverter_sn=sn, data=hoje).first()
+        if existente:
+            existente.etoday = etoday
+            existente.etotal = etotal
+        else:
+            nova = GeracaoInversor(
+                data=hoje,
+                inverter_sn=sn,
+                etoday=etoday,
+                etotal=etotal
+            )
+            inversor = Inversor.query.filter_by(inverter_sn=sn).first()
+            if inversor:
+                nova.usina_id = inversor.usina_id
+                db.session.add(nova)
+            else:
+                continue  # não insere se não achar o inversor
+
+        # Acumula total por usina
+        inversor = Inversor.query.filter_by(inverter_sn=sn).first()
+        if inversor and inversor.usina_id:
+            soma_por_usina[inversor.usina_id] = soma_por_usina.get(inversor.usina_id, 0) + etoday
+
+    # Atualiza ou insere na tabela GERACOES (por usina e dia)
+    for usina_id, total_kwh in soma_por_usina.items():
+        geracao = Geracao.query.filter_by(usina_id=usina_id, data=hoje).first()
+        if geracao:
+            geracao.energia_kwh = total_kwh
+        else:
+            nova_geracao = Geracao(
+                usina_id=usina_id,
+                data=hoje,
+                energia_kwh=total_kwh
+            )
+            db.session.add(nova_geracao)
+
+    db.session.commit()
+    flash("Geração dos inversores e das usinas atualizada com sucesso.", "success")
+    return redirect(url_for('portal_usinas'))
+
+def listar_e_salvar_geracoes():
+    registros = listar_todos_inversores()
+    hoje = date.today()
+
+    # Para salvar dados por inversor
+    usina_kwh_por_dia = {}
+
+    for r in registros:
+        sn = r.get("sn")
+        if not sn:
+            continue
+
+        etoday = float(r.get("etoday", 0) or 0)
+        etotal = float(r.get("etotal", 0) or 0)
+
+        # Salva leitura individual
+        existente = GeracaoInversor.query.filter_by(inverter_sn=sn, data=hoje).first()
+        inversor = Inversor.query.filter_by(inverter_sn=sn).first()
+        if not inversor:
+            continue
+
+        # Atualiza/inclui leitura do inversor
+        if existente:
+            existente.etoday = etoday
+            existente.etotal = etotal
+        else:
+            nova = GeracaoInversor(
+                data=hoje,
+                inverter_sn=sn,
+                etoday=etoday,
+                etotal=etotal,
+                usina_id=inversor.usina_id
+            )
+            db.session.add(nova)
+
+        # Acumula sempre (independente de já existir)
+        usina_kwh_por_dia[inversor.usina_id] = usina_kwh_por_dia.get(inversor.usina_id, 0) + etoday
+
+    # Agora salva o total por usina na tabela Geracao
+    for usina_id, soma_etoday in usina_kwh_por_dia.items():
+        leitura = Geracao.query.filter_by(usina_id=usina_id, data=hoje).first()
+        if leitura:
+            leitura.energia_kwh = soma_etoday
+        else:
+            nova_leitura = Geracao(
+                data=hoje,
+                usina_id=usina_id,
+                energia_kwh=soma_etoday
+            )
+            db.session.add(nova_leitura)
+
+    db.session.commit()
+
+def atualizar_geracao_agendada():
+    with app.app_context():
+        try:
+            print(f"[{datetime.now()}] Atualizando geração automaticamente...")
+            listar_e_salvar_geracoes()
+            print("Atualização concluída.")
+        except Exception as e:
+            print(f"Erro na atualização agendada: {e}")
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(func=atualizar_geracao_agendada, trigger="interval", minutes=45)
+scheduler.start()
+
+# Garantir que pare quando o app for encerrado
+atexit.register(lambda: scheduler.shutdown())
+
+@app.route('/atualizar_periodo', methods=['GET', 'POST'])
+def atualizar_periodo():
+    usinas = Usina.query.all()
+
+    if request.method == 'POST':
+        usina_id = request.form.get('usina_id')
+        data_inicio = request.form.get('data_inicio')
+        data_fim = request.form.get('data_fim')
+
+        if not usina_id or not data_inicio or not data_fim:
+            flash("Todos os campos são obrigatórios.", "danger")
+            return redirect(url_for('atualizar_periodo'))
+
+        usina = Usina.query.get(int(usina_id))
+        if not usina:
+            flash("Usina não encontrada.", "danger")
+            return redirect(url_for('atualizar_periodo'))
+
+        data_atual = datetime.strptime(data_inicio, "%Y-%m-%d").date()
+        data_final = datetime.strptime(data_fim, "%Y-%m-%d").date()
+
+        while data_atual <= data_final:
+            print(f"🔄 Atualizando {usina.nome} para {data_atual}")
+            registros = listar_todos_inversores_por_data(data_atual)
+
+            # ⚠️ Corrigido: soma por stationName e salva só se tiver valor
+            soma_kwh = sum(
+                float(inv.get("pac", 0) or 0)
+                for inv in registros
+                if inv.get("stationName") == usina.nome
+            )
+
+            if soma_kwh > 0:
+                geracao_existente = Geracao.query.filter_by(usina_id=usina.id, data=data_atual).first()
+                if geracao_existente:
+                    geracao_existente.energia_kwh = soma_kwh
+                else:
+                    nova_geracao = Geracao(
+                        usina_id=usina.id,
+                        data=data_atual,
+                        energia_kwh=soma_kwh
+                    )
+                    db.session.add(nova_geracao)
+
+            data_atual += timedelta(days=1)
+
+        db.session.commit()
+        flash("Atualização concluída com sucesso!", "success")
+        return redirect(url_for('atualizar_periodo'))
+
+    return render_template('atualizar_periodo.html', usinas=usinas)
+
+
+def listar_todos_inversores_por_data(data: date):
+    """
+    Consulta todos os inversores da Solis para uma data retroativa.
+    """
+    
+    registros = []
+    ids_ja_vistos = set()
+    current_page = 1
+    page_size = 100
+    max_paginas = 50
+    data_str = data.strftime("%Y-%m-%d")
+
+    while current_page <= max_paginas:
+        payload = {
+            "currentPage": current_page,
+            "pageSize": page_size,
+            "day": data_str
+        }
+
+        headers, body_json = montar_headers_solis('/v1/api/inverterList', payload)
+
+        try:
+            response = requests.post(
+                url="https://www.soliscloud.com:13333/v1/api/inverterList",
+                headers=headers,
+                data=body_json,
+                timeout=20,
+                verify=False
+            )
+            response.raise_for_status()
+
+            print(f"🔍 Página {current_page} - Resposta da API ({data_str}):\n{response.text[:500]}")
+            data_api = response.json()
+            registros_pagina = data_api.get("data", {}).get("page", {}).get("records", [])
+
+            if data_api.get("success") and registros_pagina:
+                novos_registros = []
+
+                for reg in registros_pagina:
+                    reg_id = reg.get("id")
+                    if reg_id in ids_ja_vistos:
+                        continue  # apenas ignora duplicados
+
+                    ids_ja_vistos.add(reg_id)
+                    novos_registros.append(reg)
+
+                registros.extend(novos_registros)
+
+                if len(registros_pagina) < page_size:
+                    print(f"✅ Última página atingida com {len(registros_pagina)} registros.")
+                    break
+
+                current_page += 1
+            else:
+                print(f"⚠️ Sem registros válidos em {data_str} (página {current_page}).")
+                break
+
+        except Exception as e:
+            print(f"❌ Erro ao consultar a API ({data_str}): {e}")
+            break
+
+    else:
+        print(f"🛑 Máximo de {max_paginas} páginas atingido. Parando busca.")
+
+    return registros
 
 
 if __name__ == '__main__':

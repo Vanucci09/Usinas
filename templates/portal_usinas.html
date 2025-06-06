@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>Portal de Usinas</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    h1 { margin-bottom: 16px; }
+    .erro { color: red; margin-bottom: 20px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 8px 12px; border-bottom: 1px solid #ddd; text-align: left; }
+    th { background-color: #f5f5f5; }
+    tr.usina-linha:hover { background-color: #f0f8ff; cursor: pointer; }
+    .icone-verde, .icone-cinza {
+      display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px;
+    }
+    .icone-verde { background-color: #4CAF50; }
+    .icone-cinza { background-color: #B0B0B0; }
+    .btn-coletar, .btn-vincular {
+      padding: 6px 12px; background-color: #FFA500; border: none; color: #fff;
+      border-radius: 4px; font-size: 14px; cursor: pointer;
+    }
+    .btn-coletar:hover, .btn-vincular:hover { background-color: #e69500; }
+    tr.detalhes-linha td { background-color: #fafafa; padding: 0; }
+    table.subtabela { width: 100%; border-collapse: collapse; }
+    table.subtabela th, table.subtabela td {
+      padding: 6px 10px; border-bottom: 1px solid #eee; font-size: 13px;
+    }
+    table.subtabela th { background-color: #f0f0f0; }
+  </style>
+</head>
+<body>
+
+  <h1>Portal de Usinas</h1>
+
+  {% if erro %}
+    <div class="erro">{{ erro }}</div>
+  {% endif %}
+
+  {% if usinas_info %}
+    <table>
+      <thead>
+        <tr>
+          <th>Estado da Unidade</th>
+          <th>Nome da Planta</th>
+          <th>Proprietário</th>
+          <th>Inversor On-line</th>
+          <th>Rendimento Diário</th>
+          <th>Rendimento Total</th>
+          <th>Operação</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in usinas_info %}
+          <tr class="usina-linha" data-plant-id="{{ u.nome|replace(' ', '_') }}">
+            <td>
+              {% if u.online > 0 %}
+                <span class="icone-verde"></span>On-line
+              {% else %}
+                <span class="icone-cinza"></span>Off-line
+              {% endif %}
+            </td>
+            <td><strong>{{ u.nome }}</strong></td>
+            <td>--</td>
+            <td>{{ u.online }} / {{ u.total }}</td>
+            <td>{{ "%.1f"|format(u.rendimento_diario) }} kWh</td>
+            <td>{{ "%.3f"|format(u.rendimento_total) }} MWh</td>
+            <td>
+              <form method="GET" action="{{ url_for('sync_solis', dia=hoje) }}" class="d-inline">
+                <button type="submit" class="btn-coletar">Coletar</button>
+              </form>
+              <form method="POST" action="{{ url_for('vincular_estacoes') }}" class="d-inline">
+                <input type="hidden" name="nome_plant" value="{{ u.nome }}">
+                <select name="usina_id" class="form-select d-inline w-auto" required>
+                  <option value="">Vincular a...</option>
+                  {% for usina in usinas %}
+                    <option value="{{ usina.id }}">{{ usina.nome }}</option>
+                  {% endfor %}
+                </select>
+                <button type="submit" class="btn-vincular">Vincular</button>
+              </form>
+            </td>
+          </tr>
+
+          <tr class="detalhes-linha" id="detalhes-{{ u.nome|replace(' ', '_') }}" style="display: none;">
+            <td colspan="7">
+              <table class="subtabela">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Serial (SN)</th>
+                    <th>Status</th>
+                    <th>Rendimento Hoje (etoday)</th>
+                    <th>Rendimento Total (etotal)</th>
+                    <th>Modelo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% set lista = detalhe_por_plant[u.nome] %}
+                  {% for rec in lista %}
+                    <tr>
+                      <td>{{ loop.index }}</td>
+                      <td>{{ rec.sn }}</td>
+                      <td>
+                        {% if rec.state == 1 %}
+                          <span class="icone-verde"></span>On-line
+                        {% else %}
+                          <span class="icone-cinza"></span>Off-line
+                        {% endif %}
+                      </td>
+                      <td>{{ rec.etoday or "0.0" }} kWh</td>
+                      <td>{{ rec.etotal or "0.000" }} MWh</td>
+                      <td>{{ rec.productModel or '--' }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>Não há usinas vinculadas a inversores Solis.</p>
+  {% endif %}
+
+  <script>
+    document.querySelectorAll('tr.usina-linha').forEach(function(tr) {
+      tr.addEventListener('click', function() {
+        var id = 'detalhes-' + this.getAttribute('data-plant-id');
+        var detalhes = document.getElementById(id);
+        if (detalhes) {
+          detalhes.style.display = (detalhes.style.display === 'none') ? 'table-row' : 'none';
+        }
+      });
+    });
+  </script>
+<form action="{{ url_for('atualizar_geracao') }}" method="GET" class="d-inline">
+  <button class="btn btn-success">Atualizar Geração</button>
+</form>
+</body>
+</html>
