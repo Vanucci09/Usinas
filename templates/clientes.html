@@ -84,7 +84,7 @@
             {% for cliente in clientes %}
                 <li class="list-group-item d-flex justify-content-between align-items-start">
                     <div class="me-3">
-                        <strong>{{ cliente.nome }}</strong> – {{ cliente.cpf_cnpj }}<br>
+                        <strong>{{ cliente.nome }} - ID {{ cliente.id }}</strong> – {{ cliente.cpf_cnpj }}<br>
                         E-mail: {{ cliente.email }} | Telefone: {{ cliente.telefone }}<br>
                         Endereço: {{ cliente.endereco }} | Código Unidade: {{ cliente.codigo_unidade }}<br>
                         Usina: {{ cliente.usina.nome }}

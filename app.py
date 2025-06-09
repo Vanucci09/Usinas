@@ -164,6 +164,7 @@ def index():
     return render_template('index.html')
 
 @app.route('/cadastrar_usina', methods=['GET', 'POST'])
+@login_required
 def cadastrar_usina():
     if request.method == 'POST':
         cc = request.form['cc']
@@ -216,6 +217,7 @@ def cadastrar_geracao():
     return render_template('cadastrar_geracao.html', usinas=usinas)
 
 @app.route('/listar_geracoes')
+@login_required
 def listar_geracoes():
     data_inicio = request.args.get('data_inicio', date.today().replace(day=1))
     data_fim = request.args.get('data_fim', date.today())
@@ -261,6 +263,7 @@ def excluir_geracao(id):
     return redirect(url_for('listar_geracoes'))
 
 @app.route('/consulta')
+@login_required
 def consulta():
     usina_id = request.args.get('usina_id', '')
     data_inicio = request.args.get('data_inicio', date.today().replace(day=1).isoformat())
@@ -307,6 +310,7 @@ def consulta():
                            data_inicio=data_inicio, data_fim=data_fim, dias=dias, geracoes=geracoes, previsoes=previsoes)
 
 @app.route('/producao_mensal/<int:usina_id>/<int:ano>/<int:mes>')
+@login_required
 def producao_mensal(usina_id, ano, mes):
     usina = Usina.query.get_or_404(usina_id)
 
@@ -485,6 +489,7 @@ def cadastrar_cliente():
     )
 
 @app.route('/rateios', methods=['GET', 'POST'])
+@login_required
 def cadastrar_rateio():
     usinas = Usina.query.all()
     clientes = Cliente.query.all()
@@ -628,6 +633,7 @@ def clientes_por_usina(usina_id):
     return jsonify([{'id': c.id, 'nome': c.nome} for c in clientes])
 
 @app.route('/faturas')
+@login_required
 def listar_faturas():
     usina_id = request.args.get('usina_id', type=int)
     mes = request.args.get('mes', type=int)
@@ -769,6 +775,7 @@ def extrair_ficha_compensacao(pdf_path, output_path='static/ficha_compensacao.pn
     return output_path
 
 @app.route('/upload_boleto', methods=['GET', 'POST'])
+@login_required
 def upload_boleto():
     faturas = FaturaMensal.query.join(Cliente).order_by(
         FaturaMensal.ano_referencia.desc(),
@@ -811,6 +818,7 @@ def excluir_fatura(id):
     return redirect(url_for('listar_faturas'))
 
 @app.route('/extrair_dados_fatura', methods=['POST'])
+@login_required
 def extrair_dados_fatura():
     import re
 
