@@ -632,11 +632,14 @@ def listar_faturas():
     usina_id = request.args.get('usina_id', type=int)
     mes = request.args.get('mes', type=int)
     ano = request.args.get('ano', type=int)
+    cliente_id = request.args.get('cliente_id', type=int)
 
     query = FaturaMensal.query.join(Cliente).join(Usina)
 
     if usina_id:
         query = query.filter(Usina.id == usina_id)
+    if cliente_id:
+        query = query.filter(FaturaMensal.cliente_id == cliente_id)
     if mes:
         query = query.filter(FaturaMensal.mes_referencia == mes)
     if ano:
@@ -644,9 +647,10 @@ def listar_faturas():
 
     faturas = query.order_by(FaturaMensal.ano_referencia.desc(), FaturaMensal.mes_referencia.desc()).all()
     usinas = Usina.query.all()
+    clientes = Cliente.query.all()
     anos = sorted({f.ano_referencia for f in FaturaMensal.query.all()}, reverse=True)
 
-    return render_template('listar_faturas.html', faturas=faturas, usinas=usinas, anos=anos,
+    return render_template('listar_faturas.html', faturas=faturas, usinas=usinas, clientes=clientes, anos=anos,
                            usina_id=usina_id, mes=mes, ano=ano)
 
 @app.route('/editar_fatura/<int:id>', methods=['GET', 'POST'])
