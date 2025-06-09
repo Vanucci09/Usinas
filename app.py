@@ -770,9 +770,12 @@ def extrair_ficha_compensacao(pdf_path, output_path='static/ficha_compensacao.pn
 
 @app.route('/upload_boleto', methods=['GET', 'POST'])
 def upload_boleto():
-    faturas = FaturaMensal.query.order_by(
-        FaturaMensal.ano_referencia.desc(), FaturaMensal.mes_referencia.desc()
+    faturas = FaturaMensal.query.join(Cliente).order_by(
+        FaturaMensal.ano_referencia.desc(),
+        FaturaMensal.mes_referencia.desc()
     ).all()
+
+    fatura_id_selecionada = request.args.get('fatura_id', type=int)
     mensagem = ''
 
     if request.method == 'POST':
@@ -784,7 +787,6 @@ def upload_boleto():
         elif not arquivo.filename.lower().endswith('.pdf'):
             mensagem = "O arquivo deve ser um PDF."
         else:
-            # Lê da variável de ambiente (ou usa '/data/boletos' por padrão)
             pasta_boletos = os.getenv('BOLETOS_PATH', '/data/boletos')
             os.makedirs(pasta_boletos, exist_ok=True)
 
@@ -794,7 +796,12 @@ def upload_boleto():
 
             mensagem = f"Boleto da fatura {fatura_id} enviado com sucesso."
 
-    return render_template('upload_boleto.html', faturas=faturas, mensagem=mensagem)
+    return render_template(
+        'upload_boleto.html',
+        faturas=faturas,
+        mensagem=mensagem,
+        fatura_id_selecionada=fatura_id_selecionada
+    )
 
 @app.route('/excluir_fatura/<int:id>', methods=['POST'])
 def excluir_fatura(id):

@@ -14,14 +14,61 @@
         <div class="alert alert-info text-center">{{ mensagem }}</div>
     {% endif %}
 
+    <!-- Filtros -->
+    <div class="row mb-3">
+        <div class="col-md-3">
+            <label class="form-label">Usina</label>
+            <select id="usinaFiltro" class="form-select">
+                <option value="">Todas</option>
+                {% for usina in usinas %}
+                    <option value="{{ usina.id }}">{{ usina.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Cliente</label>
+            <select id="clienteFiltro" class="form-select">
+                <option value="">Todos</option>
+                {% for cliente in clientes %}
+                    <option value="{{ cliente.id }}" data-usina="{{ cliente.usina_id }}">{{ cliente.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">Mês</label>
+            <select id="mesFiltro" class="form-select">
+                <option value="">Todos</option>
+                {% for m in range(1, 13) %}
+                    <option value="{{ m }}">{{ "%02d"|format(m) }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">Ano</label>
+            <select id="anoFiltro" class="form-select">
+                <option value="">Todos</option>
+                {% for a in anos %}
+                    <option value="{{ a }}">{{ a }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <!-- Formulário de envio -->
     <form method="POST" enctype="multipart/form-data">
         <div class="mb-3">
             <label for="fatura_id" class="form-label">Fatura</label>
-            <select class="form-select" name="fatura_id" required>
+            <select class="form-select" name="fatura_id" id="faturaSelect" required>
                 <option value="" disabled selected>Selecione a fatura</option>
                 {% for fatura in faturas %}
-                    <option value="{{ fatura.id }}">
-                        {{ fatura.cliente.nome }} - {{ fatura.mes_referencia }}/{{ fatura.ano_referencia }} (ID {{ fatura.id }})
+                    <option 
+                        value="{{ fatura.id }}"
+                        data-usina="{{ fatura.cliente.usina_id }}"
+                        data-cliente="{{ fatura.cliente.id }}"
+                        data-mes="{{ fatura.mes_referencia }}"
+                        data-ano="{{ fatura.ano_referencia }}"
+                        {% if fatura.id == fatura_id_selecionada %}selected{% endif %}>
+                        {{ fatura.cliente.nome }} - {{ fatura.mes_referencia }}/{{ fatura.ano_referencia }} (ID {{ fatura.cliente.id }})
                     </option>
                 {% endfor %}
             </select>
@@ -36,8 +83,63 @@
             <button class="btn btn-success btn-lg" type="submit">Enviar Boleto</button>
         </div>
     </form>
+
     <a href="/" class="btn btn-secondary mt-3">Voltar</a>
 </div>
+
+<script>
+    function aplicarFiltros() {
+        const usina = document.getElementById('usinaFiltro').value;
+        const cliente = document.getElementById('clienteFiltro').value;
+        const mes = document.getElementById('mesFiltro').value;
+        const ano = document.getElementById('anoFiltro').value;
+        const faturaSelect = document.getElementById('faturaSelect');
+
+        Array.from(faturaSelect.options).forEach(opt => {
+            if (!opt.value) return;
+
+            const matchUsina = !usina || opt.dataset.usina === usina;
+            const matchCliente = !cliente || opt.dataset.cliente === cliente;
+            const matchMes = !mes || opt.dataset.mes === mes;
+            const matchAno = !ano || opt.dataset.ano === ano;
+
+            opt.style.display = matchUsina && matchCliente && matchMes && matchAno ? 'block' : 'none';
+        });
+
+        faturaSelect.selectedIndex = 0;
+    }
+
+    document.getElementById('usinaFiltro').addEventListener('change', function () {
+        const usinaId = this.value;
+        const clienteFiltro = document.getElementById('clienteFiltro');
+
+        Array.from(clienteFiltro.options).forEach(opt => {
+            if (!opt.value) return;
+            opt.style.display = !usinaId || opt.dataset.usina === usinaId ? 'block' : 'none';
+        });
+
+        clienteFiltro.selectedIndex = 0;
+        aplicarFiltros();
+    });
+
+    document.getElementById('clienteFiltro').addEventListener('change', aplicarFiltros);
+    document.getElementById('mesFiltro').addEventListener('change', aplicarFiltros);
+    document.getElementById('anoFiltro').addEventListener('change', aplicarFiltros);
+
+    // Seleciona automaticamente a fatura se vinda via GET
+    const faturaIdSelecionada = {{ fatura_id_selecionada or 'null' }};
+    if (faturaIdSelecionada) {
+        const option = document.querySelector(`#faturaSelect option[value="${faturaIdSelecionada}"]`);
+        if (option) {
+            document.getElementById('usinaFiltro').value = option.dataset.usina;
+            document.getElementById('clienteFiltro').value = option.dataset.cliente;
+            document.getElementById('mesFiltro').value = option.dataset.mes;
+            document.getElementById('anoFiltro').value = option.dataset.ano;
+            aplicarFiltros();
+            option.selected = true;
+        }
+    }
+</script>
 
 </body>
 </html>

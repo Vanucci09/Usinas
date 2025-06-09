@@ -113,7 +113,7 @@
                             <form method="POST" action="{{ url_for('excluir_fatura', id=fatura.id) }}" onsubmit="return confirm('Confirmar exclusão?');">
                                 <button type="submit" class="btn btn-sm btn-danger">Excluir</button>
                             </form>
-                            <a href="{{ url_for('upload_boleto', fatura_id=fatura.id) }}" class="btn btn-sm btn-info">Boleto</a>
+                            <a href="{{ url_for('upload_boleto') }}?fatura_id={{ fatura.id }}" class="btn btn-sm btn-info">Boleto</a>
                             <a href="{{ url_for('relatorio_fatura', fatura_id=fatura.id) }}" target="_blank" class="btn btn-sm btn-success">Relatório</a>
                             {% if fatura.cliente.telefone %}
                                 {% set telefone_clean = fatura.cliente.telefone.replace(' ','').replace('-','') %}
