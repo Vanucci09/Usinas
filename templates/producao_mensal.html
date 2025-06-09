@@ -196,7 +196,7 @@
                         {% set liquido = faturamento * 0.80 %}
                         <tr>
                             <td>{{ item.data }}</td>
-                            <td>{{ item.energia_kwh }}</td>
+                            <td>{{'%.2f' | format(item.energia_kwh) }}</td>
                             <td>{{ faturamento|formato_brasileiro }}</td>
                             <td>{{ liquido|formato_brasileiro }}</td>
                         </tr>

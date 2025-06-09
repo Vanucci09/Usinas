@@ -1232,7 +1232,7 @@ def listar_todos_inversores():
     MAX_PAGINAS = 5  # limite alto, mas seguro
 
     while pagina <= MAX_PAGINAS:
-        body = {"currentPage": pagina, "pageSize": 50}
+        body = {"currentPage": pagina, "pageSize": 100}
         headers, body_json = montar_headers_solis(path, body)
 
         try:
