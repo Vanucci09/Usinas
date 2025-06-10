@@ -45,7 +45,7 @@
         {% for rateio in rateios %}
             <li class="list-group-item d-flex justify-content-between align-items-center">
                 <div>
-                    {{ rateio.usina.nome }} → {{ rateio.cliente.nome }} (ID: {{ rateio.cliente.id }}) —
+                    {{ rateio.usina.nome }} → {{ rateio.cliente.nome }} (ID: {{ rateio.codigo_rateio }}) —
                     {{ rateio.percentual }}% @ {{ rateio.tarifa_kwh|formato_tarifa }}
                 </div>
                 <div>

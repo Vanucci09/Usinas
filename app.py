@@ -55,6 +55,7 @@ class Usina(db.Model):
     nome = db.Column(db.String, nullable=False)
     potencia_kw = db.Column(db.Float, nullable=True)
     rateios = db.relationship('Rateio', backref='usina', cascade="all, delete-orphan")
+    logo_url = db.Column(db.String(200))
     
 class Inversor(db.Model):
     """
@@ -105,6 +106,7 @@ class Rateio(db.Model):
     cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=False)
     percentual = db.Column(db.Float, nullable=False)
     tarifa_kwh = db.Column(db.Float, nullable=False)
+    codigo_rateio = db.Column(db.Integer, nullable=True)
     
 class FaturaMensal(db.Model):
     __tablename__ = 'faturas_mensais'
@@ -167,6 +169,7 @@ def index():
 @login_required
 def cadastrar_usina():
     if request.method == 'POST':
+        logo = request.files.get('logo')
         cc = request.form['cc']
         nome = request.form['nome']
         potencia = request.form['potencia']
@@ -175,6 +178,24 @@ def cadastrar_usina():
         nova_usina = Usina(cc=cc, nome=nome, potencia_kw=potencia)
         db.session.add(nova_usina)
         db.session.commit()
+
+        # Salvar o logo se enviado
+        if logo and logo.filename != '':
+            filename = secure_filename(logo.filename)
+
+            # Define o caminho com base no ambiente
+            if os.getenv('FLASK_ENV') == 'production':
+                caminho_base = '/data/logos'
+            else:
+                caminho_base = os.path.join('static', 'logos')
+
+            os.makedirs(caminho_base, exist_ok=True)  # Garante que a pasta existe
+
+            caminho_logo = os.path.join(caminho_base, filename)
+            logo.save(caminho_logo)
+
+            nova_usina.logo_url = filename
+            db.session.commit()
 
         # Previsões mensais
         for mes in range(1, 13):
@@ -192,7 +213,7 @@ def cadastrar_usina():
         db.session.commit()
         return redirect(url_for('cadastrar_usina'))
 
-    return render_template('cadastrar_usina.html')
+    return render_template('cadastrar_usina.html', env=os.getenv('FLASK_ENV'))
 
 @app.route('/cadastrar_geracao', methods=['GET', 'POST'])
 @login_required
@@ -495,13 +516,26 @@ def cadastrar_rateio():
     clientes = Cliente.query.all()
 
     if request.method == 'POST':
-        usina_id = request.form['usina_id']
-        cliente_id = request.form['cliente_id']
+        usina_id = int(request.form['usina_id'])
+        cliente_id = int(request.form['cliente_id'])
         percentual = float(request.form['percentual'])
         tarifa_kwh = float(request.form['tarifa_kwh'])
 
-        rateio = Rateio(usina_id=usina_id, cliente_id=cliente_id,
-                        percentual=percentual, tarifa_kwh=tarifa_kwh)
+        # Buscar o maior codigo_rateio já usado para essa usina
+        ultimo_codigo = db.session.query(
+            db.func.max(Rateio.codigo_rateio)
+        ).filter_by(usina_id=usina_id).scalar()
+
+        proximo_codigo = 1 if ultimo_codigo is None else ultimo_codigo + 1
+
+        rateio = Rateio(
+            usina_id=usina_id,
+            cliente_id=cliente_id,
+            percentual=percentual,
+            tarifa_kwh=tarifa_kwh,
+            codigo_rateio=proximo_codigo  # Define o código sequencial
+        )
+
         db.session.add(rateio)
         db.session.commit()
         return redirect(url_for('cadastrar_rateio'))
@@ -596,7 +630,7 @@ def faturamento():
             injetado = limpar_valor(request.form['injetado'])
             valor_conta_neoenergia = limpar_valor(request.form['valor_conta_neoenergia'])
 
-            identificador = f"{cliente_id}-{mes:02d}-{ano}"
+            identificador = f"{codigo_rateio}-{mes:02d}-{ano}"
 
             existente = FaturaMensal.query.filter_by(identificador=identificador).first()
             if existente:
@@ -628,9 +662,20 @@ def faturamento():
     return render_template('faturamento.html', usinas=usinas, clientes=clientes, mensagem=mensagem)
 
 @app.route('/clientes_por_usina/<int:usina_id>')
+@login_required
 def clientes_por_usina(usina_id):
     clientes = Cliente.query.filter_by(usina_id=usina_id).all()
-    return jsonify([{'id': c.id, 'nome': c.nome} for c in clientes])
+    resultado = []
+
+    for cliente in clientes:
+        rateio = cliente.rateios[0] if cliente.rateios else None
+        resultado.append({
+            'id': cliente.id,
+            'nome': cliente.nome,
+            'codigo_rateio': rateio.codigo_rateio if rateio else ''
+        })
+
+    return jsonify(resultado)
 
 @app.route('/faturas')
 @login_required
@@ -756,7 +801,8 @@ def relatorio_fatura(fatura_id):
         sem_desconto=sem_desconto,
         economia=economia,
         economia_acumulada=economia_acumulada,
-        ficha_compensacao_img=ficha_compensacao_img
+        ficha_compensacao_img=ficha_compensacao_img,
+        env=os.getenv('FLASK_ENV')
     )
     
 def extrair_ficha_compensacao(pdf_path, output_path='static/ficha_compensacao.png'):
@@ -947,17 +993,40 @@ def editar_previsoes(usina_id):
                     db.session.add(previsao)
                 previsao.previsao_kwh = float(valor.replace(',', '.'))
 
+        # Upload da nova logo (se enviada)
+        if 'logo' in request.files:
+            logo = request.files['logo']
+            if logo and logo.filename != '':
+                filename = secure_filename(logo.filename)
+
+                # Define o caminho com base no ambiente
+                if os.getenv('FLASK_ENV') == 'production':
+                    caminho_base = '/data/logos'
+                else:
+                    caminho_base = os.path.join('static', 'logos')
+
+                os.makedirs(caminho_base, exist_ok=True)  # Garante que a pasta existe
+
+                logo_path = os.path.join(caminho_base, filename)
+                logo.save(logo_path)
+
+                usina.logo_url = filename
+
         db.session.commit()
         return redirect(url_for('editar_previsoes', usina_id=usina.id, ano=ano))
 
     # Preenche os valores existentes no formulário
-    previsoes = {p.mes: p.previsao_kwh for p in PrevisaoMensal.query.filter_by(usina_id=usina.id, ano=ano).all()}
+    previsoes = {
+        p.mes: p.previsao_kwh
+        for p in PrevisaoMensal.query.filter_by(usina_id=usina.id, ano=ano).all()
+    }
 
     return render_template(
         'editar_previsoes.html',
         usina=usina,
         previsoes=previsoes,
-        ano=ano
+        ano=ano,
+        env=os.getenv('FLASK_ENV')  # para uso no template
     )
 
 @app.route('/usinas')
@@ -1542,7 +1611,7 @@ def atualizar_periodo():
             print(f"🔄 Atualizando {usina.nome} para {data_atual}")
             registros = listar_todos_inversores_por_data(data_atual)
 
-            # ⚠️ Corrigido: soma por stationName e salva só se tiver valor
+            # soma por stationName e salva só se tiver valor
             soma_kwh = sum(
                 float(inv.get("pac", 0) or 0)
                 for inv in registros
@@ -1635,6 +1704,11 @@ def listar_todos_inversores_por_data(data: date):
         print(f"🛑 Máximo de {max_paginas} páginas atingido. Parando busca.")
 
     return registros
+
+@app.route('/logos/<nome_arquivo>')
+def servir_logo(nome_arquivo):
+    caminho_base = '/data/logos'
+    return send_from_directory(caminho_base, nome_arquivo)
 
 
 if __name__ == '__main__':

@@ -84,7 +84,15 @@
             {% for cliente in clientes %}
                 <li class="list-group-item d-flex justify-content-between align-items-start">
                     <div class="me-3">
-                        <strong>{{ cliente.nome }} - ID {{ cliente.id }}</strong> – {{ cliente.cpf_cnpj }}<br>
+                        {% set rateio = cliente.rateios[0] if cliente.rateios else None %}
+                        <strong>
+                            {{ cliente.nome }}
+                            {% if rateio %}
+                                – ID: {{ rateio.codigo_rateio }}
+                            {% else %}
+                                – <span class="text-danger">Sem rateio</span>
+                            {% endif %}
+                        </strong> – {{ cliente.cpf_cnpj }}<br>
                         E-mail: {{ cliente.email }} | Telefone: {{ cliente.telefone }}<br>
                         Endereço: {{ cliente.endereco }} | Código Unidade: {{ cliente.codigo_unidade }}<br>
                         Usina: {{ cliente.usina.nome }}

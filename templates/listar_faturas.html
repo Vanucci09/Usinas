@@ -97,7 +97,15 @@
             <tbody>
             {% for fatura in faturas %}
                 <tr>
-                    <td>{{ fatura.cliente.nome }} <br><small class="text-muted">ID: {{ fatura.cliente.id }}</small></td>
+                    {% set rateio = fatura.cliente.rateios[0] if fatura.cliente.rateios else None %}
+                    <td>
+                        {{ fatura.cliente.nome }}
+                        {% if rateio %}
+                            <br><small class="text-muted">ID: {{ rateio.codigo_rateio }}</small>
+                        {% else %}
+                            <br><small class="text-muted text-danger">Sem rateio</small>
+                        {% endif %}
+                    </td>
                     <td>{{ fatura.mes_referencia }}/{{ fatura.ano_referencia }}</td>
                     <td>
                         {% set rateio = fatura.cliente.rateios[0] if fatura.cliente.rateios else None %}

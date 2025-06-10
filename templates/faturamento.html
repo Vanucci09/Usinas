@@ -107,7 +107,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 clientes.forEach(c => {
                     const opt = document.createElement('option');
                     opt.value = c.id;
-                    opt.textContent = `(${c.id}) ${c.nome}`;
+                    opt.textContent = `(${c.codigo_rateio}) ${c.nome}`;
                     clienteSelect.appendChild(opt);
                 });
                 clienteSelect.disabled = false;

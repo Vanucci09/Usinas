@@ -58,7 +58,10 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <img src="{{ url_for('static', filename='img/logo_cgr.png') }}" alt="CGR Energia" class="logo">
         <h5 class="text-center flex-grow-1">Relatório de Faturamento {{ usina.nome }}</h5>
-        <img src="{{ url_for('static', filename='img/logo_supernova.png') }}" alt="Supernova" class="logo">
+
+        {% if usina.logo_url %}
+            <img src="{{ url_for('servir_logo', nome_arquivo=usina.logo_url) if env == 'production' else url_for('static', filename='logos/' + usina.logo_url) }}" alt="Logo da Usina" class="logo">
+        {% endif %}
     </div>
 
     <!-- Dados do cliente e fatura -->
@@ -168,5 +171,6 @@
         </div>
     {% endif %}
 </div>
+
 </body>
 </html>
