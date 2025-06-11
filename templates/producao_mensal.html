@@ -22,273 +22,281 @@
     </style>
 </head>
 <body>
-    
-    <div class="container mt-4">
 
-        <h2 class="mb-4 text-primary">
-            Produção Mensal – {{ usina_nome }} 
-            {% if potencia_kw is not none %}
-                ({{ potencia_kw }} kWp)
-            {% endif %}
-        </h2>
-        
-        <div class="row justify-content-center mb-4">
-            <div class="col-lg-8">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-white">
-                        <h5 class="mb-0">Filtros</h5>
+<div class="container mt-4">
+    <h2 class="mb-4 text-primary">
+        Produção Mensal – {{ usina_nome }}
+        {% if potencia_kw is not none %}
+            ({{ potencia_kw }} kWp)
+        {% endif %}
+    </h2>
+
+    <!-- Filtros -->
+    <div class="row justify-content-center mb-4">
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">Filtros</h5>
+                </div>
+                <div class="card-body row g-3">
+                    <div class="col-md-4">
+                        <label for="usina_id" class="form-label">Usina</label>
+                        <select class="form-select" id="usina_id">
+                            <option value="">Selecione</option>
+                            {% for usina in usinas %}
+                                <option value="{{ usina.id }}" {% if usina_id|int == usina.id %}selected{% endif %}>
+                                    {{ usina.nome }}
+                                </option>
+                            {% endfor %}
+                        </select>
                     </div>
-                    <div class="card-body row g-3">
-                        <div class="col-md-4">
-                            <label for="usina_id" class="form-label">Usina</label>
-                            <select class="form-select" id="usina_id">
-                                <option value="">Selecione</option>
-                                {% for usina in usinas %}
-                                    <option value="{{ usina.id }}" {% if usina_id|int == usina.id %}selected{% endif %}>
-                                        {{ usina.nome }}
-                                    </option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <label for="ano" class="form-label">Ano</label>
-                            <input type="number" class="form-control" id="ano" value="{{ ano }}" min="2000" max="2100">
-                        </div>
-                        <div class="col-md-2">
-                            <label for="mes" class="form-label">Mês</label>
-                            <input type="number" class="form-control" id="mes" value="{{ mes }}" min="1" max="12">
-                        </div>
-                        <div class="col-md-4 d-flex align-items-end">
-                            <small class="text-muted">
-                                As informações serão atualizadas automaticamente ao alterar algum filtro.
-                            </small>
-                        </div>
+                    <div class="col-md-2">
+                        <label for="ano" class="form-label">Ano</label>
+                        <input type="number" class="form-control" id="ano" value="{{ ano }}" min="2000" max="2100">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="mes" class="form-label">Mês</label>
+                        <input type="number" class="form-control" id="mes" value="{{ mes }}" min="1" max="12">
                     </div>
                 </div>
             </div>
         </div>
-        <!-- ===== FIM DOS FILTROS ===== -->
+    </div>
 
-
-        <!-- ===== Totais Anuais ===== -->
-        <div class="row mb-4">
-            <div class="col-md-4 fade-in">
-                <div class="card border-secondary shadow-sm">
-                    <div class="card-body d-flex align-items-center">
-                        <i class="bi bi-calendar fs-1 me-3"></i>
-                        <div>
-                            <h5 class="card-title text-secondary">Geração Anual Atual</h5>
-                            <p class="card-text fs-4">{{ ano_geracao_total }} kWh</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4 fade-in" style="animation-delay: 0.2s;">
-                <div class="card border-info shadow-sm">
-                    <div class="card-body d-flex align-items-center">
-                        <i class="bi bi-currency-dollar fs-1 text-info me-3"></i>
-                        <div>
-                            <h5 class="card-title text-info">Faturamento Bruto Anual</h5>
-                            <p class="card-text fs-4">{{ ano_faturamento_bruto | formato_brasileiro }}</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4 fade-in" style="animation-delay: 0.4s;">
-                <div class="card border-dark shadow-sm">
-                    <div class="card-body d-flex align-items-center">
-                        <i class="bi bi-cash-stack fs-1 text-dark me-3"></i>
-                        <div>
-                            <h5 class="card-title text-dark">Faturamento Líquido Anual</h5>
-                            <p class="card-text fs-4">{{ ano_faturamento_liquido | formato_brasileiro }}</p>
-                        </div>
-                    </div>
+    <!-- Métricas -->
+    <div class="row mb-4">
+        <div class="col-md-3 fade-in">
+            <div class="card border-success shadow-sm">
+                <div class="card-body">
+                    <h6 class="text-success">Geração Anual</h6>
+                    <p class="fs-5">{{ ano_geracao_total }} kWh</p>
                 </div>
             </div>
         </div>
-        <!-- ===== Fim dos Totais Anuais ===== -->
-
-
-        <!-- ===== Totais Mensais ===== -->
-        {% set totais_faturamento = {'bruto': 0, 'liquido': 0, 'geracao_total': 0} %}
-        {% for item in detalhes %}
-            {% set faturamento = item.energia_kwh * 0.83 %}
-            {% set liquido = faturamento * 0.80 %}
-            {% set _ = totais_faturamento.update({
-                'bruto': totais_faturamento.bruto + faturamento,
-                'liquido': totais_faturamento.liquido + liquido,
-                'geracao_total': totais_faturamento.geracao_total + item.energia_kwh
-            }) %}
-        {% endfor %}
-        <div class="row mb-5">
-            <div class="col-md-4 fade-in">
-                <div class="card border-warning shadow-sm">
-                    <div class="card-body d-flex align-items-center">
-                        <i class="bi bi-lightning-charge text-warning fs-1 me-3"></i>
-                        <div>
-                            <h5 class="card-title text-warning">Geração Total Atual</h5>
-                            <p class="card-text fs-4">{{ '%.2f' | format(totais_faturamento.geracao_total) }} kWh</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4 fade-in" style="animation-delay: 0.2s;">
-                <div class="card border-success shadow-sm">
-                    <div class="card-body d-flex align-items-center">
-                        <i class="bi bi-currency-dollar text-success fs-1 me-3"></i>
-                        <div>
-                            <h5 class="card-title text-success">Previsão Faturamento Bruto</h5>
-                            <p class="card-text fs-4">{{ totais_faturamento.bruto | formato_brasileiro }}</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4 fade-in" style="animation-delay: 0.4s;">
-                <div class="card border-primary shadow-sm">
-                    <div class="card-body d-flex align-items-center">
-                        <i class="bi bi-cash-stack text-primary fs-1 me-3"></i>
-                        <div>
-                            <h5 class="card-title text-primary">Previsão Valor Líquido</h5>
-                            <p class="card-text fs-4">{{ totais_faturamento.liquido | formato_brasileiro }}</p>
-                        </div>
-                    </div>
+        <div class="col-md-3 fade-in" style="animation-delay: 0.2s;">
+            <div class="card border-primary shadow-sm">
+                <div class="card-body">
+                    <h6 class="text-primary">Geração Mensal</h6>
+                    <p class="fs-5">{{ soma_total | round(2) }} kWh</p>
                 </div>
             </div>
         </div>
-        <!-- ===== Fim dos Totais Mensais ===== -->
+        <div class="col-md-3 fade-in" style="animation-delay: 0.4s;">
+            <div class="card border-warning shadow-sm">
+                <div class="card-body">
+                    <h6 class="text-warning">Previsão Mensal</h6>
+                    <p class="fs-5">{{ previsao_mensal }} kWh</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 fade-in" style="animation-delay: 0.6s;">
+            <div class="card border-dark shadow-sm">
+                <div class="card-body">
+                    <h6 class="text-dark">Yield (kWh/kWp)</h6>
+                    <p class="fs-5">
+                        {% if potencia_kw %}
+                            {{ (soma_total / potencia_kw) | round(2) }}
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
 
-
-        <!-- Gráfico -->
-        <canvas id="graficoProducao" height="100"></canvas>
-
-
-        <!-- Informações (alert) -->
-        <div class="mt-5">
+    <!-- Desvio e Tendência -->
+    <div class="row mb-4 fade-in" style="animation-delay: 0.8s;">
+        <div class="col-md-12">
             <div class="alert alert-info">
-                <strong>Geração total até agora:</strong> {{ '%.2f'|format(soma_total) }} kWh<br>
-                <strong>Média diária atual:</strong> {{ media_diaria }} kWh<br>
-                <strong>Previsão Mensal:</strong> {{ previsao_mensal }} kWh<br>
-                <strong>Percentual da previsão mensal atingido:</strong>
-                {% if previsao_mensal and previsao_mensal > 0 %}
-                    {{ ((soma_total / previsao_mensal * 100) | round(2)) }}%
+                <p><strong>Desvio Geração Bruto x Real:</strong>
+                {% if previsao_mensal > 0 %}
+                    {{ ((soma_total / previsao_mensal) * 100) | round(2) }}%
                 {% else %}
                     0%
                 {% endif %}
+                </p>
+
+                {% set hoje = current_day if current_day is defined else detalhes[-1].data.day if detalhes else 1 %}
+                {% set dias_mes = dias_no_mes if dias_no_mes is defined else 30 %}
+                {% set media_diaria = (soma_total / hoje) if hoje > 0 else 0 %}
+                {% set estimativa_final = media_diaria * dias_mes %}
+
+                <p><strong>Estimativa de geração até o fim do mês:</strong> {{ estimativa_final | round(2) }} kWh</p>
+
+                <p><strong>Status:</strong>
+                {% if estimativa_final >= previsao_mensal %}
+                    ✅ A geração está no ritmo para alcançar ou superar a meta mensal.
+                {% elif estimativa_final >= (previsao_mensal * 0.90) %}
+                    ⚠️ Geração levemente abaixo do ritmo ideal (até 10% de desvio). Acompanhar de perto.
+                {% else %}
+                    ❌ Geração abaixo do ritmo necessário. Ajustes são recomendados para atingir a meta.
+                {% endif %}
+                </p>
             </div>
         </div>
+    </div>
 
-
-        <!-- Tabela de detalhes diários -->
-        <div class="mt-4">
-            <h5>Detalhes Diários</h5>
-            <table class="table table-bordered table-striped">
-                <thead class="table-light">
-                    <tr>
-                        <th>Data</th>
-                        <th>Energia Gerada (kWh)</th>
-                        <th>Faturamento Bruto</th>
-                        <th>Valor Líquido</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in detalhes %}
-                        {% set faturamento = item.energia_kwh * 0.83 %}
-                        {% set liquido = faturamento * 0.80 %}
-                        <tr>
-                            <td>{{ item.data }}</td>
-                            <td>{{'%.2f' | format(item.energia_kwh) }}</td>
-                            <td>{{ faturamento|formato_brasileiro }}</td>
-                            <td>{{ liquido|formato_brasileiro }}</td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-                <tfoot class="table-light">
-                    <tr>
-                        <th colspan="2">Totais</th>
-                        <th>{{ totais_faturamento.bruto|formato_brasileiro }}</th>
-                        <th>{{ totais_faturamento.liquido|formato_brasileiro }}</th>
-                    </tr>
-                </tfoot>
-            </table>
+    <!-- Gráfico Original -->
+    <div class="card mb-4 shadow-sm fade-in">
+        <div class="card-body">
+            
+            <canvas id="graficoProducaoOriginal" height="100"></canvas>
         </div>
-        <div class="text-center mt-4">
+    </div>
+
+    <!-- Novos Gráficos -->
+    <div class="card mb-4 shadow-sm fade-in">
+        <div class="card-body">
+            <h5 class="card-title">Geração Real vs Previsão</h5>
+            <canvas id="graficoComparativo" height="100"></canvas>
+        </div>
+    </div>
+
+    <div class="card mb-5 shadow-sm fade-in">
+        <div class="card-body">
+            <h5 class="card-title">Geração Acumulada</h5>
+            <canvas id="graficoAcumulado" height="100"></canvas>
+        </div>
+    </div>
+
+    <div class="text-center mt-4">
         <a href="{{ url_for('index') }}" class="btn btn-secondary">
             <i class="bi bi-house-door-fill"></i> Voltar para o Início
         </a>
     </div>
-    </div> <!-- fim container -->
+</div>
 
-    <!-- ===== Script de gráfico e atualização automática ===== -->
-    <script>
-        function irParaProducao() {
-            const usina = document.getElementById('usina_id').value;
-            const ano = document.getElementById('ano').value;
-            const mes = document.getElementById('mes').value;
-            if (usina && ano && mes) {
-                window.location.href = `/producao_mensal/${usina}/${ano}/${mes}`;
+<script>
+    function irParaProducao() {
+        const usina = document.getElementById('usina_id').value;
+        const ano = document.getElementById('ano').value;
+        const mes = document.getElementById('mes').value;
+        if (usina && ano && mes) {
+            window.location.href = `/producao_mensal/${usina}/${ano}/${mes}`;
+        }
+    }
+
+    document.getElementById('usina_id').addEventListener('change', irParaProducao);
+    document.getElementById('ano').addEventListener('change', irParaProducao);
+    document.getElementById('mes').addEventListener('change', irParaProducao);
+
+    const dias = {{ meses | tojson }};
+    const producao = {{ totais | tojson }};
+    const previsoes = {{ previsoes | tojson }};
+
+    const cores = producao.map((valor, idx) => {
+        const previsao = previsoes[idx] || 0;
+        if (valor >= previsao) return 'rgba(54, 162, 235, 0.6)';
+        if (valor >= previsao * 0.9) return 'rgba(255, 206, 86, 0.6)';
+        return 'rgba(255, 99, 132, 0.6)';
+    });
+
+    const bordas = cores.map(cor => cor.replace('0.6', '1'));
+
+    new Chart(document.getElementById('graficoProducaoOriginal').getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: dias,
+            datasets: [{
+                label: 'Energia Gerada (kWh)',
+                data: producao,
+                backgroundColor: cores,
+                borderColor: bordas,
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false },
+                title: { display: true, text: 'Produção Diária no Mês' }
+            },
+            scales: {
+                y: { beginAtZero: true, title: { display: true, text: 'kWh' } },
+                x: { title: { display: true, text: 'Dia do Mês' } }
             }
         }
+    });
 
-        document.getElementById('usina_id').addEventListener('change', irParaProducao);
-        document.getElementById('ano').addEventListener('change', irParaProducao);
-        document.getElementById('mes').addEventListener('change', irParaProducao);
-
-        // Dados do Chart.js
-        const dias = {{ meses | tojson }};
-        const producao = {{ totais | tojson }};
-        const previsoes = {{ previsoes | tojson }};
-
-        const cores = producao.map((valor, idx) => {
-            const previsao = previsoes[idx] || 0;
-            if (valor >= previsao) {
-                return 'rgba(54, 162, 235, 0.6)';     // Azul
-            } else if (valor >= previsao * 0.9) {
-                return 'rgba(255, 206, 86, 0.6)';     // Amarelo
-            } else {
-                return 'rgba(255, 99, 132, 0.6)';     // Vermelho
-            }
-        });
-        const bordas = producao.map((valor, idx) => {
-            const previsao = previsoes[idx] || 0;
-            if (valor >= previsao) {
-                return 'rgba(54, 162, 235, 1)';       // Azul
-            } else if (valor >= previsao * 0.9) {
-                return 'rgba(255, 206, 86, 1)';       // Amarelo
-            } else {
-                return 'rgba(255, 99, 132, 1)';       // Vermelho
-            }
-        });
-
-        const ctx = document.getElementById('graficoProducao').getContext('2d');
-        new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: dias,
-                datasets: [{
-                    label: 'Energia Gerada (kWh)',
+    // Gráfico Comparativo
+    new Chart(document.getElementById('graficoComparativo').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: dias,
+            datasets: [
+                {
+                    label: 'Geração Real',
                     data: producao,
-                    backgroundColor: cores,
-                    borderColor: bordas,
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: { display: false },
-                    title: { display: true, text: 'Produção Diária no Mês' }
+                    borderColor: 'green',
+                    tension: 0.3,
+                    fill: false
                 },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        title: { display: true, text: 'kWh' }
-                    },
-                    x: {
-                        title: { display: true, text: 'Dia do Mês' }
-                    }
+                {
+                    label: 'Previsão',
+                    data: previsoes,
+                    borderColor: 'orange',
+                    borderDash: [5, 5],
+                    tension: 0.3,
+                    fill: false
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Geração Real x Previsão'
                 }
             }
-        });
-    </script>
+        }
+    });
+
+    // Gráfico Acumulado
+    const acumuladoReal = producao.reduce((acc, val, idx) => {
+        acc.push((acc[idx - 1] || 0) + val);
+        return acc;
+    }, []);
+
+    const acumuladoPrevisto = previsoes.reduce((acc, val, idx) => {
+        acc.push((acc[idx - 1] || 0) + val);
+        return acc;
+    }, []);
+
+    new Chart(document.getElementById('graficoAcumulado').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: dias,
+            datasets: [
+                {
+                    label: 'Acumulado Real',
+                    data: acumuladoReal,
+                    borderColor: 'blue',
+                    fill: false,
+                    tension: 0.3
+                },
+                {
+                    label: 'Acumulado Previsto',
+                    data: acumuladoPrevisto,
+                    borderColor: 'gray',
+                    borderDash: [5, 5],
+                    fill: false,
+                    tension: 0.3
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Geração Acumulada no Mês'
+                }
+            }
+        }
+    });
+</script>
+
 </body>
 </html>
