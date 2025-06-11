@@ -618,6 +618,11 @@ def faturamento():
             mes = int(request.form['mes'])
             ano = int(request.form['ano'])
 
+            # Obter código_rateio do cliente
+            cliente = Cliente.query.get(cliente_id)
+            rateio = cliente.rateios[0] if cliente and cliente.rateios else None
+            codigo_rateio = rateio.codigo_rateio if rateio else "SEM"
+
             inicio_leitura = datetime.strptime(request.form['inicio_leitura'], '%Y-%m-%d').date()
             fim_leitura = datetime.strptime(request.form['fim_leitura'], '%Y-%m-%d').date()
 
@@ -630,7 +635,8 @@ def faturamento():
             injetado = limpar_valor(request.form['injetado'])
             valor_conta_neoenergia = limpar_valor(request.form['valor_conta_neoenergia'])
 
-            identificador = f"{codigo_rateio}-{mes:02d}-{ano}"
+            identificador = f"U{usina_id}: {codigo_rateio}-{mes:02d}-{ano}"
+
 
             existente = FaturaMensal.query.filter_by(identificador=identificador).first()
             if existente:
