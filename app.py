@@ -421,7 +421,8 @@ def producao_mensal(usina_id, ano, mes):
         previsao_mensal=round(valor_mensal, 2),
         ano_geracao_total=round(ano_sum, 2),
         ano_faturamento_bruto=ano_bruto,
-        ano_faturamento_liquido=ano_liquido
+        ano_faturamento_liquido=ano_liquido,
+        dias_no_mes=dias_mes
     )
 
 @app.route('/clientes_da_usina/<int:usina_id>')
@@ -1796,7 +1797,7 @@ def registrar_despesa():
     usinas = Usina.query.all()
     clientes = Cliente.query.all()
     mensagem = ''
-    
+
     usinas = Usina.query.all()
     categorias = CategoriaDespesa.query.order_by(CategoriaDespesa.nome).all()
     mensagem = None

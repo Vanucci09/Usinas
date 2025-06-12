@@ -95,10 +95,13 @@
                     <h6 class="text-dark">Yield (kWh/kWp)</h6>
                     <p class="fs-5">
                         {% if potencia_kw %}
-                            {{ (soma_total / potencia_kw) | round(2) }}
+                            {% set dias_com_dados = totais | select("gt", 0) | list | length %}
+                            {% set resultado = soma_total / (dias_com_dados * (potencia_kw / dias_no_mes)) %}
+                            {{ resultado | round(2) }}
                         {% else %}
-                            N/A
+                            <span class="text-muted">Potência não definida</span>
                         {% endif %}
+
                     </p>
                 </div>
             </div>
@@ -109,12 +112,13 @@
     <div class="row mb-4 fade-in" style="animation-delay: 0.8s;">
         <div class="col-md-12">
             <div class="alert alert-info">
+                {% set dias_com_dados = totais | length %}
+                {% set previsao_diaria = previsao_mensal / dias_no_mes %}
+                {% set previsao_acumulada_ate_agora = previsao_diaria * dias_com_dados %}
+                {% set desvio_percentual = ((soma_total - previsao_acumulada_ate_agora) / previsao_acumulada_ate_agora * 100) if previsao_acumulada_ate_agora > 0 else 0 %}
+
                 <p><strong>Desvio Geração Bruto x Real:</strong>
-                {% if previsao_mensal > 0 %}
-                    {{ ((soma_total / previsao_mensal) * 100) | round(2) }}%
-                {% else %}
-                    0%
-                {% endif %}
+                    {{ desvio_percentual | round(2) }}%
                 </p>
 
                 {% set hoje = current_day if current_day is defined else detalhes[-1].data.day if detalhes else 1 %}
