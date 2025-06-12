@@ -691,7 +691,7 @@ def faturamento():
                     receita_valor = float(Decimal(consumo_usina * rateio.tarifa_kwh).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
                     receita = FinanceiroUsina(
                         usina_id=rateio.usina_id,
-                        categoria_id=None,  # 💡 Você pode definir uma categoria padrão, ex: 1
+                        categoria_id=None, # pode adicionar a categoria
                         data=date.today(),
                         tipo='receita',
                         descricao=f"Fatura {fatura.identificador} - {cliente.nome}",
@@ -786,7 +786,14 @@ def relatorio_fatura(fatura_id):
 
     # Tarifas e dados da fatura atual
     tarifa_base = Decimal(str(fatura.tarifa_neoenergia))
-    tarifa_neoenergia_aplicada = tarifa_base if fatura.icms == 20 else tarifa_base * Decimal('1.1023232323')
+    
+    if fatura.icms == 0:
+        tarifa_neoenergia_aplicada = tarifa_base * Decimal('1.2625')
+    elif fatura.icms == 20:
+        tarifa_neoenergia_aplicada = tarifa_base
+    else:
+        tarifa_neoenergia_aplicada = tarifa_base * Decimal('1.1023232323')
+
     consumo_usina = Decimal(str(fatura.consumo_usina))
     valor_conta = Decimal(str(fatura.valor_conta_neoenergia))
 
@@ -811,10 +818,19 @@ def relatorio_fatura(fatura_id):
 
     # Somar a economia de cada fatura anterior
     economia_total = Decimal('0')
+
     for f in faturas_anteriores:
         try:
             tarifa_base_ant = Decimal(str(f.tarifa_neoenergia))
-            tarifa_aplicada_ant = tarifa_base_ant if f.icms == 20 else tarifa_base_ant * Decimal('1.1023232323')
+
+            # Corrige aplicação do ICMS
+            if f.icms == 0:
+                tarifa_aplicada_ant = tarifa_base_ant * Decimal('1.2625')
+            elif f.icms == 20:
+                tarifa_aplicada_ant = tarifa_base_ant
+            else:
+                tarifa_aplicada_ant = tarifa_base_ant * Decimal('1.1023232323')
+
             consumo_usina_ant = Decimal(str(f.consumo_usina))
             valor_conta_ant = Decimal(str(f.valor_conta_neoenergia))
 
