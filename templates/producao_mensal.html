@@ -112,7 +112,7 @@
     <div class="row mb-4 fade-in" style="animation-delay: 0.8s;">
         <div class="col-md-12">
             <div class="alert alert-info">
-                {% set dias_com_dados = totais | length %}
+                {% set dias_com_dados = totais | select("gt", 0) | list | length %}
                 {% set previsao_diaria = previsao_mensal / dias_no_mes %}
                 {% set previsao_acumulada_ate_agora = previsao_diaria * dias_com_dados %}
                 {% set desvio_percentual = ((soma_total - previsao_acumulada_ate_agora) / previsao_acumulada_ate_agora * 100) if previsao_acumulada_ate_agora > 0 else 0 %}
