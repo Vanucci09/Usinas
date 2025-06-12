@@ -25,6 +25,7 @@
                     <th>Geração</th>
                     <th>Clientes</th>
                     <th>Faturas</th>
+                    <th>Financeiro</th>
                     <th>Ações</th>
                 </tr>
             </thead>
@@ -36,6 +37,7 @@
                     <td>{% if usuario.pode_cadastrar_geracao %}<i class="bi bi-check-circle-fill text-success"></i>{% else %}<i class="bi bi-x-circle-fill text-danger"></i>{% endif %}</td>
                     <td>{% if usuario.pode_cadastrar_cliente %}<i class="bi bi-check-circle-fill text-success"></i>{% else %}<i class="bi bi-x-circle-fill text-danger"></i>{% endif %}</td>
                     <td>{% if usuario.pode_cadastrar_fatura %}<i class="bi bi-check-circle-fill text-success"></i>{% else %}<i class="bi bi-x-circle-fill text-danger"></i>{% endif %}</td>
+                    <td>{% if usuario.pode_acessar_financeiro %}<i class="bi bi-check-circle-fill text-success"></i>{% else %}<i class="bi bi-x-circle-fill text-danger"></i>{% endif %}</td>
                     <td>
                         <a href="{{ url_for('editar_usuario', id=usuario.id) }}" class="btn btn-sm btn-primary">
                             <i class="bi bi-pencil"></i>

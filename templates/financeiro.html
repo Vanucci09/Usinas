@@ -59,7 +59,7 @@
                     <td>{{ item.usina }}</td>
                     <td>{{ item.categoria or '-' }}</td>
                     <td>{{ item.descricao }}</td>
-                    <td>R$ {{ "%.2f"|format(item.valor) }}</td>
+                    <td>{{item.valor | formato_brasileiro }}</td>
                     <td>{{ item.data.strftime('%d/%m/%Y') }}</td>
                     <td>{{ item.referencia }}</td>
                 </tr>
@@ -72,12 +72,12 @@
     <div class="row mt-4">
         <div class="col-md-6">
             <div class="alert alert-success">
-                <strong>Total de Receitas:</strong> R$ {{ total_receitas | round(2) }}
+                <strong>Total de Receitas:</strong> {{ total_receitas | formato_brasileiro }}
             </div>
         </div>
         <div class="col-md-6">
             <div class="alert alert-danger">
-                <strong>Total de Despesas:</strong> R$ {{ total_despesas | round(2) }}
+                <strong>Total de Despesas:</strong> {{ total_despesas | formato_brasileiro }}
             </div>
         </div>
     </div>
@@ -86,9 +86,9 @@
         <strong>Saldo:</strong>
         {% set saldo = total_receitas - total_despesas %}
         {% if saldo >= 0 %}
-            <span class="text-success">R$ {{ saldo | round(2) }}</span>
+            <span class="text-success"> {{ saldo | formato_brasileiro }}</span>
         {% else %}
-            <span class="text-danger">R$ {{ saldo | round(2) }}</span>
+            <span class="text-danger"> {{ saldo | formato_brasileiro }}</span>
         {% endif %}
     </div>
 

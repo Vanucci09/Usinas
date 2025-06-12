@@ -168,6 +168,7 @@ class Usuario(db.Model, UserMixin):
     pode_cadastrar_geracao = db.Column(db.Boolean, default=False)
     pode_cadastrar_cliente = db.Column(db.Boolean, default=False)
     pode_cadastrar_fatura = db.Column(db.Boolean, default=False)
+    pode_acessar_financeiro = db.Column(db.Boolean, default=False)
 
     def set_senha(self, senha):
         self.senha_hash = generate_password_hash(senha)
@@ -1139,13 +1140,15 @@ def cadastrar_usuario():
         pode_geracao = 'pode_cadastrar_geracao' in request.form
         pode_cliente = 'pode_cadastrar_cliente' in request.form
         pode_fatura = 'pode_cadastrar_fatura' in request.form
+        pode_financeiro = 'pode_acessar_financeiro' in request.form
 
         novo_usuario = Usuario(
             nome=nome,
             email=email,
             pode_cadastrar_geracao=pode_geracao,
             pode_cadastrar_cliente=pode_cliente,
-            pode_cadastrar_fatura=pode_fatura
+            pode_cadastrar_fatura=pode_fatura,
+            pode_acessar_financeiro=pode_financeiro
         )
         novo_usuario.set_senha(senha)
         db.session.add(novo_usuario)
@@ -1176,6 +1179,8 @@ def editar_usuario(id):
         usuario.pode_cadastrar_geracao = 'pode_cadastrar_geracao' in request.form
         usuario.pode_cadastrar_cliente = 'pode_cadastrar_cliente' in request.form
         usuario.pode_cadastrar_fatura = 'pode_cadastrar_fatura' in request.form
+        usuario.pode_acessar_financeiro = 'pode_acessar_financeiro' in request.form
+        print(request.form)
 
         if request.form.get('senha'):
             usuario.set_senha(request.form['senha'])
@@ -1785,6 +1790,13 @@ def servir_logo(nome_arquivo):
 @app.route('/registrar_despesa', methods=['GET', 'POST'])
 @login_required
 def registrar_despesa():
+    if not current_user.pode_acessar_financeiro:
+        return "Acesso negado", 403
+
+    usinas = Usina.query.all()
+    clientes = Cliente.query.all()
+    mensagem = ''
+    
     usinas = Usina.query.all()
     categorias = CategoriaDespesa.query.order_by(CategoriaDespesa.nome).all()
     mensagem = None
@@ -1821,7 +1833,15 @@ def registrar_despesa():
     return render_template('registrar_despesa.html', usinas=usinas, categorias=categorias, mensagem=mensagem)
 
 @app.route('/financeiro')
+@login_required
 def financeiro():
+    if not current_user.pode_acessar_financeiro:
+        return "Acesso negado", 403
+
+    usinas = Usina.query.all()
+    clientes = Cliente.query.all()
+    mensagem = ''
+
     # Filtros de mês, ano e usina
     mes = request.args.get('mes', default=date.today().month, type=int)
     ano = request.args.get('ano', default=date.today().year, type=int)
@@ -1873,45 +1893,6 @@ def financeiro():
         total_receitas=total_receitas,
         total_despesas=total_despesas
     )
-
-@app.route('/atualizar_receitas_antigas')
-def atualizar_receitas_antigas():
-    from datetime import date
-    faturas = FaturaMensal.query.all()
-    inseridos = 0
-
-    for fatura in faturas:
-        cliente = fatura.cliente
-        rateio = cliente.rateios[0] if cliente and cliente.rateios else None
-
-        if not rateio:
-            continue
-
-        identificador = fatura.identificador
-        descricao = f"Fatura {identificador} - {cliente.nome}"
-
-        existe = FinanceiroUsina.query.filter_by(descricao=descricao).first()
-        if existe:
-            continue
-
-        valor_receita = round(float(fatura.consumo_usina) * float(rateio.tarifa_kwh), 2)
-
-        receita = FinanceiroUsina(
-            usina_id=rateio.usina_id,
-            categoria_id=None,
-            data=date.today(),
-            tipo='receita',
-            descricao=descricao,
-            valor=valor_receita,
-            referencia_mes=fatura.mes_referencia,
-            referencia_ano=fatura.ano_referencia
-        )
-
-        db.session.add(receita)
-        inseridos += 1
-
-    db.session.commit()
-    return f"{inseridos} registros adicionados com sucesso."
 
 
 if __name__ == '__main__':
