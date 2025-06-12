@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Registrar Despesa</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+<div class="container mt-5 p-4 bg-white shadow rounded">
+    <h2 class="text-primary mb-4 text-center">Registrar Despesa</h2>
+
+    {% if mensagem %}
+        <div class="alert alert-info text-center">{{ mensagem }}</div>
+    {% endif %}
+
+    <form method="POST">
+        <div class="mb-3">
+            <label class="form-label">Usina</label>
+            <select name="usina_id" class="form-select" required>
+                <option value="" disabled selected>Selecione a usina</option>
+                {% for usina in usinas %}
+                    <option value="{{ usina.id }}">{{ usina.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Categoria da Despesa</label>
+            <select name="categoria_id" class="form-select" required>
+                <option value="" disabled selected>Selecione uma categoria</option>
+                {% for categoria in categorias %}
+                    <option value="{{ categoria.id }}">{{ categoria.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Valor (R$)</label>
+            <input type="text" name="valor" class="form-control" required placeholder="Ex: 1500,00">
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Descrição</label>
+            <input type="text" name="descricao" class="form-control" required placeholder="Ex: Pagamento de manutenção">
+        </div>
+
+        <div class="row">
+            <div class="col-md-4 mb-3">
+                <label class="form-label">Data</label>
+                <input type="date" name="data" class="form-control" required>
+            </div>
+            <div class="col-md-4 mb-3">
+                <label class="form-label">Mês de Referência</label>
+                <input type="number" name="referencia_mes" class="form-control" min="1" max="12" required>
+            </div>
+            <div class="col-md-4 mb-3">
+                <label class="form-label">Ano de Referência</label>
+                <input type="number" name="referencia_ano" class="form-control" min="2000" max="2100" required>
+            </div>
+        </div>
+
+        <div class="text-center">
+            <button type="submit" class="btn btn-success">Salvar Despesa</button>
+        </div>
+    </form>
+</div>
+
+</body>
+</html>

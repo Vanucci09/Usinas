@@ -137,6 +137,27 @@ class PrevisaoMensal(db.Model):
     previsao_kwh = db.Column(db.Float, nullable=False)
 
     usina = db.relationship('Usina', backref='previsoes')
+
+class CategoriaDespesa(db.Model):
+    __tablename__ = 'categorias_despesa'
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(100), nullable=False, unique=True)
+    
+    despesas = db.relationship('FinanceiroUsina', backref='categoria')
+
+class FinanceiroUsina(db.Model):
+    __tablename__ = 'financeiro_usina'
+    id = db.Column(db.Integer, primary_key=True)
+    usina_id = db.Column(db.Integer, db.ForeignKey('usinas.id'), nullable=False)
+    categoria_id = db.Column(db.Integer, db.ForeignKey('categorias_despesa.id'), nullable=True)
+    data = db.Column(db.Date, nullable=False)
+    tipo = db.Column(db.String(20), nullable=False)  # 'receita' ou 'despesa'
+    descricao = db.Column(db.String(255), nullable=False)
+    valor = db.Column(db.Float, nullable=False)
+    referencia_mes = db.Column(db.Integer, nullable=True)
+    referencia_ano = db.Column(db.Integer, nullable=True)
+
+    usina = db.relationship('Usina', backref='financeiros')
     
 class Usuario(db.Model, UserMixin):
     __tablename__ = 'usuarios'
@@ -596,6 +617,7 @@ def excluir_cliente(id):
 def faturamento():
     if not current_user.pode_cadastrar_fatura:
         return "Acesso negado", 403
+
     usinas = Usina.query.all()
     clientes = Cliente.query.all()
     mensagem = ''
@@ -613,12 +635,14 @@ def faturamento():
 
     if request.method == 'POST':
         try:
-            cliente_id = int(request.form['cliente_id'])
-            usina_id = int(request.form['usina_id'])
-            mes = int(request.form['mes'])
-            ano = int(request.form['ano'])
+            cliente_id = int(request.form.get('cliente_id', 0))
+            usina_id = int(request.form.get('usina_id', 0))
+            mes = int(request.form.get('mes', 0))
+            ano = int(request.form.get('ano', 0))
 
-            # Obter código_rateio do cliente
+            if not cliente_id or not usina_id:
+                raise ValueError("Cliente e Usina são obrigatórios")
+
             cliente = Cliente.query.get(cliente_id)
             rateio = cliente.rateios[0] if cliente and cliente.rateios else None
             codigo_rateio = rateio.codigo_rateio if rateio else "SEM"
@@ -636,9 +660,8 @@ def faturamento():
             valor_conta_neoenergia = limpar_valor(request.form['valor_conta_neoenergia'])
 
             identificador = f"U{usina_id}: {codigo_rateio}-{mes:02d}-{ano}"
-
-
             existente = FaturaMensal.query.filter_by(identificador=identificador).first()
+
             if existente:
                 mensagem = 'Já existe uma fatura para esse cliente neste mês.'
             else:
@@ -660,7 +683,25 @@ def faturamento():
                 )
                 db.session.add(fatura)
                 db.session.commit()
+
+                # Receita associada
+                if rateio:
+                    receita_valor = float(Decimal(consumo_usina * rateio.tarifa_kwh).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+                    receita = FinanceiroUsina(
+                        usina_id=rateio.usina_id,
+                        categoria_id=None,  # 💡 Você pode definir uma categoria padrão, ex: 1
+                        data=date.today(),
+                        tipo='receita',
+                        descricao=f"Fatura {fatura.identificador} - {cliente.nome}",
+                        valor=receita_valor,
+                        referencia_mes=mes,
+                        referencia_ano=ano
+                    )
+                    db.session.add(receita)
+                    db.session.commit()
+
                 mensagem = 'Fatura cadastrada com sucesso.'
+
         except Exception as e:
             db.session.rollback()
             mensagem = f"Erro ao salvar fatura: {str(e)}"
@@ -863,10 +904,35 @@ def upload_boleto():
     )
 
 @app.route('/excluir_fatura/<int:id>', methods=['POST'])
+@login_required
 def excluir_fatura(id):
     fatura = FaturaMensal.query.get_or_404(id)
-    db.session.delete(fatura)
-    db.session.commit()
+
+    try:
+        # Buscar a receita associada à fatura
+        cliente = fatura.cliente
+        rateio = cliente.rateios[0] if cliente.rateios else None
+        if rateio:
+            descricao_receita = f"Fatura {fatura.identificador} - {cliente.nome}"
+            receita = FinanceiroUsina.query.filter_by(
+                usina_id=rateio.usina_id,
+                tipo='receita',
+                referencia_mes=fatura.mes_referencia,
+                referencia_ano=fatura.ano_referencia,
+                descricao=descricao_receita
+            ).first()
+            if receita:
+                db.session.delete(receita)
+
+        # Excluir a fatura
+        db.session.delete(fatura)
+        db.session.commit()
+        flash('Fatura e receita vinculada excluídas com sucesso.', 'success')
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao excluir: {str(e)}', 'danger')
+
     return redirect(url_for('listar_faturas'))
 
 @app.route('/extrair_dados_fatura', methods=['POST'])
@@ -1715,6 +1781,137 @@ def listar_todos_inversores_por_data(data: date):
 def servir_logo(nome_arquivo):
     caminho_base = '/data/logos'
     return send_from_directory(caminho_base, nome_arquivo)
+
+@app.route('/registrar_despesa', methods=['GET', 'POST'])
+@login_required
+def registrar_despesa():
+    usinas = Usina.query.all()
+    categorias = CategoriaDespesa.query.order_by(CategoriaDespesa.nome).all()
+    mensagem = None
+
+    if request.method == 'POST':
+        try:
+            usina_id = int(request.form['usina_id'])
+            categoria_id = int(request.form['categoria_id'])
+            valor = float(request.form['valor'].replace(',', '.'))
+            descricao = request.form['descricao']
+            data = datetime.strptime(request.form['data'], '%Y-%m-%d').date()
+            referencia_mes = int(request.form['referencia_mes'])
+            referencia_ano = int(request.form['referencia_ano'])
+
+            nova_despesa = FinanceiroUsina(
+                usina_id=usina_id,
+                categoria_id=categoria_id,
+                tipo='despesa',
+                valor=valor,
+                descricao=descricao,
+                data=data,
+                referencia_mes=referencia_mes,
+                referencia_ano=referencia_ano
+            )
+
+            db.session.add(nova_despesa)
+            db.session.commit()
+            mensagem = 'Despesa registrada com sucesso.'
+
+        except Exception as e:
+            db.session.rollback()
+            mensagem = f'Erro ao registrar despesa: {str(e)}'
+
+    return render_template('registrar_despesa.html', usinas=usinas, categorias=categorias, mensagem=mensagem)
+
+@app.route('/financeiro')
+def financeiro():
+    # Filtros de mês, ano e usina
+    mes = request.args.get('mes', default=date.today().month, type=int)
+    ano = request.args.get('ano', default=date.today().year, type=int)
+    usina_id = request.args.get('usina_id', type=int)
+
+    # Base da query
+    query = FinanceiroUsina.query.filter(
+        FinanceiroUsina.referencia_mes == mes,
+        FinanceiroUsina.referencia_ano == ano
+    )
+
+    if usina_id:
+        query = query.filter(FinanceiroUsina.usina_id == usina_id)
+
+    registros = query.order_by(FinanceiroUsina.data.desc()).all()
+
+    # Monta lista para o template
+    financeiro = []
+    total_receitas = 0
+    total_despesas = 0
+
+    for r in registros:
+        valor = r.valor or 0
+        item = {
+            'tipo': r.tipo,
+            'usina': r.usina.nome if r.usina else 'N/A',
+            'categoria': r.categoria.nome if r.categoria else '-',
+            'descricao': r.descricao,
+            'valor': valor,
+            'data': r.data,
+            'referencia': f"{r.referencia_mes:02d}/{r.referencia_ano}"
+        }
+        financeiro.append(item)
+
+        if r.tipo == 'receita':
+            total_receitas += valor
+        else:
+            total_despesas += valor
+
+    usinas = Usina.query.order_by(Usina.nome).all()
+
+    return render_template(
+        'financeiro.html',
+        financeiro=financeiro,
+        mes=mes,
+        ano=ano,
+        usina_id=usina_id,
+        usinas=usinas,
+        total_receitas=total_receitas,
+        total_despesas=total_despesas
+    )
+
+@app.route('/atualizar_receitas_antigas')
+def atualizar_receitas_antigas():
+    from datetime import date
+    faturas = FaturaMensal.query.all()
+    inseridos = 0
+
+    for fatura in faturas:
+        cliente = fatura.cliente
+        rateio = cliente.rateios[0] if cliente and cliente.rateios else None
+
+        if not rateio:
+            continue
+
+        identificador = fatura.identificador
+        descricao = f"Fatura {identificador} - {cliente.nome}"
+
+        existe = FinanceiroUsina.query.filter_by(descricao=descricao).first()
+        if existe:
+            continue
+
+        valor_receita = round(float(fatura.consumo_usina) * float(rateio.tarifa_kwh), 2)
+
+        receita = FinanceiroUsina(
+            usina_id=rateio.usina_id,
+            categoria_id=None,
+            data=date.today(),
+            tipo='receita',
+            descricao=descricao,
+            valor=valor_receita,
+            referencia_mes=fatura.mes_referencia,
+            referencia_ano=fatura.ano_referencia
+        )
+
+        db.session.add(receita)
+        inseridos += 1
+
+    db.session.commit()
+    return f"{inseridos} registros adicionados com sucesso."
 
 
 if __name__ == '__main__':
