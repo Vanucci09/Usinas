@@ -8,7 +8,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from sqlalchemy import Numeric, text, func, extract
 from decimal import Decimal, ROUND_HALF_UP
-import fitz, pdfkit, tempfile
+import fitz, tempfile
 from PIL import Image
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
@@ -2040,31 +2040,26 @@ def financeiro():
 @app.route('/enviar_email/<int:fatura_id>')
 def enviar_email(fatura_id):
     fatura = FaturaMensal.query.get_or_404(fatura_id)
-    cliente = Cliente.query.get_or_404(fatura.cliente_id)
+    cliente = Cliente.query.get(fatura.cliente_id)
 
     if not cliente.email:
         flash('Cliente não possui e-mail cadastrado.', 'danger')
         return redirect(url_for('listar_faturas'))
 
     try:
-        # ✅ Gera link externo real
-        link_relatorio = url_for('relatorio_fatura', fatura_id=fatura.id, _external=True).replace("127.0.0.1:5000", "painel.cgrenergia.com.br")
+        link = f"https://painel.cgrenergia.com.br/relatorio/{fatura.id}"  # Ajuste esse link se necessário
 
-        # ✅ Renderiza o template HTML do e-mail
-        html_corpo = render_template("email_fatura.html", cliente=cliente, fatura=fatura, link_relatorio=link_relatorio)
-
-        # ✅ Monta e envia o e-mail
         msg = Message(
             subject=f"Relatório de Fatura - {fatura.mes_referencia}/{fatura.ano_referencia}",
             recipients=[cliente.email],
-            html=html_corpo
+            html=render_template('email_fatura.html', cliente=cliente, fatura=fatura, link=link)
         )
 
         mail.send(msg)
-        flash("E-mail enviado com sucesso.", "success")
+        flash('E-mail enviado com sucesso.', 'success')
 
     except Exception as e:
-        flash(f"Erro ao enviar e-mail: {e}", "danger")
+        flash(f'Erro ao enviar e-mail: {e}', 'danger')
 
     return redirect(url_for('listar_faturas'))
 
@@ -2159,7 +2154,7 @@ def gerar_pdf_fatura(fatura_id):
     )
 
     # Configura PDFKit com wkhtmltopdf correto
-    config = pdfkit.configuration(wkhtmltopdf=r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe")
+    #config = pdfkit.configuration(wkhtmltopdf=r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe")
 
     options = {
         'enable-local-file-access': '',
@@ -2172,7 +2167,7 @@ def gerar_pdf_fatura(fatura_id):
     print("FICHA COMP:", ficha_compensacao_path)
     print("BOOTSTRAP:", bootstrap_path)
 
-    pdf = pdfkit.from_string(html, False, options=options, configuration=config)
+    #pdf = pdfkit.from_string(html, False, options=options, configuration=config)
 
     response = make_response(pdf)
     response.headers['Content-Type'] = 'application/pdf'
