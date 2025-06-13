@@ -2040,24 +2040,21 @@ def financeiro():
 @app.route('/enviar_email/<int:fatura_id>')
 def enviar_email(fatura_id):
     fatura = FaturaMensal.query.get_or_404(fatura_id)
-    cliente = Cliente.query.get(fatura.cliente_id)
+    cliente = Cliente.query.get_or_404(fatura.cliente_id)
+    
+    link_relatorio = url_for('relatorio_fatura', fatura_id=fatura.id, _external=True)
 
-    if not cliente.email:
-        flash('Cliente não possui e-mail cadastrado.', 'danger')
-        return redirect(url_for('listar_faturas'))
+    html = render_template('email_fatura.html', cliente=cliente, fatura=fatura, link_relatorio=link_relatorio)
+
+    msg = Message(
+        subject=f'Relatório de Fatura - {fatura.mes_referencia}/{fatura.ano_referencia}',
+        recipients=[cliente.email],
+        html=html
+    )
 
     try:
-        link = f"https://painel.cgrenergia.com.br/relatorio/{fatura.id}"  # Ajuste esse link se necessário
-
-        msg = Message(
-            subject=f"Relatório de Fatura - {fatura.mes_referencia}/{fatura.ano_referencia}",
-            recipients=[cliente.email],
-            html=render_template('email_fatura.html', cliente=cliente, fatura=fatura, link=link)
-        )
-
         mail.send(msg)
-        flash('E-mail enviado com sucesso.', 'success')
-
+        flash('E-mail enviado com sucesso!', 'success')
     except Exception as e:
         flash(f'Erro ao enviar e-mail: {e}', 'danger')
 
