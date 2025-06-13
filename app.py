@@ -847,24 +847,26 @@ def render_template_relatorio(fatura_id):
 
     economia_acumulada = economia + economia_total
 
-    pasta_boletos = os.getenv('BOLETOS_PATH', 'static/boletos')
+    # Caminhos fixos no Render
+    pasta_boletos = '/data/boletos'
+    pasta_logos = '/data/logos'
+
     pdf_path = os.path.join(pasta_boletos, f"boleto_{fatura.id}.pdf")
     ficha_compensacao_img = f"ficha_compensacao_{fatura.id}.png"
-    ficha_path = os.path.abspath(f"static/{ficha_compensacao_img}")
+    ficha_path = os.path.join('static', ficha_compensacao_img)
     ficha_compensacao_img = extrair_ficha_compensacao(pdf_path, ficha_path) if os.path.exists(pdf_path) else None
 
-    logo_cgr_path = os.path.abspath("static/img/logo_cgr.png").replace('\\', '/')
-    logo_cgr_path = f"file:///{logo_cgr_path}"
+    logo_cgr_path = "file:///static/img/logo_cgr.png"
 
     logo_usina_path = None
     if usina.logo_url:
-        logo_usina_path = os.path.abspath(f"static/logos/{usina.logo_url}").replace('\\', '/')
-        logo_usina_path = f"file:///{logo_usina_path}"
+        logo_usina_path = os.path.join(pasta_logos, usina.logo_url)
+        if os.path.exists(logo_usina_path):
+            logo_usina_path = f"file://{logo_usina_path}"
 
     ficha_compensacao_path = None
-    if ficha_compensacao_img:
-        ficha_abspath = os.path.abspath(f"static/{ficha_compensacao_img}").replace('\\', '/')
-        ficha_compensacao_path = f"file:///{ficha_abspath}"
+    if ficha_compensacao_img and os.path.exists(ficha_path):
+        ficha_compensacao_path = f"file://{os.path.abspath(ficha_path)}"
 
     bootstrap_path = os.path.abspath("static/css/bootstrap.min.css").replace('\\', '/')
     bootstrap_path = f"file:///{bootstrap_path}"
