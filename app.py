@@ -8,13 +8,16 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from sqlalchemy import Numeric, text, func, extract
 from decimal import Decimal, ROUND_HALF_UP
-import fitz
+import fitz, pdfkit, tempfile
 from PIL import Image
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 import time, hashlib, json, hmac, requests, base64, atexit
 from email.utils import formatdate
 from apscheduler.schedulers.background import BackgroundScheduler
+from flask_mail import Mail, Message
+from urllib.parse import quote
+import base64
 
 
 app = Flask(__name__)
@@ -41,6 +44,15 @@ SOLIS_BASE_URL   = os.getenv("SOLIS_BASE_URL", "https://www.soliscloud.com:13333
 
 if not SOLIS_KEY_ID or not SOLIS_KEY_SECRET:
     raise RuntimeError("As variáveis de ambiente SOLIS_KEY_ID e SOLIS_KEY_SECRET precisam estar definidas.")
+
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'  # ou outro servidor
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = 'posvenda@cgrenergia.com.br'
+app.config['MAIL_PASSWORD'] = 'edtz zhfj oflx pqpc'
+app.config['MAIL_DEFAULT_SENDER'] = 'posvenda@cgrenergia.com.br'
+
+mail = Mail(app)
 
 
 @login_manager.user_loader
@@ -777,16 +789,14 @@ def editar_fatura(id):
 
     return render_template('editar_fatura.html', fatura=fatura, clientes=clientes, usinas=usinas)
 
-@app.route('/relatorio/<int:fatura_id>')
-def relatorio_fatura(fatura_id):
-    
+def render_template_relatorio(fatura_id):
+    from decimal import Decimal
+
     fatura = FaturaMensal.query.get_or_404(fatura_id)
     cliente = Cliente.query.get(fatura.cliente_id)
     usina = Usina.query.get(cliente.usina_id)
 
-    # Tarifas e dados da fatura atual
     tarifa_base = Decimal(str(fatura.tarifa_neoenergia))
-    
     if fatura.icms == 0:
         tarifa_neoenergia_aplicada = tarifa_base * Decimal('1.2625')
     elif fatura.icms == 20:
@@ -797,17 +807,14 @@ def relatorio_fatura(fatura_id):
     consumo_usina = Decimal(str(fatura.consumo_usina))
     valor_conta = Decimal(str(fatura.valor_conta_neoenergia))
 
-    # Tarifa do cliente
     rateio = Rateio.query.filter_by(cliente_id=cliente.id, usina_id=usina.id).first()
     tarifa_cliente = Decimal(str(rateio.tarifa_kwh)) if rateio else Decimal('0')
 
-    # Economia da fatura atual
     valor_usina = consumo_usina * tarifa_cliente
     com_desconto = valor_conta + valor_usina
     sem_desconto = consumo_usina * tarifa_neoenergia_aplicada + valor_conta
     economia = sem_desconto - com_desconto
 
-    # Buscar todas as faturas anteriores do mesmo cliente (exceto a atual)
     faturas_anteriores = FaturaMensal.query.filter(
         FaturaMensal.cliente_id == cliente.id,
         FaturaMensal.id != fatura.id,
@@ -816,14 +823,10 @@ def relatorio_fatura(fatura_id):
          (FaturaMensal.mes_referencia < fatura.mes_referencia))
     ).all()
 
-    # Somar a economia de cada fatura anterior
     economia_total = Decimal('0')
-
     for f in faturas_anteriores:
         try:
             tarifa_base_ant = Decimal(str(f.tarifa_neoenergia))
-
-            # Corrige aplicação do ICMS
             if f.icms == 0:
                 tarifa_aplicada_ant = tarifa_base_ant * Decimal('1.2625')
             elif f.icms == 20:
@@ -838,21 +841,33 @@ def relatorio_fatura(fatura_id):
             com_desconto_ant = valor_conta_ant + valor_usina_ant
             sem_desconto_ant = consumo_usina_ant * tarifa_aplicada_ant + valor_conta_ant
 
-            economia_ant = sem_desconto_ant - com_desconto_ant
-            economia_total += economia_ant
-        except Exception as e:
-            continue  # Ignora se algum dado estiver incompleto
+            economia_total += sem_desconto_ant - com_desconto_ant
+        except:
+            continue
 
     economia_acumulada = economia + economia_total
 
-    # Ficha de compensação, se houver
-    pasta_boletos = os.getenv('BOLETOS_PATH', '/data/boletos')
+    pasta_boletos = os.getenv('BOLETOS_PATH', 'static/boletos')
     pdf_path = os.path.join(pasta_boletos, f"boleto_{fatura.id}.pdf")
-    ficha_path = f"static/ficha_compensacao_{fatura.id}.png"
+    ficha_compensacao_img = f"ficha_compensacao_{fatura.id}.png"
+    ficha_path = os.path.abspath(f"static/{ficha_compensacao_img}")
+    ficha_compensacao_img = extrair_ficha_compensacao(pdf_path, ficha_path) if os.path.exists(pdf_path) else None
 
-    ficha_compensacao_img = None
-    if os.path.exists(pdf_path):
-        ficha_compensacao_img = extrair_ficha_compensacao(pdf_path, ficha_path)
+    logo_cgr_path = os.path.abspath("static/img/logo_cgr.png").replace('\\', '/')
+    logo_cgr_path = f"file:///{logo_cgr_path}"
+
+    logo_usina_path = None
+    if usina.logo_url:
+        logo_usina_path = os.path.abspath(f"static/logos/{usina.logo_url}").replace('\\', '/')
+        logo_usina_path = f"file:///{logo_usina_path}"
+
+    ficha_compensacao_path = None
+    if ficha_compensacao_img:
+        ficha_abspath = os.path.abspath(f"static/{ficha_compensacao_img}").replace('\\', '/')
+        ficha_compensacao_path = f"file:///{ficha_abspath}"
+
+    bootstrap_path = os.path.abspath("static/css/bootstrap.min.css").replace('\\', '/')
+    bootstrap_path = f"file:///{bootstrap_path}"
 
     return render_template(
         'relatorio_fatura.html',
@@ -866,8 +881,119 @@ def relatorio_fatura(fatura_id):
         sem_desconto=sem_desconto,
         economia=economia,
         economia_acumulada=economia_acumulada,
-        ficha_compensacao_img=ficha_compensacao_img,
-        env=os.getenv('FLASK_ENV')
+        ficha_compensacao_path=ficha_compensacao_path,
+        logo_cgr_path=logo_cgr_path,
+        logo_usina_path=logo_usina_path,
+        bootstrap_path=bootstrap_path
+    )
+
+@app.route('/relatorio/<int:fatura_id>')
+def relatorio_fatura(fatura_id):
+    
+    fatura = FaturaMensal.query.get_or_404(fatura_id)
+    cliente = Cliente.query.get(fatura.cliente_id)
+    usina = Usina.query.get(cliente.usina_id)
+
+    # Cálculo da tarifa aplicada com ICMS
+    tarifa_base = Decimal(str(fatura.tarifa_neoenergia))
+    if fatura.icms == 0:
+        tarifa_neoenergia_aplicada = tarifa_base * Decimal('1.2625')
+    elif fatura.icms == 20:
+        tarifa_neoenergia_aplicada = tarifa_base
+    else:
+        tarifa_neoenergia_aplicada = tarifa_base * Decimal('1.1023232323')
+
+    consumo_usina = Decimal(str(fatura.consumo_usina))
+    valor_conta = Decimal(str(fatura.valor_conta_neoenergia))
+
+    # Tarifa do cliente
+    rateio = Rateio.query.filter_by(cliente_id=cliente.id, usina_id=usina.id).first()
+    tarifa_cliente = Decimal(str(rateio.tarifa_kwh)) if rateio else Decimal('0')
+
+    # Cálculo de valores
+    valor_usina = consumo_usina * tarifa_cliente
+    com_desconto = valor_conta + valor_usina
+    sem_desconto = consumo_usina * tarifa_neoenergia_aplicada + valor_conta
+    economia = sem_desconto - com_desconto
+
+    # Faturas anteriores para calcular economia acumulada
+    faturas_anteriores = FaturaMensal.query.filter(
+        FaturaMensal.cliente_id == cliente.id,
+        FaturaMensal.id != fatura.id,
+        (FaturaMensal.ano_referencia < fatura.ano_referencia) |
+        ((FaturaMensal.ano_referencia == fatura.ano_referencia) &
+         (FaturaMensal.mes_referencia < fatura.mes_referencia))
+    ).all()
+
+    economia_total = Decimal('0')
+    for f in faturas_anteriores:
+        try:
+            tarifa_base_ant = Decimal(str(f.tarifa_neoenergia))
+            if f.icms == 0:
+                tarifa_aplicada_ant = tarifa_base_ant * Decimal('1.2625')
+            elif f.icms == 20:
+                tarifa_aplicada_ant = tarifa_base_ant
+            else:
+                tarifa_aplicada_ant = tarifa_base_ant * Decimal('1.1023232323')
+
+            consumo_usina_ant = Decimal(str(f.consumo_usina))
+            valor_conta_ant = Decimal(str(f.valor_conta_neoenergia))
+
+            valor_usina_ant = consumo_usina_ant * tarifa_cliente
+            com_desconto_ant = valor_conta_ant + valor_usina_ant
+            sem_desconto_ant = consumo_usina_ant * tarifa_aplicada_ant + valor_conta_ant
+
+            economia_total += sem_desconto_ant - com_desconto_ant
+        except:
+            continue
+
+    economia_acumulada = economia + economia_total
+
+    # Caminho da ficha de compensação
+    pasta_boletos = os.getenv('BOLETOS_PATH', 'static/boletos')
+    pdf_path = os.path.join(pasta_boletos, f"boleto_{fatura.id}.pdf")
+    ficha_compensacao_img = f"ficha_compensacao_{fatura.id}.png"
+    ficha_path = os.path.abspath(f"static/{ficha_compensacao_img}")
+    ficha_compensacao_img = extrair_ficha_compensacao(pdf_path, ficha_path) if os.path.exists(pdf_path) else None
+
+    # Caminhos absolutos para imagens e CSS (compatível com PDFKit)
+    logo_cgr_path = os.path.abspath("static/img/logo_cgr.png").replace('\\', '/')
+    logo_cgr_base64 = imagem_para_base64(logo_cgr_path)
+    logo_cgr_data_uri = f"data:image/png;base64,{logo_cgr_base64}"
+
+    logo_usina_data_uri = None
+    if usina.logo_url:
+        logo_usina_path = os.path.abspath(f"static/logos/{usina.logo_url}").replace('\\', '/')
+        logo_usina_base64 = imagem_para_base64(logo_usina_path)
+        logo_usina_data_uri = f"data:image/png;base64,{logo_usina_base64}"
+
+    ficha_compensacao_data_uri = None
+    if ficha_compensacao_img:
+        ficha_abspath = os.path.abspath(f"static/{ficha_compensacao_img}").replace('\\', '/')
+        if os.path.exists(ficha_abspath):
+            ficha_base64 = imagem_para_base64(ficha_abspath)
+            ficha_compensacao_data_uri = f"data:image/png;base64,{ficha_base64}"
+
+    # Bootstrap
+    bootstrap_path = os.path.abspath("static/css/bootstrap.min.css").replace('\\', '/')
+    bootstrap_path = f"file:///{bootstrap_path}"
+
+    return render_template(
+        'relatorio_fatura.html',
+        fatura=fatura,
+        cliente=cliente,
+        usina=usina,
+        tarifa_neoenergia_aplicada=tarifa_neoenergia_aplicada,
+        tarifa_cliente=tarifa_cliente,
+        valor_usina=valor_usina,
+        com_desconto=com_desconto,
+        sem_desconto=sem_desconto,
+        economia=economia,
+        economia_acumulada=economia_acumulada,
+        ficha_compensacao_path=ficha_compensacao_data_uri,
+        logo_cgr_path=logo_cgr_data_uri,
+        logo_usina_path=logo_usina_data_uri,
+        bootstrap_path=bootstrap_path
     )
     
 def extrair_ficha_compensacao(pdf_path, output_path='static/ficha_compensacao.png'):
@@ -1911,6 +2037,152 @@ def financeiro():
         total_despesas=total_despesas
     )
 
+@app.route('/enviar_email/<int:fatura_id>')
+def enviar_email(fatura_id):
+    fatura = FaturaMensal.query.get_or_404(fatura_id)
+    cliente = Cliente.query.get_or_404(fatura.cliente_id)
+
+    if not cliente.email:
+        flash('Cliente não possui e-mail cadastrado.', 'danger')
+        return redirect(url_for('listar_faturas'))
+
+    try:
+        # ✅ Gera link externo real
+        link_relatorio = url_for('relatorio_fatura', fatura_id=fatura.id, _external=True).replace("127.0.0.1:5000", "painel.cgrenergia.com.br")
+
+        # ✅ Renderiza o template HTML do e-mail
+        html_corpo = render_template("email_fatura.html", cliente=cliente, fatura=fatura, link_relatorio=link_relatorio)
+
+        # ✅ Monta e envia o e-mail
+        msg = Message(
+            subject=f"Relatório de Fatura - {fatura.mes_referencia}/{fatura.ano_referencia}",
+            recipients=[cliente.email],
+            html=html_corpo
+        )
+
+        mail.send(msg)
+        flash("E-mail enviado com sucesso.", "success")
+
+    except Exception as e:
+        flash(f"Erro ao enviar e-mail: {e}", "danger")
+
+    return redirect(url_for('listar_faturas'))
+
+@app.route('/gerar_pdf/<int:fatura_id>')
+def gerar_pdf_fatura(fatura_id):
+    fatura = FaturaMensal.query.get_or_404(fatura_id)
+    cliente = Cliente.query.get(fatura.cliente_id)
+    usina = Usina.query.get(cliente.usina_id)
+
+    tarifa_base = Decimal(str(fatura.tarifa_neoenergia))
+    if fatura.icms == 0:
+        tarifa_neoenergia_aplicada = tarifa_base * Decimal('1.2625')
+    elif fatura.icms == 20:
+        tarifa_neoenergia_aplicada = tarifa_base
+    else:
+        tarifa_neoenergia_aplicada = tarifa_base * Decimal('1.1023232323')
+
+    consumo_usina = Decimal(str(fatura.consumo_usina))
+    valor_conta = Decimal(str(fatura.valor_conta_neoenergia))
+    rateio = Rateio.query.filter_by(cliente_id=cliente.id, usina_id=usina.id).first()
+    tarifa_cliente = Decimal(str(rateio.tarifa_kwh)) if rateio else Decimal('0')
+
+    valor_usina = consumo_usina * tarifa_cliente
+    com_desconto = valor_conta + valor_usina
+    sem_desconto = consumo_usina * tarifa_neoenergia_aplicada + valor_conta
+    economia = sem_desconto - com_desconto
+
+    faturas_anteriores = FaturaMensal.query.filter(
+        FaturaMensal.cliente_id == cliente.id,
+        FaturaMensal.id != fatura.id,
+        (FaturaMensal.ano_referencia < fatura.ano_referencia) |
+        ((FaturaMensal.ano_referencia == fatura.ano_referencia) &
+         (FaturaMensal.mes_referencia < fatura.mes_referencia))
+    ).all()
+
+    economia_total = Decimal('0')
+    for f in faturas_anteriores:
+        try:
+            tarifa_base_ant = Decimal(str(f.tarifa_neoenergia))
+            if f.icms == 0:
+                tarifa_aplicada_ant = tarifa_base_ant * Decimal('1.2625')
+            elif f.icms == 20:
+                tarifa_aplicada_ant = tarifa_base_ant
+            else:
+                tarifa_aplicada_ant = tarifa_base_ant * Decimal('1.1023232323')
+
+            consumo_usina_ant = Decimal(str(f.consumo_usina))
+            valor_conta_ant = Decimal(str(f.valor_conta_neoenergia))
+
+            valor_usina_ant = consumo_usina_ant * tarifa_cliente
+            com_desconto_ant = valor_conta_ant + valor_usina_ant
+            sem_desconto_ant = consumo_usina_ant * tarifa_aplicada_ant + valor_conta_ant
+
+            economia_total += sem_desconto_ant - com_desconto_ant
+        except:
+            continue
+
+    economia_acumulada = economia + economia_total
+
+    # Caminhos com encoding e file://
+    def to_file_url(path):
+        abs_path = os.path.abspath(path).replace('\\', '/')
+        return f"file:///{abs_path}"
+
+    logo_cgr_path = to_file_url("static/img/logo_cgr.png")
+    logo_usina_path = to_file_url(f"static/logos/{usina.logo_url}") if usina.logo_url else None
+
+    ficha_compensacao_path = None
+    pdf_path = os.path.join('static/boletos', f"boleto_{fatura.id}.pdf")
+    ficha_img = f"ficha_compensacao_{fatura.id}.png"
+    if os.path.exists(pdf_path):
+        ficha_compensacao_path = to_file_url(f"static/{ficha_img}")
+
+    bootstrap_path = to_file_url("static/css/bootstrap.min.css")
+
+    html = render_template(
+        'relatorio_fatura.html',
+        fatura=fatura,
+        cliente=cliente,
+        usina=usina,
+        tarifa_neoenergia_aplicada=tarifa_neoenergia_aplicada,
+        tarifa_cliente=tarifa_cliente,
+        valor_usina=valor_usina,
+        com_desconto=com_desconto,
+        sem_desconto=sem_desconto,
+        economia=economia,
+        economia_acumulada=economia_acumulada,
+        ficha_compensacao_path=ficha_compensacao_path,
+        logo_cgr_path=logo_cgr_path,
+        logo_usina_path=logo_usina_path,
+        bootstrap_path=bootstrap_path
+    )
+
+    # Configura PDFKit com wkhtmltopdf correto
+    config = pdfkit.configuration(wkhtmltopdf=r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe")
+
+    options = {
+        'enable-local-file-access': '',
+        'quiet': '',
+        'page-size': 'A4',
+        'encoding': 'UTF-8'
+    }
+    print("LOGO CGR:", logo_cgr_path)
+    print("LOGO USINA:", logo_usina_path)
+    print("FICHA COMP:", ficha_compensacao_path)
+    print("BOOTSTRAP:", bootstrap_path)
+
+    pdf = pdfkit.from_string(html, False, options=options, configuration=config)
+
+    response = make_response(pdf)
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'inline; filename=fatura_{fatura_id}.pdf'
+    return response
+
+def imagem_para_base64(caminho):
+    with open(caminho, "rb") as img_file:
+        return base64.b64encode(img_file.read()).decode("utf-8")
+        
 
 if __name__ == '__main__':
     with app.app_context():

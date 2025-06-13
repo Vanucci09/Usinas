@@ -134,6 +134,9 @@
                                     <i class="bi bi-whatsapp"></i>
                                 </a>
                             {% endif %}
+                            <a href="{{ url_for('enviar_email', fatura_id=fatura.id) }}" class="btn btn-sm btn-secondary">
+                                <i class="bi bi-envelope-fill"></i>
+                            </a>
                         </div>
                     </td>
                 </tr>
