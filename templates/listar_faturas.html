@@ -34,9 +34,15 @@
 <body>
 <div class="container mt-5 mb-5 p-4 bg-white shadow rounded">
 
+    <div class="mb-3">
+        <a href="{{ url_for('index') }}">
+            <img src="{{ url_for('static', filename='img/LogoEmpresa.jpg') }}" alt="Início" style="height: 50px;">
+        </a>
+    </div>
+
     <h2 class="mb-4 text-primary text-center">Faturas Cadastradas</h2>
 
-    <!-- Filtros -->
+    <!-- ✅ Filtros -->
     <form method="GET" class="row g-3 mb-4">
         <div class="col-md-3">
             <label for="usina_id" class="form-label">Usina</label>
@@ -83,7 +89,7 @@
         </div>
     </form>
 
-    <!-- Tabela -->
+    <!-- ✅ Tabela de Faturas -->
     <div class="table-responsive">
         <table class="table table-bordered table-hover align-middle">
             <thead class="table-light">
@@ -108,7 +114,6 @@
                     </td>
                     <td>{{ fatura.mes_referencia }}/{{ fatura.ano_referencia }}</td>
                     <td>
-                        {% set rateio = fatura.cliente.rateios[0] if fatura.cliente.rateios else None %}
                         {% if rateio %}
                             {{ (fatura.consumo_usina * rateio.tarifa_kwh)|formato_brasileiro }}
                         {% else %}
@@ -145,12 +150,13 @@
         </table>
     </div>
 
-
+    <!-- ✅ Voltar ao início no final -->
     <div class="text-center mt-4">
         <a href="{{ url_for('index') }}" class="btn btn-secondary">
             <i class="bi bi-house-door-fill"></i> Voltar para o Início
         </a>
     </div>
+
 </div>
 
 <script>
@@ -182,6 +188,11 @@ document.getElementById('usina_id').addEventListener('change', function () {
         });
 });
 </script>
+{% if email_enviado %}
+<script>
+    alert("E-mail enviado com sucesso!");
+</script>
+{% endif %}
 
 </body>
 </html>

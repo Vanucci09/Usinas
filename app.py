@@ -700,16 +700,22 @@ def faturamento():
 
                 # Receita associada
                 if rateio:
+                    # Calcula o mês subsequente
+                    data_base = date(ano, mes, 1)
+                    proximo_mes = (data_base + timedelta(days=32)).replace(day=1)
+                    referencia_mes_receita = proximo_mes.month
+                    referencia_ano_receita = proximo_mes.year
+
                     receita_valor = float(Decimal(consumo_usina * rateio.tarifa_kwh).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
                     receita = FinanceiroUsina(
                         usina_id=rateio.usina_id,
-                        categoria_id=None, # pode adicionar a categoria
-                        data=date.today(),
+                        categoria_id=None,  # pode adicionar a categoria
+                        data=date(referencia_ano_receita, referencia_mes_receita, 1),  # data como 1º dia do mês subsequente
                         tipo='receita',
                         descricao=f"Fatura {fatura.identificador} - {cliente.nome}",
                         valor=receita_valor,
-                        referencia_mes=mes,
-                        referencia_ano=ano
+                        referencia_mes=referencia_mes_receita,
+                        referencia_ano=referencia_ano_receita
                     )
                     db.session.add(receita)
                     db.session.commit()
@@ -741,6 +747,7 @@ def clientes_por_usina(usina_id):
 @app.route('/faturas')
 @login_required
 def listar_faturas():
+    email_enviado = request.args.get('email_enviado') == '1'
     usina_id = request.args.get('usina_id', type=int)
     mes = request.args.get('mes', type=int)
     ano = request.args.get('ano', type=int)
@@ -763,7 +770,7 @@ def listar_faturas():
     anos = sorted({f.ano_referencia for f in FaturaMensal.query.all()}, reverse=True)
 
     return render_template('listar_faturas.html', faturas=faturas, usinas=usinas, clientes=clientes, anos=anos,
-                           usina_id=usina_id, mes=mes, ano=ano)
+                       usina_id=usina_id, mes=mes, ano=ano, email_enviado=email_enviado)
 
 @app.route('/editar_fatura/<int:id>', methods=['GET', 'POST'])
 def editar_fatura(id):
@@ -1953,12 +1960,11 @@ def enviar_email(fatura_id):
     try:
         mail.send(msg)
         flash('E-mail enviado com sucesso!', 'success')
+        return redirect(url_for('listar_faturas', email_enviado=1))
     except Exception as e:
         flash(f'Erro ao enviar e-mail: {e}', 'danger')
-
-    return redirect(url_for('listar_faturas'))
-
-    # Caminhos com encoding e file://
+        return redirect(url_for('listar_faturas'))
+    
     def to_file_url(path):
         abs_path = os.path.abspath(path).replace('\\', '/')
         return f"file:///{abs_path}"
@@ -2000,11 +2006,7 @@ def enviar_email(fatura_id):
         'quiet': '',
         'page-size': 'A4',
         'encoding': 'UTF-8'
-    }
-    print("LOGO CGR:", logo_cgr_path)
-    print("LOGO USINA:", logo_usina_path)
-    print("FICHA COMP:", ficha_compensacao_path)
-    print("BOOTSTRAP:", bootstrap_path)
+    }   
 
     #pdf = pdfkit.from_string(html, False, options=options, configuration=config)
 

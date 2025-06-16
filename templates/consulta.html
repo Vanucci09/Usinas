@@ -49,14 +49,14 @@
                 <tr>
                     <td>{{ item.nome }}</td>
                     <td>{{ item.data }}</td>
-                    <td>{{ item.previsao_diaria|round(2) }}</td>
+                    <td>{{ "{:,}".format(item.previsao_diaria|round(2)).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
                     <td class="
                         {% if item.energia_kwh >= item.previsao_diaria %} text-success 
                         {% elif item.energia_kwh >= (item.previsao_diaria * 0.9) %} text-warning 
                         {% else %} text-danger 
                         {% endif %}
                     ">
-                        {{'%.2f' | format(item.energia_kwh) }}
+                        {{ "{:,}".format(item.energia_kwh|round(2)).replace(",", "X").replace(".", ",").replace("X", ".") }}
                     </td>
                 </tr>
                 {% endfor %}
@@ -64,7 +64,7 @@
         </table>
 
         <div class="text-end mt-4">
-            <strong>Total da Geração: </strong>{{'%.2f' | format(total) }} kWh
+            <strong>Total da Geração: </strong>{{ "{:,}".format(total|round(2)).replace(",", "X").replace(".", ",").replace("X", ".") }} kWh
         </div>
 
         {% if usina_id %}
