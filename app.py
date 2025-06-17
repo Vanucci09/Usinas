@@ -168,6 +168,7 @@ class FinanceiroUsina(db.Model):
     valor = db.Column(db.Float, nullable=False)
     referencia_mes = db.Column(db.Integer, nullable=True)
     referencia_ano = db.Column(db.Integer, nullable=True)
+    data_pagamento = db.Column(db.Date)
 
     usina = db.relationship('Usina', backref='financeiros')
     
@@ -1914,13 +1915,15 @@ def financeiro():
     for r in registros:
         valor = r.valor or 0
         item = {
+            'id': r.id, 
             'tipo': r.tipo,
             'usina': r.usina.nome if r.usina else 'N/A',
             'categoria': r.categoria.nome if r.categoria else '-',
             'descricao': r.descricao,
             'valor': valor,
             'data': r.data,
-            'referencia': f"{r.referencia_mes:02d}/{r.referencia_ano}"
+            'referencia': f"{r.referencia_mes:02d}/{r.referencia_ano}",
+            'data_pagamento': r.data_pagamento
         }
         financeiro.append(item)
 
@@ -2018,6 +2021,78 @@ def enviar_email(fatura_id):
 def imagem_para_base64(caminho):
     with open(caminho, "rb") as img_file:
         return base64.b64encode(img_file.read()).decode("utf-8")
+
+@app.route('/atualizar_pagamento/<int:id>', methods=['POST'])
+@login_required
+def atualizar_pagamento(id):
+    financeiro = FinanceiroUsina.query.get_or_404(id)
+    data_str = request.form.get('data_pagamento')
+
+    try:
+        if data_str:
+            financeiro.data_pagamento = datetime.strptime(data_str, '%Y-%m-%d').date()
+        else:
+            financeiro.data_pagamento = None  # Se o campo vier vazio, limpa a data
+        db.session.commit()
+        flash('Data de pagamento atualizada com sucesso!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao atualizar data: {e}', 'danger')
+
+    return redirect(request.referrer or url_for('financeiro'))
+
+@app.route('/editar_despesa/<int:despesa_id>', methods=['GET', 'POST'])
+def editar_despesa(despesa_id):
+    despesa = FinanceiroUsina.query.get_or_404(despesa_id)
+    usinas = Usina.query.all()
+    categorias = CategoriaDespesa.query.all()
+
+    if request.method == 'POST':
+        despesa.usina_id = request.form['usina_id']
+        despesa.categoria_id = request.form['categoria_id']
+        despesa.descricao = request.form['descricao']
+        despesa.valor = float(request.form['valor'].replace(',', '.'))
+        despesa.data = request.form['data']
+        despesa.referencia_mes = int(request.form['referencia_mes'])
+        despesa.referencia_ano = int(request.form['referencia_ano'])
+        db.session.commit()
+        return redirect(url_for('listar_despesas'))
+
+    return render_template('editar_despesa.html', despesa=despesa, usinas=usinas, categorias=categorias)
+
+@app.route('/listar_despesas', methods=['GET'])
+def listar_despesas():
+    # Dicionário {id: nome} para as usinas
+    usinas = {u.id: u.nome for u in Usina.query.all()}
+    
+    # Dicionário {id: nome} para as categorias
+    categorias = {c.id: c.nome for c in CategoriaDespesa.query.all()}
+
+    # Filtros
+    usina_id = request.args.get('usina_id', type=int)
+    data_inicio = request.args.get('data_inicio')
+    data_fim = request.args.get('data_fim')
+
+    query = FinanceiroUsina.query.filter_by(tipo='despesa')
+
+    if usina_id:
+        query = query.filter(FinanceiroUsina.usina_id == usina_id)
+
+    if data_inicio and data_fim:
+        query = query.filter(FinanceiroUsina.data.between(data_inicio, data_fim))
+
+    despesas = query.order_by(FinanceiroUsina.data.desc()).all()
+
+    usinas_lista = Usina.query.all()
+
+    return render_template('listar_despesas.html',
+                           despesas=despesas,
+                           usinas=usinas,
+                           usinas_lista=usinas_lista,
+                           categorias=categorias,
+                           usina_id=usina_id,
+                           data_inicio=data_inicio,
+                           data_fim=data_fim)
         
 
 if __name__ == '__main__':

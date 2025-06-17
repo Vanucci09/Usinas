@@ -50,6 +50,7 @@
                     <th>Valor (R$)</th>
                     <th>Data</th>
                     <th>Referência</th>
+                    <th>Data Pagamento</th>
                 </tr>
             </thead>
             <tbody>
@@ -59,9 +60,19 @@
                     <td>{{ item.usina }}</td>
                     <td>{{ item.categoria or '-' }}</td>
                     <td>{{ item.descricao }}</td>
-                    <td>{{item.valor | formato_brasileiro }}</td>
+                    <td>{{ item.valor | formato_brasileiro }}</td>
                     <td>{{ item.data.strftime('%d/%m/%Y') }}</td>
                     <td>{{ item.referencia }}</td>
+                    <td>
+                        {% if item['tipo'] == 'receita' %}
+                            <form method="POST" action="{{ url_for('atualizar_pagamento', id=item['id']) }}" class="d-flex gap-1">
+                                <input type="date" name="data_pagamento" value="{{ item['data_pagamento'].isoformat() if item['data_pagamento'] else '' }}" class="form-control form-control-sm" style="max-width: 140px;">
+                                <button type="submit" class="btn btn-sm btn-primary">Salvar</button>
+                            </form>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
