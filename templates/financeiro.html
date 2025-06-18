@@ -1,10 +1,28 @@
 {% extends 'base.html' %}
 
-{% block title %}Cadastrar Geração Diária{% endblock %}
+{% block title %}Financeiro - Balancete{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
     <h2 class="mb-4 text-primary">Financeiro - Balancete</h2>
+
+    <!-- Links para Relatórios -->
+    <div class="mb-4">
+        <div class="btn-group" role="group">
+            <a href="{{ url_for('relatorio_financeiro') }}" class="btn btn-outline-primary btn-sm">
+                📄 Relatório por Período
+            </a>
+            <a href="{{ url_for('relatorio_consolidado') }}" class="btn btn-outline-primary btn-sm">
+                🏭 Consolidado por Usina
+            </a>
+            <a href="{{ url_for('relatorio_categoria') }}" class="btn btn-outline-primary btn-sm">
+                🗂️ Por Categoria
+            </a>
+            <a href="{{ url_for('relatorio_cliente') }}" class="btn btn-outline-primary btn-sm">
+                👥 Por Cliente
+            </a>
+        </div>
+    </div>
 
     <!-- Filtros -->
     <form class="row g-3 mb-4" method="get">
@@ -13,22 +31,34 @@
             <select id="usina_id" name="usina_id" class="form-select">
                 <option value="">Todas</option>
                 {% for u in usinas %}
-                <option value="{{ u.id }}" {% if u.id == usina_id %}selected{% endif %}>{{ u.nome }}</option>
+                    <option value="{{ u.id }}" {% if u.id == usina_id %}selected{% endif %}>{{ u.nome }}</option>
                 {% endfor %}
             </select>
         </div>
+
         <div class="col-md-2">
             <label for="mes" class="form-label">Mês</label>
             <select id="mes" name="mes" class="form-select">
                 {% for m in range(1, 13) %}
-                <option value="{{ m }}" {% if m == mes %}selected{% endif %}>{{ "%02d"|format(m) }}</option>
+                    <option value="{{ m }}" {% if m == mes %}selected{% endif %}>{{ "%02d"|format(m) }}</option>
                 {% endfor %}
             </select>
         </div>
+
         <div class="col-md-2">
             <label for="ano" class="form-label">Ano</label>
             <input type="number" id="ano" name="ano" class="form-control" value="{{ ano }}">
         </div>
+
+        <div class="col-md-2">
+            <label for="tipo" class="form-label">Tipo</label>
+            <select id="tipo" name="tipo" class="form-select">
+                <option value="">Todos</option>
+                <option value="receita" {% if tipo == 'receita' %}selected{% endif %}>Receitas</option>
+                <option value="despesa" {% if tipo == 'despesa' %}selected{% endif %}>Despesas</option>
+            </select>
+        </div>
+
         <div class="col-md-2 align-self-end">
             <button type="submit" class="btn btn-primary w-100">Filtrar</button>
         </div>
@@ -60,9 +90,9 @@
                     <td>{{ item.data.strftime('%d/%m/%Y') }}</td>
                     <td>{{ item.referencia }}</td>
                     <td>
-                        {% if item['tipo'] == 'receita' %}
-                            <form method="POST" action="{{ url_for('atualizar_pagamento', id=item['id']) }}" class="d-flex gap-1">
-                                <input type="date" name="data_pagamento" value="{{ item['data_pagamento'].isoformat() if item['data_pagamento'] else '' }}" class="form-control form-control-sm" style="max-width: 140px;">
+                        {% if item.tipo == 'receita' %}
+                            <form method="POST" action="{{ url_for('atualizar_pagamento', id=item.id) }}" class="d-flex gap-1">
+                                <input type="date" name="data_pagamento" value="{{ item.data_pagamento.isoformat() if item.data_pagamento else '' }}" class="form-control form-control-sm" style="max-width: 140px;">
                                 <button type="submit" class="btn btn-sm btn-primary">Salvar</button>
                             </form>
                         {% else %}
@@ -93,18 +123,15 @@
         <strong>Saldo:</strong>
         {% set saldo = total_receitas - total_despesas %}
         {% if saldo >= 0 %}
-            <span class="text-success"> {{ saldo | formato_brasileiro }}</span>
+            <span class="text-success">{{ saldo | formato_brasileiro }}</span>
         {% else %}
-            <span class="text-danger"> {{ saldo | formato_brasileiro }}</span>
+            <span class="text-danger">{{ saldo | formato_brasileiro }}</span>
         {% endif %}
     </div>
 
     <div class="text-center mt-4">
-        <a href="{{ url_for('index') }}" class="btn btn-secondary">
-            <i class="bi bi-house-door-fill"></i> Voltar para o Início
-        </a>
+        <a href="{{ url_for('index') }}?aba=financeiro" class="btn btn-secondary">Voltar</a>
     </div>
+
 </div>
-</body>
-</html>
 {% endblock %}

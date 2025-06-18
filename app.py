@@ -1904,14 +1904,11 @@ def financeiro():
     if not current_user.pode_acessar_financeiro:
         return "Acesso negado", 403
 
-    usinas = Usina.query.all()
-    clientes = Cliente.query.all()
-    mensagem = ''
-
-    # Filtros de mês, ano e usina
+    usinas = Usina.query.order_by(Usina.nome).all()
     mes = request.args.get('mes', default=date.today().month, type=int)
     ano = request.args.get('ano', default=date.today().year, type=int)
     usina_id = request.args.get('usina_id', type=int)
+    tipo = request.args.get('tipo') 
 
     # Base da query
     query = FinanceiroUsina.query.filter(
@@ -1922,9 +1919,12 @@ def financeiro():
     if usina_id:
         query = query.filter(FinanceiroUsina.usina_id == usina_id)
 
+    if tipo in ['receita', 'despesa']:
+        query = query.filter(FinanceiroUsina.tipo == tipo)
+
     registros = query.order_by(FinanceiroUsina.data.desc()).all()
 
-    # Monta lista para o template
+    # Monta lista
     financeiro = []
     total_receitas = 0
     total_despesas = 0
@@ -1932,7 +1932,7 @@ def financeiro():
     for r in registros:
         valor = r.valor or 0
         item = {
-            'id': r.id, 
+            'id': r.id,
             'tipo': r.tipo,
             'usina': r.usina.nome if r.usina else 'N/A',
             'categoria': r.categoria.nome if r.categoria else '-',
@@ -1949,18 +1949,18 @@ def financeiro():
         else:
             total_despesas += valor
 
-    usinas = Usina.query.order_by(Usina.nome).all()
-
     return render_template(
         'financeiro.html',
         financeiro=financeiro,
         mes=mes,
         ano=ano,
         usina_id=usina_id,
+        tipo=tipo,
         usinas=usinas,
         total_receitas=total_receitas,
         total_despesas=total_despesas
     )
+
 
 @app.route('/enviar_email/<int:fatura_id>')
 def enviar_email(fatura_id):
@@ -2110,7 +2110,197 @@ def listar_despesas():
                            usina_id=usina_id,
                            data_inicio=data_inicio,
                            data_fim=data_fim)
-        
+
+@app.route('/relatorio_financeiro', methods=['GET'])
+@login_required
+def relatorio_financeiro():
+    if not current_user.pode_acessar_financeiro:
+        return "Acesso negado", 403
+
+    usinas = Usina.query.order_by(Usina.nome).all()
+
+    # Filtros
+    usina_id = request.args.get('usina_id', type=int)
+    tipo = request.args.get('tipo')
+    data_inicio = request.args.get('data_inicio')
+    data_fim = request.args.get('data_fim')
+
+    query = FinanceiroUsina.query
+
+    # Filtro por usina
+    if usina_id:
+        query = query.filter(FinanceiroUsina.usina_id == usina_id)
+
+    # Filtro por tipo (receita/despesa)
+    if tipo in ['receita', 'despesa']:
+        query = query.filter(FinanceiroUsina.tipo == tipo)
+
+    # Filtro por data
+    if data_inicio:
+        query = query.filter(FinanceiroUsina.data >= data_inicio)
+    if data_fim:
+        query = query.filter(FinanceiroUsina.data <= data_fim)
+
+    registros = query.order_by(FinanceiroUsina.data.asc()).all()
+
+    total_receitas = sum(r.valor for r in registros if r.tipo == 'receita')
+    total_despesas = sum(r.valor for r in registros if r.tipo == 'despesa')
+    saldo = total_receitas - total_despesas
+
+    return render_template(
+        'relatorio_financeiro.html',
+        registros=registros,
+        usinas=usinas,
+        usina_id=usina_id,
+        tipo=tipo,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+        total_receitas=total_receitas,
+        total_despesas=total_despesas,
+        saldo=saldo
+    )
+
+@app.route('/relatorio_consolidado', methods=['GET'])
+@login_required
+def relatorio_consolidado():
+    if not current_user.pode_acessar_financeiro:
+        return "Acesso negado", 403
+
+    mes = request.args.get('mes', default=date.today().month, type=int)
+    ano = request.args.get('ano', default=date.today().year, type=int)
+
+    usinas = Usina.query.order_by(Usina.nome).all()
+    resultado = []
+
+    for usina in usinas:
+        # Somar apenas receitas com data_pagamento preenchida
+        receitas = db.session.query(db.func.sum(FinanceiroUsina.valor)).filter(
+            FinanceiroUsina.usina_id == usina.id,
+            FinanceiroUsina.tipo == 'receita',
+            FinanceiroUsina.referencia_mes == mes,
+            FinanceiroUsina.referencia_ano == ano,
+            FinanceiroUsina.data_pagamento.isnot(None) 
+        ).scalar() or 0
+
+        despesas = db.session.query(db.func.sum(FinanceiroUsina.valor)).filter(
+            FinanceiroUsina.usina_id == usina.id,
+            FinanceiroUsina.tipo == 'despesa',
+            FinanceiroUsina.referencia_mes == mes,
+            FinanceiroUsina.referencia_ano == ano
+        ).scalar() or 0
+
+        saldo = receitas - despesas
+
+        resultado.append({
+            'usina': usina.nome,
+            'receitas': receitas,
+            'despesas': despesas,
+            'saldo': saldo
+        })
+    
+    total_receitas = sum(r['receitas'] for r in resultado)
+    total_despesas = sum(r['despesas'] for r in resultado)
+    total_saldo = total_receitas - total_despesas
+
+    return render_template(
+        'relatorio_consolidado.html',
+        resultado=resultado,
+        mes=mes,
+        ano=ano,
+        total_receitas=total_receitas,
+        total_despesas=total_despesas,
+        total_saldo=total_saldo
+    )
+
+@app.route('/relatorio_categoria', methods=['GET'])
+@login_required
+def relatorio_categoria():
+    if not current_user.pode_acessar_financeiro:
+        return "Acesso negado", 403
+
+    mes = request.args.get('mes', default=date.today().month, type=int)
+    ano = request.args.get('ano', default=date.today().year, type=int)
+    usina_id = request.args.get('usina_id', type=int)
+    tipo = request.args.get('tipo')  # Pode ser receita, despesa ou None
+
+    query = db.session.query(
+        CategoriaDespesa.nome.label('categoria'),
+        FinanceiroUsina.tipo,
+        db.func.sum(FinanceiroUsina.valor).label('total')
+    ).join(CategoriaDespesa, FinanceiroUsina.categoria_id == CategoriaDespesa.id)
+
+
+    # Filtros básicos
+    query = query.filter(
+        FinanceiroUsina.referencia_mes == mes,
+        FinanceiroUsina.referencia_ano == ano
+    )
+
+    if usina_id:
+        query = query.filter(FinanceiroUsina.usina_id == usina_id)
+
+    if tipo in ['receita', 'despesa']:
+        query = query.filter(FinanceiroUsina.tipo == tipo)
+
+    query = query.group_by(CategoriaDespesa.nome, FinanceiroUsina.tipo).order_by(CategoriaDespesa.nome)
+
+    resultados = query.all()
+
+    # Organizar o resultado para facilitar no template
+    categorias = {}
+    for r in resultados:
+        if r.categoria not in categorias:
+            categorias[r.categoria] = {'receita': 0, 'despesa': 0}
+        categorias[r.categoria][r.tipo] = r.total
+
+    return render_template(
+        'relatorio_categoria.html',
+        categorias=categorias,
+        mes=mes,
+        ano=ano,
+        usina_id=usina_id,
+        tipo=tipo,
+        usinas=Usina.query.order_by(Usina.nome).all()
+    )
+
+@app.route('/relatorio_cliente', methods=['GET'])
+@login_required
+def relatorio_cliente():
+    if not current_user.pode_acessar_financeiro:
+        return "Acesso negado", 403
+
+    mes = request.args.get('mes', default=date.today().month, type=int)
+    ano = request.args.get('ano', default=date.today().year, type=int)
+    usina_id = request.args.get('usina_id', type=int)
+
+    query = db.session.query(
+        Cliente.nome.label('cliente'),
+        db.func.sum(FaturaMensal.consumo_usina).label('consumo_total'),
+        db.func.sum(FaturaMensal.consumo_usina * Rateio.tarifa_kwh).label('faturamento_total')
+    ).join(Cliente, FaturaMensal.cliente_id == Cliente.id
+    ).join(Rateio, Rateio.cliente_id == Cliente.id
+    ).join(Usina, Cliente.usina_id == Usina.id
+    ).filter(
+        FaturaMensal.mes_referencia == mes,
+        FaturaMensal.ano_referencia == ano
+    )
+
+    if usina_id:
+        query = query.filter(Cliente.usina_id == usina_id)
+
+    query = query.group_by(Cliente.nome).order_by(Cliente.nome)
+
+    resultados = query.all()
+
+    return render_template(
+        'relatorio_cliente.html',
+        resultados=resultados,
+        mes=mes,
+        ano=ano,
+        usina_id=usina_id,
+        usinas=Usina.query.order_by(Usina.nome).all()
+    )
+
 
 if __name__ == '__main__':
     with app.app_context():

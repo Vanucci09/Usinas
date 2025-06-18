@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+
+{% block title %}Relatório Consolidado por Usina{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4 text-primary">Relatório Consolidado - {{ "%02d"|format(mes) }}/{{ ano }}</h2>
+
+    <form class="row g-3 mb-4" method="get">
+        <div class="col-md-2">
+            <label for="mes" class="form-label">Mês</label>
+            <select id="mes" name="mes" class="form-select">
+                {% for m in range(1, 13) %}
+                    <option value="{{ m }}" {% if m == mes %}selected{% endif %}>{{ "%02d"|format(m) }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label for="ano" class="form-label">Ano</label>
+            <input type="number" id="ano" name="ano" class="form-control" value="{{ ano }}">
+        </div>
+        <div class="col-md-2 align-self-end">
+            <button type="submit" class="btn btn-primary w-100">Filtrar</button>
+        </div>
+    </form>
+
+    <table class="table table-bordered table-striped">
+        <thead class="table-light">
+            <tr>
+                <th>Usina</th>
+                <th>Total Receitas (R$)</th>
+                <th>Total Despesas (R$)</th>
+                <th>Saldo (R$)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in resultado %}
+            <tr>
+                <td>{{ r.usina }}</td>
+                <td>{{ r.receitas | formato_brasileiro }}</td>
+                <td>{{ r.despesas | formato_brasileiro }}</td>
+                <td>
+                    {% if r.saldo >= 0 %}
+                        <span class="text-success">{{ r.saldo | formato_brasileiro }}</span>
+                    {% else %}
+                        <span class="text-danger">{{ r.saldo | formato_brasileiro }}</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr class="table-secondary">
+                <th>Total Geral</th>
+                <th>{{ total_receitas | formato_brasileiro }}</th>
+                <th>{{ total_despesas | formato_brasileiro }}</th>
+                <th>
+                    {% if total_saldo >= 0 %}
+                        <span class="text-success">{{ total_saldo | formato_brasileiro }}</span>
+                    {% else %}
+                        <span class="text-danger">{{ total_saldo | formato_brasileiro }}</span>
+                    {% endif %}
+                </th>
+            </tr>
+        </tfoot>
+    </table>
+
+    <div class="text-center mt-4">
+        <a href="{{ url_for('financeiro') }}" class="btn btn-secondary">
+            Voltar
+        </a>
+    </div>
+</div>
+{% endblock %}
