@@ -1023,11 +1023,28 @@ def extrair_dados_fatura():
     def buscar_tarifa():
         match = re.search(r'KWh\s+\d+\s+([\d.,]+)', texto)
         return match.group(1).replace('.', '').replace(',', '.') if match else None
-
+    
+    print(linhas)
     def buscar_aliquota_icms():
-        for linha in linhas:
-            if "12,00" in linha or "12.00" in linha:
-                return "12.00"
+        for i, linha in enumerate(linhas):
+            if "ICMS" in linha.upper():
+                candidatos = []
+                inicio = max(0, i - 10)
+                fim = i
+                for j in range(inicio, fim):
+                    candidato = linhas[j].strip()
+                    if re.match(r'^\d{1,2}[.,]\d{2}$', candidato):
+                        try:
+                            valor_float = float(candidato.replace('.', '').replace(',', '.'))
+                            if 0 <= valor_float <= 25:
+                                candidatos.append((j, valor_float, candidato))
+                        except ValueError:
+                            continue                
+                for pos, valor, original in reversed(candidatos):
+                    if valor >= 10:  
+                        return original.replace('.', '').replace(',', '.')                
+                if candidatos:
+                    return candidatos[-1][2].replace('.', '').replace(',', '.')
         return None
 
     def buscar_consumo_total():
