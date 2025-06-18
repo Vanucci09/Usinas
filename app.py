@@ -2301,6 +2301,109 @@ def relatorio_cliente():
         usinas=Usina.query.order_by(Usina.nome).all()
     )
 
+@app.route('/relatorio_recebido_vs_previsto')
+@login_required
+def relatorio_recebido_vs_previsto():
+    mes = request.args.get('mes', default=date.today().month, type=int)
+    ano = request.args.get('ano', default=date.today().year, type=int)
+
+    # Pega todas as faturas daquele mês/ano
+    faturas = FaturaMensal.query.filter_by(mes_referencia=mes, ano_referencia=ano).all()
+
+    dados = []
+
+    for fatura in faturas:
+        cliente = fatura.cliente
+        usina = cliente.usina
+
+        # Tarifa do rateio
+        rateio = Rateio.query.filter_by(cliente_id=cliente.id, usina_id=usina.id).first()
+        tarifa = rateio.tarifa_kwh if rateio else 0
+
+        # Valor previsto (geração * tarifa)
+        valor_previsto = fatura.consumo_usina * tarifa
+
+        # Valor recebido (somatório das receitas pagas no financeiro)
+        recebimentos = FinanceiroUsina.query.filter(
+            FinanceiroUsina.usina_id == usina.id,
+            FinanceiroUsina.tipo == 'receita',
+            FinanceiroUsina.descricao.ilike(f"%{cliente.nome}%"),
+            db.extract('month', FinanceiroUsina.data) == mes,
+            db.extract('year', FinanceiroUsina.data) == ano,
+            FinanceiroUsina.data_pagamento != None
+        ).with_entities(db.func.sum(FinanceiroUsina.valor)).scalar() or 0
+
+        dados.append({
+            'cliente': cliente.nome,
+            'usina': usina.nome,
+            'consumo_kwh': fatura.consumo_usina,
+            'tarifa': tarifa,
+            'valor_previsto': valor_previsto,
+            'valor_recebido': recebimentos,
+            'diferenca': valor_previsto - recebimentos
+        })
+
+    return render_template('relatorio_recebido_vs_previsto.html', dados=dados, mes=mes, ano=ano)
+
+@app.route('/relatorio_gestao_usina')
+@login_required
+def relatorio_gestao_usina():
+    if not current_user.pode_acessar_financeiro:
+        return "Acesso negado", 403
+
+    from sqlalchemy import func
+
+    # Filtros de mês e ano atual (selecionado pelo usuário)
+    mes = request.args.get('mes', default=date.today().month, type=int)
+    ano = request.args.get('ano', default=date.today().year, type=int)
+
+    # Definir o mês/ano da geração (sempre o mês anterior)
+    if mes == 1:
+        mes_geracao = 12
+        ano_geracao = ano - 1
+    else:
+        mes_geracao = mes - 1
+        ano_geracao = ano
+
+    usinas = Usina.query.all()
+    dados = []
+
+    for usina in usinas:
+        # Total gerado no mês anterior
+        geracao_total = db.session.query(func.sum(Geracao.energia_kwh)).filter(
+            Geracao.usina_id == usina.id,
+            func.extract('month', Geracao.data) == mes_geracao,
+            func.extract('year', Geracao.data) == ano_geracao
+        ).scalar() or 0
+
+        # Receita prevista com base na geração
+        receita_prevista = 0
+        rateios = Rateio.query.filter_by(usina_id=usina.id).all()
+
+        for rateio in rateios:
+            percentual = rateio.percentual / 100
+            tarifa = rateio.tarifa_kwh or 0
+            receita_prevista += geracao_total * percentual * tarifa
+
+        # Receita recebida no mês selecionado (receitas com data_pagamento preenchida)
+        receita_recebida = db.session.query(func.sum(FinanceiroUsina.valor)).filter(
+            FinanceiroUsina.usina_id == usina.id,
+            FinanceiroUsina.tipo == 'receita',
+            FinanceiroUsina.referencia_mes == mes,
+            FinanceiroUsina.referencia_ano == ano,
+            FinanceiroUsina.data_pagamento != None
+        ).scalar() or 0
+
+        dados.append({
+            'usina': usina.nome,
+            'geracao': geracao_total,
+            'previsto': receita_prevista,
+            'recebido': receita_recebida,
+            'diferenca': receita_recebida - receita_prevista
+        })
+
+    return render_template('relatorio_gestao_usina.html', dados=dados, mes=mes, ano=ano, mes_geracao=mes_geracao, ano_geracao=ano_geracao)
+
 
 if __name__ == '__main__':
     with app.app_context():

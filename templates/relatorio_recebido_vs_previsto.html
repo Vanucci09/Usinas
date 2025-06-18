@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+
+{% block title %}Relatório Receita Prevista x Recebida{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4 text-primary">Relatório: Geração x Previsto x Recebido ({{ "%02d"|format(mes) }}/{{ ano }})</h2>
+
+    <table class="table table-bordered table-striped">
+        <thead class="table-light">
+            <tr>
+                <th>Cliente</th>
+                <th>Usina</th>
+                <th>Consumo Usina (kWh)</th>
+                <th>Tarifa (R$/kWh)</th>
+                <th>Valor Previsto (R$)</th>
+                <th>Valor Recebido (R$)</th>
+                <th>Diferença (R$)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in dados %}
+            <tr>
+                <td>{{ item.cliente }}</td>
+                <td>{{ item.usina }}</td>
+                <td>{{ "%.2f"|format(item.consumo_kwh) }}</td>
+                <td>{{ "%.2f"|format(item.tarifa) }}</td>
+                <td>{{ "%.2f"|format(item.valor_previsto) }}</td>
+                <td>{{ "%.2f"|format(item.valor_recebido) }}</td>
+                <td>
+                    {% if item.diferenca < 0 %}
+                        <span class="text-danger">{{ "%.2f"|format(item.diferenca) }}</span>
+                    {% else %}
+                        <span class="text-success">{{ "%.2f"|format(item.diferenca) }}</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="text-center mt-4">
+        <a href="{{ url_for('financeiro') }}" class="btn btn-secondary">Voltar</a>
+    </div>
+</div>
+{% endblock %}
