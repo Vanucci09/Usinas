@@ -48,9 +48,9 @@ if not SOLIS_KEY_ID or not SOLIS_KEY_SECRET:
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'  # ou outro servidor
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = 'posvenda@cgrenergia.com.br'
-app.config['MAIL_PASSWORD'] = 'edtz zhfj oflx pqpc'
-app.config['MAIL_DEFAULT_SENDER'] = 'posvenda@cgrenergia.com.br'
+app.config['MAIL_USERNAME'] = 'nuza@cgrenergia.com.br'
+app.config['MAIL_PASSWORD'] = 'kwou zhvp iszj hqtz'
+app.config['MAIL_DEFAULT_SENDER'] = 'nuza@cgrenergia.com.br'
 
 mail = Mail(app)
 
