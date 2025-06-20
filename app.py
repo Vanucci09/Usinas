@@ -171,6 +171,14 @@ class FinanceiroUsina(db.Model):
     data_pagamento = db.Column(db.Date)
 
     usina = db.relationship('Usina', backref='financeiros')
+
+class EconomiaExtra(db.Model):
+    __tablename__ = 'economias_extra'
+    id = db.Column(db.Integer, primary_key=True)
+    cliente_id = db.Column(db.Integer, nullable=True)
+    usina_id = db.Column(db.Integer, nullable=True)
+    valor_extra = db.Column(db.Numeric(12, 2), nullable=False)
+    observacao = db.Column(db.String, nullable=True)
     
 class Usuario(db.Model, UserMixin):
     __tablename__ = 'usuarios'
@@ -218,21 +226,18 @@ def cadastrar_usina():
         if logo and logo.filename != '':
             filename = secure_filename(logo.filename)
 
-            # Define o caminho com base no ambiente
-            if os.getenv('FLASK_ENV') == 'production':
-                caminho_base = '/data/logos'
-            else:
-                caminho_base = os.path.join('static', 'logos')
-
-            os.makedirs(caminho_base, exist_ok=True)  # Garante que a pasta existe
+            # Caminho conforme variável de ambiente (Render ou local)
+            caminho_base = os.getenv('LOGOS_PATH', os.path.join('static', 'logos'))
+            os.makedirs(caminho_base, exist_ok=True)
 
             caminho_logo = os.path.join(caminho_base, filename)
             logo.save(caminho_logo)
 
+            # Salva o nome do arquivo no banco
             nova_usina.logo_url = filename
             db.session.commit()
 
-        # Previsões mensais
+        # Salvar previsões mensais
         for mes in range(1, 13):
             chave = f'previsoes[{mes}]'
             valor = request.form.get(chave)
@@ -853,7 +858,11 @@ def relatorio_fatura(fatura_id):
         except:
             continue
 
-    economia_acumulada = economia + economia_total
+    economia_extra_total = db.session.query(
+        db.func.sum(EconomiaExtra.valor_extra)
+    ).filter(EconomiaExtra.cliente_id == cliente.id).scalar() or Decimal('0')
+
+    economia_acumulada = economia + economia_total + economia_extra_total
 
     # Caminhos
     pasta_boletos = '/data/boletos'
@@ -2018,17 +2027,12 @@ def enviar_email(fatura_id):
         bootstrap_path=bootstrap_path
     )
 
-    # Configura PDFKit com wkhtmltopdf correto
-    #config = pdfkit.configuration(wkhtmltopdf=r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe")
-
     options = {
         'enable-local-file-access': '',
         'quiet': '',
         'page-size': 'A4',
         'encoding': 'UTF-8'
     }   
-
-    #pdf = pdfkit.from_string(html, False, options=options, configuration=config)
 
     response = make_response(pdf)
     response.headers['Content-Type'] = 'application/pdf'
