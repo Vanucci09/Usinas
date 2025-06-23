@@ -2018,12 +2018,19 @@ def atualizar_pagamento(id):
     data_str = request.form.get('data_pagamento')
 
     try:
+        # Se for uma despesa que já tem data de pagamento, bloqueia a edição
+        if financeiro.tipo == 'despesa' and financeiro.data_pagamento:
+            flash('Despesa já paga! Alteração não permitida.', 'warning')
+            return redirect(request.referrer or url_for('financeiro'))
+
         if data_str:
             financeiro.data_pagamento = datetime.strptime(data_str, '%Y-%m-%d').date()
         else:
-            financeiro.data_pagamento = None  # Se o campo vier vazio, limpa a data
+            financeiro.data_pagamento = None  # Caso queira permitir limpar (opcional)
+
         db.session.commit()
         flash('Data de pagamento atualizada com sucesso!', 'success')
+
     except Exception as e:
         db.session.rollback()
         flash(f'Erro ao atualizar data: {e}', 'danger')

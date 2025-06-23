@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Cadastrar Geração Diária{% endblock %}
+{% block title %}Faturas Cadastradas{% endblock %}
 
 {% block content %}
 <body>
@@ -55,9 +55,9 @@
         </div>
     </form>
 
-    <!-- ✅ Tabela de Faturas -->
+    <!-- ✅ Tabela com DataTables -->
     <div class="table-responsive">
-        <table class="table table-bordered table-hover align-middle">
+        <table id="faturas-table" class="table table-bordered table-hover align-middle">
             <thead class="table-light">
                 <tr>
                     <th>Cliente</th>
@@ -116,48 +116,32 @@
         </table>
     </div>
 
-    <!-- ✅ Voltar ao início no final -->
     <div class="text-center mt-4">
         <a href="{{ url_for('index') }}?aba=financeiro" class="btn btn-secondary">Voltar</a>
     </div>
 
 </div>
 
+<!-- ✅ Incluindo jQuery + DataTables -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
 <script>
-document.getElementById('usina_id').addEventListener('change', function () {
-    const usinaId = this.value;
-    const clienteSelect = document.getElementById('cliente_id');
-
-    if (!usinaId) {
-        clienteSelect.innerHTML = '<option value="">Selecione a usina primeiro</option>';
-        return;
-    }
-
-    clienteSelect.innerHTML = '<option value="">Carregando...</option>';
-
-    fetch(`/clientes_por_usina/${usinaId}`)
-        .then(response => response.json())
-        .then(clientes => {
-            clienteSelect.innerHTML = '<option value="">Todos</option>';
-            clientes.forEach(cliente => {
-                const option = document.createElement('option');
-                option.value = cliente.id;
-                option.textContent = cliente.nome;
-                clienteSelect.appendChild(option);
-            });
-        })
-        .catch(error => {
-            clienteSelect.innerHTML = '<option value="">Erro ao carregar</option>';
-            console.error('Erro:', error);
-        });
+$(document).ready(function() {
+    $('#faturas-table').DataTable({
+        language: {
+            url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json'
+        },
+        pageLength: 25
+    });
 });
 </script>
+
 {% if email_enviado %}
 <script>
     alert("E-mail enviado com sucesso!");
 </script>
 {% endif %}
-
 </body>
-</html>
 {% endblock %}
