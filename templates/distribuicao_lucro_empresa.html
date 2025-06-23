@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Distribuição de Lucro - {{ resultado.empresa }} ({{ "%02d"|format(resultado.mes) }}/{{ resultado.ano }})</h2>
+
+    <div class="alert alert-info">
+        <strong>Lucro Líquido Total:</strong> R$ {{ "%.2f"|format(resultado.lucro_liquido) }}
+    </div>
+
+    <table class="table table-bordered">
+        <thead>
+            <tr>
+                <th>Acionista</th>
+                <th>Percentual (%)</th>
+                <th>Valor a Receber (R$)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for dist in resultado.distribuicoes %}
+            <tr>
+                <td>{{ dist.acionista }}</td>
+                <td>{{ "%.2f"|format(dist.percentual) }}</td>
+                <td>R$ {{ "%.2f"|format(dist.valor) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <a href="{{ url_for('selecionar_distribuicao_lucro') }}" class="btn btn-secondary mt-3">Voltar</a>
+</div>
+{% endblock %}

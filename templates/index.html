@@ -132,6 +132,63 @@
                 </div>
             </div>
         </div>
+        <!-- Investidores -->
+         {% if current_user.email == 'master@admin.com' %}
+        <div class="accordion-item">
+            <h2 class="accordion-header" id="headingInvestidores">
+                <button class="accordion-button {% if request.args.get('aba') == 'investidores' %} {% else %}collapsed{% endif %}" 
+                        type="button" 
+                        data-bs-toggle="collapse" 
+                        data-bs-target="#collapseInvestidores" 
+                        aria-expanded="{% if request.args.get('aba') == 'investidores' %}true{% else %}false{% endif %}" 
+                        aria-controls="collapseInvestidores">
+                    🏢 Investidores
+                </button>
+
+            </h2>
+            <div id="collapseInvestidores" 
+                class="accordion-collapse collapse {% if request.args.get('aba') == 'investidores' %}show{% endif %}" 
+                aria-labelledby="headingInvestidores" 
+                data-bs-parent="#accordionGrupos">
+
+                <div class="accordion-body">
+                    <div class="row g-3">
+
+                        <div class="col-md-4">
+                            <a href="{{ url_for('cadastrar_empresa') }}" class="btn btn-outline-primary w-100">
+                                Cadastrar Empresas
+                            </a>
+                        </div>
+
+                        <div class="col-md-4">
+                            <a href="{{ url_for('cadastrar_acionista') }}" class="btn btn-outline-primary w-100">
+                                Cadastrar Acionistas
+                            </a>
+                        </div>
+
+                        <div class="col-md-4">
+                            <a href="{{ url_for('vincular_empresa_usina') }}" class="btn btn-outline-primary w-100">
+                                Vincular Empresas às Usinas
+                            </a>
+                        </div>
+
+                        <div class="col-md-4">
+                            <a href="{{ url_for('cadastrar_financeiro_empresa') }}" class="btn btn-outline-primary w-100">
+                                Lançar Despesas/Receitas Empresa
+                            </a>
+                        </div>
+
+                        <div class="col-md-4">
+                            <a href="{{ url_for('selecionar_distribuicao_lucro') }}" class="btn btn-outline-primary w-100">
+                                Relatório de Distribuição de Lucro
+                            </a>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
 
         <!-- Usuários (Somente Master) -->
         {% if current_user.email == 'master@admin.com' %}

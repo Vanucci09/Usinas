@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Cadastrar Acionista</h2>
+
+    <form method="POST">
+        <div class="mb-3">
+            <label class="form-label">Nome</label>
+            <input type="text" name="nome" class="form-control" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">CPF</label>
+            <input type="text" name="cpf" class="form-control" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Telefone</label>
+            <input type="text" name="telefone" class="form-control">
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Email</label>
+            <input type="email" name="email" class="form-control">
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Empresa Investidora</label>
+            <select name="empresa_id" class="form-select" required>
+                {% for empresa in empresas %}
+                    <option value="{{ empresa.id }}">{{ empresa.razao_social }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Percentual de Participação (%)</label>
+            <input type="number" name="percentual" step="0.01" class="form-control" required>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Cadastrar</button>
+    </form>
+    <a href="{{ url_for('index') }}?aba=investidores" class="btn btn-secondary mt-3">Voltar ao Início</a>
+</div>
+{% endblock %}

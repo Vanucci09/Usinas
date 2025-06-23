@@ -60,6 +60,7 @@
         <table id="faturas-table" class="table table-bordered table-hover align-middle">
             <thead class="table-light">
                 <tr>
+                    <th>ID</th>
                     <th>Cliente</th>
                     <th>Mês/Ano</th>
                     <th>Valor Boleto</th>
@@ -70,15 +71,23 @@
             {% for fatura in faturas %}
                 <tr>
                     {% set rateio = fatura.cliente.rateios[0] if fatura.cliente.rateios else None %}
+
+                    <!-- Coluna ID -->
                     <td>
-                        {{ fatura.cliente.nome }}
                         {% if rateio %}
-                            <br><small class="text-muted">ID: {{ rateio.codigo_rateio }}</small>
+                            {{ rateio.codigo_rateio }}
                         {% else %}
-                            <br><small class="text-muted text-danger">Sem rateio</small>
+                            <span class="text-danger">-</span>
                         {% endif %}
                     </td>
+
+                    <!-- Nome Cliente -->
+                    <td>{{ fatura.cliente.nome }}</td>
+
+                    <!-- Mês/Ano -->
                     <td>{{ fatura.mes_referencia }}/{{ fatura.ano_referencia }}</td>
+
+                    <!-- Valor -->
                     <td>
                         {% if rateio %}
                             {{ (fatura.consumo_usina * rateio.tarifa_kwh)|formato_brasileiro }}
@@ -86,6 +95,8 @@
                             R$ 0,00
                         {% endif %}
                     </td>
+
+                    <!-- Ações -->
                     <td>
                         <div class="d-flex flex-wrap gap-2 justify-content-center">
                             <a href="{{ url_for('editar_fatura', id=fatura.id) }}" class="btn btn-sm btn-warning">Editar</a>
@@ -107,6 +118,9 @@
                             {% endif %}
                             <a href="{{ url_for('enviar_email', fatura_id=fatura.id) }}" class="btn btn-sm btn-secondary">
                                 <i class="bi bi-envelope-fill"></i>
+                                {% if fatura.email_enviado %}
+                                    <span class="text-success ms-1">&#10004;</span>
+                                {% endif %}
                             </a>
                         </div>
                     </td>

@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Relatório Financeiro por Empresa Investidora</h2>
+
+    <form method="POST" class="row g-3 mb-4">
+        <div class="col-md-2">
+            <label class="form-label">Mês</label>
+            <select name="mes" class="form-select" required>
+                {% for m in range(1, 13) %}
+                    <option value="{{ m }}" {% if mes == m %}selected{% endif %}>{{ "%02d"|format(m) }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="col-md-2">
+            <label class="form-label">Ano</label>
+            <input type="number" name="ano" class="form-control" value="{{ ano or '' }}" required>
+        </div>
+
+        <div class="col-md-2 d-flex align-items-end">
+            <button type="submit" class="btn btn-primary">Gerar Relatório</button>
+        </div>
+    </form>
+
+    {% if resultados %}
+    <table class="table table-bordered table-striped">
+        <thead>
+            <tr>
+                <th>Empresa</th>
+                <th>Receitas Usinas</th>
+                <th>Despesas Usinas</th>
+                <th>Despesas da Empresa</th>
+                <th>Receitas da Empresa</th>
+                <th>Lucro Líquido</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in resultados %}
+            <tr>
+                <td>{{ r.empresa }}</td>
+                <td>R$ {{ "%.2f"|format(r.receitas_usinas) }}</td>
+                <td>R$ {{ "%.2f"|format(r.despesas_usinas) }}</td>
+                <td>R$ {{ "%.2f"|format(r.despesas_empresa) }}</td>
+                <td>R$ {{ "%.2f"|format(r.receitas_empresa) }}</td>
+                <td><strong>R$ {{ "%.2f"|format(r.lucro_liquido) }}</strong></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <a href="{{ url_for('index') }}" class="btn btn-secondary mt-3">Voltar ao Início</a>
+</div>
+{% endblock %}

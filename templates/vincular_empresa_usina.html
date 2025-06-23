@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Vincular Empresa Investidora à Usina</h2>
+
+    <form method="POST">
+        <div class="mb-3">
+            <label class="form-label">Empresa Investidora</label>
+            <select name="empresa_id" class="form-select" required>
+                {% for empresa in empresas %}
+                    <option value="{{ empresa.id }}">{{ empresa.razao_social }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Usina</label>
+            <select name="usina_id" class="form-select" required>
+                {% for usina in usinas %}
+                    <option value="{{ usina.id }}">{{ usina.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Vincular</button>
+    </form>
+
+    <hr>
+
+    <h4>Vínculos existentes:</h4>
+    <ul>
+        {% for empresa in empresas %}
+            <li><strong>{{ empresa.razao_social }}:</strong>
+                <ul>
+                {% for investimento in empresa.usinas %}
+                    <li>{{ investimento.usina.nome }}</li>
+                {% endfor %}
+                </ul>
+            </li>
+        {% endfor %}
+    </ul>
+    <a href="{{ url_for('index') }}?aba=investidores" class="btn btn-secondary mt-3">Voltar</a>
+</div>
+{% endblock %}

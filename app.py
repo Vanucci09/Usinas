@@ -181,6 +181,52 @@ class EconomiaExtra(db.Model):
     valor_extra = db.Column(db.Numeric(12, 2), nullable=False)
     observacao = db.Column(db.String, nullable=True)
     
+class EmpresaInvestidora(db.Model):
+    __tablename__ = 'empresas_investidoras'
+    id = db.Column(db.Integer, primary_key=True)
+    razao_social = db.Column(db.String(255), nullable=False)
+    cnpj = db.Column(db.String(20), nullable=False, unique=True)
+
+    usinas = db.relationship('UsinaInvestidora', backref='empresa', cascade="all, delete-orphan")
+    acionistas = db.relationship('ParticipacaoAcionista', backref='empresa', cascade="all, delete-orphan")
+    
+class ParticipacaoAcionista(db.Model):
+    __tablename__ = 'participacoes_acionistas'
+    id = db.Column(db.Integer, primary_key=True)
+    empresa_id = db.Column(db.Integer, db.ForeignKey('empresas_investidoras.id'), nullable=False)
+    acionista_id = db.Column(db.Integer, db.ForeignKey('acionistas.id'), nullable=False)
+    percentual = db.Column(db.Float, nullable=False)  # Exemplo: 33.33 para 33,33%
+    
+class UsinaInvestidora(db.Model):
+    __tablename__ = 'usinas_investidoras'
+    id = db.Column(db.Integer, primary_key=True)
+    empresa_id = db.Column(db.Integer, db.ForeignKey('empresas_investidoras.id'), nullable=False)
+    usina_id = db.Column(db.Integer, db.ForeignKey('usinas.id'), nullable=False)
+
+    usina = db.relationship('Usina', backref='investimentos')
+    
+class Acionista(db.Model):
+    __tablename__ = 'acionistas'
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(255), nullable=False)
+    cpf = db.Column(db.String(20), nullable=False, unique=True)
+    telefone = db.Column(db.String(20), nullable=True)
+    email = db.Column(db.String(255), nullable=True)
+
+    participacoes = db.relationship('ParticipacaoAcionista', backref='acionista', cascade="all, delete-orphan")
+    
+class FinanceiroEmpresaInvestidora(db.Model):
+    __tablename__ = 'financeiro_empresa_investidora'
+
+    id = db.Column(db.Integer, primary_key=True)
+    empresa_id = db.Column(db.Integer, db.ForeignKey('empresas_investidoras.id'), nullable=False)
+    data = db.Column(db.Date, nullable=False)
+    tipo = db.Column(db.String(20), nullable=False)  # 'receita' ou 'despesa'
+    descricao = db.Column(db.String(255), nullable=False)
+    valor = db.Column(db.Float, nullable=False)
+
+    empresa = db.relationship('EmpresaInvestidora', backref='financeiros')
+    
 class Usuario(db.Model, UserMixin):
     __tablename__ = 'usuarios'
     id = db.Column(db.Integer, primary_key=True)
@@ -1532,7 +1578,7 @@ def cadastrar_inversor():
 def vincular_inversores():
     try:
         # Lista todos os inversores da Solis
-        registros = registros = listar_todos_inversores()  # função já existente no seu código
+        registros = registros = listar_todos_inversores() 
     except Exception as e:
         return render_template('vincular_inversores.html', erro=str(e), inversores=[], usinas=[])
 
@@ -1611,7 +1657,7 @@ def vincular_estacoes():
     
     return render_template(
         'vincular_estacoes.html',
-        estacoes=sorted(detalhe_por_plant.keys()),  # <-- sem acento
+        estacoes=sorted(detalhe_por_plant.keys()),  
         usinas=usinas
     )
     
@@ -2026,7 +2072,7 @@ def atualizar_pagamento(id):
         if data_str:
             financeiro.data_pagamento = datetime.strptime(data_str, '%Y-%m-%d').date()
         else:
-            financeiro.data_pagamento = None  # Caso queira permitir limpar (opcional)
+            financeiro.data_pagamento = None 
 
         db.session.commit()
         flash('Data de pagamento atualizada com sucesso!', 'success')
@@ -2382,6 +2428,236 @@ def relatorio_gestao_usina():
         })
 
     return render_template('relatorio_gestao_usina.html', dados=dados, mes=mes, ano=ano, mes_geracao=mes_geracao, ano_geracao=ano_geracao)
+
+@app.route('/cadastrar_empresa', methods=['GET', 'POST'])
+def cadastrar_empresa():
+    if request.method == 'POST':
+        razao_social = request.form['razao_social']
+        cnpj = request.form['cnpj']
+
+        nova_empresa = EmpresaInvestidora(razao_social=razao_social, cnpj=cnpj)
+        db.session.add(nova_empresa)
+        db.session.commit()
+
+        flash('Empresa cadastrada com sucesso!', 'success')
+        return redirect(url_for('cadastrar_empresa'))
+
+    empresas = EmpresaInvestidora.query.all()
+    return render_template('cadastrar_empresa.html', empresas=empresas)
+
+@app.route('/cadastrar_acionista', methods=['GET', 'POST'])
+def cadastrar_acionista():
+    empresas = EmpresaInvestidora.query.all()
+
+    if request.method == 'POST':
+        nome = request.form['nome']
+        cpf = request.form['cpf']
+        telefone = request.form['telefone']
+        email = request.form['email']
+        empresa_id = request.form['empresa_id']
+        percentual = float(request.form['percentual'])
+
+        novo_acionista = Acionista(nome=nome, cpf=cpf, telefone=telefone, email=email)
+        db.session.add(novo_acionista)
+        db.session.commit()
+
+        participacao = ParticipacaoAcionista(
+            empresa_id=empresa_id,
+            acionista_id=novo_acionista.id,
+            percentual=percentual
+        )
+        db.session.add(participacao)
+        db.session.commit()
+
+        flash('Acionista cadastrado e vinculado à empresa!', 'success')
+        return redirect(url_for('cadastrar_acionista'))
+
+    return render_template('cadastrar_acionista.html', empresas=empresas)
+
+@app.route('/vincular_empresa_usina', methods=['GET', 'POST'])
+def vincular_empresa_usina():
+    empresas = EmpresaInvestidora.query.all()
+    usinas = Usina.query.all()
+
+    if request.method == 'POST':
+        empresa_id = request.form['empresa_id']
+        usina_id = request.form['usina_id']
+
+        # Criando o vínculo
+        vinculo = UsinaInvestidora(empresa_id=empresa_id, usina_id=usina_id)
+        db.session.add(vinculo)
+        db.session.commit()
+
+        flash('Usina vinculada à empresa com sucesso!', 'success')
+        return redirect(url_for('vincular_empresa_usina'))
+
+    return render_template('vincular_empresa_usina.html', empresas=empresas, usinas=usinas)
+
+@app.route('/cadastrar_financeiro_empresa', methods=['GET', 'POST'])
+def cadastrar_financeiro_empresa():
+    empresas = EmpresaInvestidora.query.all()
+
+    if request.method == 'POST':
+        empresa_id = request.form['empresa_id']
+        data = datetime.strptime(request.form['data'], '%Y-%m-%d').date()
+        tipo = request.form['tipo']
+        descricao = request.form['descricao']
+        valor = float(request.form['valor'])
+
+        novo_lancamento = FinanceiroEmpresaInvestidora(
+            empresa_id=empresa_id,
+            data=data,
+            tipo=tipo,
+            descricao=descricao,
+            valor=valor
+        )
+        db.session.add(novo_lancamento)
+        db.session.commit()
+
+        flash('Lançamento financeiro salvo com sucesso!', 'success')
+        return redirect(url_for('cadastrar_financeiro_empresa'))
+
+    # Listar os últimos lançamentos
+    ultimos_lancamentos = FinanceiroEmpresaInvestidora.query.order_by(FinanceiroEmpresaInvestidora.data.desc()).limit(20).all()
+
+    return render_template('cadastrar_financeiro_empresa.html', empresas=empresas, ultimos_lancamentos=ultimos_lancamentos)
+
+@app.route('/relatorio_financeiro_empresa', methods=['GET', 'POST'])
+def relatorio_financeiro_empresa():
+    empresas = EmpresaInvestidora.query.all()
+    resultados = []
+
+    if request.method == 'POST':
+        mes = int(request.form['mes'])
+        ano = int(request.form['ano'])
+
+        for empresa in empresas:
+            # Usinas vinculadas à empresa
+            usinas_ids = [vinculo.usina_id for vinculo in empresa.usinas]
+
+            # Total de receitas das usinas
+            receitas_usinas = db.session.query(db.func.coalesce(db.func.sum(FinanceiroUsina.valor), 0)).filter(
+                FinanceiroUsina.usina_id.in_(usinas_ids),
+                FinanceiroUsina.tipo == 'receita',
+                FinanceiroUsina.referencia_mes == mes,
+                FinanceiroUsina.referencia_ano == ano
+            ).scalar()
+
+            # Total de despesas das usinas
+            despesas_usinas = db.session.query(db.func.coalesce(db.func.sum(FinanceiroUsina.valor), 0)).filter(
+                FinanceiroUsina.usina_id.in_(usinas_ids),
+                FinanceiroUsina.tipo == 'despesa',
+                FinanceiroUsina.referencia_mes == mes,
+                FinanceiroUsina.referencia_ano == ano
+            ).scalar()
+
+            # Despesas da empresa
+            despesas_empresa = db.session.query(db.func.coalesce(db.func.sum(FinanceiroEmpresaInvestidora.valor), 0)).filter(
+                FinanceiroEmpresaInvestidora.empresa_id == empresa.id,
+                FinanceiroEmpresaInvestidora.tipo == 'despesa',
+                db.extract('month', FinanceiroEmpresaInvestidora.data) == mes,
+                db.extract('year', FinanceiroEmpresaInvestidora.data) == ano
+            ).scalar()
+
+            # Receitas diretas da empresa
+            receitas_empresa = db.session.query(db.func.coalesce(db.func.sum(FinanceiroEmpresaInvestidora.valor), 0)).filter(
+                FinanceiroEmpresaInvestidora.empresa_id == empresa.id,
+                FinanceiroEmpresaInvestidora.tipo == 'receita',
+                db.extract('month', FinanceiroEmpresaInvestidora.data) == mes,
+                db.extract('year', FinanceiroEmpresaInvestidora.data) == ano
+            ).scalar()
+
+            lucro_liquido = receitas_usinas - despesas_usinas - despesas_empresa + receitas_empresa
+
+            resultados.append({
+                'empresa': empresa.razao_social,
+                'receitas_usinas': receitas_usinas,
+                'despesas_usinas': despesas_usinas,
+                'despesas_empresa': despesas_empresa,
+                'receitas_empresa': receitas_empresa,
+                'lucro_liquido': lucro_liquido
+            })
+
+        return render_template('relatorio_financeiro_empresa.html', resultados=resultados, mes=mes, ano=ano, empresas=empresas)
+
+    return render_template('relatorio_financeiro_empresa.html', resultados=None, empresas=empresas)
+
+def calcular_distribuicao_lucro(empresa_id, mes, ano):
+    empresa = EmpresaInvestidora.query.get_or_404(empresa_id)
+
+    # Usinas vinculadas
+    usinas_ids = [vinculo.usina_id for vinculo in empresa.usinas]
+
+    # Receita das usinas
+    receitas_usinas = db.session.query(db.func.coalesce(db.func.sum(FinanceiroUsina.valor), 0)).filter(
+        FinanceiroUsina.usina_id.in_(usinas_ids),
+        FinanceiroUsina.tipo == 'receita',
+        FinanceiroUsina.referencia_mes == mes,
+        FinanceiroUsina.referencia_ano == ano
+    ).scalar()
+
+    # Despesas das usinas
+    despesas_usinas = db.session.query(db.func.coalesce(db.func.sum(FinanceiroUsina.valor), 0)).filter(
+        FinanceiroUsina.usina_id.in_(usinas_ids),
+        FinanceiroUsina.tipo == 'despesa',
+        FinanceiroUsina.referencia_mes == mes,
+        FinanceiroUsina.referencia_ano == ano
+    ).scalar()
+
+    # Despesas da própria empresa
+    despesas_empresa = db.session.query(db.func.coalesce(db.func.sum(FinanceiroEmpresaInvestidora.valor), 0)).filter(
+        FinanceiroEmpresaInvestidora.empresa_id == empresa.id,
+        FinanceiroEmpresaInvestidora.tipo == 'despesa',
+        db.extract('month', FinanceiroEmpresaInvestidora.data) == mes,
+        db.extract('year', FinanceiroEmpresaInvestidora.data) == ano
+    ).scalar()
+
+    # Receitas diretas da empresa
+    receitas_empresa = db.session.query(db.func.coalesce(db.func.sum(FinanceiroEmpresaInvestidora.valor), 0)).filter(
+        FinanceiroEmpresaInvestidora.empresa_id == empresa.id,
+        FinanceiroEmpresaInvestidora.tipo == 'receita',
+        db.extract('month', FinanceiroEmpresaInvestidora.data) == mes,
+        db.extract('year', FinanceiroEmpresaInvestidora.data) == ano
+    ).scalar()
+
+    lucro_liquido = receitas_usinas - despesas_usinas - despesas_empresa + receitas_empresa
+
+    # Agora, distribuir entre acionistas
+    distribuicoes = []
+    for participacao in empresa.acionistas:
+        valor_participante = lucro_liquido * (participacao.percentual / 100)
+        distribuicoes.append({
+            'acionista': participacao.acionista.nome,
+            'percentual': participacao.percentual,
+            'valor': round(valor_participante, 2)
+        })
+
+    return {
+        'empresa': empresa.razao_social,
+        'mes': mes,
+        'ano': ano,
+        'lucro_liquido': round(lucro_liquido, 2),
+        'distribuicoes': distribuicoes
+    }
+
+@app.route('/distribuicao_lucro_empresa/<int:empresa_id>/<int:mes>/<int:ano>')
+def distribuicao_lucro_empresa(empresa_id, mes, ano):
+    resultado = calcular_distribuicao_lucro(empresa_id, mes, ano)
+    return render_template('distribuicao_lucro_empresa.html', resultado=resultado)
+
+@app.route('/selecionar_distribuicao_lucro', methods=['GET', 'POST'])
+def selecionar_distribuicao_lucro():
+    empresas = EmpresaInvestidora.query.all()
+    anos_disponiveis = [2024, 2025, 2026]  # Você pode montar dinamicamente depois se quiser.
+
+    if request.method == 'POST':
+        empresa_id = int(request.form['empresa_id'])
+        mes = int(request.form['mes'])
+        ano = int(request.form['ano'])
+
+        return redirect(url_for('distribuicao_lucro_empresa', empresa_id=empresa_id, mes=mes, ano=ano))
+
+    return render_template('selecionar_distribuicao_lucro.html', empresas=empresas, anos=anos_disponiveis)
 
 
 if __name__ == '__main__':

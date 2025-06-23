@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Distribuição de Lucro - Selecionar Empresa e Período</h2>
+
+    <form method="POST" class="row g-3 mb-4">
+        <div class="col-md-4">
+            <label class="form-label">Empresa Investidora</label>
+            <select name="empresa_id" class="form-select" required>
+                {% for empresa in empresas %}
+                    <option value="{{ empresa.id }}">{{ empresa.razao_social }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="col-md-2">
+            <label class="form-label">Mês</label>
+            <select name="mes" class="form-select" required>
+                {% for m in range(1, 13) %}
+                    <option value="{{ m }}">{{ "%02d"|format(m) }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="col-md-2">
+            <label class="form-label">Ano</label>
+            <select name="ano" class="form-select" required>
+                {% for a in anos %}
+                    <option value="{{ a }}">{{ a }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="col-md-2 d-flex align-items-end">
+            <button type="submit" class="btn btn-primary">Gerar Relatório</button>
+        </div>
+    </form>
+
+    <a href="{{ url_for('index') }}?aba=investidores" class="btn btn-secondary mt-3">Voltar</a>
+</div>
+{% endblock %}

@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Cadastrar Despesa ou Receita da Empresa Investidora</h2>
+
+    <form method="POST" class="mb-4">
+        <div class="mb-3">
+            <label class="form-label">Empresa Investidora</label>
+            <select name="empresa_id" class="form-select" required>
+                {% for empresa in empresas %}
+                    <option value="{{ empresa.id }}">{{ empresa.razao_social }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Data</label>
+            <input type="date" name="data" class="form-control" required>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Tipo</label>
+            <select name="tipo" class="form-select" required>
+                <option value="despesa">Despesa</option>
+                <option value="receita">Receita</option>
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Descrição</label>
+            <input type="text" name="descricao" class="form-control" required>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Valor (R$)</label>
+            <input type="number" step="0.01" name="valor" class="form-control" required>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Salvar Lançamento</button>
+    </form>
+
+    <hr>
+
+    <h4>Últimos Lançamentos:</h4>
+    <table class="table table-bordered">
+        <thead>
+            <tr>
+                <th>Data</th>
+                <th>Empresa</th>
+                <th>Tipo</th>
+                <th>Descrição</th>
+                <th>Valor</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for lancamento in ultimos_lancamentos %}
+                <tr>
+                    <td>{{ lancamento.data.strftime('%d/%m/%Y') }}</td>
+                    <td>{{ lancamento.empresa.razao_social }}</td>
+                    <td>{{ lancamento.tipo.title() }}</td>
+                    <td>{{ lancamento.descricao }}</td>
+                    <td>R$ {{ "%.2f"|format(lancamento.valor) }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <a href="{{ url_for('index') }}?aba=investidores" class="btn btn-secondary mt-3">Voltar</a>
+</div>
+{% endblock %}
