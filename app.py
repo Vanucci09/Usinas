@@ -106,6 +106,7 @@ class Cliente(db.Model):
     codigo_unidade = db.Column(db.String, nullable=False)
     usina_id = db.Column(db.Integer, db.ForeignKey('usinas.id'), nullable=False)
     email = db.Column(db.String, nullable=True)
+    email_cc = db.Column(db.String, nullable=True)
     telefone = db.Column(db.String, nullable=True)
 
     rateios = db.relationship('Rateio', backref='cliente', cascade="all, delete-orphan")
@@ -523,6 +524,7 @@ def cadastrar_cliente():
         usina_id = request.form['usina_id']
         email = request.form['email']
         telefone = request.form['telefone']
+        email_cc = request.form.get('email_cc')
 
         cliente = Cliente(
             nome=nome,
@@ -531,7 +533,8 @@ def cadastrar_cliente():
             codigo_unidade=codigo_unidade,
             usina_id=usina_id,
             email=email,
-            telefone=telefone
+            telefone=telefone,
+            email_cc=email_cc
         )
         db.session.add(cliente)
         db.session.commit()
@@ -620,6 +623,7 @@ def editar_cliente(id):
         cliente.usina_id = request.form['usina_id']
         cliente.email = request.form['email']
         cliente.telefone = request.form['telefone']
+        cliente.email_cc = request.form.get('email_cc')
         db.session.commit()
         return redirect(url_for('cadastrar_cliente'))
 
@@ -1975,14 +1979,23 @@ def financeiro():
 def enviar_email(fatura_id):
     fatura = FaturaMensal.query.get_or_404(fatura_id)
     cliente = Cliente.query.get_or_404(fatura.cliente_id)
-    
+
     link_relatorio = url_for('relatorio_fatura', fatura_id=fatura.id, _external=True)
 
     html = render_template('email_fatura.html', cliente=cliente, fatura=fatura, link_relatorio=link_relatorio)
 
+    # Preparando a lista de destinatários
+    recipients = [cliente.email]
+
+    # Adiciona os emails em cópia se houver
+    if cliente.email_cc:
+        # Divide por vírgula e limpa espaços
+        cc_emails = [email.strip() for email in cliente.email_cc.split(',') if email.strip()]
+        recipients.extend(cc_emails)
+
     msg = Message(
         subject=f'Relatório de Fatura - {fatura.mes_referencia}/{fatura.ano_referencia}',
-        recipients=[cliente.email],
+        recipients=recipients,
         html=html
     )
 
@@ -1994,51 +2007,6 @@ def enviar_email(fatura_id):
         flash(f'Erro ao enviar e-mail: {e}', 'danger')
         return redirect(url_for('listar_faturas'))
     
-    def to_file_url(path):
-        abs_path = os.path.abspath(path).replace('\\', '/')
-        return f"file:///{abs_path}"
-
-    logo_cgr_path = to_file_url("static/img/logo_cgr.png")
-    logo_usina_path = to_file_url(f"static/logos/{usina.logo_url}") if usina.logo_url else None
-
-    ficha_compensacao_path = None
-    pdf_path = os.path.join('static/boletos', f"boleto_{fatura.id}.pdf")
-    ficha_img = f"ficha_compensacao_{fatura.id}.png"
-    if os.path.exists(pdf_path):
-        ficha_compensacao_path = to_file_url(f"static/{ficha_img}")
-
-    bootstrap_path = to_file_url("static/css/bootstrap.min.css")
-
-    html = render_template(
-        'relatorio_fatura.html',
-        fatura=fatura,
-        cliente=cliente,
-        usina=usina,
-        tarifa_neoenergia_aplicada=tarifa_neoenergia_aplicada,
-        tarifa_cliente=tarifa_cliente,
-        valor_usina=valor_usina,
-        com_desconto=com_desconto,
-        sem_desconto=sem_desconto,
-        economia=economia,
-        economia_acumulada=economia_acumulada,
-        ficha_compensacao_path=ficha_compensacao_path,
-        logo_cgr_path=logo_cgr_path,
-        logo_usina_path=logo_usina_path,
-        bootstrap_path=bootstrap_path
-    )
-
-    options = {
-        'enable-local-file-access': '',
-        'quiet': '',
-        'page-size': 'A4',
-        'encoding': 'UTF-8'
-    }   
-
-    response = make_response(pdf)
-    response.headers['Content-Type'] = 'application/pdf'
-    response.headers['Content-Disposition'] = f'inline; filename=fatura_{fatura_id}.pdf'
-    return response
-
 def imagem_para_base64(caminho):
     with open(caminho, "rb") as img_file:
         return base64.b64encode(img_file.read()).decode("utf-8")

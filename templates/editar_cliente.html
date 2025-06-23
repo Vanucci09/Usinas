@@ -24,6 +24,12 @@
                     <input type="email" class="form-control" id="email" name="email" value="{{ cliente.email }}" required>
                 </div>
                 <div class="col-md-6">
+                    <label for="email_cc" class="form-label">E-mails em Cópia (CC)</label>
+                    <input type="text" class="form-control" id="email_cc" name="email_cc"
+                        value="{{ cliente.email_cc or '' }}"
+                        placeholder="Ex: email1@exemplo.com, email2@exemplo.com">
+                </div>
+                <div class="col-md-6">
                     <label for="telefone" class="form-label">Telefone</label>
                     <input type="text" class="form-control" id="telefone" name="telefone" value="{{ cliente.telefone }}" required>
                 </div>
