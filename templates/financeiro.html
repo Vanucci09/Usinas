@@ -9,27 +9,17 @@
     <!-- Links para Relatórios -->
     <div class="mb-4">
         <div class="btn-group" role="group">
-            <a href="{{ url_for('relatorio_financeiro') }}" class="btn btn-outline-primary btn-sm">
-                📄 Relatório por Período
-            </a>
-            <a href="{{ url_for('relatorio_consolidado') }}" class="btn btn-outline-primary btn-sm">
-                🏭 Consolidado por Usina
-            </a>
-            <a href="{{ url_for('relatorio_categoria') }}" class="btn btn-outline-primary btn-sm">
-                🗂️ Por Categoria
-            </a>
-            <a href="{{ url_for('relatorio_cliente') }}" class="btn btn-outline-primary btn-sm">
-                👥 Por Cliente
-            </a>
-            <a href="{{ url_for('relatorio_gestao_usina') }}" class="btn btn-outline-dark btn-sm">
-                📊 Gestão por Usina (Geração x Recebido)
-            </a>
+            <a href="{{ url_for('relatorio_financeiro') }}" class="btn btn-outline-primary btn-sm">📄 Relatório por Período</a>
+            <a href="{{ url_for('relatorio_consolidado') }}" class="btn btn-outline-primary btn-sm">🏭 Consolidado por Usina</a>
+            <a href="{{ url_for('relatorio_categoria') }}" class="btn btn-outline-primary btn-sm">🗂️ Por Categoria</a>
+            <a href="{{ url_for('relatorio_cliente') }}" class="btn btn-outline-primary btn-sm">👥 Por Cliente</a>
+            <a href="{{ url_for('relatorio_gestao_usina') }}" class="btn btn-outline-dark btn-sm">📊 Gestão por Usina (Geração x Recebido)</a>
         </div>
     </div>
 
     <!-- Filtros -->
     <form class="row g-3 mb-4" method="get">
-        <div class="col-md-3">
+        <div class="col-md-2">
             <label for="usina_id" class="form-label">Usina</label>
             <select id="usina_id" name="usina_id" class="form-select">
                 <option value="">Todas</option>
@@ -39,7 +29,7 @@
             </select>
         </div>
 
-        <div class="col-md-2">
+        <div class="col-md-1">
             <label for="mes" class="form-label">Mês</label>
             <select id="mes" name="mes" class="form-select">
                 {% for m in range(1, 13) %}
@@ -48,7 +38,7 @@
             </select>
         </div>
 
-        <div class="col-md-2">
+        <div class="col-md-1">
             <label for="ano" class="form-label">Ano</label>
             <input type="number" id="ano" name="ano" class="form-control" value="{{ ano }}">
         </div>
@@ -59,6 +49,16 @@
                 <option value="">Todos</option>
                 <option value="receita" {% if tipo == 'receita' %}selected{% endif %}>Receitas</option>
                 <option value="despesa" {% if tipo == 'despesa' %}selected{% endif %}>Despesas</option>
+            </select>
+        </div>
+
+        <div class="col-md-3">
+            <label for="categoria_id" class="form-label">Categoria</label>
+            <select id="categoria_id" name="categoria_id" class="form-select">
+                <option value="">Todas</option>
+                {% for c in categorias %}
+                    <option value="{{ c.id }}" {% if c.id == categoria_id %}selected{% endif %}>{{ c.nome }}</option>
+                {% endfor %}
             </select>
         </div>
 
@@ -77,7 +77,6 @@
                     <th>Categoria</th>
                     <th>Descrição</th>
                     <th>Valor (R$)</th>
-                    
                     <th>Referência</th>
                     <th>Data Pagamento</th>
                 </tr>
@@ -85,13 +84,11 @@
             <tbody>
                 {% for item in financeiro %}
                 <tr class="{% if item.tipo == 'receita' %}table-success{% else %}table-danger{% endif %}">
-
                     <td>{{ item.tipo.title() }}</td>
                     <td>{{ item.usina }}</td>
-                    <td>{{ item.categoria or '-' }}</td>
+                    <td>{{ item.categoria }}</td>
                     <td>{{ item.descricao }}</td>
                     <td>{{ item.valor | formato_brasileiro }}</td>
-                    
                     <td>{{ item.referencia }}</td>
                     <td>
                         {% if item.data_pagamento %}
@@ -139,6 +136,5 @@
     <div class="text-center mt-4">
         <a href="{{ url_for('index') }}?aba=financeiro" class="btn btn-secondary">Voltar</a>
     </div>
-
 </div>
 {% endblock %}

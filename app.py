@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify, make_response, send_file, flash
+from flask import Flask, render_template, request, redirect, url_for, jsonify, make_response, send_file, flash, send_from_directory
 from datetime import date, datetime, timedelta
 from calendar import monthrange
 import os
@@ -831,8 +831,24 @@ def listar_faturas():
     clientes = Cliente.query.all()
     anos = sorted({f.ano_referencia for f in FaturaMensal.query.all()}, reverse=True)
 
-    return render_template('listar_faturas.html', faturas=faturas, usinas=usinas, clientes=clientes, anos=anos,
-                       usina_id=usina_id, mes=mes, ano=ano, email_enviado=email_enviado)
+    # ✅ Verificar se existe boleto PDF no sistema de arquivos
+    BOLETOS_PATH = os.getenv('BOLETOS_PATH', '/data/boletos')
+
+    for f in faturas:
+        nome_arquivo = f"boleto_{f.id}.pdf"
+        f.tem_boleto = os.path.exists(os.path.join(BOLETOS_PATH, nome_arquivo))
+
+    return render_template(
+        'listar_faturas.html',
+        faturas=faturas,
+        usinas=usinas,
+        clientes=clientes,
+        anos=anos,
+        usina_id=usina_id,
+        mes=mes,
+        ano=ano,
+        email_enviado=email_enviado
+    )
 
 @app.route('/editar_fatura/<int:id>', methods=['GET', 'POST'])
 def editar_fatura(id):
@@ -1332,7 +1348,7 @@ def excluir_usuario(id):
     db.session.commit()
     return redirect(url_for('listar_usuarios'))
 
-def montar_headers_solis(path: str, body_dict: dict) -> (dict, str):
+def montar_headers_solis(path: str, body_dict: dict) -> tuple[dict, str]:
     # 1) JSON “compacto”
     body_json = json.dumps(body_dict, separators=(",", ":"))
     body_bytes = body_json.encode("utf-8")
@@ -1970,10 +1986,13 @@ def financeiro():
         return "Acesso negado", 403
 
     usinas = Usina.query.order_by(Usina.nome).all()
+    categorias = CategoriaDespesa.query.order_by(CategoriaDespesa.nome).all()
+
     mes = request.args.get('mes', default=date.today().month, type=int)
     ano = request.args.get('ano', default=date.today().year, type=int)
     usina_id = request.args.get('usina_id', type=int)
-    tipo = request.args.get('tipo') 
+    tipo = request.args.get('tipo')  # 'receita' ou 'despesa'
+    categoria_id = request.args.get('categoria_id', type=int)
 
     # Base da query
     query = FinanceiroUsina.query.filter(
@@ -1987,9 +2006,12 @@ def financeiro():
     if tipo in ['receita', 'despesa']:
         query = query.filter(FinanceiroUsina.tipo == tipo)
 
+    if categoria_id:
+        query = query.filter(FinanceiroUsina.categoria_id == categoria_id)
+
     registros = query.order_by(FinanceiroUsina.data.desc()).all()
 
-    # Monta lista
+    # Monta lista para o template
     financeiro = []
     total_receitas = 0
     total_despesas = 0
@@ -2021,11 +2043,12 @@ def financeiro():
         ano=ano,
         usina_id=usina_id,
         tipo=tipo,
+        categorias=categorias,
+        categoria_id=categoria_id,
         usinas=usinas,
         total_receitas=total_receitas,
         total_despesas=total_despesas
     )
-
 
 @app.route('/enviar_email/<int:fatura_id>')
 def enviar_email(fatura_id):
@@ -2824,6 +2847,59 @@ def listar_participacoes_empresa(empresa_id):
         empresa=empresa,
         participacoes=participacoes,
         total_percentual=total_percentual
+    )
+
+@app.route('/vincular_acionista', methods=['GET', 'POST'])
+@login_required
+def vincular_acionista():
+    acionistas = Acionista.query.all()
+    empresas = EmpresaInvestidora.query.all()
+
+    if request.method == 'POST':
+        acionista_id = int(request.form['acionista_id'])
+        empresa_id = int(request.form['empresa_id'])
+        percentual = float(request.form['percentual'])
+
+        # Verificar se já existe vínculo
+        existe = ParticipacaoAcionista.query.filter_by(acionista_id=acionista_id, empresa_id=empresa_id).first()
+        if existe:
+            flash('Esse acionista já está vinculado a essa empresa. Edite o percentual se quiser.', 'warning')
+            return redirect(url_for('vincular_acionista'))
+
+        # Verificar limite de 100%
+        total_atual = db.session.query(db.func.sum(ParticipacaoAcionista.percentual)).filter_by(empresa_id=empresa_id).scalar() or 0
+        if total_atual + percentual > 100:
+            flash(f'O percentual total da empresa não pode ultrapassar 100%. Total atual: {total_atual:.2f}%.', 'danger')
+            return redirect(url_for('vincular_acionista'))
+
+        nova_participacao = ParticipacaoAcionista(
+            empresa_id=empresa_id,
+            acionista_id=acionista_id,
+            percentual=percentual
+        )
+        db.session.add(nova_participacao)
+        db.session.commit()
+
+        flash('Vínculo criado com sucesso!', 'success')
+        return redirect(url_for('vincular_acionista'))
+
+    # Prepara lista de participações por acionista
+    participacoes_por_acionista = {}
+
+    for a in acionistas:
+        participacoes = ParticipacaoAcionista.query.filter_by(acionista_id=a.id).all()
+        participacoes_por_acionista[a.id] = [
+            {
+                'empresa': EmpresaInvestidora.query.get(p.empresa_id).razao_social,
+                'percentual': p.percentual
+            } for p in participacoes
+        ]
+
+    return render_template(
+        'vincular_acionista.html',
+        acionistas=acionistas,
+        empresas=empresas,
+        participacoes_por_acionista=participacoes_por_acionista
     )
 
 

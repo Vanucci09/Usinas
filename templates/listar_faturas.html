@@ -3,12 +3,10 @@
 {% block title %}Faturas Cadastradas{% endblock %}
 
 {% block content %}
-<body>
 <div class="container mt-5 mb-5 p-4 bg-white shadow rounded">
-
     <h2 class="mb-4 text-primary text-center">Faturas Cadastradas</h2>
 
-    <!-- ✅ Filtros -->
+    <!-- Filtros -->
     <form method="GET" class="row g-3 mb-4">
         <div class="col-md-3">
             <label for="usina_id" class="form-label">Usina</label>
@@ -55,12 +53,12 @@
         </div>
     </form>
 
-    <!-- ✅ Tabela com DataTables -->
+    <!-- Tabela -->
     <div class="table-responsive">
         <table id="faturas-table" class="table table-bordered table-hover align-middle">
             <thead class="table-light">
                 <tr>
-                    <th>ID</th>
+                    <th>ID Rateio</th>
                     <th>Cliente</th>
                     <th>Mês/Ano</th>
                     <th>Valor Boleto</th>
@@ -72,7 +70,7 @@
                 <tr>
                     {% set rateio = fatura.cliente.rateios[0] if fatura.cliente.rateios else None %}
 
-                    <!-- Coluna ID -->
+                    <!-- ID Rateio -->
                     <td>
                         {% if rateio %}
                             {{ rateio.codigo_rateio }}
@@ -81,13 +79,13 @@
                         {% endif %}
                     </td>
 
-                    <!-- Nome Cliente -->
+                    <!-- Cliente -->
                     <td>{{ fatura.cliente.nome }}</td>
 
                     <!-- Mês/Ano -->
                     <td>{{ fatura.mes_referencia }}/{{ fatura.ano_referencia }}</td>
 
-                    <!-- Valor -->
+                    <!-- Valor Boleto -->
                     <td>
                         {% if rateio %}
                             {{ (fatura.consumo_usina * rateio.tarifa_kwh)|formato_brasileiro }}
@@ -100,22 +98,34 @@
                     <td>
                         <div class="d-flex flex-wrap gap-2 justify-content-center">
                             <a href="{{ url_for('editar_fatura', id=fatura.id) }}" class="btn btn-sm btn-warning">Editar</a>
+
                             <form method="POST" action="{{ url_for('excluir_fatura', id=fatura.id) }}" onsubmit="return confirm('Confirmar exclusão?');">
                                 <button type="submit" class="btn btn-sm btn-danger">Excluir</button>
                             </form>
-                            <a href="{{ url_for('upload_boleto') }}?fatura_id={{ fatura.id }}" class="btn btn-sm btn-info">Boleto</a>
+
+                            <!-- Botão Boleto (verde se já tem arquivo) -->
+                            <a href="{{ url_for('upload_boleto') }}?fatura_id={{ fatura.id }}" class="btn btn-sm btn-info">
+                                {% if fatura.tem_boleto %}
+                                    📎 Boleto
+                                {% else %}
+                                    Boleto
+                                {% endif %}
+                            </a>
+
                             <a href="{{ url_for('relatorio_fatura', fatura_id=fatura.id) }}" target="_blank" class="btn btn-sm btn-success">Relatório</a>
+
                             {% if fatura.cliente.telefone %}
                                 {% set telefone_clean = fatura.cliente.telefone.replace(' ','').replace('-','') %}
                                 {% set link_relatorio = url_for('relatorio_fatura', fatura_id=fatura.id, _external=True) %}
                                 {% set msg_whatsapp = (
                                     "Olá, " ~ fatura.cliente.nome ~
-                                    "! Aqui está seu relatório de faturamento com referência: " ~ fatura.identificador ~ " Acesse: " ~ link_relatorio
+                                    "! Aqui está seu relatório de faturamento referente ao ID: " ~ fatura.identificador ~ ". Acesse: " ~ link_relatorio
                                 ) | urlencode %}
-                                <a href="https://wa.me/{{ telefone_clean }}?text={{ msg_whatsapp }}" target="_blank" class="btn btn-sm btn-success whatsapp-btn">
+                                <a href="https://wa.me/{{ telefone_clean }}?text={{ msg_whatsapp }}" target="_blank" class="btn btn-sm btn-success">
                                     <i class="bi bi-whatsapp"></i>
                                 </a>
                             {% endif %}
+
                             <a href="{{ url_for('enviar_email', fatura_id=fatura.id) }}" class="btn btn-sm btn-secondary">
                                 <i class="bi bi-envelope-fill"></i>
                                 {% if fatura.email_enviado %}
@@ -133,20 +143,16 @@
     <div class="text-center mt-4">
         <a href="{{ url_for('index') }}?aba=financeiro" class="btn btn-secondary">Voltar</a>
     </div>
-
 </div>
 
-<!-- ✅ Incluindo jQuery + DataTables -->
+<!-- DataTables -->
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
 <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-
 <script>
 $(document).ready(function() {
     $('#faturas-table').DataTable({
-        language: {
-            url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json'
-        },
+        language: { url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json' },
         pageLength: 25
     });
 });
@@ -157,5 +163,4 @@ $(document).ready(function() {
     alert("E-mail enviado com sucesso!");
 </script>
 {% endif %}
-</body>
 {% endblock %}

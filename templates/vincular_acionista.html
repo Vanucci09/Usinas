@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Vincular Acionista a Empresa</h2>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <form method="POST">
+        <div class="mb-3">
+            <label>Acionista</label>
+            <select name="acionista_id" class="form-select" required onchange="mostrarParticipacoes(this.value)">
+                <option value="">Selecione</option>
+                {% for a in acionistas %}
+                    <option value="{{ a.id }}">{{ a.nome }} ({{ a.cpf }})</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div id="participacoesExistentes" class="mb-3" style="display:none;">
+            <h5>Participações já existentes:</h5>
+            <ul id="listaParticipacoes" class="list-group"></ul>
+        </div>
+
+        <div class="mb-3">
+            <label>Empresa</label>
+            <select name="empresa_id" class="form-select" required>
+                {% for e in empresas %}
+                    <option value="{{ e.id }}">{{ e.razao_social }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label>Percentual de Participação (%)</label>
+            <input type="number" step="0.01" name="percentual" class="form-control" required>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Vincular</button>
+    </form>
+
+    <a href="{{ url_for('listar_acionistas') }}" class="btn btn-secondary mt-3">Voltar</a>
+</div>
+
+<script>
+    const todasParticipacoes = {{ participacoes_por_acionista | tojson }};
+
+    function mostrarParticipacoes(acionistaId) {
+        const div = document.getElementById('participacoesExistentes');
+        const lista = document.getElementById('listaParticipacoes');
+        lista.innerHTML = '';
+
+        if (acionistaId && todasParticipacoes[acionistaId]) {
+            todasParticipacoes[acionistaId].forEach(function(p) {
+                const item = document.createElement('li');
+                item.classList.add('list-group-item');
+                item.textContent = p.empresa + ' - ' + p.percentual.toFixed(2) + '%';
+                lista.appendChild(item);
+            });
+            div.style.display = 'block';
+        } else {
+            div.style.display = 'none';
+        }
+    }
+</script>
+{% endblock %}

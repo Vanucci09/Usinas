@@ -76,13 +76,15 @@
                 <div class="card-body">
                     <h6 class="text-dark">Yield (kWh/kWp)</h6>
                     <p class="fs-5">
-                        {% if potencia_kw %}
-                            {% set dias_com_dados = totais | select("gt", 0) | list | length %}
+                        {% set dias_com_dados = totais | select("gt", 0) | list | length %}
+
+                        {% if potencia_kw is not none and potencia_kw > 0 and dias_no_mes > 0 and dias_com_dados > 0 %}
                             {% set resultado = soma_total / (dias_com_dados * (potencia_kw / dias_no_mes)) %}
                             {{ resultado | round(2) }}
                         {% else %}
-                            <span class="text-muted">Potência não definida</span>
+                            <span class="text-muted">Não calculável (dados insuficientes)</span>
                         {% endif %}
+
                     </p>
                 </div>
             </div>
