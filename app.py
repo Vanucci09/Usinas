@@ -186,6 +186,10 @@ class EmpresaInvestidora(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     razao_social = db.Column(db.String(255), nullable=False)
     cnpj = db.Column(db.String(20), nullable=False, unique=True)
+    endereco = db.Column(db.String(255))
+    responsavel = db.Column(db.String(100))
+    telefone = db.Column(db.String(20))
+    email = db.Column(db.String(120))
 
     usinas = db.relationship('UsinaInvestidora', backref='empresa', cascade="all, delete-orphan")
     acionistas = db.relationship('ParticipacaoAcionista', backref='empresa', cascade="all, delete-orphan")
@@ -212,6 +216,8 @@ class Acionista(db.Model):
     cpf = db.Column(db.String(20), nullable=False, unique=True)
     telefone = db.Column(db.String(20), nullable=True)
     email = db.Column(db.String(255), nullable=True)
+    tipo = db.Column(db.String(2), nullable=False, default='PF')  # 'PF' ou 'PJ'
+    representante_legal = db.Column(db.String(255), nullable=True)  # Só usado se for PJ
 
     participacoes = db.relationship('ParticipacaoAcionista', backref='acionista', cascade="all, delete-orphan")
     
@@ -2430,12 +2436,24 @@ def relatorio_gestao_usina():
     return render_template('relatorio_gestao_usina.html', dados=dados, mes=mes, ano=ano, mes_geracao=mes_geracao, ano_geracao=ano_geracao)
 
 @app.route('/cadastrar_empresa', methods=['GET', 'POST'])
+@login_required
 def cadastrar_empresa():
     if request.method == 'POST':
         razao_social = request.form['razao_social']
         cnpj = request.form['cnpj']
+        endereco = request.form.get('endereco')
+        responsavel = request.form.get('responsavel')
+        telefone = request.form.get('telefone')
+        email = request.form.get('email')
 
-        nova_empresa = EmpresaInvestidora(razao_social=razao_social, cnpj=cnpj)
+        nova_empresa = EmpresaInvestidora(
+            razao_social=razao_social,
+            cnpj=cnpj,
+            endereco=endereco,
+            responsavel=responsavel,
+            telefone=telefone,
+            email=email
+        )
         db.session.add(nova_empresa)
         db.session.commit()
 
@@ -2446,18 +2464,42 @@ def cadastrar_empresa():
     return render_template('cadastrar_empresa.html', empresas=empresas)
 
 @app.route('/cadastrar_acionista', methods=['GET', 'POST'])
+@login_required
 def cadastrar_acionista():
     empresas = EmpresaInvestidora.query.all()
 
     if request.method == 'POST':
-        nome = request.form['nome']
         cpf = request.form['cpf']
-        telefone = request.form['telefone']
-        email = request.form['email']
-        empresa_id = request.form['empresa_id']
+
+        # Verifica se já existe o CPF no banco
+        existente = Acionista.query.filter_by(cpf=cpf).first()
+        if existente:
+            flash(f'O CPF {cpf} já está cadastrado para o acionista: {existente.nome}.', 'danger')
+            return redirect(url_for('cadastrar_acionista'))
+
+        # Se não existe, prossegue com o cadastro
+        nome = request.form['nome']
+        telefone = request.form.get('telefone')
+        email = request.form.get('email')
+        tipo = request.form['tipo']
+        representante_legal = request.form.get('representante_legal') if tipo == 'PJ' else None
+        empresa_id = int(request.form['empresa_id'])
         percentual = float(request.form['percentual'])
 
-        novo_acionista = Acionista(nome=nome, cpf=cpf, telefone=telefone, email=email)
+        # Verifica total de percentual antes
+        total_atual = db.session.query(db.func.sum(ParticipacaoAcionista.percentual)).filter_by(empresa_id=empresa_id).scalar() or 0
+        if total_atual + percentual > 100:
+            flash(f'O percentual total da empresa não pode ultrapassar 100%. Total atual: {total_atual:.2f}%.', 'danger')
+            return redirect(url_for('cadastrar_acionista'))
+
+        novo_acionista = Acionista(
+            nome=nome,
+            cpf=cpf,
+            telefone=telefone,
+            email=email,
+            tipo=tipo,
+            representante_legal=representante_legal
+        )
         db.session.add(novo_acionista)
         db.session.commit()
 
@@ -2475,6 +2517,7 @@ def cadastrar_acionista():
     return render_template('cadastrar_acionista.html', empresas=empresas)
 
 @app.route('/vincular_empresa_usina', methods=['GET', 'POST'])
+@login_required
 def vincular_empresa_usina():
     empresas = EmpresaInvestidora.query.all()
     usinas = Usina.query.all()
@@ -2494,6 +2537,7 @@ def vincular_empresa_usina():
     return render_template('vincular_empresa_usina.html', empresas=empresas, usinas=usinas)
 
 @app.route('/cadastrar_financeiro_empresa', methods=['GET', 'POST'])
+@login_required
 def cadastrar_financeiro_empresa():
     empresas = EmpresaInvestidora.query.all()
 
@@ -2523,6 +2567,7 @@ def cadastrar_financeiro_empresa():
     return render_template('cadastrar_financeiro_empresa.html', empresas=empresas, ultimos_lancamentos=ultimos_lancamentos)
 
 @app.route('/relatorio_financeiro_empresa', methods=['GET', 'POST'])
+@login_required
 def relatorio_financeiro_empresa():
     empresas = EmpresaInvestidora.query.all()
     resultados = []
@@ -2641,11 +2686,13 @@ def calcular_distribuicao_lucro(empresa_id, mes, ano):
     }
 
 @app.route('/distribuicao_lucro_empresa/<int:empresa_id>/<int:mes>/<int:ano>')
+@login_required
 def distribuicao_lucro_empresa(empresa_id, mes, ano):
     resultado = calcular_distribuicao_lucro(empresa_id, mes, ano)
     return render_template('distribuicao_lucro_empresa.html', resultado=resultado)
 
 @app.route('/selecionar_distribuicao_lucro', methods=['GET', 'POST'])
+@login_required
 def selecionar_distribuicao_lucro():
     empresas = EmpresaInvestidora.query.all()
     anos_disponiveis = [2024, 2025, 2026]  # Você pode montar dinamicamente depois se quiser.
@@ -2658,6 +2705,126 @@ def selecionar_distribuicao_lucro():
         return redirect(url_for('distribuicao_lucro_empresa', empresa_id=empresa_id, mes=mes, ano=ano))
 
     return render_template('selecionar_distribuicao_lucro.html', empresas=empresas, anos=anos_disponiveis)
+
+@app.route('/empresas')
+def listar_empresas():
+    empresas = EmpresaInvestidora.query.order_by(EmpresaInvestidora.id.asc()).all()
+    return render_template('listar_empresas.html', empresas=empresas)
+
+@app.route('/editar_empresa/<int:empresa_id>', methods=['GET', 'POST'])
+def editar_empresa(empresa_id):
+    empresa = EmpresaInvestidora.query.get_or_404(empresa_id)
+
+    if request.method == 'POST':
+        empresa.razao_social = request.form['razao_social']
+        empresa.cnpj = request.form['cnpj']
+        empresa.endereco = request.form.get('endereco')
+        empresa.responsavel = request.form.get('responsavel')
+        empresa.telefone = request.form.get('telefone')
+        empresa.email = request.form.get('email')
+
+        db.session.commit()
+        flash('Empresa atualizada com sucesso!', 'success')
+        return redirect(url_for('listar_empresas'))
+
+    return render_template('editar_empresa.html', empresa=empresa)
+
+@app.route('/excluir_empresa/<int:empresa_id>')
+def excluir_empresa(empresa_id):
+    empresa = EmpresaInvestidora.query.get_or_404(empresa_id)
+    db.session.delete(empresa)
+    db.session.commit()
+    flash('Empresa excluída com sucesso!', 'success')
+    return redirect(url_for('listar_empresas'))
+
+@app.route('/acionistas')
+@login_required
+def listar_acionistas():
+    acionistas = Acionista.query.order_by(Acionista.id.asc()).all()
+    return render_template('listar_acionistas.html', acionistas=acionistas)
+
+@app.route('/excluir_acionista/<int:acionista_id>')
+@login_required
+def excluir_acionista(acionista_id):
+    acionista = Acionista.query.get_or_404(acionista_id)
+
+    # Excluir as participações vinculadas primeiro
+    ParticipacaoAcionista.query.filter_by(acionista_id=acionista.id).delete()
+
+    db.session.delete(acionista)
+    db.session.commit()
+
+    flash('Acionista excluído com sucesso!', 'success')
+    return redirect(url_for('listar_acionistas'))
+
+@app.route('/editar_acionista/<int:acionista_id>', methods=['GET', 'POST'])
+@login_required
+def editar_acionista(acionista_id):
+    acionista = Acionista.query.get_or_404(acionista_id)
+
+    if request.method == 'POST':
+        acionista.nome = request.form['nome']
+        acionista.cpf = request.form['cpf']
+        acionista.telefone = request.form.get('telefone')
+        acionista.email = request.form.get('email')
+        acionista.tipo = request.form['tipo']
+        acionista.representante_legal = request.form.get('representante_legal') if acionista.tipo == 'PJ' else None
+
+        db.session.commit()
+        flash('Acionista atualizado com sucesso!', 'success')
+        return redirect(url_for('listar_acionistas'))
+
+    return render_template('editar_acionista.html', acionista=acionista)
+
+@app.route('/editar_participacao/<int:participacao_id>', methods=['GET', 'POST'])
+@login_required
+def editar_participacao(participacao_id):
+    participacao = ParticipacaoAcionista.query.get_or_404(participacao_id)
+
+    # Total de percentuais da empresa, excluindo o atual
+    total_outros = db.session.query(db.func.sum(ParticipacaoAcionista.percentual)).filter(
+        ParticipacaoAcionista.empresa_id == participacao.empresa_id,
+        ParticipacaoAcionista.id != participacao.id
+    ).scalar() or 0
+
+    total_empresa = total_outros + participacao.percentual
+
+    if request.method == 'POST':
+        novo_percentual = float(request.form['percentual'])
+
+        # Verifica se o novo total ultrapassa 100%
+        if total_outros + novo_percentual > 100:
+            flash(f'O total atual da empresa (sem considerar esta participação) é {total_outros:.2f}%. Se você salvar com {novo_percentual:.2f}%, vai ultrapassar 100%.', 'danger')
+            return redirect(url_for('editar_participacao', participacao_id=participacao.id))
+
+        # Salvar a alteração
+        participacao.percentual = novo_percentual
+        db.session.commit()
+        flash('Percentual de participação atualizado com sucesso!', 'success')
+        return redirect(url_for('listar_participacoes_empresa', empresa_id=participacao.empresa_id))
+
+    return render_template(
+        'editar_participacao.html',
+        participacao=participacao,
+        total_outros=total_outros,
+        total_empresa=total_empresa
+    )
+
+@app.route('/participacoes_empresa/<int:empresa_id>')
+@login_required
+def listar_participacoes_empresa(empresa_id):
+    empresa = EmpresaInvestidora.query.get_or_404(empresa_id)
+    participacoes = ParticipacaoAcionista.query.filter_by(empresa_id=empresa.id).all()
+
+    # Cálculo da soma total dos percentuais
+    total_percentual = sum(p.percentual for p in participacoes)
+
+    return render_template(
+        'listar_participacoes_empresa.html',
+        empresa=empresa,
+        participacoes=participacoes,
+        total_percentual=total_percentual
+    )
 
 
 if __name__ == '__main__':

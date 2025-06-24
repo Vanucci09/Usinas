@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Editar Percentual de Participação</h2>
+
+    <p><strong>Empresa:</strong> {{ participacao.empresa.razao_social }}</p>
+    <p><strong>Acionista:</strong> {{ participacao.acionista.nome }}</p>
+
+    <div class="alert alert-info">
+        <strong>Total já cadastrado (outros acionistas):</strong> {{ "%.2f"|format(total_outros) }}%<br>
+        <strong>Total atual considerando esta participação:</strong> {{ "%.2f"|format(total_empresa) }}%
+    </div>
+
+    <form method="POST">
+        <div class="mb-3">
+            <label class="form-label">Novo Percentual de Participação (%)</label>
+            <input type="number" name="percentual" value="{{ participacao.percentual }}" step="0.01" class="form-control" required>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Salvar</button>
+        <a href="{{ url_for('listar_participacoes_empresa', empresa_id=participacao.empresa_id) }}" class="btn btn-secondary">Cancelar</a>
+    </form>
+</div>
+{% endblock %}

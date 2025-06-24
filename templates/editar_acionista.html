@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Editar Acionista</h2>
+
+    <form method="POST">
+        <div class="mb-3">
+            <label class="form-label">Tipo de Acionista</label>
+            <select name="tipo" class="form-select" id="tipoAcionista" onchange="mostrarRepresentante()" required>
+                <option value="PF" {% if acionista.tipo == 'PF' %}selected{% endif %}>Pessoa Física (PF)</option>
+                <option value="PJ" {% if acionista.tipo == 'PJ' %}selected{% endif %}>Pessoa Jurídica (PJ)</option>
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Nome / Razão Social</label>
+            <input type="text" name="nome" value="{{ acionista.nome }}" class="form-control" required>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">CPF / CNPJ</label>
+            <input type="text" name="cpf" value="{{ acionista.cpf }}" class="form-control" required>
+        </div>
+
+        <div class="mb-3" id="campoRepresentante" style="display: {% if acionista.tipo == 'PJ' %}block{% else %}none{% endif %};">
+            <label class="form-label">Representante Legal</label>
+            <input type="text" name="representante_legal" value="{{ acionista.representante_legal or '' }}" class="form-control">
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Telefone</label>
+            <input type="text" name="telefone" value="{{ acionista.telefone }}" class="form-control">
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">E-mail</label>
+            <input type="email" name="email" value="{{ acionista.email }}" class="form-control">
+        </div>
+
+        <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+        <a href="{{ url_for('listar_acionistas') }}" class="btn btn-secondary">Cancelar</a>
+    </form>
+</div>
+
+<script>
+function mostrarRepresentante() {
+    var tipo = document.getElementById('tipoAcionista').value;
+    var campo = document.getElementById('campoRepresentante');
+    campo.style.display = (tipo === 'PJ') ? 'block' : 'none';
+}
+</script>
+{% endblock %}

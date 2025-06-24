@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Editar Empresa</h2>
+
+    <form method="POST">
+        <div class="mb-3">
+            <label>Razão Social</label>
+            <input type="text" name="razao_social" value="{{ empresa.razao_social }}" class="form-control" required>
+        </div>
+
+        <div class="mb-3">
+            <label>CNPJ</label>
+            <input type="text" name="cnpj" value="{{ empresa.cnpj }}" class="form-control" required>
+        </div>
+
+        <div class="mb-3">
+            <label>Endereço</label>
+            <input type="text" name="endereco" value="{{ empresa.endereco }}" class="form-control">
+        </div>
+
+        <div class="mb-3">
+            <label>Responsável</label>
+            <input type="text" name="responsavel" value="{{ empresa.responsavel }}" class="form-control">
+        </div>
+
+        <div class="mb-3">
+            <label>Telefone</label>
+            <input type="text" name="telefone" value="{{ empresa.telefone }}" class="form-control">
+        </div>
+
+        <div class="mb-3">
+            <label>E-mail</label>
+            <input type="email" name="email" value="{{ empresa.email }}" class="form-control">
+        </div>
+
+        <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+        <a href="{{ url_for('listar_empresas') }}" class="btn btn-secondary">Cancelar</a>
+    </form>
+</div>
+{% endblock %}

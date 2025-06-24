@@ -4,23 +4,56 @@
 <div class="container mt-4">
     <h2>Cadastrar Acionista</h2>
 
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
     <form method="POST">
+        <!-- Tipo -->
         <div class="mb-3">
-            <label class="form-label">Nome</label>
+            <label class="form-label">Tipo de Acionista</label>
+            <select name="tipo" class="form-select" id="tipoAcionista" onchange="mostrarRepresentante()" required>
+                <option value="">Selecione...</option>
+                <option value="PF">Pessoa Física (PF)</option>
+                <option value="PJ">Pessoa Jurídica (PJ)</option>
+            </select>
+        </div>
+
+        <!-- Nome / Razão Social -->
+        <div class="mb-3">
+            <label class="form-label">Nome / Razão Social</label>
             <input type="text" name="nome" class="form-control" required>
         </div>
+
+        <!-- CPF / CNPJ -->
         <div class="mb-3">
-            <label class="form-label">CPF</label>
+            <label class="form-label">CPF / CNPJ</label>
             <input type="text" name="cpf" class="form-control" required>
         </div>
+
+        <!-- Representante Legal (apenas para PJ) -->
+        <div class="mb-3" id="campoRepresentante" style="display: none;">
+            <label class="form-label">Representante Legal</label>
+            <input type="text" name="representante_legal" class="form-control">
+        </div>
+
+        <!-- Telefone -->
         <div class="mb-3">
             <label class="form-label">Telefone</label>
             <input type="text" name="telefone" class="form-control">
         </div>
+
+        <!-- Email -->
         <div class="mb-3">
-            <label class="form-label">Email</label>
+            <label class="form-label">E-mail</label>
             <input type="email" name="email" class="form-control">
         </div>
+
+        <!-- Empresa Investidora -->
         <div class="mb-3">
             <label class="form-label">Empresa Investidora</label>
             <select name="empresa_id" class="form-select" required>
@@ -29,6 +62,8 @@
                 {% endfor %}
             </select>
         </div>
+
+        <!-- Percentual -->
         <div class="mb-3">
             <label class="form-label">Percentual de Participação (%)</label>
             <input type="number" name="percentual" step="0.01" class="form-control" required>
@@ -36,6 +71,19 @@
 
         <button type="submit" class="btn btn-primary">Cadastrar</button>
     </form>
+
     <a href="{{ url_for('index') }}?aba=investidores" class="btn btn-secondary mt-3">Voltar ao Início</a>
 </div>
+
+<script>
+function mostrarRepresentante() {
+    var tipo = document.getElementById('tipoAcionista').value;
+    var campo = document.getElementById('campoRepresentante');
+    if (tipo === 'PJ') {
+        campo.style.display = 'block';
+    } else {
+        campo.style.display = 'none';
+    }
+}
+</script>
 {% endblock %}

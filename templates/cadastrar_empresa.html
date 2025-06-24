@@ -4,15 +4,45 @@
 <div class="container mt-4">
     <h2>Cadastrar Empresa Investidora</h2>
 
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
     <form method="POST">
         <div class="mb-3">
             <label class="form-label">Razão Social</label>
             <input type="text" name="razao_social" class="form-control" required>
         </div>
+
         <div class="mb-3">
             <label class="form-label">CNPJ</label>
             <input type="text" name="cnpj" class="form-control" required>
         </div>
+
+        <div class="mb-3">
+            <label class="form-label">Endereço</label>
+            <input type="text" name="endereco" class="form-control">
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Responsável</label>
+            <input type="text" name="responsavel" class="form-control">
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Telefone</label>
+            <input type="text" name="telefone" class="form-control">
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">E-mail</label>
+            <input type="email" name="email" class="form-control">
+        </div>
+
         <button type="submit" class="btn btn-primary">Cadastrar</button>
     </form>
 
@@ -20,9 +50,19 @@
     <h4>Empresas já cadastradas:</h4>
     <ul>
         {% for empresa in empresas %}
-            <li>{{ empresa.razao_social }} - {{ empresa.cnpj }}</li>
+            <li>
+                {{ empresa.razao_social }} - {{ empresa.cnpj }}
+                {% if empresa.endereco %} | Endereço: {{ empresa.endereco }} {% endif %}
+                {% if empresa.responsavel %} | Responsável: {{ empresa.responsavel }} {% endif %}
+                {% if empresa.telefone %} | Telefone: {{ empresa.telefone }} {% endif %}
+                {% if empresa.email %} | E-mail: {{ empresa.email }} {% endif %}
+                
+                <!-- Botão de Acesso / Editar -->
+                <a href="{{ url_for('editar_empresa', empresa_id=empresa.id) }}" class="btn btn-sm btn-warning ms-2">Acessar</a>
+            </li>
         {% endfor %}
     </ul>
+
     <a href="{{ url_for('index') }}?aba=investidores" class="btn btn-secondary mt-3">Voltar</a>
 </div>
 {% endblock %}
