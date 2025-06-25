@@ -2911,6 +2911,12 @@ def excluir_participacao(participacao_id):
     db.session.commit()
     return redirect(url_for('listar_participacoes_empresa', empresa_id=empresa_id))
 
+from flask import send_from_directory
+
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(app.root_path, 'static'), 'favicon.ico')
+
 
 if __name__ == '__main__':
     with app.app_context():
