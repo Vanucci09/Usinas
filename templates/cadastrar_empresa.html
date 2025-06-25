@@ -58,7 +58,7 @@
                 {% if empresa.email %} | E-mail: {{ empresa.email }} {% endif %}
                 
                 <!-- Botão de Acesso / Editar -->
-                <a href="{{ url_for('editar_empresa', empresa_id=empresa.id) }}" class="btn btn-sm btn-warning ms-2">Acessar</a>
+                <a href="{{ url_for('editar_empresa', empresa_id=empresa.id) }}" class="btn btn-sm btn-warning ms-2">Editar</a>
             </li>
         {% endfor %}
     </ul>

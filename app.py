@@ -2902,6 +2902,15 @@ def vincular_acionista():
         participacoes_por_acionista=participacoes_por_acionista
     )
 
+@app.route('/excluir_participacao/<int:participacao_id>', methods=['POST'])
+@login_required
+def excluir_participacao(participacao_id):
+    participacao = ParticipacaoAcionista.query.get_or_404(participacao_id)
+    empresa_id = participacao.empresa_id
+    db.session.delete(participacao)
+    db.session.commit()
+    return redirect(url_for('listar_participacoes_empresa', empresa_id=empresa_id))
+
 
 if __name__ == '__main__':
     with app.app_context():

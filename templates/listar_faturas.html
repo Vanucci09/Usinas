@@ -97,13 +97,16 @@
                     <!-- Ações -->
                     <td>
                         <div class="d-flex flex-wrap gap-2 justify-content-center">
+
+                            <!-- Editar -->
                             <a href="{{ url_for('editar_fatura', id=fatura.id) }}" class="btn btn-sm btn-warning">Editar</a>
 
+                            <!-- Excluir -->
                             <form method="POST" action="{{ url_for('excluir_fatura', id=fatura.id) }}" onsubmit="return confirm('Confirmar exclusão?');">
                                 <button type="submit" class="btn btn-sm btn-danger">Excluir</button>
                             </form>
 
-                            <!-- Botão Boleto (verde se já tem arquivo) -->
+                            <!-- Boleto (sempre azul, mas com ícone se já tem) -->
                             <a href="{{ url_for('upload_boleto') }}?fatura_id={{ fatura.id }}" class="btn btn-sm btn-info">
                                 {% if fatura.tem_boleto %}
                                     📎 Boleto
@@ -112,8 +115,10 @@
                                 {% endif %}
                             </a>
 
+                            <!-- Relatório -->
                             <a href="{{ url_for('relatorio_fatura', fatura_id=fatura.id) }}" target="_blank" class="btn btn-sm btn-success">Relatório</a>
 
+                            <!-- WhatsApp -->
                             {% if fatura.cliente.telefone %}
                                 {% set telefone_clean = fatura.cliente.telefone.replace(' ','').replace('-','') %}
                                 {% set link_relatorio = url_for('relatorio_fatura', fatura_id=fatura.id, _external=True) %}
@@ -126,14 +131,17 @@
                                 </a>
                             {% endif %}
 
+                            <!-- Enviar E-mail (sempre cinza) -->
                             <a href="{{ url_for('enviar_email', fatura_id=fatura.id) }}" class="btn btn-sm btn-secondary">
                                 <i class="bi bi-envelope-fill"></i>
                                 {% if fatura.email_enviado %}
-                                    <span class="text-success ms-1">&#10004;</span>
+                                    <span class="text-success ms-1 fw-bold">&#10004;</span>
                                 {% endif %}
                             </a>
+
                         </div>
                     </td>
+
                 </tr>
             {% endfor %}
             </tbody>

@@ -4,14 +4,14 @@
 <div class="container mt-4">
     <h2>Participações - {{ empresa.razao_social }}</h2>
 
-    <table class="table table-striped table-bordered">
-        <thead>
+    <table class="table table-striped table-bordered align-middle">
+        <thead class="table-light">
             <tr>
                 <th>ID</th>
                 <th>Acionista</th>
                 <th>CPF / CNPJ</th>
                 <th>Percentual (%)</th>
-                <th>Ações</th>
+                <th class="text-center">Ações</th>
             </tr>
         </thead>
         <tbody>
@@ -21,15 +21,26 @@
                 <td>{{ p.acionista.nome }}</td>
                 <td>{{ p.acionista.cpf }}</td>
                 <td>{{ "%.2f"|format(p.percentual) }}</td>
-                <td>
-                    <a href="{{ url_for('editar_participacao', participacao_id=p.id) }}" class="btn btn-warning btn-sm">Editar Percentual</a>
-                    <!-- Opcional: Adicionar exclusão de participação -->
+                <td class="text-center">
+                    <a href="{{ url_for('editar_participacao', participacao_id=p.id) }}" class="btn btn-sm btn-warning">Editar</a>
+
+                    <form method="POST" action="{{ url_for('excluir_participacao', participacao_id=p.id) }}" class="d-inline" onsubmit="return confirm('Deseja realmente excluir esta participação?');">
+                        <button type="submit" class="btn btn-sm btn-danger">Excluir</button>
+                    </form>
                 </td>
             </tr>
             {% endfor %}
         </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="3" class="text-end"><strong>Total:</strong></td>
+                <td colspan="2"><strong>{{ participacoes | sum(attribute='percentual') | round(2) }}%</strong></td>
+            </tr>
+        </tfoot>
     </table>
 
-    <a href="{{ url_for('listar_empresas') }}" class="btn btn-secondary">Voltar para Empresas</a>
+    <div class="text-center mt-4">
+        <a href="{{ url_for('listar_empresas') }}" class="btn btn-secondary">Voltar para Empresas</a>
+    </div>
 </div>
 {% endblock %}
