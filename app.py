@@ -185,7 +185,7 @@ class EmpresaInvestidora(db.Model):
     __tablename__ = 'empresas_investidoras'
     id = db.Column(db.Integer, primary_key=True)
     razao_social = db.Column(db.String(255), nullable=False)
-    cnpj = db.Column(db.String(20), nullable=False, unique=True)
+    cnpj = db.Column(db.String(20), nullable=False)
     endereco = db.Column(db.String(255))
     responsavel = db.Column(db.String(100))
     telefone = db.Column(db.String(20))

@@ -3,12 +3,12 @@
 {% block title %}Cadastrar Geração Diária{% endblock %}
 
 {% block content %}
-<body class="bg-light">
 <div class="container mt-5 p-4 bg-white rounded shadow">
 
     <!-- Título -->
     <h2 class="mb-4 text-primary text-center">Cadastro de Clientes</h2>
-    
+
+    <!-- Formulário de Cadastro -->
     <form method="POST" action="{{ url_for('cadastrar_cliente') }}">
         <div class="row g-3">
             <div class="col-md-6">
@@ -55,9 +55,10 @@
             <button type="submit" class="btn btn-primary">Cadastrar Cliente</button>
         </div>
     </form>
-    
+
     <hr class="my-4">
-    
+
+    <!-- Filtro por Usina -->
     <form method="GET" id="form-filtro-usina" class="row g-3 mb-3">
         <div class="col-md-4">
             <label for="filtro-usina" class="form-label">Filtrar por Usina</label>
@@ -73,13 +74,15 @@
             </select>
         </div>
     </form>
-        
+
+    <!-- Campo de busca -->
     <div class="input-group mb-4">
         <span class="input-group-text"><i class="bi bi-search"></i></span>
         <input type="text" class="form-control" id="filtro-cliente"
                placeholder="Buscar cliente por nome, CPF/CNPJ, e-mail ou telefone...">
     </div>
-        
+
+    <!-- Lista de Clientes -->
     <h4 class="mb-3">Clientes Cadastrados</h4>
     {% if clientes %}
         <ul class="list-group" id="lista-clientes">
@@ -116,30 +119,32 @@
     {% else %}
         <div class="alert alert-info">Nenhum cliente cadastrado ainda.</div>
     {% endif %}
-    
+
     <div class="text-center mt-4">
         <a href="{{ url_for('index') }}" class="btn btn-secondary">
             <i class="bi bi-house-door-fill"></i> Voltar para o Início
         </a>
     </div>
-
 </div>
+{% endblock %}
 
-
+{% block extra_js %}
 <script>
-    const inputFiltro = document.getElementById('filtro-cliente');
-    const lista = document.getElementById('lista-clientes');
+    document.addEventListener('DOMContentLoaded', function () {
+        const inputFiltro = document.getElementById('filtro-cliente');
+        const lista = document.getElementById('lista-clientes');
 
-    inputFiltro.addEventListener('input', function () {
-        const termo = this.value.toLowerCase();
-        const itens = lista.querySelectorAll('.list-group-item');
+        if (!inputFiltro || !lista) return;
 
-        itens.forEach(item => {
-            const texto = item.textContent.toLowerCase();
-            item.style.display = texto.includes(termo) ? '' : 'none';
+        inputFiltro.addEventListener('input', function () {
+            const termo = this.value.trim().toLowerCase();
+            const itens = lista.querySelectorAll('.list-group-item');
+
+            itens.forEach(item => {
+                const texto = item.textContent.toLowerCase();
+                item.style.display = texto.includes(termo) ? '' : 'none';
+            });
         });
     });
 </script>
-</body>
-</html>
 {% endblock %}
