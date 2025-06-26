@@ -2581,6 +2581,17 @@ def vincular_empresa_usina():
 
     return render_template('vincular_empresa_usina.html', empresas=empresas, usinas=usinas)
 
+@app.route('/excluir_vinculo/<int:empresa_id>/<int:usina_id>', methods=['POST'])
+@login_required
+def excluir_vinculo(empresa_id, usina_id):
+    vinculo = UsinaInvestidora.query.filter_by(empresa_id=empresa_id, usina_id=usina_id).first_or_404()
+
+    db.session.delete(vinculo)
+    db.session.commit()
+
+    flash('Vínculo removido com sucesso.', 'info')
+    return redirect(url_for('vincular_empresa_usina'))
+
 @app.route('/cadastrar_financeiro_empresa', methods=['GET', 'POST'])
 @login_required
 def cadastrar_financeiro_empresa():
