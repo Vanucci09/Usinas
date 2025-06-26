@@ -560,14 +560,14 @@ def formato_tarifa(valor):
 app.jinja_env.filters['formato_brasileiro'] = formato_brasileiro
 app.jinja_env.filters['formato_tarifa'] = formato_tarifa
 
-@app.route('/clientes', methods=['GET', 'POST'])
+@app.route('/cadastrar_cliente', methods=['GET', 'POST'])
 @login_required
 def cadastrar_cliente():
     if not current_user.pode_cadastrar_cliente:
         return "Acesso negado", 403
-    
+
     usinas = Usina.query.all()
-    
+
     if request.method == 'POST':
         nome = request.form['nome']
         cpf_cnpj = request.form['cpf_cnpj']
@@ -590,7 +590,15 @@ def cadastrar_cliente():
         )
         db.session.add(cliente)
         db.session.commit()
-        return redirect(url_for('cadastrar_cliente'))
+        return redirect(url_for('listar_clientes'))
+
+    return render_template('cadastrar_cliente.html', usinas=usinas)
+
+@app.route('/clientes')
+@login_required
+def listar_clientes():
+    if not current_user.pode_cadastrar_cliente:
+        return "Acesso negado", 403
 
     usina_id_filtro = request.args.get('usina_id', type=int)
     if usina_id_filtro:
@@ -598,18 +606,19 @@ def cadastrar_cliente():
     else:
         clientes = Cliente.query.all()
 
+    usinas = Usina.query.all()
+
     return render_template(
-        'clientes.html',
+        'listar_clientes.html',
         clientes=clientes,
         usinas=usinas,
         usina_id_filtro=usina_id_filtro
     )
 
-@app.route('/rateios', methods=['GET', 'POST'])
+@app.route('/cadastrar_rateio', methods=['GET', 'POST'])
 @login_required
 def cadastrar_rateio():
     usinas = Usina.query.all()
-    clientes = Cliente.query.all()
 
     if request.method == 'POST':
         usina_id = int(request.form['usina_id'])
@@ -617,7 +626,6 @@ def cadastrar_rateio():
         percentual = float(request.form['percentual'])
         tarifa_kwh = float(request.form['tarifa_kwh'])
 
-        # Buscar o maior codigo_rateio já usado para essa usina
         ultimo_codigo = db.session.query(
             db.func.max(Rateio.codigo_rateio)
         ).filter_by(usina_id=usina_id).scalar()
@@ -629,17 +637,30 @@ def cadastrar_rateio():
             cliente_id=cliente_id,
             percentual=percentual,
             tarifa_kwh=tarifa_kwh,
-            codigo_rateio=proximo_codigo  # Define o código sequencial
+            codigo_rateio=proximo_codigo
         )
 
         db.session.add(rateio)
         db.session.commit()
         return redirect(url_for('cadastrar_rateio'))
 
-    rateios = Rateio.query.all()
-    return render_template('rateios.html', rateios=rateios, usinas=usinas, clientes=clientes)
+    return render_template('cadastrar_rateio.html', usinas=usinas)
+
+@app.route('/listar_rateios')
+@login_required
+def listar_rateios():
+    usinas = Usina.query.all()
+    usina_id_filtro = request.args.get('usina_id', type=int)
+
+    if usina_id_filtro:
+        rateios = Rateio.query.filter_by(usina_id=usina_id_filtro).all()
+    else:
+        rateios = Rateio.query.all()
+
+    return render_template('listar_rateios.html', rateios=rateios, usinas=usinas, usina_id_filtro=usina_id_filtro)
 
 @app.route('/editar_rateio/<int:id>', methods=['GET', 'POST'])
+@login_required
 def editar_rateio(id):
     rateio = Rateio.query.get_or_404(id)
     usinas = Usina.query.all()
@@ -651,16 +672,17 @@ def editar_rateio(id):
         rateio.percentual = float(request.form['percentual'])
         rateio.tarifa_kwh = float(request.form['tarifa_kwh'])
         db.session.commit()
-        return redirect(url_for('cadastrar_rateio'))
+        return redirect(url_for('listar_rateios'))
 
     return render_template('editar_rateio.html', rateio=rateio, usinas=usinas, clientes=clientes)
 
 @app.route('/excluir_rateio/<int:id>', methods=['POST'])
+@login_required
 def excluir_rateio(id):
     rateio = Rateio.query.get_or_404(id)
     db.session.delete(rateio)
     db.session.commit()
-    return redirect(url_for('cadastrar_rateio'))
+    return redirect(url_for('listar_rateios'))
 
 @app.route('/editar_cliente/<int:id>', methods=['GET', 'POST'])
 def editar_cliente(id):

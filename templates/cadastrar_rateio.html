@@ -1,10 +1,10 @@
 {% extends 'base.html' %}
 
-{% block title %}Cadastrar Geração Diária{% endblock %}
+{% block title %}Cadastrar Rateio{% endblock %}
 
 {% block content %}
 <div class="container mt-5 p-4 bg-white rounded shadow">
-    <h2 class="mb-4 text-primary text-center">Configuração de Rateios</h2>
+    <h2 class="mb-4 text-primary text-center">Cadastrar Rateio</h2>
 
     <form method="POST" action="{{ url_for('cadastrar_rateio') }}">
         <div class="mb-3">
@@ -34,29 +34,19 @@
             <input type="number" step="0.0000001" class="form-control" id="tarifa_kwh" name="tarifa_kwh" required>
         </div>
 
-        <button type="submit" class="btn btn-success">Cadastrar Rateio</button>
+        <div class="text-center mt-3">
+            <button type="submit" class="btn btn-success">Cadastrar Rateio</button>
+        </div>
     </form>
 
-    <h4 class="mt-5">Rateios Cadastrados</h4>
-    <ul class="list-group">
-        {% for rateio in rateios %}
-            <li class="list-group-item d-flex justify-content-between align-items-center">
-                <div>
-                    {{ rateio.usina.nome }} → {{ rateio.cliente.nome }} (ID: {{ rateio.codigo_rateio }}) —
-                    {{ rateio.percentual }}% @ {{ rateio.tarifa_kwh|formato_tarifa }}
-                </div>
-                <div>
-                    <a href="{{ url_for('editar_rateio', id=rateio.id) }}" class="btn btn-sm btn-warning">Editar</a>
-                    <form action="{{ url_for('excluir_rateio', id=rateio.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Tem certeza que deseja excluir este rateio?');">
-                        <button type="submit" class="btn btn-sm btn-danger">Excluir</button>
-                    </form>
-                </div>
-            </li>
-        {% else %}
-            <li class="list-group-item text-muted">Nenhum rateio cadastrado.</li>
-        {% endfor %}
-    </ul>
-    <a href="/" class="btn btn-secondary mt-3">Voltar</a>
+    <div class="text-center mt-4 d-flex justify-content-center gap-3 flex-wrap">
+        <a href="{{ url_for('listar_rateios') }}" class="btn btn-primary">
+            <i class="bi bi-list-ul"></i> Ver Rateios Cadastrados
+        </a>
+        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-house-door-fill"></i> Voltar para o Início
+        </a>
+    </div>
 </div>
 
 <script>
@@ -69,7 +59,6 @@ function carregarClientes() {
         .then(response => response.json())
         .then(data => {
             clienteSelect.innerHTML = "";
-
             if (data.length === 0) {
                 clienteSelect.innerHTML = '<option value="">Nenhum cliente encontrado</option>';
                 return;

@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+
+{% block title %}Cadastrar Cliente{% endblock %}
+
+{% block content %}
+<div class="container mt-5 p-4 bg-white rounded shadow">
+    <h2 class="mb-4 text-primary text-center">Cadastro de Clientes</h2>
+
+    <form method="POST" action="{{ url_for('cadastrar_cliente') }}">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label for="nome" class="form-label">Nome</label>
+                <input type="text" class="form-control" id="nome" name="nome" required>
+            </div>
+            <div class="col-md-6">
+                <label for="cpf_cnpj" class="form-label">CPF ou CNPJ</label>
+                <input type="text" class="form-control" id="cpf_cnpj" name="cpf_cnpj" required>
+            </div>
+            <div class="col-md-6">
+                <label for="email" class="form-label">E-mail</label>
+                <input type="email" class="form-control" id="email" name="email" required>
+            </div>
+            <div class="col-md-6">
+                <label for="email_cc" class="form-label">E-mails em Cópia (CC)</label>
+                <input type="text" class="form-control" id="email_cc" name="email_cc" placeholder="Ex: email1@exemplo.com, email2@exemplo.com">
+            </div>
+            <div class="col-md-6">
+                <label for="telefone" class="form-label">Telefone</label>
+                <input type="text" class="form-control" id="telefone" name="telefone" required>
+            </div>
+            <div class="col-md-6">
+                <label for="endereco" class="form-label">Endereço</label>
+                <input type="text" class="form-control" id="endereco" name="endereco" required>
+            </div>
+            <div class="col-md-6">
+                <label for="codigo_unidade" class="form-label">Código da Unidade</label>
+                <input type="text" class="form-control" id="codigo_unidade" name="codigo_unidade" required>
+            </div>
+            <div class="col-md-12">
+                <label for="usina_id" class="form-label">Usina</label>
+                <select class="form-select" id="usina_id" name="usina_id" required>
+                    <option value="" disabled selected>Selecione uma usina</option>
+                    {% for usina in usinas %}
+                        <option value="{{ usina.id }}">{{ usina.nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+            <div class="mt-4 text-center">
+                <button type="submit" class="btn btn-primary">Cadastrar Cliente</button>
+            </div>
+        </form>
+
+        <!-- Botões de navegação -->
+        <div class="text-center mt-4 d-flex justify-content-center gap-3 flex-wrap">
+            <a href="{{ url_for('listar_clientes') }}" class="btn btn-primary">
+                <i class="bi bi-list-ul"></i> Ver Clientes Cadastrados
+            </a>
+            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-house-door-fill"></i> Voltar para o Início
+            </a>
+        </div>
+{% endblock %}

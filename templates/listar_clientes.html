@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+
+{% block title %}Clientes Cadastrados{% endblock %}
+
+{% block content %}
+<div class="container mt-5 p-4 bg-white rounded shadow">
+    <h2 class="mb-4 text-primary text-center">Clientes Cadastrados</h2>
+
+    <!-- Filtro por usina -->
+    <form method="GET" id="form-filtro-usina" class="row g-3 mb-4">
+        <div class="col-md-4">
+            <label for="usina_id" class="form-label">Filtrar por Usina</label>
+            <select class="form-select" id="usina_id" name="usina_id" onchange="document.getElementById('form-filtro-usina').submit()">
+                <option value="" {% if not usina_id_filtro %}selected{% endif %}>Todas</option>
+                {% for usina in usinas %}
+                    <option value="{{ usina.id }}" {% if usina_id_filtro == usina.id %}selected{% endif %}>{{ usina.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
+
+    <!-- Tabela com DataTables -->
+    <div class="table-responsive">
+        <table id="clientes-table" class="table table-bordered table-hover align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Nome</th>
+                    <th>CPF/CNPJ</th>
+                    <th>Email</th>
+                    <th>Telefone</th>
+                    <th>Endereço</th>
+                    <th>Usina</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cliente in clientes %}
+                <tr>
+                    <td>
+                        {{ cliente.nome }}
+                        {% if cliente.rateios %}
+                            <br><small class="text-muted">ID: {{ cliente.rateios[0].codigo_rateio }}</small>
+                        {% else %}
+                            <br><small class="text-danger">Sem rateio</small>
+                        {% endif %}
+                    </td>
+                    <td>{{ cliente.cpf_cnpj }}</td>
+                    <td>{{ cliente.email }}</td>
+                    <td>{{ cliente.telefone }}</td>
+                    <td>
+                        {{ cliente.endereco }}<br>
+                        <small class="text-muted">Cód. Unidade: {{ cliente.codigo_unidade }}</small>
+                    </td>
+                    <td>{{ cliente.usina.nome }}</td>
+                    <td>
+                        <a href="{{ url_for('editar_cliente', id=cliente.id) }}" class="btn btn-sm btn-outline-primary me-1" title="Editar">
+                            <i class="bi bi-pencil-fill"></i>
+                        </a>
+                        <a href="{{ url_for('excluir_cliente', id=cliente.id) }}" class="btn btn-sm btn-outline-danger" title="Excluir"
+                           onclick="return confirm('Deseja excluir este cliente?');">
+                            <i class="bi bi-trash-fill"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="text-center mt-4 d-flex justify-content-center gap-3 flex-wrap">
+        <a href="{{ url_for('cadastrar_cliente') }}" class="btn btn-primary">
+            <i class="bi bi-person-plus-fill"></i> Cadastrar Novo Cliente
+        </a>
+        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-house-door-fill"></i> Voltar para o Início
+        </a>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- DataTables -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
+<script>
+$(document).ready(function () {
+    $('#clientes-table').DataTable({
+        language: {
+            url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json'
+        },
+        pageLength: 25
+    });
+});
+</script>
+{% endblock %}

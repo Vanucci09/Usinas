@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+
+{% block title %}Rateios Cadastrados{% endblock %}
+
+{% block content %}
+<div class="container mt-5 p-4 bg-white rounded shadow">
+    <h2 class="mb-4 text-primary text-center">Rateios Cadastrados</h2>
+
+    <!-- Filtro por usina -->
+    <form method="GET" id="filtro-form" class="row g-3 mb-4">
+        <div class="col-md-4">
+            <label for="usina_id" class="form-label">Filtrar por Usina</label>
+            <select class="form-select" name="usina_id" id="usina_id" onchange="document.getElementById('filtro-form').submit()">
+                <option value="">Todas</option>
+                {% for usina in usinas %}
+                    <option value="{{ usina.id }}" {% if usina.id == usina_id_filtro %}selected{% endif %}>{{ usina.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
+
+    <!-- Tabela de rateios -->
+    <div class="table-responsive">
+        <table id="rateios-table" class="table table-bordered table-hover align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Usina</th>
+                    <th>Cliente</th>
+                    <th>% Energia</th>
+                    <th>Tarifa (R$)</th>
+                    <th>Código</th>
+                    <th class="text-center">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rateio in rateios %}
+                <tr>
+                    <td>{{ rateio.usina.nome }}</td>
+                    <td>{{ rateio.cliente.nome }}</td>
+                    <td>{{ rateio.percentual }}%</td>
+                    <td>{{ rateio.tarifa_kwh|formato_tarifa }}</td>
+                    <td>{{ rateio.codigo_rateio }}</td>
+                    <td class="text-center">
+                        <a href="{{ url_for('editar_rateio', id=rateio.id) }}" class="btn btn-sm btn-outline-warning me-2" title="Editar">
+                            <i class="bi bi-pencil-fill"></i>
+                        </a>
+                        <form method="POST" action="{{ url_for('excluir_rateio', id=rateio.id) }}" class="d-inline" onsubmit="return confirm('Excluir este rateio?');">
+                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir">
+                                <i class="bi bi-trash-fill"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="text-center mt-4 d-flex justify-content-center gap-3 flex-wrap">
+        <a href="{{ url_for('cadastrar_rateio') }}" class="btn btn-primary">
+            <i class="bi bi-plus-circle-fill"></i> Cadastrar Novo Rateio
+        </a>
+        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-house-door-fill"></i> Voltar para o Início
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script>
+$(document).ready(function () {
+    $('#rateios-table').DataTable({
+        language: { url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json' },
+        pageLength: 25
+    });
+});
+</script>
+{% endblock %}

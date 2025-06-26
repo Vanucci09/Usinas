@@ -70,7 +70,6 @@
                 <tr>
                     {% set rateio = fatura.cliente.rateios[0] if fatura.cliente.rateios else None %}
 
-                    <!-- ID Rateio -->
                     <td>
                         {% if rateio %}
                             {{ rateio.codigo_rateio }}
@@ -79,13 +78,9 @@
                         {% endif %}
                     </td>
 
-                    <!-- Cliente -->
                     <td>{{ fatura.cliente.nome }}</td>
-
-                    <!-- Mês/Ano -->
                     <td>{{ fatura.mes_referencia }}/{{ fatura.ano_referencia }}</td>
 
-                    <!-- Valor Boleto -->
                     <td>
                         {% if rateio %}
                             {{ (fatura.consumo_usina * rateio.tarifa_kwh)|formato_brasileiro }}
@@ -94,31 +89,30 @@
                         {% endif %}
                     </td>
 
-                    <!-- Ações -->
                     <td>
-                        <div class="d-flex flex-wrap gap-2 justify-content-center">
+                        <div class="d-flex flex-wrap justify-content-center gap-1 acoes-btns">
+                            <a href="{{ url_for('editar_fatura', id=fatura.id) }}" class="btn btn-sm btn-outline-warning" title="Editar">
+                                <i class="bi bi-pencil-fill"></i>
+                            </a>
 
-                            <!-- Editar -->
-                            <a href="{{ url_for('editar_fatura', id=fatura.id) }}" class="btn btn-sm btn-warning">Editar</a>
-
-                            <!-- Excluir -->
                             <form method="POST" action="{{ url_for('excluir_fatura', id=fatura.id) }}" onsubmit="return confirm('Confirmar exclusão?');">
-                                <button type="submit" class="btn btn-sm btn-danger">Excluir</button>
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir">
+                                    <i class="bi bi-trash-fill"></i>
+                                </button>
                             </form>
 
-                            <!-- Boleto (sempre azul, mas com ícone se já tem) -->
-                            <a href="{{ url_for('upload_boleto') }}?fatura_id={{ fatura.id }}" class="btn btn-sm btn-info">
+                            <a href="{{ url_for('upload_boleto') }}?fatura_id={{ fatura.id }}" class="btn btn-sm btn-outline-info" title="Boleto">
                                 {% if fatura.tem_boleto %}
-                                    📎 Boleto
+                                    <i class="bi bi-paperclip"></i>
                                 {% else %}
-                                    Boleto
+                                    <i class="bi bi-receipt-cutoff"></i>
                                 {% endif %}
                             </a>
 
-                            <!-- Relatório -->
-                            <a href="{{ url_for('relatorio_fatura', fatura_id=fatura.id) }}" target="_blank" class="btn btn-sm btn-success">Relatório</a>
+                            <a href="{{ url_for('relatorio_fatura', fatura_id=fatura.id) }}" target="_blank" class="btn btn-sm btn-outline-success" title="Relatório">
+                                <i class="bi bi-file-earmark-text-fill"></i>
+                            </a>
 
-                            <!-- WhatsApp -->
                             {% if fatura.cliente.telefone %}
                                 {% set telefone_clean = fatura.cliente.telefone.replace(' ','').replace('-','') %}
                                 {% set link_relatorio = url_for('relatorio_fatura', fatura_id=fatura.id, _external=True) %}
@@ -126,22 +120,19 @@
                                     "Olá, " ~ fatura.cliente.nome ~
                                     "! Aqui está seu relatório de faturamento referente ao ID: " ~ fatura.identificador ~ ". Acesse: " ~ link_relatorio
                                 ) | urlencode %}
-                                <a href="https://wa.me/{{ telefone_clean }}?text={{ msg_whatsapp }}" target="_blank" class="btn btn-sm btn-success">
+                                <a href="https://wa.me/{{ telefone_clean }}?text={{ msg_whatsapp }}" target="_blank" class="btn btn-sm btn-outline-success" title="Enviar WhatsApp">
                                     <i class="bi bi-whatsapp"></i>
                                 </a>
                             {% endif %}
 
-                            <!-- Enviar E-mail (sempre cinza) -->
-                            <a href="{{ url_for('enviar_email', fatura_id=fatura.id) }}" class="btn btn-sm btn-secondary">
+                            <a href="{{ url_for('enviar_email', fatura_id=fatura.id) }}" class="btn btn-sm btn-outline-secondary" title="Enviar E-mail">
                                 <i class="bi bi-envelope-fill"></i>
                                 {% if fatura.email_enviado %}
                                     <span class="text-success ms-1 fw-bold">&#10004;</span>
                                 {% endif %}
                             </a>
-
                         </div>
                     </td>
-
                 </tr>
             {% endfor %}
             </tbody>
@@ -152,6 +143,25 @@
         <a href="{{ url_for('index') }}?aba=financeiro" class="btn btn-secondary">Voltar</a>
     </div>
 </div>
+
+<!-- Estilo para coluna Ações -->
+<style>
+    .acoes-btns a,
+    .acoes-btns form {
+        flex: 0 0 auto;
+    }
+
+    .acoes-btns .btn {
+        width: 34px;
+        height: 34px;
+        padding: 0;
+        text-align: center;
+    }
+
+    .acoes-btns i {
+        font-size: 1rem;
+    }
+</style>
 
 <!-- DataTables -->
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
