@@ -2,7 +2,7 @@
 
 {% block content %}
 <div class="container mt-4">
-    <h2>Participações - {{ empresa.razao_social }}</h2>
+    <h2 class="mb-4 text-primary">Participações - {{ empresa.razao_social }}</h2>
 
     <table class="table table-striped table-bordered align-middle">
         <thead class="table-light">
@@ -22,10 +22,18 @@
                 <td>{{ p.acionista.cpf }}</td>
                 <td>{{ "%.2f"|format(p.percentual) }}</td>
                 <td class="text-center">
-                    <a href="{{ url_for('editar_participacao', participacao_id=p.id) }}" class="btn btn-sm btn-warning">Editar</a>
+                    <a href="{{ url_for('editar_participacao', participacao_id=p.id) }}"
+                       class="btn btn-outline-warning btn-sm me-1" title="Editar">
+                        <i class="bi bi-pencil-square"></i>
+                    </a>
 
-                    <form method="POST" action="{{ url_for('excluir_participacao', participacao_id=p.id) }}" class="d-inline" onsubmit="return confirm('Deseja realmente excluir esta participação?');">
-                        <button type="submit" class="btn btn-sm btn-danger">Excluir</button>
+                    <form method="POST"
+                          action="{{ url_for('excluir_participacao', participacao_id=p.id) }}"
+                          class="d-inline"
+                          onsubmit="return confirm('Deseja realmente excluir esta participação?');">
+                        <button type="submit" class="btn btn-outline-danger btn-sm" title="Excluir">
+                            <i class="bi bi-trash"></i>
+                        </button>
                     </form>
                 </td>
             </tr>
@@ -40,7 +48,9 @@
     </table>
 
     <div class="text-center mt-4">
-        <a href="{{ url_for('listar_empresas') }}" class="btn btn-secondary">Voltar para Empresas</a>
+        <a href="{{ url_for('listar_empresas') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left-circle"></i> Voltar para Empresas
+        </a>
     </div>
 </div>
 {% endblock %}

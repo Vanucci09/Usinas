@@ -2,43 +2,65 @@
 
 {% block content %}
 <div class="container mt-4">
-    <h2>Lista de Acionistas</h2>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="text-primary">Lista de Acionistas</h2>
+        <a href="{{ url_for('cadastrar_acionista') }}" class="btn btn-success">
+            <i class="bi bi-person-plus-fill me-1"></i> Novo Acionista
+        </a>
+    </div>
 
-    <a href="{{ url_for('cadastrar_acionista') }}" class="btn btn-success mb-3">Novo Acionista</a>
+    <div class="table-responsive">
+        <table class="table table-striped table-bordered align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>ID</th>
+                    <th>Nome / Razão Social</th>
+                    <th>CPF / CNPJ</th>
+                    <th>Tipo</th>
+                    <th>Representante Legal</th>
+                    <th>Telefone</th>
+                    <th>Email</th>
+                    <th class="text-center">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in acionistas %}
+                <tr>
+                    <td>{{ a.id }}</td>
+                    <td>{{ a.nome }}</td>
+                    <td>{{ a.cpf }}</td>
+                    <td>{{ a.tipo }}</td>
+                    <td>{{ a.representante_legal or '-' }}</td>
+                    <td>{{ a.telefone }}</td>
+                    <td>{{ a.email }}</td>
+                    <td class="text-center">
+                        <div class="d-flex justify-content-center gap-2">
+                            <a href="{{ url_for('editar_acionista', acionista_id=a.id) }}"
+                               class="btn btn-outline-warning btn-sm"
+                               title="Editar">
+                                <i class="bi bi-pencil-fill"></i>
+                            </a>
+                            <a href="{{ url_for('excluir_acionista', acionista_id=a.id) }}"
+                               class="btn btn-outline-danger btn-sm"
+                               title="Excluir"
+                               onclick="return confirm('Tem certeza que deseja excluir?');">
+                                <i class="bi bi-trash-fill"></i>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 
-    <table class="table table-striped table-bordered">
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Nome / Razão Social</th>
-                <th>CPF / CNPJ</th>
-                <th>Tipo</th>
-                <th>Representante Legal</th>
-                <th>Telefone</th>
-                <th>Email</th>
-                <th>Ações</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for a in acionistas %}
-            <tr>
-                <td>{{ a.id }}</td>
-                <td>{{ a.nome }}</td>
-                <td>{{ a.cpf }}</td>
-                <td>{{ a.tipo }}</td>
-                <td>{{ a.representante_legal or '-' }}</td>
-                <td>{{ a.telefone }}</td>
-                <td>{{ a.email }}</td>
-                <td>
-                    <a href="{{ url_for('editar_acionista', acionista_id=a.id) }}" class="btn btn-warning btn-sm">Editar</a>
-                    <a href="{{ url_for('excluir_acionista', acionista_id=a.id) }}" class="btn btn-danger btn-sm" onclick="return confirm('Tem certeza que deseja excluir?');">Excluir</a>
-                    <a href="{{ url_for('vincular_acionista') }}" class="btn btn-info btn-sm">Vincular Empresa</a>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    <a href="{{ url_for('index') }}?aba=investidores" class="btn btn-secondary mt-3">Voltar</a>
-    
+    <div class="d-flex justify-content-between mt-4">
+        <a href="{{ url_for('index') }}?aba=investidores" class="btn btn-secondary">
+            <i class="bi bi-arrow-left-circle me-1"></i> Voltar
+        </a>
+        <a href="{{ url_for('vincular_acionista') }}" class="btn btn-info text-white">
+            <i class="bi bi-link-45deg me-1"></i> Vincular Empresa
+        </a>
+    </div>
 </div>
 {% endblock %}

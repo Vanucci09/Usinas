@@ -2,39 +2,60 @@
 
 {% block content %}
 <div class="container mt-4">
-    <h2>Empresas Investidoras</h2>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="text-primary">Empresas Investidoras</h2>
+        <a href="{{ url_for('cadastrar_empresa') }}" class="btn btn-success">
+            <i class="bi bi-building-add me-1"></i> Nova Empresa
+        </a>
+    </div>
 
-    <a href="{{ url_for('cadastrar_empresa') }}" class="btn btn-success mb-3">Cadastrar Nova Empresa</a>
+    <div class="table-responsive">
+        <table class="table table-striped table-bordered align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>ID</th>
+                    <th>Razão Social</th>
+                    <th>CNPJ</th>
+                    <th>Responsável</th>
+                    <th>Telefone</th>
+                    <th class="text-center">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for empresa in empresas %}
+                <tr>
+                    <td>{{ empresa.id }}</td>
+                    <td>{{ empresa.razao_social }}</td>
+                    <td>{{ empresa.cnpj }}</td>
+                    <td>{{ empresa.responsavel }}</td>
+                    <td>{{ empresa.telefone }}</td>
+                    <td class="text-center">
+                        <div class="d-flex justify-content-center gap-2">
+                            <a href="{{ url_for('editar_empresa', empresa_id=empresa.id) }}"
+                               class="btn btn-outline-warning btn-sm" title="Editar">
+                                <i class="bi bi-pencil-square"></i>
+                            </a>
+                            <a href="{{ url_for('excluir_empresa', empresa_id=empresa.id) }}"
+                               class="btn btn-outline-danger btn-sm" title="Excluir"
+                               onclick="return confirm('Tem certeza que deseja excluir?');">
+                                <i class="bi bi-trash-fill"></i>
+                            </a>
+                            <a href="{{ url_for('listar_participacoes_empresa', empresa_id=empresa.id) }}"
+                               class="btn btn-outline-info btn-sm" title="Ver Participações">
+                                <i class="bi bi-diagram-3-fill"></i>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 
-    <table class="table table-bordered">
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Razão Social</th>
-                <th>CNPJ</th>
-                <th>Responsável</th>
-                <th>Telefone</th>
-                <th>Ações</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for empresa in empresas %}
-            <tr>
-                <td>{{ empresa.id }}</td>
-                <td>{{ empresa.razao_social }}</td>
-                <td>{{ empresa.cnpj }}</td>
-                <td>{{ empresa.responsavel }}</td>
-                <td>{{ empresa.telefone }}</td>
-                <td>
-                    <a href="{{ url_for('editar_empresa', empresa_id=empresa.id) }}" class="btn btn-warning btn-sm">Editar</a>
-                    <a href="{{ url_for('excluir_empresa', empresa_id=empresa.id) }}" class="btn btn-danger btn-sm" onclick="return confirm('Tem certeza que deseja excluir?');">Excluir</a>
-                    <a href="{{ url_for('listar_participacoes_empresa', empresa_id=empresa.id) }}" class="btn btn-info btn-sm">Ver Participações</a>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    <a href="{{ url_for('index') }}?aba=investidores" class="btn btn-secondary mt-3">Voltar</a>
+    <div class="text-start mt-4">
+        <a href="{{ url_for('index') }}?aba=investidores" class="btn btn-secondary">
+            <i class="bi bi-arrow-left-circle me-1"></i> Voltar
+        </a>
+    </div>
 </div>
 {% endblock %}
