@@ -150,12 +150,14 @@
                 <td>kWh</td>
                 <td>{{ tarifa_cliente|formato_tarifa }}</td>
             </tr>
+            {% if cliente.mostrar_saldo and fatura.saldo_unidade %}
             <tr>
                 <td>Saldo Acumulado</td>
                 <td>{{ fatura.saldo_unidade }}</td>
                 <td>kWh</td>
                 <td>-</td>
             </tr>
+            {% endif %}
         </tbody>
     </table>
 

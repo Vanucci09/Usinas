@@ -18,6 +18,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from flask_mail import Mail, Message
 from urllib.parse import quote
 import base64
+from sqlalchemy.orm import joinedload
 
 
 app = Flask(__name__)
@@ -108,6 +109,7 @@ class Cliente(db.Model):
     email = db.Column(db.String, nullable=True)
     email_cc = db.Column(db.String, nullable=True)
     telefone = db.Column(db.String, nullable=True)
+    mostrar_saldo = db.Column(db.Boolean, default=True)
 
     rateios = db.relationship('Rateio', backref='cliente', cascade="all, delete-orphan")
     usina = db.relationship('Usina')
@@ -577,6 +579,7 @@ def cadastrar_cliente():
         email = request.form['email']
         telefone = request.form['telefone']
         email_cc = request.form.get('email_cc')
+        mostrar_saldo = request.form.get('mostrar_saldo') == 'on'
 
         cliente = Cliente(
             nome=nome,
@@ -586,7 +589,8 @@ def cadastrar_cliente():
             usina_id=usina_id,
             email=email,
             telefone=telefone,
-            email_cc=email_cc
+            email_cc=email_cc,
+            mostrar_saldo=mostrar_saldo
         )
         db.session.add(cliente)
         db.session.commit()
@@ -698,6 +702,7 @@ def editar_cliente(id):
         cliente.email = request.form['email']
         cliente.telefone = request.form['telefone']
         cliente.email_cc = request.form.get('email_cc')
+        cliente.mostrar_saldo = request.form.get('mostrar_saldo') == 'on'
         db.session.commit()
         return redirect(url_for('cadastrar_cliente'))
 
@@ -2949,6 +2954,33 @@ from flask import send_from_directory
 @app.route('/favicon.ico')
 def favicon():
     return send_from_directory(os.path.join(app.root_path, 'static'), 'favicon.ico')
+
+@app.route('/relatorio_empresas_acionistas')
+def relatorio_empresas_acionistas():
+    empresas = EmpresaInvestidora.query.options(
+        joinedload(EmpresaInvestidora.usinas).joinedload(UsinaInvestidora.usina),
+        joinedload(EmpresaInvestidora.acionistas).joinedload(ParticipacaoAcionista.acionista)
+    ).all()
+
+    return render_template('relatorio_empresas_acionistas.html', empresas=empresas)
+
+@app.route('/menu_relatorios')
+def menu_relatorios():
+    return render_template('menu_relatorios.html')
+
+@app.route('/distribuicao_lucro', methods=['GET', 'POST'])
+@login_required
+def distribuicao_lucro_formulario():
+    empresas = EmpresaInvestidora.query.all()
+    anos = list(range(2022, date.today().year + 1))  # Exemplo
+
+    if request.method == 'POST':
+        empresa_id = int(request.form['empresa_id'])
+        mes = int(request.form['mes'])
+        ano = int(request.form['ano'])
+        return redirect(url_for('distribuicao_lucro_empresa', empresa_id=empresa_id, mes=mes, ano=ano))
+
+    return render_template('form_distribuicao_lucro.html', empresas=empresas, anos=anos)
 
 
 if __name__ == '__main__':
