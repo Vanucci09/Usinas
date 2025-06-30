@@ -123,6 +123,9 @@ class Rateio(db.Model):
     tarifa_kwh = db.Column(db.Float, nullable=False)
     codigo_rateio = db.Column(db.Integer, nullable=True)
     
+    data_inicio = db.Column(db.Date, nullable=False, default=date.today)
+    ativo = db.Column(db.Boolean, default=True)
+    
 class FaturaMensal(db.Model):
     __tablename__ = 'faturas_mensais'
     id = db.Column(db.Integer, primary_key=True)
@@ -666,19 +669,30 @@ def listar_rateios():
 @app.route('/editar_rateio/<int:id>', methods=['GET', 'POST'])
 @login_required
 def editar_rateio(id):
-    rateio = Rateio.query.get_or_404(id)
+    rateio_antigo = Rateio.query.get_or_404(id)
     usinas = Usina.query.all()
     clientes = Cliente.query.all()
 
     if request.method == 'POST':
-        rateio.usina_id = request.form['usina_id']
-        rateio.cliente_id = request.form['cliente_id']
-        rateio.percentual = float(request.form['percentual'])
-        rateio.tarifa_kwh = float(request.form['tarifa_kwh'])
+        # Desativa o rateio antigo
+        rateio_antigo.ativo = False
+
+        # Cria um novo com os dados atualizados
+        novo_rateio = Rateio(
+            usina_id=request.form['usina_id'],
+            cliente_id=request.form['cliente_id'],
+            percentual=float(request.form['percentual']),
+            tarifa_kwh=float(request.form['tarifa_kwh']),
+            codigo_rateio=rateio_antigo.codigo_rateio,
+            data_inicio=date.today(),
+            ativo=True
+        )
+        db.session.add(novo_rateio)
         db.session.commit()
+
         return redirect(url_for('listar_rateios'))
 
-    return render_template('editar_rateio.html', rateio=rateio, usinas=usinas, clientes=clientes)
+    return render_template('editar_rateio.html', rateio=rateio_antigo, usinas=usinas, clientes=clientes)
 
 @app.route('/excluir_rateio/<int:id>', methods=['POST'])
 @login_required
@@ -704,7 +718,7 @@ def editar_cliente(id):
         cliente.email_cc = request.form.get('email_cc')
         cliente.mostrar_saldo = request.form.get('mostrar_saldo') == 'on'
         db.session.commit()
-        return redirect(url_for('cadastrar_cliente'))
+        return redirect(url_for('listar_clientes', usina_id=cliente.usina_id))
 
     return render_template('editar_cliente.html', cliente=cliente, usinas=usinas)
 

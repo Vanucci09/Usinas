@@ -1,20 +1,34 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <title>Editar Rateio</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body class="bg-light">
+{% extends 'base.html' %}
+
+{% block title %}Editar Rateio{% endblock %}
+
+{% block content %}
 <div class="container mt-5 p-4 bg-white rounded shadow">
     <h2 class="mb-4 text-primary text-center">Editar Rateio</h2>
 
+    <div class="alert alert-warning">
+        <strong>Aviso:</strong> Ao editar, o rateio atual será desativado e um novo será criado com os dados atualizados.
+    </div>
+
+    <!-- Exibição do rateio atual -->
+    <div class="mb-4">
+        <h5>Rateio Atual</h5>
+        <ul>
+            <li><strong>Usina:</strong> {{ rateio.usina.nome }}</li>
+            <li><strong>Cliente:</strong> {{ rateio.cliente.nome }}</li>
+            <li><strong>Percentual:</strong> {{ rateio.percentual }}%</li>
+            <li><strong>Tarifa Atual:</strong> R$ {{ rateio.tarifa_kwh }}</li>
+            <li><strong>Data de Início:</strong> {{ rateio.data_inicio.strftime('%d/%m/%Y') if rateio.data_inicio else 'Não definida' }}</li>
+        </ul>
+    </div>
+
+    <!-- Formulário para novo rateio -->
     <form method="POST">
         <div class="mb-3">
             <label for="usina_id" class="form-label">Usina</label>
             <select class="form-select" id="usina_id" name="usina_id" required>
                 {% for usina in usinas %}
-                    <option value="{{ usina.id }}" {% if rateio.usina_id == usina.id %}selected{% endif %}>{{ usina.nome }}</option>
+                    <option value="{{ usina.id }}" {% if usina.id == rateio.usina_id %}selected{% endif %}>{{ usina.nome }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -23,26 +37,27 @@
             <label for="cliente_id" class="form-label">Cliente</label>
             <select class="form-select" id="cliente_id" name="cliente_id" required>
                 {% for cliente in clientes %}
-                    <option value="{{ cliente.id }}" {% if rateio.cliente_id == cliente.id %}selected{% endif %}>{{ cliente.nome }}</option>
+                    <option value="{{ cliente.id }}" {% if cliente.id == rateio.cliente_id %}selected{% endif %}>{{ cliente.nome }}</option>
                 {% endfor %}
             </select>
         </div>
 
         <div class="mb-3">
             <label for="percentual" class="form-label">% da Energia</label>
-            <input type="number" step="0.01" class="form-control" id="percentual" name="percentual" value="{{ rateio.percentual }}" required>
+            <input type="number" step="0.01" class="form-control" id="percentual" name="percentual"
+                   value="{{ rateio.percentual }}" required>
         </div>
 
         <div class="mb-3">
-            <label for="tarifa_kwh" class="form-label">Tarifa por kWh (R$)</label>
-            <input type="number" step="0.0000001" class="form-control" id="tarifa_kwh" name="tarifa_kwh" value="{{ rateio.tarifa_kwh }}" required>
+            <label for="tarifa_kwh" class="form-label">Nova Tarifa por kWh (R$)</label>
+            <input type="number" step="0.0000001" class="form-control" id="tarifa_kwh" name="tarifa_kwh"
+                   value="{{ rateio.tarifa_kwh }}" required>
         </div>
 
-        <div class="d-flex justify-content-between">
-            <a href="{{ url_for('cadastrar_rateio') }}" class="btn btn-secondary">Cancelar</a>
-            <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+        <div class="text-center mt-3">
+            <button type="submit" class="btn btn-success">Salvar Novo Rateio</button>
+            <a href="{{ url_for('listar_rateios') }}" class="btn btn-secondary">Cancelar</a>
         </div>
     </form>
 </div>
-</body>
-</html>
+{% endblock %}
