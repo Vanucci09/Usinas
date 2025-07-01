@@ -1071,7 +1071,7 @@ def upload_boleto():
         if fatura_selecionada:
             cliente = fatura_selecionada.cliente
             usina_id = cliente.usina_id
-            cliente_id = cliente.id
+            cliente_id = ''
             mes = fatura_selecionada.mes_referencia
             ano = fatura_selecionada.ano_referencia
 
