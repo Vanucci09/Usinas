@@ -88,7 +88,7 @@
         <a href="{{ url_for('index') }}?aba=financeiro" class="btn btn-secondary">Início</a>
     </div>
     <div class="col-md-2">
-        <a href="{{ url_for('listar_faturas') }}" class="btn btn-outline-primary w-100">Faturas Cadastradas</a>
+        <a href="{{ url_for('listar_faturas') }}?usina_id={{ usina_id }}&cliente_id={{ cliente_id }}&mes={{ mes }}&ano={{ ano }}&com_boleto=0" class="btn btn-outline-primary w-100">Faturas Cadastradas</a>
     </div>
 </div>
 

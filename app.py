@@ -856,6 +856,7 @@ def listar_faturas():
     mes = request.args.get('mes', type=int)
     ano = request.args.get('ano', type=int)
     cliente_id = request.args.get('cliente_id', type=int)
+    com_boleto = request.args.get('com_boleto') 
 
     query = FaturaMensal.query.join(Cliente).join(Usina)
 
@@ -869,16 +870,25 @@ def listar_faturas():
         query = query.filter(FaturaMensal.ano_referencia == ano)
 
     faturas = query.order_by(FaturaMensal.ano_referencia.desc(), FaturaMensal.mes_referencia.desc()).all()
-    usinas = Usina.query.all()
-    clientes = Cliente.query.all()
-    anos = sorted({f.ano_referencia for f in FaturaMensal.query.all()}, reverse=True)
 
-    # ✅ Verificar se existe boleto PDF no sistema de arquivos
+    # Verifica se existe boleto PDF no sistema de arquivos
+    import os
     BOLETOS_PATH = os.getenv('BOLETOS_PATH', '/data/boletos')
 
     for f in faturas:
         nome_arquivo = f"boleto_{f.id}.pdf"
         f.tem_boleto = os.path.exists(os.path.join(BOLETOS_PATH, nome_arquivo))
+
+    # Filtro por existência do boleto (aplicado após carregar todos os objetos)
+    if com_boleto == '1':
+        faturas = [f for f in faturas if f.tem_boleto]
+    elif com_boleto == '0':
+        faturas = [f for f in faturas if not f.tem_boleto]
+
+    # Dados auxiliares para os filtros
+    usinas = Usina.query.all()
+    clientes = Cliente.query.all()
+    anos = sorted({f.ano_referencia for f in FaturaMensal.query.all()}, reverse=True)
 
     return render_template(
         'listar_faturas.html',
@@ -889,6 +899,8 @@ def listar_faturas():
         usina_id=usina_id,
         mes=mes,
         ano=ano,
+        cliente_id=cliente_id,
+        com_boleto=com_boleto,
         email_enviado=email_enviado
     )
 
@@ -1051,6 +1063,18 @@ def upload_boleto():
     fatura_id_selecionada = request.args.get('fatura_id', type=int)
     mensagem = ''
 
+    # Variáveis de filtro padrão
+    usina_id = cliente_id = mes = ano = ''
+
+    if fatura_id_selecionada:
+        fatura_selecionada = FaturaMensal.query.get(fatura_id_selecionada)
+        if fatura_selecionada:
+            cliente = fatura_selecionada.cliente
+            usina_id = cliente.usina_id
+            cliente_id = cliente.id
+            mes = fatura_selecionada.mes_referencia
+            ano = fatura_selecionada.ano_referencia
+
     if request.method == 'POST':
         fatura_id = request.form.get('fatura_id')
         arquivo = request.files.get('boleto_pdf')
@@ -1069,11 +1093,22 @@ def upload_boleto():
 
             mensagem = f"Boleto da fatura {fatura_id} enviado com sucesso."
 
+    anos = sorted({f.ano_referencia for f in faturas}, reverse=True)
+    usinas = Usina.query.all()
+    clientes = Cliente.query.all()
+
     return render_template(
         'upload_boleto.html',
         faturas=faturas,
         mensagem=mensagem,
-        fatura_id_selecionada=fatura_id_selecionada
+        fatura_id_selecionada=fatura_id_selecionada,
+        usina_id=usina_id,
+        cliente_id=cliente_id,
+        mes=mes,
+        ano=ano,
+        usinas=usinas,
+        clientes=clientes,
+        anos=anos
     )
 
 @app.route('/excluir_fatura/<int:id>', methods=['POST'])

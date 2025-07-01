@@ -48,6 +48,15 @@
             </select>
         </div>
 
+        <div class="col-md-2">
+            <label for="com_boleto" class="form-label">Com Boleto?</label>
+            <select name="com_boleto" id="com_boleto" class="form-select">
+                <option value="">Todos</option>
+                <option value="1" {% if com_boleto == '1' %}selected{% endif %}>Somente com boleto</option>
+                <option value="0" {% if com_boleto == '0' %}selected{% endif %}>Somente sem boleto</option>
+            </select>
+        </div>
+
         <div class="col-md-2 d-flex align-items-end">
             <button type="submit" class="btn btn-primary w-100">Filtrar</button>
         </div>
@@ -61,7 +70,8 @@
                     <th>ID</th>
                     <th>Cliente</th>
                     <th>Mês/Ano</th>
-                    <th>Valor Boleto</th>
+                    <th style="white-space: nowrap;">Valor Boleto</th>
+                    <th style="white-space: nowrap;">Boleto</th>
                     <th class="text-center">Ações</th>
                 </tr>
             </thead>
@@ -81,11 +91,19 @@
                     <td>{{ fatura.cliente.nome }}</td>
                     <td>{{ fatura.mes_referencia }}/{{ fatura.ano_referencia }}</td>
 
-                    <td>
+                    <td style="white-space: nowrap;">
                         {% if rateio %}
                             {{ (fatura.consumo_usina * rateio.tarifa_kwh)|formato_brasileiro }}
                         {% else %}
                             R$ 0,00
+                        {% endif %}
+                    </td>
+
+                    <td class="text-center">
+                        {% if fatura.tem_boleto %}
+                            <span class="text-success fw-bold">&#10004;</span>
+                        {% else %}
+                            <span class="text-muted">–</span>
                         {% endif %}
                     </td>
 
@@ -101,7 +119,7 @@
                                 </button>
                             </form>
 
-                            <a href="{{ url_for('upload_boleto') }}?fatura_id={{ fatura.id }}" class="btn btn-sm btn-outline-info" title="Boleto">
+                            <a href="{{ url_for('upload_boleto') }}?fatura_id={{ fatura.id }}" class="btn btn-sm {% if fatura.tem_boleto %}btn-info{% else %}btn-outline-info{% endif %}" title="Boleto">
                                 {% if fatura.tem_boleto %}
                                     <i class="bi bi-paperclip"></i>
                                 {% else %}
