@@ -6,7 +6,7 @@ import pandas as pd
 from werkzeug.utils import secure_filename
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-from sqlalchemy import Numeric, text, func, extract
+from sqlalchemy import Numeric, text, func, case, cast
 from decimal import Decimal, ROUND_HALF_UP
 import fitz, tempfile
 from PIL import Image
@@ -175,6 +175,7 @@ class FinanceiroUsina(db.Model):
     referencia_mes = db.Column(db.Integer, nullable=True)
     referencia_ano = db.Column(db.Integer, nullable=True)
     data_pagamento = db.Column(db.Date)
+    juros = db.Column(Numeric(10, 2), default=0)
 
     usina = db.relationship('Usina', backref='financeiros')
 
@@ -2058,7 +2059,8 @@ def financeiro():
     total_despesas = 0
 
     for r in registros:
-        valor = r.valor or 0
+        valor = Decimal(str(r.valor or 0))
+        juros = Decimal(str(r.juros or 0))
         item = {
             'id': r.id,
             'tipo': r.tipo,
@@ -2066,6 +2068,7 @@ def financeiro():
             'categoria': r.categoria.nome if r.categoria else '-',
             'descricao': r.descricao,
             'valor': valor,
+            'juros': float(juros),
             'data': r.data,
             'referencia': f"{r.referencia_mes:02d}/{r.referencia_ano}",
             'data_pagamento': r.data_pagamento
@@ -2073,7 +2076,7 @@ def financeiro():
         financeiro.append(item)
 
         if r.tipo == 'receita':
-            total_receitas += valor
+            total_receitas += valor + juros
         else:
             total_despesas += valor
 
@@ -2132,24 +2135,33 @@ def imagem_para_base64(caminho):
 def atualizar_pagamento(id):
     financeiro = FinanceiroUsina.query.get_or_404(id)
     data_str = request.form.get('data_pagamento')
+    juros_str = request.form.get('juros')  # Novo campo
 
     try:
-        # Se for uma despesa que já tem data de pagamento, bloqueia a edição
+        # Se for uma despesa já paga, bloqueia alteração
         if financeiro.tipo == 'despesa' and financeiro.data_pagamento:
             flash('Despesa já paga! Alteração não permitida.', 'warning')
             return redirect(request.referrer or url_for('financeiro'))
 
+        # Atualiza data de pagamento
         if data_str:
             financeiro.data_pagamento = datetime.strptime(data_str, '%Y-%m-%d').date()
         else:
-            financeiro.data_pagamento = None 
+            financeiro.data_pagamento = None
+
+        # Atualiza juros se informados
+        if juros_str:
+            juros_normalizado = juros_str.replace(',', '.')
+            financeiro.juros = Decimal(juros_normalizado)
+        else:
+            financeiro.juros = Decimal('0.00')
 
         db.session.commit()
-        flash('Data de pagamento atualizada com sucesso!', 'success')
+        flash('Pagamento atualizado com sucesso!', 'success')
 
     except Exception as e:
         db.session.rollback()
-        flash(f'Erro ao atualizar data: {e}', 'danger')
+        flash(f'Erro ao atualizar pagamento: {e}', 'danger')
 
     return redirect(request.referrer or url_for('financeiro'))
 
@@ -2238,8 +2250,8 @@ def relatorio_financeiro():
 
     registros = query.order_by(FinanceiroUsina.data.asc()).all()
 
-    total_receitas = sum(r.valor for r in registros if r.tipo == 'receita')
-    total_despesas = sum(r.valor for r in registros if r.tipo == 'despesa')
+    total_receitas = sum((r.valor or 0) + (r.juros or 0) for r in registros if r.tipo == 'receita')
+    total_despesas = sum(r.valor or 0 for r in registros if r.tipo == 'despesa')
     saldo = total_receitas - total_despesas
 
     return render_template(
@@ -2269,12 +2281,14 @@ def relatorio_consolidado():
 
     for usina in usinas:
         # Somar apenas receitas com data_pagamento preenchida
-        receitas = db.session.query(db.func.sum(FinanceiroUsina.valor)).filter(
+        receitas = db.session.query(
+            func.sum((FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)))
+        ).filter(
             FinanceiroUsina.usina_id == usina.id,
             FinanceiroUsina.tipo == 'receita',
             FinanceiroUsina.referencia_mes == mes,
             FinanceiroUsina.referencia_ano == ano,
-            FinanceiroUsina.data_pagamento.isnot(None) 
+            FinanceiroUsina.data_pagamento.isnot(None)
         ).scalar() or 0
 
         despesas = db.session.query(db.func.sum(FinanceiroUsina.valor)).filter(

@@ -76,7 +76,8 @@
                     <th>Usina</th>
                     <th>Categoria</th>
                     <th>Descrição</th>
-                    <th>Valor (R$)</th>
+                    <th style="white-space: nowrap; width: 120px;">Valor (R$)</th>
+                    <th>Juros (R$)</th>
                     <th>Referência</th>
                     <th>Data Pagamento</th>
                 </tr>
@@ -88,7 +89,8 @@
                     <td>{{ item.usina }}</td>
                     <td>{{ item.categoria }}</td>
                     <td>{{ item.descricao }}</td>
-                    <td>{{ item.valor | formato_brasileiro }}</td>
+                    <td style="white-space: nowrap;">{{ item.valor | formato_brasileiro }}</td>
+                    <td>{{ item.juros | default(0) | formato_brasileiro }}</td>
                     <td>{{ item.referencia }}</td>
                     <td>
                         {% if item.data_pagamento %}
@@ -97,8 +99,11 @@
                                 <span class="text-success">&#10004;</span>
                             </div>
                         {% else %}
-                            <form method="POST" action="{{ url_for('atualizar_pagamento', id=item.id) }}" class="d-flex gap-1">
+                            <form method="POST" action="{{ url_for('atualizar_pagamento', id=item.id) }}" class="d-flex flex-wrap gap-1">
                                 <input type="date" name="data_pagamento" class="form-control form-control-sm" style="max-width: 140px;" required>
+                                {% if item.tipo == 'receita' %}
+                                    <input type="number" step="0.01" name="juros" class="form-control form-control-sm" placeholder="Juros" style="max-width: 100px;">
+                                {% endif %}
                                 <button type="submit" class="btn btn-sm btn-primary">Salvar</button>
                             </form>
                         {% endif %}
