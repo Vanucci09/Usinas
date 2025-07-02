@@ -1,123 +1,96 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Editar Previsões Mensais</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f7fa;
-            margin: 0;
-            padding: 0;
-        }
+{% extends 'base.html' %}
 
-        .container {
-            max-width: 700px;
-            margin: 50px auto;
-            background-color: #fff;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        }
+{% block content %}
 
-        h2 {
-            text-align: center;
-            color: #333;
-            margin-bottom: 20px;
-        }
+<div class="container my-5">
+    <div class="bg-white p-4 rounded shadow-sm">
+        <h2 class="text-center text-primary mb-4">Editar Usina - {{ usina.nome }}</h2>
 
-        form {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
+        <!-- Formulário de seleção de ano -->
+        <form method="GET" class="row g-3 align-items-end mb-4">
+            <div class="col-auto">
+                <label for="ano" class="form-label">Selecionar Ano:</label>
+                <input type="number" id="ano" name="ano" value="{{ ano }}" class="form-control">
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-outline-primary">Carregar</button>
+            </div>
+        </form>
 
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-        }
+        <!-- Formulário principal -->
+        <form method="POST" enctype="multipart/form-data" class="row g-3">
+            <div class="col-md-6">
+                <label for="cc" class="form-label">Código CC:</label>
+                <input type="text" name="cc" id="cc" class="form-control" value="{{ usina.cc }}" required>
+            </div>
 
-        label {
-            font-weight: bold;
-            color: #555;
-        }
+            <div class="col-md-6">
+                <label for="nome" class="form-label">Nome da Usina:</label>
+                <input type="text" name="nome" id="nome" class="form-control" value="{{ usina.nome }}" required>
+            </div>
 
-        input[type="number"],
-        select,
-        button {
-            padding: 10px;
-            font-size: 1rem;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            box-sizing: border-box;
-        }
+            <div class="col-md-4">
+                <label for="potencia_kw" class="form-label">Potência da Usina (kW):</label>
+                <input type="number" step="0.01" name="potencia_kw" id="potencia_kw" class="form-control" value="{{ usina.potencia_kw }}">
+            </div>
 
-        button {
-            background-color: #007bff;
-            color: white;
-            border: none;
-            cursor: pointer;
-        }
+            <div class="col-md-4">
+                <label for="data_ligacao" class="form-label">Data de Ligação:</label>
+                <input type="date" name="data_ligacao" id="data_ligacao" class="form-control"
+                       value="{{ usina.data_ligacao.strftime('%Y-%m-%d') if usina.data_ligacao }}">
+            </div>
 
-        button:hover {
-            background-color: #0056b3;
-        }
+            <div class="col-md-4">
+                <label for="valor_investido" class="form-label">Valor Investido (R$):</label>
+                <input type="number" step="0.01" name="valor_investido" id="valor_investido" class="form-control"
+                       value="{{ usina.valor_investido }}">
+            </div>
 
-        .footer {
-            text-align: center;
-            margin-top: 20px;
-        }
-    </style>
-</head>
-<body>
-<div class="container">
-    <h2>Editar Previsões - {{ usina.nome }}</h2>
-
-    <form method="GET" class="mb-3">
-        <label for="ano">Selecionar Ano:</label>
-        <input type="number" id="ano" name="ano" value="{{ ano }}">
-        <button type="submit">Carregar</button>
-    </form>
-
-    <div style="margin-top: 20px;"></div>
-
-    <form method="POST" enctype="multipart/form-data">
-        <label for="potencia_kw">Potência da Usina (kW):</label>
-        <input type="number" step="0.01" name="potencia_kw" id="potencia_kw" value="{{ usina.potencia_kw }}">
-
-        <!-- Exibir logo atual se houver -->
-        {% if usina.logo_url %}
-            <label>Logo atual:</label><br>
-            <img src="{{ url_for('servir_logo', nome_arquivo=usina.logo_url) if env == 'production' else url_for('static', filename='logos/' + usina.logo_url) }}"
-                alt="Logo da Usina"
-                style="max-height: 100px; max-width: 100%; object-fit: contain; display: block; margin-top: 10px;">
-        {% endif %}
-
-        <label for="logo">Nova logo:</label>
-        <input type="file" name="logo" id="logo" accept="image/*">
-
-        <div class="grid">
-            {% set meses = [
-                'Janeiro', 'Fevereiro', 'Março', 'Abril',
-                'Maio', 'Junho', 'Julho', 'Agosto',
-                'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-            ] %}
-            {% for i in range(12) %}
-                <div>
-                    <label for="previsao_{{ i+1 }}">{{ meses[i] }}</label>
-                    <input type="number" step="0.01" name="previsoes[{{ i+1 }}]" id="previsao_{{ i+1 }}" value="{{ previsoes.get(i+1, '') }}">
+            <!-- Logo atual -->
+            {% if usina.logo_url %}
+                <div class="col-md-6">
+                    <label class="form-label">Logo atual:</label><br>
+                    <img src="{{ url_for('servir_logo', nome_arquivo=usina.logo_url) if env == 'production' else url_for('static', filename='logos/' + usina.logo_url) }}"
+                         alt="Logo da Usina"
+                         class="img-fluid mt-1 border rounded"
+                         style="max-height: 100px; object-fit: contain;">
                 </div>
-            {% endfor %}
+            {% endif %}
+
+            <!-- Upload nova logo -->
+            <div class="col-md-6">
+                <label for="logo" class="form-label">Nova logo (opcional):</label>
+                <input type="file" name="logo" id="logo" accept="image/*" class="form-control">
+            </div>
+
+            <!-- Previsões mensais -->
+            <div class="col-12 mt-3">
+                <label class="form-label">Previsão Mensal por Mês (kWh):</label>
+                <div class="row g-3">
+                    {% set meses = [
+                        'Janeiro', 'Fevereiro', 'Março', 'Abril',
+                        'Maio', 'Junho', 'Julho', 'Agosto',
+                        'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+                    ] %}
+                    {% for i in range(12) %}
+                        <div class="col-md-4">
+                            <label for="previsao_{{ i+1 }}" class="form-label">{{ meses[i] }}</label>
+                            <input type="number" step="0.01" name="previsoes[{{ i+1 }}]" id="previsao_{{ i+1 }}"
+                                   class="form-control" value="{{ previsoes.get(i+1, '') }}">
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="col-12 text-center mt-4">
+                <button type="submit" class="btn btn-primary px-4">Salvar Alterações</button>
+            </div>
+        </form>
+
+        <div class="text-center mt-4">
+            <a href="/" class="btn btn-outline-secondary me-2">Início</a>
+            <a href="/usinas" class="btn btn-outline-primary">Lista de Usinas</a>
         </div>
-
-        <button type="submit">Salvar Previsões</button>
-    </form>
-
-    <div class="footer">
-        <a href="/">Voltar para o Início</a>
     </div>
 </div>
-</body>
-</html>
+{% endblock %}

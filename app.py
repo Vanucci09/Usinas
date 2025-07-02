@@ -69,6 +69,11 @@ class Usina(db.Model):
     potencia_kw = db.Column(db.Float, nullable=True)
     rateios = db.relationship('Rateio', backref='usina', cascade="all, delete-orphan")
     logo_url = db.Column(db.String(200))
+    data_ligacao = db.Column(db.Date)
+    valor_investido = db.Column(db.Numeric(precision=12, scale=2))
+    
+    rateios = db.relationship('Rateio', backref='usina', cascade="all, delete-orphan")
+    geracoes = db.relationship('Geracao', backref='usina', cascade="all, delete-orphan")
     
 class Inversor(db.Model):
     """
@@ -268,6 +273,8 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 def index():
     return render_template('index.html')
 
+from datetime import datetime
+
 @app.route('/cadastrar_usina', methods=['GET', 'POST'])
 @login_required
 def cadastrar_usina():
@@ -276,24 +283,32 @@ def cadastrar_usina():
         cc = request.form['cc']
         nome = request.form['nome']
         potencia = request.form['potencia']
+        data_ligacao_str = request.form.get('data_ligacao')
+        valor_investido_str = request.form.get('valor_investido')
         ano_atual = date.today().year
 
-        nova_usina = Usina(cc=cc, nome=nome, potencia_kw=potencia)
+        # Conversão dos valores
+        data_ligacao = datetime.strptime(data_ligacao_str, '%Y-%m-%d').date() if data_ligacao_str else None
+        valor_investido = float(valor_investido_str.replace(',', '.')) if valor_investido_str else None
+
+        nova_usina = Usina(
+            cc=cc,
+            nome=nome,
+            potencia_kw=potencia,
+            data_ligacao=data_ligacao,
+            valor_investido=valor_investido
+        )
         db.session.add(nova_usina)
         db.session.commit()
 
         # Salvar o logo se enviado
         if logo and logo.filename != '':
             filename = secure_filename(logo.filename)
-
-            # Caminho conforme variável de ambiente (Render ou local)
             caminho_base = os.getenv('LOGOS_PATH', os.path.join('static', 'logos'))
             os.makedirs(caminho_base, exist_ok=True)
-
             caminho_logo = os.path.join(caminho_base, filename)
             logo.save(caminho_logo)
 
-            # Salva o nome do arquivo no banco
             nova_usina.logo_url = filename
             db.session.commit()
 
@@ -1270,48 +1285,61 @@ def salvar_pdf_temp():
     return "OK"
 
 @app.route('/editar_previsoes/<int:usina_id>', methods=['GET', 'POST'])
+@login_required
 def editar_previsoes(usina_id):
     usina = Usina.query.get_or_404(usina_id)
     ano = request.args.get('ano', date.today().year, type=int)
 
     if request.method == 'POST':
-        # Atualiza potência da usina
-        potencia = request.form.get('potencia_kw')
-        if potencia:
-            usina.potencia_kw = float(potencia.replace(',', '.'))
+        try:
+            # Dados gerais da usina
+            usina.cc = request.form.get('cc')
+            usina.nome = request.form.get('nome')
 
-        # Atualiza previsões mensais
-        for mes in range(1, 13):
-            campo = f'previsoes[{mes}]'
-            valor = request.form.get(campo)
-            if valor:
-                previsao = PrevisaoMensal.query.filter_by(usina_id=usina.id, ano=ano, mes=mes).first()
-                if not previsao:
-                    previsao = PrevisaoMensal(usina_id=usina.id, ano=ano, mes=mes)
-                    db.session.add(previsao)
-                previsao.previsao_kwh = float(valor.replace(',', '.'))
+            potencia = request.form.get('potencia_kw')
+            usina.potencia_kw = float(potencia.replace(',', '.')) if potencia else usina.potencia_kw
 
-        # Upload da nova logo (se enviada)
-        if 'logo' in request.files:
-            logo = request.files['logo']
+            data_ligacao_str = request.form.get('data_ligacao')
+            if data_ligacao_str:
+                usina.data_ligacao = datetime.strptime(data_ligacao_str, '%Y-%m-%d').date()
+
+            valor_investido_str = request.form.get('valor_investido')
+            if valor_investido_str:
+                usina.valor_investido = float(valor_investido_str.replace(',', '.'))
+
+            # Atualiza previsões mensais
+            for mes in range(1, 13):
+                campo = f'previsoes[{mes}]'
+                valor = request.form.get(campo)
+                if valor:
+                    previsao = PrevisaoMensal.query.filter_by(usina_id=usina.id, ano=ano, mes=mes).first()
+                    if not previsao:
+                        previsao = PrevisaoMensal(usina_id=usina.id, ano=ano, mes=mes)
+                        db.session.add(previsao)
+                    previsao.previsao_kwh = float(valor.replace(',', '.'))
+
+            # Upload da nova logo
+            logo = request.files.get('logo')
             if logo and logo.filename != '':
                 filename = secure_filename(logo.filename)
+                ext = os.path.splitext(filename)[1]
+                unique_filename = f"{uuid.uuid4().hex}{ext}"
 
-                # Define o caminho com base no ambiente
-                if os.getenv('FLASK_ENV') == 'production':
-                    caminho_base = '/data/logos'
-                else:
-                    caminho_base = os.path.join('static', 'logos')
+                caminho_base = os.getenv('LOGOS_PATH', os.path.join('static', 'logos'))
+                os.makedirs(caminho_base, exist_ok=True)
 
-                os.makedirs(caminho_base, exist_ok=True)  # Garante que a pasta existe
-
-                logo_path = os.path.join(caminho_base, filename)
+                logo_path = os.path.join(caminho_base, unique_filename)
                 logo.save(logo_path)
 
-                usina.logo_url = filename
+                usina.logo_url = unique_filename
 
-        db.session.commit()
-        return redirect(url_for('editar_previsoes', usina_id=usina.id, ano=ano))
+            db.session.commit()
+            flash('Usina atualizada com sucesso!', 'success')
+            return redirect(url_for('editar_previsoes', usina_id=usina.id, ano=ano))
+
+        except Exception as e:
+            flash(f'Erro ao atualizar: {e}', 'danger')
+            return redirect(request.url)
 
     # Preenche os valores existentes no formulário
     previsoes = {
@@ -1324,7 +1352,7 @@ def editar_previsoes(usina_id):
         usina=usina,
         previsoes=previsoes,
         ano=ano,
-        env=os.getenv('FLASK_ENV')  # para uso no template
+        env=os.getenv('FLASK_ENV')
     )
 
 @app.route('/usinas')
@@ -3053,6 +3081,127 @@ def distribuicao_lucro_formulario():
 
     return render_template('form_distribuicao_lucro.html', empresas=empresas, anos=anos)
 
+@app.route('/relatorio_prestacao', methods=['GET'])
+@login_required
+def relatorio_prestacao():
+    acionistas = Acionista.query.order_by(Acionista.nome).all()
+    acionista_id = request.args.get('acionista_id', type=int)
+    mes = request.args.get('mes', type=int)
+    ano = request.args.get('ano', type=int)
+    usina_id = request.args.get('usina_id', type=int)
+    ano_atual = date.today().year
+
+    usinas = []
+    relatorio = None
+
+    if acionista_id:
+        participacoes = ParticipacaoAcionista.query.filter_by(acionista_id=acionista_id).all()
+        empresas_ids = [p.empresa_id for p in participacoes]
+        usinas_investidas = UsinaInvestidora.query.filter(UsinaInvestidora.empresa_id.in_(empresas_ids)).all()
+        usinas = [ui.usina for ui in usinas_investidas]
+
+    if acionista_id and usina_id:
+        usina = Usina.query.get(usina_id)
+        acionista = Acionista.query.get(acionista_id)
+
+        if usina not in usinas:
+            flash('A usina não está vinculada ao acionista selecionado.', 'danger')
+            return redirect(url_for('relatorio_prestacao'))
+
+        # GERAÇÃO PREVISTA (usa ano e mes da tabela diretamente)
+        previsto = sum(
+            p.previsao_kwh for p in usina.previsoes
+            if (not mes or p.mes == mes) and (not ano or p.ano == ano)
+        )
+
+        # GERAÇÃO REALIZADA
+        realizado = sum(
+            g.energia_kwh for g in usina.geracoes
+            if (not mes or g.data.month == mes) and (not ano or g.data.year == ano)
+        )
+
+        eficiencia = round((realizado / previsto * 100), 2) if previsto else 0
+
+        # FLUXO CONSÓRCIO
+        fluxo_consorcio = []
+        receitas_usina = despesas_usina = 0
+        for f in usina.financeiros:
+            if (not mes or f.data.month == mes) and (not ano or f.data.year == ano):
+                valor = f.valor or 0
+                if f.tipo == 'receita':
+                    receitas_usina += valor
+                    fluxo_consorcio.append({'data': f.data, 'descricao': f.descricao, 'credito': valor, 'debito': ''})
+                else:
+                    despesas_usina += valor
+                    fluxo_consorcio.append({'data': f.data, 'descricao': f.descricao, 'credito': '', 'debito': valor})
+
+        # FLUXO EMPRESA
+        empresa_investidora = EmpresaInvestidora.query \
+            .join(UsinaInvestidora, UsinaInvestidora.empresa_id == EmpresaInvestidora.id) \
+            .filter(UsinaInvestidora.usina_id == usina.id).first()
+
+        fluxo_empresa = []
+        receitas_empresa = despesas_empresa = 0
+        if empresa_investidora:
+            for f in empresa_investidora.financeiros:
+                if (not mes or f.data.month == mes) and (not ano or f.data.year == ano):
+                    valor = f.valor or 0
+                    if f.tipo == 'receita':
+                        receitas_empresa += valor
+                        fluxo_empresa.append({'data': f.data, 'descricao': f.descricao, 'credito': valor, 'debito': ''})
+                    else:
+                        despesas_empresa += valor
+                        fluxo_empresa.append({'data': f.data, 'descricao': f.descricao, 'credito': '', 'debito': valor})
+
+        # DISTRIBUIÇÃO para o acionista selecionado
+        total_liquido = receitas_usina - despesas_usina
+        distribuicao = []
+        for part in empresa_investidora.acionistas:
+            if part.acionista_id == acionista.id:
+                percentual = part.percentual
+                valor = round(total_liquido * (percentual / 100), 2)
+                distribuicao.append({
+                    'acionista': part.acionista.nome,
+                    'percentual': percentual,
+                    'valor': valor
+                })
+
+        # CONSOLIDAÇÃO
+        consolidacao = {
+            'receita_bruta': round(receitas_usina, 2),
+            'despesa_bruta': round(despesas_usina, 2),
+            'receita_liquida': round(total_liquido, 2),
+            'distribuicao_mensal': round(total_liquido / 12, 2),
+            'retorno_bruto': round(receitas_usina / 12, 2),
+            'impostos': round(total_liquido * 0.15, 2),
+            'fundo_reserva': round(total_liquido * 0.05, 2),
+            'total_distribuido': round(sum(d['valor'] for d in distribuicao), 2)
+        }
+
+        relatorio = {
+            'usina': usina,
+            'acionista': acionista,
+            'previsto': previsto,
+            'realizado': realizado,
+            'eficiencia': eficiencia,
+            'fluxo_consorcio': fluxo_consorcio,
+            'fluxo_empresa': fluxo_empresa,
+            'distribuicao': distribuicao,
+            'consolidacao': consolidacao
+        }
+
+    return render_template(
+        'relatorio_prestacao_contas.html',
+        acionistas=acionistas,
+        acionista_id=acionista_id,
+        usinas=usinas,
+        usina_id=usina_id,
+        relatorio=relatorio,
+        mes=mes,
+        ano=ano,
+        ano_atual=ano_atual
+    )
+    
 
 if __name__ == '__main__':
     with app.app_context():
