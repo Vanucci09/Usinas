@@ -3108,7 +3108,7 @@ def relatorio_prestacao():
             flash('A usina não está vinculada ao acionista selecionado.', 'danger')
             return redirect(url_for('relatorio_prestacao'))
 
-        # GERAÇÃO PREVISTA (usa ano e mes da tabela diretamente)
+        # GERAÇÃO PREVISTA
         previsto = sum(
             p.previsao_kwh for p in usina.previsoes
             if (not mes or p.mes == mes) and (not ano or p.ano == ano)
@@ -3122,18 +3122,20 @@ def relatorio_prestacao():
 
         eficiencia = round((realizado / previsto * 100), 2) if previsto else 0
 
-        # FLUXO CONSÓRCIO
+        # FLUXO CONSÓRCIO baseado em referencia_mes e referencia_ano
         fluxo_consorcio = []
         receitas_usina = despesas_usina = 0
         for f in usina.financeiros:
-            if (not mes or f.data.month == mes) and (not ano or f.data.year == ano):
+            if (not mes or f.referencia_mes == mes) and (not ano or f.referencia_ano == ano):
                 valor = f.valor or 0
+                data_exibida = f.data_pagamento if f.data_pagamento else date(f.referencia_ano, f.referencia_mes, 1)
+
                 if f.tipo == 'receita':
                     receitas_usina += valor
-                    fluxo_consorcio.append({'data': f.data, 'descricao': f.descricao, 'credito': valor, 'debito': ''})
+                    fluxo_consorcio.append({'data': data_exibida, 'descricao': f.descricao, 'credito': valor, 'debito': 0})
                 else:
                     despesas_usina += valor
-                    fluxo_consorcio.append({'data': f.data, 'descricao': f.descricao, 'credito': '', 'debito': valor})
+                    fluxo_consorcio.append({'data': data_exibida, 'descricao': f.descricao, 'credito': 0, 'debito': valor})
 
         # FLUXO EMPRESA
         empresa_investidora = EmpresaInvestidora.query \
@@ -3148,12 +3150,12 @@ def relatorio_prestacao():
                     valor = f.valor or 0
                     if f.tipo == 'receita':
                         receitas_empresa += valor
-                        fluxo_empresa.append({'data': f.data, 'descricao': f.descricao, 'credito': valor, 'debito': ''})
+                        fluxo_empresa.append({'data': f.data, 'descricao': f.descricao, 'credito': valor, 'debito': 0})
                     else:
                         despesas_empresa += valor
-                        fluxo_empresa.append({'data': f.data, 'descricao': f.descricao, 'credito': '', 'debito': valor})
+                        fluxo_empresa.append({'data': f.data, 'descricao': f.descricao, 'credito': 0, 'debito': valor})
 
-        # DISTRIBUIÇÃO para o acionista selecionado
+        # DISTRIBUIÇÃO
         total_liquido = receitas_usina - despesas_usina
         distribuicao = []
         for part in empresa_investidora.acionistas:
