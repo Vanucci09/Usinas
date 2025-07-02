@@ -143,7 +143,7 @@
                                 </a>
                             {% endif %}
 
-                            <a href="{{ url_for('enviar_email', fatura_id=fatura.id) }}" class="btn btn-sm btn-outline-secondary" title="Enviar E-mail">
+                            <a href="{{ url_for('enviar_email', fatura_id=fatura.id, usina_id=usina_id, cliente_id=cliente_id, mes=mes, ano=ano, com_boleto=com_boleto) }}" class="btn btn-sm btn-outline-secondary" title="Enviar E-mail">
                                 <i class="bi bi-envelope-fill"></i>
                                 {% if fatura.email_enviado %}
                                     <span class="text-success ms-1 fw-bold">&#10004;</span>

@@ -143,6 +143,7 @@ class FaturaMensal(db.Model):
     injetado = db.Column(db.Float, nullable=False)
     valor_conta_neoenergia = db.Column(db.Float, nullable=False)
     identificador = db.Column(db.String, unique=True, nullable=False)
+    email_enviado = db.Column(db.Boolean, default=False)
 
     cliente = db.relationship('Cliente', backref='faturas')
     
@@ -2133,17 +2134,14 @@ def financeiro():
 def enviar_email(fatura_id):
     fatura = FaturaMensal.query.get_or_404(fatura_id)
     cliente = Cliente.query.get_or_404(fatura.cliente_id)
-
+    
+    rateio = Rateio.query.filter_by(cliente_id=cliente.id, usina_id=cliente.usina_id).first()
     link_relatorio = url_for('relatorio_fatura', fatura_id=fatura.id, _external=True)
 
-    html = render_template('email_fatura.html', cliente=cliente, fatura=fatura, link_relatorio=link_relatorio)
+    html = render_template('email_fatura.html', cliente=cliente, fatura=fatura, rateio=rateio, link_relatorio=link_relatorio)
 
-    # Preparando a lista de destinatários
     recipients = [cliente.email]
-
-    # Adiciona os emails em cópia se houver
     if cliente.email_cc:
-        # Divide por vírgula e limpa espaços
         cc_emails = [email.strip() for email in cliente.email_cc.split(',') if email.strip()]
         recipients.extend(cc_emails)
 
@@ -2155,11 +2153,21 @@ def enviar_email(fatura_id):
 
     try:
         mail.send(msg)
+        fatura.email_enviado = True
+        db.session.commit()
         flash('E-mail enviado com sucesso!', 'success')
-        return redirect(url_for('listar_faturas', email_enviado=1))
     except Exception as e:
         flash(f'Erro ao enviar e-mail: {e}', 'danger')
-        return redirect(url_for('listar_faturas'))
+
+    return redirect(url_for(
+        'listar_faturas',
+        usina_id=request.args.get('usina_id'),
+        cliente_id=request.args.get('cliente_id'),
+        mes=request.args.get('mes'),
+        ano=request.args.get('ano'),
+        com_boleto=request.args.get('com_boleto'),
+        email_enviado=1
+    ))
     
 def imagem_para_base64(caminho):
     with open(caminho, "rb") as img_file:
