@@ -21,9 +21,10 @@
 
         <div class="mb-3">
             <label class="form-label">Tipo</label>
-            <select name="tipo" class="form-select" required>
+            <select name="tipo" id="tipo" class="form-select" required onchange="atualizarCampos()">
                 <option value="despesa">Despesa</option>
                 <option value="receita">Receita</option>
+                <option value="imposto">Imposto</option>
             </select>
         </div>
 
@@ -32,16 +33,44 @@
             <input type="text" name="descricao" class="form-control" required>
         </div>
 
-        <div class="mb-3">
+        <!-- Valor percentual (somente para imposto) -->
+        <div class="mb-3" id="campo_valor_percentual" style="display: none;">
+            <label class="form-label">Valor Percentual (%)</label>
+            <input type="number" step="0.01" name="valor_percentual" class="form-control">
+        </div>
+
+        <!-- Valor em reais (para receita/despesa) -->
+        <div class="mb-3" id="campo_valor_real">
             <label class="form-label">Valor (R$)</label>
-            <input type="number" step="0.01" name="valor" class="form-control" required>
+            <input type="number" step="0.01" name="valor" class="form-control">
+        </div>
+
+        <!-- Periodicidade do imposto -->
+        <div class="mb-3" id="campo_periodicidade" style="display: none;">
+            <label class="form-label">Periodicidade</label>
+            <select name="periodicidade" id="periodicidade" class="form-select" onchange="atualizarCampos()">
+                <option value="recorrente">Recorrente</option>
+                <option value="mensal">Mensal</option>
+            </select>
+        </div>
+
+        <!-- Referência mensal -->
+        <div class="row" id="campo_referencia" style="display: none;">
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Mês de Referência</label>
+                <input type="number" min="1" max="12" name="mes_referencia" class="form-control">
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Ano de Referência</label>
+                <input type="number" name="ano_referencia" class="form-control">
+            </div>
         </div>
 
         <button type="submit" class="btn btn-primary">Salvar Lançamento</button>
     </form>
 
     <hr>
-
+    
     <h4>Últimos Lançamentos:</h4>
     <table class="table table-bordered">
         <thead>
@@ -51,6 +80,7 @@
                 <th>Tipo</th>
                 <th>Descrição</th>
                 <th>Valor</th>
+                <th>Ações</th> <!-- Nova coluna -->
             </tr>
         </thead>
         <tbody>
@@ -60,12 +90,44 @@
                     <td>{{ lancamento.empresa.razao_social }}</td>
                     <td>{{ lancamento.tipo.title() }}</td>
                     <td>{{ lancamento.descricao }}</td>
-                    <td>R$ {{ "%.2f"|format(lancamento.valor) }}</td>
+                    <td>
+                        {% if lancamento.tipo == 'imposto' %}
+                            {{ "%.2f"|format(lancamento.valor) }}%
+                        {% else %}
+                            R$ {{ "%.2f"|format(lancamento.valor) }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('editar_financeiro_empresa', id=lancamento.id) }}" class="btn btn-sm btn-primary">
+                            <i class="bi bi-pencil-fill"></i> Editar
+                        </a>
+                    </td>
                 </tr>
             {% endfor %}
         </tbody>
     </table>
+    
 
     <a href="{{ url_for('index') }}?aba=investidores" class="btn btn-secondary mt-3">Voltar</a>
 </div>
+
+<script>
+    function atualizarCampos() {
+        const tipo = document.getElementById('tipo').value;
+        const periodicidade = document.getElementById('periodicidade')?.value;
+
+        document.getElementById('campo_valor_percentual').style.display = tipo === 'imposto' ? 'block' : 'none';
+        document.getElementById('campo_periodicidade').style.display = tipo === 'imposto' ? 'block' : 'none';
+        document.getElementById('campo_valor_real').style.display = tipo === 'imposto' ? 'none' : 'block';
+
+        if (tipo === 'imposto' && periodicidade === 'mensal') {
+            document.getElementById('campo_referencia').style.display = 'flex';
+        } else {
+            document.getElementById('campo_referencia').style.display = 'none';
+        }
+    }
+
+    // Executa ao carregar a página (caso o usuário volte ou edite)
+    window.addEventListener('DOMContentLoaded', atualizarCampos);
+</script>
 {% endblock %}

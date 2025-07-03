@@ -52,7 +52,13 @@
             ⚡ Desempenho da Usina: {{ relatorio.usina.nome }}
         </div>
         <div class="card-body">
-            <p><strong>Potência:</strong> {{ "{:,.2f}".format(relatorio.usina.potencia_kw).replace(",", "v").replace(".", ",").replace("v", ".") }} kW</p>
+            <p><strong>Potência:</strong> 
+                {% if relatorio.usina.potencia_kw is not none %}
+                    {{ "{:,.2f}".format(relatorio.usina.potencia_kw).replace(",", "v").replace(".", ",").replace("v", ".") }} kW
+                {% else %}
+                    Não informada
+                {% endif %}
+            </p>
             <p><strong>Previsão:</strong> {{ "{:,.2f}".format(relatorio.previsto).replace(",", "v").replace(".", ",").replace("v", ".") }} kWh</p>
             <p><strong>Realizado:</strong> {{ "{:,.2f}".format(relatorio.realizado).replace(",", "v").replace(".", ",").replace("v", ".") }} kWh</p>
             <p><strong>Eficiência:</strong> {{ relatorio.eficiencia }}%</p>
@@ -157,6 +163,13 @@
             </ul>
         </div>
     </div>
+    <div class="text-center mt-4">
+        <a href="{{ url_for('menu_relatorios') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left-circle"></i> Voltar ao Menu de Relatórios
+        </a>
+    </div>
+
+    
 
     {% endif %}
 </div>

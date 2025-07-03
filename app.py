@@ -242,6 +242,9 @@ class FinanceiroEmpresaInvestidora(db.Model):
     tipo = db.Column(db.String(20), nullable=False)  # 'receita' ou 'despesa'
     descricao = db.Column(db.String(255), nullable=False)
     valor = db.Column(db.Float, nullable=False)
+    periodicidade = db.Column(db.String(20))  # 'mensal' ou 'recorrente'
+    mes_referencia = db.Column(db.Integer, nullable=True)
+    ano_referencia = db.Column(db.Integer, nullable=True)
 
     empresa = db.relationship('EmpresaInvestidora', backref='financeiros')
     
@@ -2710,24 +2713,85 @@ def excluir_vinculo(empresa_id, usina_id):
     flash('Vínculo removido com sucesso.', 'info')
     return redirect(url_for('vincular_empresa_usina'))
 
+from flask import request, render_template, redirect, url_for, flash
+from flask_login import login_required
+from datetime import datetime
+from decimal import Decimal
+
 @app.route('/cadastrar_financeiro_empresa', methods=['GET', 'POST'])
 @login_required
 def cadastrar_financeiro_empresa():
     empresas = EmpresaInvestidora.query.all()
 
     if request.method == 'POST':
-        empresa_id = request.form['empresa_id']
+        empresa_id = int(request.form['empresa_id'])
         data = datetime.strptime(request.form['data'], '%Y-%m-%d').date()
         tipo = request.form['tipo']
         descricao = request.form['descricao']
-        valor = float(request.form['valor'])
+
+        if tipo == 'imposto':
+            valor = float(request.form['valor_percentual'])
+            periodicidade = request.form.get('periodicidade')
+
+            if periodicidade == 'mensal':
+                mes_referencia = int(request.form.get('mes_referencia') or 0)
+                ano_referencia = int(request.form.get('ano_referencia') or 0)
+
+                # Verifica se já existe imposto mensal para o mesmo mês/ano
+                imposto_mensal_existente = FinanceiroEmpresaInvestidora.query.filter_by(
+                    empresa_id=empresa_id,
+                    tipo='imposto',
+                    periodicidade='mensal',
+                    mes_referencia=mes_referencia,
+                    ano_referencia=ano_referencia
+                ).first()
+                if imposto_mensal_existente:
+                    flash('Já existe um imposto mensal para esse período.', 'danger')
+                    return redirect(url_for('cadastrar_financeiro_empresa'))
+
+            else:
+                mes_referencia = None
+                ano_referencia = None
+
+                # Verifica se já existe imposto recorrente
+                imposto_recorrente_existente = FinanceiroEmpresaInvestidora.query.filter_by(
+                    empresa_id=empresa_id,
+                    tipo='imposto',
+                    periodicidade='recorrente'
+                ).first()
+
+                # Verifica se já existe mensal para o período atual
+                imposto_mensal_no_periodo = FinanceiroEmpresaInvestidora.query.filter_by(
+                    empresa_id=empresa_id,
+                    tipo='imposto',
+                    periodicidade='mensal',
+                    mes_referencia=data.month,
+                    ano_referencia=data.year
+                ).first()
+
+                if imposto_recorrente_existente:
+                    flash('Já existe um imposto recorrente cadastrado para esta empresa.', 'danger')
+                    return redirect(url_for('cadastrar_financeiro_empresa'))
+
+                if imposto_mensal_no_periodo:
+                    flash('Já existe um imposto mensal para o mesmo período. Priorize o mensal.', 'danger')
+                    return redirect(url_for('cadastrar_financeiro_empresa'))
+
+        else:
+            valor = float(request.form['valor'])
+            periodicidade = None
+            mes_referencia = None
+            ano_referencia = None
 
         novo_lancamento = FinanceiroEmpresaInvestidora(
             empresa_id=empresa_id,
             data=data,
             tipo=tipo,
             descricao=descricao,
-            valor=valor
+            valor=valor,
+            periodicidade=periodicidade,
+            mes_referencia=mes_referencia,
+            ano_referencia=ano_referencia
         )
         db.session.add(novo_lancamento)
         db.session.commit()
@@ -2735,10 +2799,17 @@ def cadastrar_financeiro_empresa():
         flash('Lançamento financeiro salvo com sucesso!', 'success')
         return redirect(url_for('cadastrar_financeiro_empresa'))
 
-    # Listar os últimos lançamentos
-    ultimos_lancamentos = FinanceiroEmpresaInvestidora.query.order_by(FinanceiroEmpresaInvestidora.data.desc()).limit(20).all()
+    ultimos_lancamentos = (
+        FinanceiroEmpresaInvestidora
+        .query.order_by(FinanceiroEmpresaInvestidora.data.desc())
+        .limit(20).all()
+    )
 
-    return render_template('cadastrar_financeiro_empresa.html', empresas=empresas, ultimos_lancamentos=ultimos_lancamentos)
+    return render_template(
+        'cadastrar_financeiro_empresa.html',
+        empresas=empresas,
+        ultimos_lancamentos=ultimos_lancamentos
+    )
 
 @app.route('/relatorio_financeiro_empresa', methods=['GET', 'POST'])
 @login_required
@@ -3095,6 +3166,40 @@ def distribuicao_lucro_formulario():
 
     return render_template('form_distribuicao_lucro.html', empresas=empresas, anos=anos)
 
+@app.route('/editar_financeiro_empresa/<int:id>', methods=['GET', 'POST'])
+@login_required
+def editar_financeiro_empresa(id):
+    lancamento = FinanceiroEmpresaInvestidora.query.get_or_404(id)
+    empresas = EmpresaInvestidora.query.all()
+
+    if request.method == 'POST':
+        lancamento.empresa_id = request.form['empresa_id']
+        lancamento.data = datetime.strptime(request.form['data'], '%Y-%m-%d').date()
+        lancamento.tipo = request.form['tipo']
+        lancamento.descricao = request.form['descricao']
+
+        if lancamento.tipo == 'imposto':
+            lancamento.valor = float(request.form['valor_percentual'])
+            lancamento.periodicidade = request.form.get('periodicidade')
+
+            if lancamento.periodicidade == 'mensal':
+                lancamento.mes_referencia = int(request.form.get('mes_referencia') or 0)
+                lancamento.ano_referencia = int(request.form.get('ano_referencia') or 0)
+            else:
+                lancamento.mes_referencia = None
+                lancamento.ano_referencia = None
+        else:
+            lancamento.valor = float(request.form['valor'])
+            lancamento.periodicidade = None
+            lancamento.mes_referencia = None
+            lancamento.ano_referencia = None
+
+        db.session.commit()
+        flash('Lançamento atualizado com sucesso!', 'success')
+        return redirect(url_for('cadastrar_financeiro_empresa'))
+
+    return render_template('editar_financeiro_empresa.html', lancamento=lancamento, empresas=empresas)
+
 @app.route('/relatorio_prestacao', methods=['GET'])
 @login_required
 def relatorio_prestacao():
@@ -3175,10 +3280,34 @@ def relatorio_prestacao():
                 'debito': ''
             })
 
-            impostos = round(total_liquido * 0.15, 2)
+            # Buscar imposto aplicável (mensal tem prioridade sobre recorrente)
+            imposto_percentual = 0
+
+            # Primeiro tenta encontrar imposto mensal para o período
+            imposto_mensal = next((
+                r for r in registros_financeiros
+                if r.tipo == 'imposto' and r.periodicidade == 'mensal' and
+                r.mes_referencia == mes and r.ano_referencia == ano
+            ), None)
+
+            if imposto_mensal:
+                imposto_percentual = imposto_mensal.valor
+            else:
+                # Se não houver mensal, busca um recorrente
+                imposto_recorrente = next((
+                    r for r in registros_financeiros
+                    if r.tipo == 'imposto' and r.periodicidade == 'recorrente'
+                ), None)
+                if imposto_recorrente:
+                    imposto_percentual = imposto_recorrente.valor
+
+            # Calcular imposto
+            impostos = round(total_liquido * (imposto_percentual / 100), 2) if imposto_percentual else 0
+
+            # Adicionar ao fluxo financeiro da empresa
             fluxo_empresa.append({
                 'data': None,
-                'descricao': 'Impostos sobre Receita Líquida',
+                'descricao': f'Impostos sobre Receita Líquida ({imposto_percentual}%)',
                 'credito': '',
                 'debito': impostos
             })
