@@ -1,179 +1,162 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Relatório de Prestação de Contas</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
-    <style>
-        h4 {
-            border-bottom: 2px solid #0d6efd;
-            padding-bottom: 6px;
-            margin-top: 40px;
-        }
-        .section-card {
-            background-color: #f9f9f9;
-            border-left: 5px solid #0d6efd;
-            padding: 20px;
-            margin-bottom: 30px;
-            border-radius: 8px;
-        }
-        .card-title i {
-            margin-right: 8px;
-        }
-        .table th {
-            background-color: #e9f1ff;
-        }
-    </style>
-</head>
-<body class="bg-light">
+{% extends 'base.html' %}
 
-<div class="container my-5">
-    <h2 class="text-center text-primary mb-5">📄 Relatório de Prestação de Contas</h2>
+{% block title %}Relatório de Prestação de Contas{% endblock %}
+
+{% block content %}
+<div class="container mt-5 mb-5 p-4 bg-white shadow rounded">
+    <h2 class="text-center text-primary mb-4">📊 Relatório de Prestação de Contas</h2>
 
     <!-- Filtros -->
-    <form method="GET" class="row g-3 mb-5">
-        <div class="col-md-3">
-            <label for="mes" class="form-label">Mês</label>
-            <select name="mes" id="mes" class="form-select">
-                <option value="">Todos</option>
-                {% for m in range(1, 13) %}
-                    <option value="{{ m }}" {% if m == mes %}selected{% endif %}>{{ "{:02d}".format(m) }}</option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <div class="col-md-3">
-            <label for="ano" class="form-label">Ano</label>
-            <select name="ano" id="ano" class="form-select">
-                <option value="">Todos</option>
-                {% for a in range(2022, ano_atual + 1) %}
-                    <option value="{{ a }}" {% if a == ano %}selected{% endif %}>{{ a }}</option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <div class="col-md-6">
-            <label for="acionista_id" class="form-label">Selecione o Acionista</label>
-            <select name="acionista_id" id="acionista_id" class="form-select" required>
+    <form method="GET" class="row g-3 mb-4">
+        <div class="col-md-4">
+            <label for="acionista_id" class="form-label">Acionista</label>
+            <select name="acionista_id" id="acionista_id" class="form-select" required onchange="this.form.submit()">
                 <option value="">Selecione</option>
                 {% for ac in acionistas %}
                     <option value="{{ ac.id }}" {% if ac.id == acionista_id %}selected{% endif %}>{{ ac.nome }}</option>
                 {% endfor %}
             </select>
         </div>
-        <div class="col-md-6">
-            <label for="usina_id" class="form-label">Selecione a Usina</label>
-            <select name="usina_id" id="usina_id" class="form-select" required>
-                <option value="">Selecione</option>
-                {% for u in usinas %}
-                    <option value="{{ u.id }}" {% if u.id == usina_id %}selected{% endif %}>{{ u.nome }}</option>
+
+        <div class="col-md-4">
+            <label for="usina_id" class="form-label">Usina</label>
+            <select name="usina_id" id="usina_id" class="form-select" onchange="this.form.submit()">
+                <option value="">Todas</option>
+                {% for usina in usinas %}
+                    <option value="{{ usina.id }}" {% if usina.id == usina_id %}selected{% endif %}>{{ usina.nome }}</option>
                 {% endfor %}
             </select>
         </div>
-        <div class="col-12 text-center">
-            <button type="submit" class="btn btn-primary px-5">
-                <i class="bi bi-bar-chart-fill"></i> Gerar Relatório
-            </button>
+
+        <div class="col-md-2">
+            <label for="mes" class="form-label">Mês</label>
+            <input type="number" min="1" max="12" class="form-control" name="mes" id="mes" value="{{ mes or '' }}">
+        </div>
+
+        <div class="col-md-2">
+            <label for="ano" class="form-label">Ano</label>
+            <input type="number" class="form-control" name="ano" id="ano" value="{{ ano or ano_atual }}">
+        </div>
+
+        <div class="col-12 text-end">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-funnel"></i> Filtrar</button>
         </div>
     </form>
 
     {% if relatorio %}
-    <div class="bg-white p-4 rounded shadow-sm">
+    <hr>
 
-        <!-- Usina -->
-        <div class="section-card">
-            <h5><i class="bi bi-lightning-charge-fill"></i> Dados da Usina</h5>
-            <p><strong>Nome:</strong> {{ relatorio.usina.nome }}</p>
-            <p><strong>Potência:</strong> {{ relatorio.usina.potencia_kw }} kW</p>
-            <p><strong>Data de Ligação:</strong>
-                {% if relatorio.usina.data_ligacao %}
-                    {{ relatorio.usina.data_ligacao.strftime('%d/%m/%Y') }}
-                {% else %}
-                    Não informada
-                {% endif %}
-            </p>
-            <p><strong>Geração Prevista:</strong> {{ relatorio.previsto }} kWh</p>
-            <p><strong>Geração Realizada:</strong> {{ "%.2f"|format(relatorio.realizado) }} kWh</p>
-            <p><strong>Eficiência:</strong> {{ relatorio.eficiencia }}%</p>
+    <!-- Desempenho da Usina -->
+    <div class="card mb-4">
+        <div class="card-header bg-success text-white fw-bold">
+            ⚡ Desempenho da Usina: {{ relatorio.usina.nome }}
         </div>
+        <div class="card-body">
+            <p><strong>Potência:</strong> {{ relatorio.usina.potencia_kw | default("Não informado") | float | round(2) | replace(".", ",") }} kW</p>
+            <p><strong>Previsão:</strong> {{ relatorio.previsto | float | round(2) | replace(".", ",") }} kWh</p>
+            <p><strong>Realizado:</strong> {{ relatorio.realizado | float | round(2) | replace(".", ",") }} kWh</p>
+            <p><strong>Eficiência:</strong> {{ relatorio.eficiencia }}%</p>
+            <p><strong>Yield (kWh/kWp):</strong> {{ relatorio.yield_kwp if relatorio.yield_kwp is not none else 'Não calculado' }}</p>
+        </div>
+    </div>
 
-        <!-- Fluxo do Consórcio -->
-        <h4><i class="bi bi-cash-coin"></i> Fluxo Financeiro do Consórcio</h4>
+    <!-- Fluxo do Consórcio -->
+    <h5 class="mt-4 text-primary">💰 Fluxo Financeiro do Consórcio</h5>
+    {% set total = namespace(credito=0, debito=0) %}
+    <div class="table-responsive">
         <table class="table table-bordered table-sm">
-            <thead><tr><th>Data</th><th>Descrição</th><th>Crédito</th><th>Débito</th></tr></thead>
+            <thead class="table-light">
+                <tr>
+                    <th>Data</th>
+                    <th>Descrição</th>
+                    <th class="text-end">Crédito</th>
+                    <th class="text-end">Débito</th>
+                </tr>
+            </thead>
             <tbody>
                 {% for item in relatorio.fluxo_consorcio %}
+                {% set total.credito = total.credito + (item.credito or 0) %}
+                {% set total.debito = total.debito + (item.debito or 0) %}
                 <tr>
-                    <td>{{ item.data.strftime('%d/%m/%Y') }}</td>
+                    <td>{{ item.data.strftime('%d/%m/%Y') if item.data else '-' }}</td>
                     <td>{{ item.descricao }}</td>
-                    <td>{{ item.credito | formato_brasileiro }}</td>
-                    <td>{{ item.debito | formato_brasileiro }}</td>
+                    <td class="text-end">{{ item.credito | formato_brasileiro }}</td>
+                    <td class="text-end">{{ item.debito | formato_brasileiro }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
+            <tfoot>
+                <tr class="fw-bold bg-light">
+                    <td colspan="2" class="text-end">Totais:</td>
+                    <td class="text-end">{{ total.credito | formato_brasileiro }}</td>
+                    <td class="text-end">{{ total.debito | formato_brasileiro }}</td>
+                </tr>
+            </tfoot>
         </table>
+    </div>
 
-        <!-- Fluxo da Empresa -->
-        <h4><i class="bi bi-building"></i> Fluxo Financeiro da Empresa Investidora</h4>
+    <!-- Fluxo da Empresa -->
+    <h5 class="mt-4 text-primary">🏢 Fluxo Financeiro da Empresa</h5>
+    {% set total_emp = namespace(credito=0, debito=0) %}
+    <div class="table-responsive">
         <table class="table table-bordered table-sm">
-            <thead><tr><th>Data</th><th>Descrição</th><th>Crédito</th><th>Débito</th></tr></thead>
+            <thead class="table-light">
+                <tr>
+                    <th>Data</th>
+                    <th>Descrição</th>
+                    <th class="text-end">Crédito</th>
+                    <th class="text-end">Débito</th>
+                </tr>
+            </thead>
             <tbody>
                 {% for item in relatorio.fluxo_empresa %}
-                <tr>
-                    <td>{{ item.data.strftime('%d/%m/%Y') }}</td>
-                    <td>{{ item.descricao }}</td>
-                    <td>{{ item.credito | formato_brasileiro }}</td>
-                    <td>{{ item.debito | formato_brasileiro }}</td>
+                {% set total_emp.credito = total_emp.credito + (item.credito or 0) %}
+                {% set total_emp.debito = total_emp.debito + (item.debito or 0) %}
+                <tr class="{% if item.descricao == 'Receita Líquida do Consórcio' %}table-success{% endif %}">
+                    <td>{{ item.data.strftime('%d/%m/%Y') if item.data else '-' }}</td>
+                    <td><strong>{{ item.descricao }}</strong></td>
+                    <td class="text-end">{{ item.credito | formato_brasileiro }}</td>
+                    <td class="text-end">{{ item.debito | formato_brasileiro }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
-        </table>
-
-        <!-- Lucros -->
-        <h4><i class="bi bi-piggy-bank-fill"></i> Distribuição de Lucros</h4>
-        <table class="table table-bordered table-sm">
-            <thead><tr><th>Acionista</th><th>% Participação</th><th>Valor</th></tr></thead>
-            <tbody>
-                {% for dist in relatorio.distribuicao %}
-                <tr>
-                    <td>{{ dist.acionista }}</td>
-                    <td>{{ dist.percentual }}%</td>
-                    <td>{{ dist.valor | formato_brasileiro }}</td>
+            <tfoot>
+                <tr class="fw-bold bg-light">
+                    <td colspan="2" class="text-end">Totais:</td>
+                    <td class="text-end">{{ total_emp.credito | formato_brasileiro }}</td>
+                    <td class="text-end">{{ total_emp.debito | formato_brasileiro }}</td>
                 </tr>
-                {% endfor %}
-            </tbody>
+            </tfoot>
         </table>
-
-        <!-- Consolidação -->
-        <h4><i class="bi bi-journal-check"></i> Consolidação Financeira</h4>
-        <ul class="list-group mb-5">
-            <li class="list-group-item"><strong>Receita Bruta:</strong> {{ relatorio.consolidacao.receita_bruta | formato_brasileiro }}</li>
-            <li class="list-group-item"><strong>Despesa Bruta:</strong> {{ relatorio.consolidacao.despesa_bruta | formato_brasileiro }}</li>
-            <li class="list-group-item"><strong>Receita Líquida:</strong> {{ relatorio.consolidacao.receita_liquida | formato_brasileiro }}</li>
-            <li class="list-group-item"><strong>Distribuição Mensal:</strong> {{ relatorio.consolidacao.distribuicao_mensal | formato_brasileiro}}</li>
-            <li class="list-group-item"><strong>Retorno Bruto Mensal:</strong> {{ relatorio.consolidacao.retorno_bruto | formato_brasileiro }}</li>
-            <li class="list-group-item"><strong>Impostos:</strong> {{ relatorio.consolidacao.impostos | formato_brasileiro}}</li>
-            <li class="list-group-item"><strong>Fundo Reserva:</strong> {{ relatorio.consolidacao.fundo_reserva | formato_brasileiro}}</li>
-            <li class="list-group-item"><strong>Total Distribuído Acumulado:</strong> {{ relatorio.consolidacao.total_distribuido | formato_brasileiro}}</li>
-        </ul>
-
     </div>
+
+    <!-- Distribuição -->
+    <div class="card my-4">
+        <div class="card-header bg-info text-white fw-bold">📈 Distribuição</div>
+        <div class="card-body">
+            {% for dist in relatorio.distribuicao %}
+            <p>{{ dist.acionista }} - {{ dist.percentual }}% → <strong>{{ dist.valor | formato_brasileiro }}</strong></p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Consolidação -->
+    <div class="card mb-4">
+        <div class="card-header bg-dark text-white fw-bold">📊 Consolidação Financeira</div>
+        <div class="card-body">
+            <ul class="mb-0">
+                <li><strong>Receita Bruta:</strong> {{ relatorio.consolidacao.receita_bruta | formato_brasileiro }}</li>
+                <li><strong>Despesa Bruta:</strong> {{ relatorio.consolidacao.despesa_bruta | formato_brasileiro }}</li>
+                <li><strong>Receita Líquida:</strong> {{ relatorio.consolidacao.receita_liquida | formato_brasileiro }}</li>
+                <li><strong>Distribuição Mensal:</strong> {{ relatorio.consolidacao.distribuicao_mensal | formato_brasileiro }}</li>
+                <li><strong>Retorno Bruto:</strong> {{ relatorio.consolidacao.retorno_bruto | formato_brasileiro }}</li>
+                <li><strong>Impostos:</strong> {{ relatorio.consolidacao.impostos | formato_brasileiro }}</li>
+                <li><strong>Fundo Reserva:</strong> {{ relatorio.consolidacao.fundo_reserva | formato_brasileiro }}</li>
+                <li><strong>Total Distribuído:</strong> {{ relatorio.consolidacao.total_distribuido | formato_brasileiro }}</li>
+            </ul>
+        </div>
+    </div>
+
     {% endif %}
-    <div class="text-center mt-4">
-        <a href="{{ url_for('menu_relatorios') }}" class="btn btn-secondary">
-            <i class="bi bi-arrow-left-circle"></i> Voltar ao Menu de Relatórios
-        </a>
-    </div>
-
-
-<script>
-    document.getElementById('acionista_id').addEventListener('change', function () {
-        const acionistaId = this.value;
-        window.location.href = `?acionista_id=${acionistaId}`;
-    });
-</script>
-
-</body>
-</html>
+</div>
+{% endblock %}
