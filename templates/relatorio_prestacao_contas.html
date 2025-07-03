@@ -52,9 +52,9 @@
             ⚡ Desempenho da Usina: {{ relatorio.usina.nome }}
         </div>
         <div class="card-body">
-            <p><strong>Potência:</strong> {{ relatorio.usina.potencia_kw | default("Não informado") | float | round(2) | replace(".", ",") }} kW</p>
-            <p><strong>Previsão:</strong> {{ relatorio.previsto | float | round(2) | replace(".", ",") }} kWh</p>
-            <p><strong>Realizado:</strong> {{ relatorio.realizado | float | round(2) | replace(".", ",") }} kWh</p>
+            <p><strong>Potência:</strong> {{ "{:,.2f}".format(relatorio.usina.potencia_kw).replace(",", "v").replace(".", ",").replace("v", ".") }} kW</p>
+            <p><strong>Previsão:</strong> {{ "{:,.2f}".format(relatorio.previsto).replace(",", "v").replace(".", ",").replace("v", ".") }} kWh</p>
+            <p><strong>Realizado:</strong> {{ "{:,.2f}".format(relatorio.realizado).replace(",", "v").replace(".", ",").replace("v", ".") }} kWh</p>
             <p><strong>Eficiência:</strong> {{ relatorio.eficiencia }}%</p>
             <p><strong>Yield (kWh/kWp):</strong> {{ relatorio.yield_kwp if relatorio.yield_kwp is not none else 'Não calculado' }}</p>
         </div>
@@ -153,6 +153,7 @@
                 <li><strong>Impostos:</strong> {{ relatorio.consolidacao.impostos | formato_brasileiro }}</li>
                 <li><strong>Fundo Reserva:</strong> {{ relatorio.consolidacao.fundo_reserva | formato_brasileiro }}</li>
                 <li><strong>Total Distribuído:</strong> {{ relatorio.consolidacao.total_distribuido | formato_brasileiro }}</li>
+                <li><strong>Payback Alcançado:</strong> {{ relatorio.consolidacao.payback_alcancado }}%</li>
             </ul>
         </div>
     </div>

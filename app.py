@@ -245,6 +245,20 @@ class FinanceiroEmpresaInvestidora(db.Model):
 
     empresa = db.relationship('EmpresaInvestidora', backref='financeiros')
     
+class DistribuicaoMensal(db.Model):
+    __tablename__ = 'distribuicoes_mensais'
+
+    id = db.Column(db.Integer, primary_key=True)
+    empresa_id = db.Column(db.Integer, db.ForeignKey('empresas_investidoras.id'), nullable=False)
+    usina_id = db.Column(db.Integer, db.ForeignKey('usinas.id'), nullable=False)
+    ano = db.Column(db.Integer, nullable=False)
+    mes = db.Column(db.Integer, nullable=False)
+    valor_total = db.Column(db.Float, nullable=False)
+    criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+
+    empresa = db.relationship('EmpresaInvestidora', backref='distribuicoes_mensais')
+    usina = db.relationship('Usina', backref='distribuicoes_mensais')
+    
 class Usuario(db.Model, UserMixin):
     __tablename__ = 'usuarios'
     id = db.Column(db.Integer, primary_key=True)
@@ -3084,10 +3098,13 @@ def distribuicao_lucro_formulario():
 @app.route('/relatorio_prestacao', methods=['GET'])
 @login_required
 def relatorio_prestacao():
+    hoje = datetime.today()
+    mes_atual = hoje.month
+    ano_atual = hoje.year
     acionistas = Acionista.query.order_by(Acionista.nome).all()
     acionista_id = request.args.get('acionista_id', type=int)
-    mes = request.args.get('mes', type=int)
-    ano = request.args.get('ano', type=int)
+    mes = request.args.get('mes', type=int) or mes_atual
+    ano = request.args.get('ano', type=int) or ano_atual
     usina_id = request.args.get('usina_id', type=int)
     ano_atual = date.today().year
 
@@ -3108,13 +3125,11 @@ def relatorio_prestacao():
             flash('A usina não está vinculada ao acionista selecionado.', 'danger')
             return redirect(url_for('relatorio_prestacao'))
 
-        # GERAÇÃO PREVISTA
         previsto = sum(
             p.previsao_kwh for p in usina.previsoes
             if (not mes or p.mes == mes) and (not ano or p.ano == ano)
         )
 
-        # GERAÇÃO REALIZADA
         realizado = sum(
             g.energia_kwh for g in usina.geracoes
             if (not mes or g.data.month == mes) and (not ano or g.data.year == ano)
@@ -3122,7 +3137,6 @@ def relatorio_prestacao():
 
         eficiencia = round((realizado / previsto * 100), 2) if previsto else 0
 
-        # FLUXO CONSÓRCIO (usando referencia_mes/referencia_ano)
         fluxo_consorcio = []
         receitas_usina = despesas_usina = 0
         for f in usina.financeiros:
@@ -3135,7 +3149,6 @@ def relatorio_prestacao():
                     despesas_usina += valor
                     fluxo_consorcio.append({'data': f.data, 'descricao': f.descricao, 'credito': '', 'debito': valor})
 
-        # FLUXO EMPRESA
         empresa_investidora = EmpresaInvestidora.query \
             .join(UsinaInvestidora, UsinaInvestidora.empresa_id == EmpresaInvestidora.id) \
             .filter(UsinaInvestidora.usina_id == usina.id).first()
@@ -3143,9 +3156,7 @@ def relatorio_prestacao():
         fluxo_empresa = []
         receitas_empresa = despesas_empresa = 0
         if empresa_investidora:
-            # Lê diretamente da tabela financeiro_empresa_investidora
             registros_financeiros = FinanceiroEmpresaInvestidora.query.filter_by(empresa_id=empresa_investidora.id).all()
-            
             for f in registros_financeiros:
                 if (not mes or f.data.month == mes) and (not ano or f.data.year == ano):
                     valor = f.valor or 0
@@ -3156,7 +3167,6 @@ def relatorio_prestacao():
                         despesas_empresa += valor
                         fluxo_empresa.append({'data': f.data, 'descricao': f.descricao, 'credito': '', 'debito': valor})
 
-            # Receita líquida do consórcio como entrada na empresa
             total_liquido = receitas_usina - despesas_usina
             fluxo_empresa.append({
                 'data': None,
@@ -3165,7 +3175,6 @@ def relatorio_prestacao():
                 'debito': ''
             })
 
-            # Impostos (15% sobre receita líquida)
             impostos = round(total_liquido * 0.15, 2)
             fluxo_empresa.append({
                 'data': None,
@@ -3174,9 +3183,27 @@ def relatorio_prestacao():
                 'debito': impostos
             })
 
-            # DISTRIBUIÇÃO ENTRE OS SÓCIOS
-            distribuicao = []
             distribuicao_base = total_liquido - impostos - despesas_empresa
+
+            distribuicao_existente = DistribuicaoMensal.query.filter_by(
+                empresa_id=empresa_investidora.id,
+                usina_id=usina.id,
+                ano=ano,
+                mes=mes
+            ).first()
+
+            if not distribuicao_existente:
+                nova_distribuicao = DistribuicaoMensal(
+                    empresa_id=empresa_investidora.id,
+                    usina_id=usina.id,
+                    ano=ano,
+                    mes=mes,
+                    valor_total=distribuicao_base
+                )
+                db.session.add(nova_distribuicao)
+                db.session.commit()
+
+            distribuicao = []
             for part in empresa_investidora.acionistas:
                 if part.acionista_id == acionista.id:
                     percentual = part.percentual
@@ -3187,19 +3214,59 @@ def relatorio_prestacao():
                         'valor': valor
                     })
 
-            # CONSOLIDAÇÃO FINAL
+            distrib_anteriores = DistribuicaoMensal.query.filter(
+                DistribuicaoMensal.empresa_id == empresa_investidora.id,
+                DistribuicaoMensal.usina_id == usina.id,
+                (DistribuicaoMensal.ano < ano) |
+                ((DistribuicaoMensal.ano == ano) & (DistribuicaoMensal.mes < mes))
+            ).all()
+
+            total_distribuido = round(sum(d.valor_total for d in distrib_anteriores) + distribuicao_base, 2)
+
+            financeiros_anteriores = [
+                f for f in usina.financeiros
+                if f.referencia_ano < ano or (f.referencia_ano == ano and f.referencia_mes <= mes)
+            ]
+            receitas_anteriores = sum(f.valor for f in financeiros_anteriores if f.tipo == 'receita')
+            despesas_anteriores = sum(f.valor for f in financeiros_anteriores if f.tipo == 'despesa')
+            receita_liquida_total = receitas_anteriores - despesas_anteriores
+            fundo_reserva_acumulado = round(receita_liquida_total * 0.05, 2)
+
+            total_recebido_acionista = 0
+            for d in distrib_anteriores:
+                part = ParticipacaoAcionista.query.filter_by(
+                    empresa_id=empresa_investidora.id,
+                    acionista_id=acionista.id
+                ).first()
+                if part:
+                    total_recebido_acionista += (d.valor_total * part.percentual / 100)
+
+            if distribuicao:
+                total_recebido_acionista += distribuicao[0]['valor']
+
+            valor_investido_total = usina.valor_investido or 0
+            participacao_acionista = ParticipacaoAcionista.query.filter_by(
+                empresa_id=empresa_investidora.id,
+                acionista_id=acionista.id
+            ).first()
+
+            percentual = participacao_acionista.percentual if participacao_acionista else 0
+            valor_investido = float(valor_investido_total) * (percentual / 100)
+
+            payback_alcancado = round((total_recebido_acionista / valor_investido) * 100, 2) if valor_investido else 0
+
             consolidacao = {
                 'receita_bruta': round(receitas_usina, 2),
                 'despesa_bruta': round(despesas_usina, 2),
                 'receita_liquida': round(total_liquido, 2),
-                'distribuicao_mensal': round(distribuicao_base / 12, 2),
-                'retorno_bruto': round(receitas_usina / 12, 2),
+                'distribuicao_mensal': round(distribuicao_base, 2),
+                'retorno_bruto': round(receitas_usina, 2),
                 'impostos': impostos,
-                'fundo_reserva': 0.00,  # Só existe no consórcio
-                'total_distribuido': round(sum(d['valor'] for d in distribuicao), 2)
+                'fundo_reserva': fundo_reserva_acumulado,
+                'total_distribuido': total_distribuido,
+                'payback_alcancado': payback_alcancado
             }
 
-        # CÁLCULO DO YIELD
         dias_no_mes = calendar.monthrange(ano or date.today().year, mes or date.today().month)[1]
         dias_com_dados = len([
             g for g in usina.geracoes if g.data.month == mes and g.data.year == ano and g.energia_kwh > 0
@@ -3209,12 +3276,8 @@ def relatorio_prestacao():
             g.energia_kwh for g in usina.geracoes if g.data.month == mes and g.data.year == ano
         )
 
-        if potencia_kw > 0 and dias_no_mes > 0 and dias_com_dados > 0:
-            yield_kwp = round(soma_total / (dias_com_dados * (potencia_kw / dias_no_mes)), 2)
-        else:
-            yield_kwp = None
+        yield_kwp = round(soma_total / (dias_com_dados * (potencia_kw / dias_no_mes)), 2) if potencia_kw > 0 and dias_no_mes > 0 and dias_com_dados > 0 else None
 
-        # RELATÓRIO FINAL
         relatorio = {
             'usina': usina,
             'acionista': acionista,
