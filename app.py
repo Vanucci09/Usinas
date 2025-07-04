@@ -844,7 +844,7 @@ def faturamento():
                     icms=icms,
                     consumo_total=consumo_total,
                     consumo_neoenergia=consumo_neoenergia,
-                    consumo_usina=consumo_usina,
+                    consumo_usina=injetado_total if cliente and cliente.consumo_instantaneo else consumo_usina,
                     saldo_unidade=saldo_unidade,
                     injetado=injetado,
                     valor_conta_neoenergia=valor_conta_neoenergia,
