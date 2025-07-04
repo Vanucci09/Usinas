@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Cadastrar Geração Diária{% endblock %}
+{% block title %}Faturamento Mensal{% endblock %}
 
 {% block content %}
 <div class="container mt-5 p-4 bg-white rounded shadow">
@@ -22,6 +22,7 @@
     </div>
 
     <form method="POST" action="{{ url_for('faturamento') }}" class="needs-validation" novalidate>
+        <!-- Usina e Cliente -->
         <div class="mb-3">
             <label class="form-label">Usina</label>
             <select name="usina_id" id="usina_id" class="form-select" required>
@@ -75,20 +76,31 @@
             <div class="col-md-6 mb-3"><label>Valor da Conta Neoenergia</label><input type="text" name="valor_conta_neoenergia" class="form-control money-mask" required></div>
         </div>
 
+        <!-- Campo oculto e exibição -->
+        <input type="hidden" name="energia_injetada_real" id="energia_injetada_real">
+        <div id="exibicao_energia_injetada_real" class="alert alert-info mt-3" style="display: none;">
+            <strong>Energia Injetada Real (PDF):</strong> <span id="valor_energia_injetada_real"></span> kWh
+        </div>
+
         <button type="submit" class="btn btn-success btn-lg w-100">Cadastrar Fatura</button>
     </form>
+</div>
+
+<!-- Botões inferiores -->
+<div class="text-center mt-4 d-flex justify-content-center gap-3">
+    <a href="{{ url_for('index') }}" class="btn btn-secondary"><i class="bi bi-house-door-fill"></i> Início</a>
+    <a href="{{ url_for('listar_faturas') }}" class="btn btn-primary"><i class="bi bi-file-text"></i> Ver Faturas</a>
 </div>
 
 <!-- Scripts -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/inputmask@5.0.8/dist/inputmask.min.js"></script>
-
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-    Inputmask({ alias: "decimal", digits: 7, radixPoint: ",", groupSeparator: ".", autoUnmask: true, removeMaskOnSubmit: true }).mask('.tarifa-mask');
-    Inputmask({ alias: "decimal", digits: 2, radixPoint: ",", groupSeparator: ".", autoUnmask: true, removeMaskOnSubmit: true }).mask('.decimal-mask');
-    Inputmask({ alias: "currency", prefix: "R$ ", groupSeparator: ".", radixPoint: ",", digits: 2, autoUnmask: true, removeMaskOnSubmit: true }).mask('.money-mask');
-    Inputmask({ alias: "percentage", suffix: " %", digits: 2, radixPoint: ",", autoUnmask: true, removeMaskOnSubmit: true }).mask('.percent-mask');
+    Inputmask({ alias: "decimal", digits: 7, radixPoint: ",", groupSeparator: ".", autoUnmask: true }).mask('.tarifa-mask');
+    Inputmask({ alias: "decimal", digits: 2, radixPoint: ",", groupSeparator: ".", autoUnmask: true }).mask('.decimal-mask');
+    Inputmask({ alias: "currency", prefix: "R$ ", groupSeparator: ".", radixPoint: ",", digits: 2, autoUnmask: true }).mask('.money-mask');
+    Inputmask({ alias: "percentage", suffix: " %", digits: 2, radixPoint: ",", autoUnmask: true }).mask('.percent-mask');
 
     document.getElementById('usina_id').addEventListener('change', function () {
         const usinaId = this.value;
@@ -125,7 +137,6 @@ function preencherAutomatico() {
     const formData = new FormData();
     formData.append('arquivo', arquivo);
 
-    // Mostrar PDF
     fetch('/salvar_pdf_temp', {
         method: 'POST',
         body: formData
@@ -134,7 +145,6 @@ function preencherAutomatico() {
         document.getElementById('iframe_pdf').src = '/visualizar_pdf_temp/temp_preview.pdf';
     });
 
-    // Preencher campos
     fetch('/extrair_dados_fatura', {
         method: 'POST',
         body: formData
@@ -169,16 +179,16 @@ function preencherAutomatico() {
         preencher("saldo_unidade", data.saldo_unidade);
         preencher("injetado", data.injetado);
         preencher("valor_conta_neoenergia", data.valor_conta);
+
+        // Energia Injetada Real
+        if (data.energia_injetada_real !== undefined && data.energia_injetada_real !== null) {
+            const valor = data.energia_injetada_real.toString().replace('.', ',');
+            document.getElementById('energia_injetada_real').value = data.energia_injetada_real;
+            document.getElementById('valor_energia_injetada_real').textContent = valor;
+            document.getElementById('exibicao_energia_injetada_real').style.display = 'block';
+        }
     })
     .catch(() => alert('Erro ao processar o PDF.'));
 }
 </script>
-<div class="text-center mt-4 d-flex justify-content-center gap-3">
-    <a href="{{ url_for('index') }}" class="btn btn-secondary">
-        <i class="bi bi-house-door-fill"></i> Início
-    </a>
-    <a href="{{ url_for('listar_faturas') }}" class="btn btn-primary">
-        <i class="bi bi-file-text"></i> Ver Faturas
-    </a>
-</div>
 {% endblock %}

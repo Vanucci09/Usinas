@@ -115,6 +115,7 @@ class Cliente(db.Model):
     email_cc = db.Column(db.String, nullable=True)
     telefone = db.Column(db.String, nullable=True)
     mostrar_saldo = db.Column(db.Boolean, default=True)
+    consumo_instantaneo = db.Column(db.Boolean, default=False)
 
     rateios = db.relationship('Rateio', backref='cliente', cascade="all, delete-orphan")
     usina = db.relationship('Usina')
@@ -149,6 +150,7 @@ class FaturaMensal(db.Model):
     valor_conta_neoenergia = db.Column(db.Float, nullable=False)
     identificador = db.Column(db.String, unique=True, nullable=False)
     email_enviado = db.Column(db.Boolean, default=False)
+    energia_injetada_real = db.Column(db.Float, default=0.0)
 
     cliente = db.relationship('Cliente', backref='faturas')
     
@@ -617,6 +619,7 @@ def cadastrar_cliente():
         telefone = request.form['telefone']
         email_cc = request.form.get('email_cc')
         mostrar_saldo = request.form.get('mostrar_saldo') == 'on'
+        consumo_instantaneo = 'consumo_instantaneo' in request.form
 
         cliente = Cliente(
             nome=nome,
@@ -627,7 +630,8 @@ def cadastrar_cliente():
             email=email,
             telefone=telefone,
             email_cc=email_cc,
-            mostrar_saldo=mostrar_saldo
+            mostrar_saldo=mostrar_saldo,
+            consumo_instantaneo=consumo_instantaneo
         )
         db.session.add(cliente)
         db.session.commit()
@@ -751,6 +755,7 @@ def editar_cliente(id):
         cliente.telefone = request.form['telefone']
         cliente.email_cc = request.form.get('email_cc')
         cliente.mostrar_saldo = request.form.get('mostrar_saldo') == 'on'
+        cliente.consumo_instantaneo = 'consumo_instantaneo' in request.form
         db.session.commit()
         return redirect(url_for('listar_clientes', usina_id=cliente.usina_id))
 
@@ -808,6 +813,19 @@ def faturamento():
             consumo_usina = limpar_valor(request.form['consumo_usina'])
             saldo_unidade = limpar_valor(request.form['saldo_unidade'])
             injetado = limpar_valor(request.form['injetado'])
+            energia_injetada_real = limpar_valor(request.form.get('energia_injetada_real', '0'))
+            consumo_instantaneo = 0.0
+
+            if cliente and cliente.consumo_instantaneo:
+                from sqlalchemy import func
+                consumo_instantaneo = db.session.query(func.sum(Geracao.energia_kwh)).filter(
+                    Geracao.usina_id == usina_id,
+                    Geracao.data >= inicio_leitura,
+                    Geracao.data <= fim_leitura
+                ).scalar() or 0.0
+
+            injetado_total = consumo_usina + consumo_instantaneo - energia_injetada_real
+
             valor_conta_neoenergia = limpar_valor(request.form['valor_conta_neoenergia'])
 
             identificador = f"U{usina_id}: {codigo_rateio}-{mes:02d}-{ano}"
@@ -830,7 +848,8 @@ def faturamento():
                     saldo_unidade=saldo_unidade,
                     injetado=injetado,
                     valor_conta_neoenergia=valor_conta_neoenergia,
-                    identificador=identificador
+                    identificador=identificador,
+                    energia_injetada_real=energia_injetada_real
                 )
                 db.session.add(fatura)
                 db.session.commit()
@@ -1264,6 +1283,28 @@ def extrair_dados_fatura():
                     return valor.replace('.', '').replace(',', '.')
         return None
 
+    def buscar_energia_injetada_real():
+        for i, linha in enumerate(linhas):
+            if "ENERGIA INJETADA" in linha.upper():
+                print("[DEBUG] Linha com 'ENERGIA INJETADA':", linha)
+                if i + 5 < len(linhas):
+                    linha_valor = linhas[i + 5].strip()
+                    print("[DEBUG] Linha 5 após 'ENERGIA INJETADA':", linha_valor)
+                    # Tenta encontrar valor do tipo 8.338,00 ou 8338,00
+                    match = re.search(r'\d{1,3}(?:\.\d{3})*,\d{2}', linha_valor)
+                    if match:
+                        valor_str = match.group(0)
+                        print("[DEBUG] Valor encontrado (br):", valor_str)
+                        valor_float = float(valor_str.replace('.', '').replace(',', '.'))
+                        print("[DEBUG] Valor convertido:", valor_float)
+                        return valor_float
+                    else:
+                        print("[DEBUG] Valor não corresponde ao formato esperado.")
+                else:
+                    print("[DEBUG] Não há 5 linhas após 'ENERGIA INJETADA'")
+        print("[DEBUG] Nenhum valor encontrado para energia injetada real.")
+        return None
+
     # Buscar dados
     inicio_leitura, fim_leitura = buscar_datas()
 
@@ -1279,7 +1320,8 @@ def extrair_dados_fatura():
         'icms': buscar_aliquota_icms(),
         'injetado': encontrar_valor_com_rotulo("INJETADO") or "0",
         'consumo_usina': encontrar_valor_com_rotulo("COMPENSADO") or "0",
-        'saldo_unidade': encontrar_valor_com_rotulo("SALDO ATUAL") or "0"
+        'saldo_unidade': encontrar_valor_com_rotulo("SALDO ATUAL") or "0",
+        'energia_injetada_real': buscar_energia_injetada_real()
     }
 
     return jsonify(dados)
@@ -2064,12 +2106,9 @@ def registrar_despesa():
         return "Acesso negado", 403
 
     usinas = Usina.query.all()
-    clientes = Cliente.query.all()
-    mensagem = ''
-
-    usinas = Usina.query.all()
     categorias = CategoriaDespesa.query.order_by(CategoriaDespesa.nome).all()
     mensagem = None
+    data_hoje = date.today().isoformat()
 
     if request.method == 'POST':
         try:
@@ -2100,7 +2139,7 @@ def registrar_despesa():
             db.session.rollback()
             mensagem = f'Erro ao registrar despesa: {str(e)}'
 
-    return render_template('registrar_despesa.html', usinas=usinas, categorias=categorias, mensagem=mensagem)
+    return render_template('registrar_despesa.html', usinas=usinas, categorias=categorias, mensagem=mensagem, data_hoje=data_hoje)
 
 @app.route('/financeiro')
 @login_required
