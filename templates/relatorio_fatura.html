@@ -146,7 +146,7 @@
             </tr>
             <tr>
                 <td>Faturado {{ usina.nome }}</td>
-                <td>{{ fatura.consumo_usina }}</td>
+                <td>{{ "%.1f"|format(fatura.consumo_usina) }}</td>
                 <td>kWh</td>
                 <td>{{ tarifa_cliente|formato_tarifa }}</td>
             </tr>
