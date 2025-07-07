@@ -161,6 +161,27 @@
         </tbody>
     </table>
 
+    <!-- NOVA SEÇÃO: Geração da Usina no Período -->
+    {% if cliente.consumo_instantaneo and geracao_periodo %}
+        <div class="section-title text-center">Geração da Usina no Período</div>
+        <table class="tabela">
+            <thead>
+                <tr>
+                    <th>Período</th>
+                    <th>Geração</th>
+                    <th>Unidade</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>{{ fatura.inicio_leitura.strftime('%d/%m/%Y') }} a {{ fatura.fim_leitura.strftime('%d/%m/%Y') }}</td>
+                    <td>{{ geracao_periodo }} kWh</td>
+                    <td>kWh</td>
+                </tr>
+            </tbody>
+        </table>
+    {% endif %}
+
     <!-- Contas -->
     <div class="contas" style="display: flex; justify-content: center; gap: 40px; margin: 30px 0;">
         <div style="

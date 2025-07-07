@@ -982,7 +982,6 @@ def editar_fatura(id):
 
 @app.route('/relatorio/<int:fatura_id>')
 def relatorio_fatura(fatura_id):
-    
     fatura = FaturaMensal.query.get_or_404(fatura_id)
     cliente = Cliente.query.get(fatura.cliente_id)
     usina = Usina.query.get(cliente.usina_id)
@@ -1006,6 +1005,7 @@ def relatorio_fatura(fatura_id):
     sem_desconto = consumo_usina * tarifa_neoenergia_aplicada + valor_conta
     economia = sem_desconto - com_desconto
 
+    # Economia acumulada
     faturas_anteriores = FaturaMensal.query.filter(
         FaturaMensal.cliente_id == cliente.id,
         FaturaMensal.id != fatura.id,
@@ -1042,13 +1042,22 @@ def relatorio_fatura(fatura_id):
 
     economia_acumulada = economia + economia_total + economia_extra_total
 
-    # Caminhos
+    # ✅ Cálculo da geração no período (somente para consumo instantâneo)
+    geracao_periodo = None
+    if cliente.consumo_instantaneo:
+        geracao_periodo = db.session.query(db.func.sum(Geracao.energia_kwh)).filter(
+            Geracao.usina_id == usina.id,
+            Geracao.data >= fatura.inicio_leitura,
+            Geracao.data <= fatura.fim_leitura
+        ).scalar() or Decimal('0')
+        geracao_periodo = round(geracao_periodo, 2)
+
+    # Ficha de compensação
     pasta_boletos = '/data/boletos'
     pdf_path = os.path.join(pasta_boletos, f"boleto_{fatura.id}.pdf")
     ficha_compensacao_img = f"ficha_compensacao_{fatura.id}.png"
     ficha_path = os.path.join('static', ficha_compensacao_img)
 
-    # Geração da imagem a partir do PDF
     ficha_compensacao_data_uri = None
     if os.path.exists(pdf_path):
         ficha_compensacao_img = extrair_ficha_compensacao(pdf_path, ficha_path)
@@ -1083,6 +1092,7 @@ def relatorio_fatura(fatura_id):
         sem_desconto=sem_desconto,
         economia=economia,
         economia_acumulada=economia_acumulada,
+        geracao_periodo=geracao_periodo,
         ficha_compensacao_path=ficha_compensacao_data_uri,
         logo_cgr_path=logo_cgr_data_uri,
         logo_usina_path=logo_usina_data_uri,
@@ -1286,23 +1296,13 @@ def extrair_dados_fatura():
     def buscar_energia_injetada_real():
         for i, linha in enumerate(linhas):
             if "ENERGIA INJETADA" in linha.upper():
-                print("[DEBUG] Linha com 'ENERGIA INJETADA':", linha)
                 if i + 5 < len(linhas):
                     linha_valor = linhas[i + 5].strip()
-                    print("[DEBUG] Linha 5 após 'ENERGIA INJETADA':", linha_valor)
-                    # Tenta encontrar valor do tipo 8.338,00 ou 8338,00
                     match = re.search(r'\d{1,3}(?:\.\d{3})*,\d{2}', linha_valor)
                     if match:
                         valor_str = match.group(0)
-                        print("[DEBUG] Valor encontrado (br):", valor_str)
                         valor_float = float(valor_str.replace('.', '').replace(',', '.'))
-                        print("[DEBUG] Valor convertido:", valor_float)
                         return valor_float
-                    else:
-                        print("[DEBUG] Valor não corresponde ao formato esperado.")
-                else:
-                    print("[DEBUG] Não há 5 linhas após 'ENERGIA INJETADA'")
-        print("[DEBUG] Nenhum valor encontrado para energia injetada real.")
         return None
 
     # Buscar dados
