@@ -3586,9 +3586,8 @@ def listar_e_salvar_geracoes_kehua():
                     headers=headers,
                     data=payload
                 )
-                print(f"📡 Kehua - Status: {resp.status_code}")
-                json_resp = resp.json()
-                print("📥 Resposta JSON:", json_resp)
+                
+                json_resp = resp.json()                
 
                 if json_resp.get("code") != "0":
                     print(f"⚠️ Erro API Kehua: {json_resp.get('message')}")
@@ -3603,8 +3602,7 @@ def listar_e_salvar_geracoes_kehua():
                             if ponto.get("property") == "dayElec":
                                 kwh = float(ponto.get("val", 0))
                                 break
-
-                print(f"📊 {usina.nome}: {kwh} kWh")
+                
                 soma_kwh += kwh
 
             except Exception as e:
@@ -3632,8 +3630,7 @@ def buscar_estacoes_kehua():
         "locale": "en"
     }
     response = requests.post(url_login, data=login_data)
-    token = response.headers.get("Authorization")
-    print("🔐 Token:", token)
+    token = response.headers.get("Authorization")    
 
     if not token:
         return []
@@ -3646,13 +3643,11 @@ def buscar_estacoes_kehua():
     estacoes = []
     url_lista = "https://energy.kehua.com/necp/north/queryPowerStationInfoPage"
     body = {"pageSize": 10, "pageNumber": 1}
-    resp_estacoes = requests.post(url_lista, headers=headers, json=body)
-    print("📡 Status estações:", resp_estacoes.status_code)
-    print("📡 Resposta estações:", resp_estacoes.text)
+    resp_estacoes = requests.post(url_lista, headers=headers, json=body)    
 
     if resp_estacoes.status_code == 200:
         lista = resp_estacoes.json().get("data", {}).get("result", [])
-        print("📦 Estações encontradas:", lista)
+        
         for est in lista:
             station_id = est.get("stationId")
             station_name = est.get("stationName")
@@ -3662,11 +3657,8 @@ def buscar_estacoes_kehua():
             resp_inv = requests.post(url_inversores, headers=headers, json={"stationId": station_id})
             inversores = []
             if resp_inv.status_code == 200:
-                dados_inversores = resp_inv.json().get("data", [])
-                print(f"📡 Inversores da estação {station_name} ({station_id}):")
-                print(dados_inversores)  # <--- log temporário
-
-                # aqui pode ajustar para o campo correto
+                dados_inversores = resp_inv.json().get("data", [])                
+                
                 inversores = [
                     i.get("sn")
                     for i in dados_inversores
