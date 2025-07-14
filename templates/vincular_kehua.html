@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">🔌 Vincular Estações Kehua às Usinas</h2>
+
+    <form method="POST">
+        <div class="mb-3">
+            <label for="usina_id" class="form-label">Usina</label>
+            <select class="form-select" name="usina_id" required>
+                {% for usina in usinas %}
+                    <option value="{{ usina.id }}">{{ usina.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label for="station_id" class="form-label">Estação Kehua</label>
+            <select class="form-select" name="station_id" id="stationSelect" required onchange="mostrarInversores()">
+                <option value="">Selecione</option>
+                {% for est in estacoes %}
+                    <option value="{{ est.station_id }}">{{ est.station_name }} ({{ est.station_id }})</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div id="inversoresContainer" class="mb-3" style="display:none;">
+            <label class="form-label">Inversores da Estação</label>
+            <div id="inversoresLista" class="form-check">
+                <!-- checkboxes inseridos via JS -->
+            </div>
+        </div>
+
+        <button class="btn btn-primary">Vincular</button>
+    </form>
+</div>
+
+<script>
+    const estacoes = {{ estacoes | tojson }};
+    function mostrarInversores() {
+        const stationId = document.getElementById("stationSelect").value;
+        const container = document.getElementById("inversoresContainer");
+        const lista = document.getElementById("inversoresLista");
+        lista.innerHTML = "";
+
+        if (!stationId) {
+            container.style.display = "none";
+            return;
+        }
+
+        const estacao = estacoes.find(e => e.station_id == stationId);
+        if (estacao && estacao.inversores.length > 0) {
+            estacao.inversores.forEach(sn => {
+                const checkbox = document.createElement("input");
+                checkbox.type = "checkbox";
+                checkbox.name = "inversores";
+                checkbox.value = sn;
+                checkbox.classList.add("form-check-input");
+
+                const label = document.createElement("label");
+                label.textContent = " " + sn;
+                label.classList.add("form-check-label");
+
+                const div = document.createElement("div");
+                div.classList.add("form-check");
+                div.appendChild(checkbox);
+                div.appendChild(label);
+
+                lista.appendChild(div);
+            });
+            container.style.display = "block";
+        }
+    }
+</script>
+{% endblock %}

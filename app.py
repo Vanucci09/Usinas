@@ -71,6 +71,7 @@ class Usina(db.Model):
     logo_url = db.Column(db.String(200))
     data_ligacao = db.Column(db.Date)
     valor_investido = db.Column(db.Numeric(precision=12, scale=2))
+    kehua_station_id = db.Column(db.String, nullable=True, unique=True)
     
     rateios = db.relationship('Rateio', backref='usina', cascade="all, delete-orphan")
     geracoes = db.relationship('Geracao', backref='usina', cascade="all, delete-orphan")
@@ -1907,11 +1908,13 @@ def atualizar_geracao():
     return redirect(url_for('portal_usinas'))
 
 def listar_e_salvar_geracoes():
-    registros = listar_todos_inversores()
     hoje = date.today()
-
-    # Para salvar dados por inversor
     usina_kwh_por_dia = {}
+
+    # -------------------
+    # 🔆 PARTE SOLIS
+    # -------------------
+    registros = listar_todos_inversores()
 
     for r in registros:
         sn = r.get("sn")
@@ -1921,13 +1924,12 @@ def listar_e_salvar_geracoes():
         etoday = float(r.get("etoday", 0) or 0)
         etotal = float(r.get("etotal", 0) or 0)
 
-        # Salva leitura individual
-        existente = GeracaoInversor.query.filter_by(inverter_sn=sn, data=hoje).first()
         inversor = Inversor.query.filter_by(inverter_sn=sn).first()
         if not inversor:
             continue
 
-        # Atualiza/inclui leitura do inversor
+        # Salvar por inversor
+        existente = GeracaoInversor.query.filter_by(inverter_sn=sn, data=hoje).first()
         if existente:
             existente.etoday = etoday
             existente.etotal = etotal
@@ -1941,10 +1943,73 @@ def listar_e_salvar_geracoes():
             )
             db.session.add(nova)
 
-        # Acumula sempre (independente de já existir)
         usina_kwh_por_dia[inversor.usina_id] = usina_kwh_por_dia.get(inversor.usina_id, 0) + etoday
 
-    # Agora salva o total por usina na tabela Geracao
+    # -------------------
+    # ⚡ PARTE KEHUA
+    # -------------------
+    def login_kehua():
+        url_login = "https://energy.kehua.com/necp/login/northboundLogin"
+        login_data = {
+            "username": "monitoramento@cgrenergia.com",
+            "password": "12345678",
+            "locale": "en"
+        }
+        response = requests.post(url_login, data=login_data)
+        return response.headers.get("Authorization")
+
+    token = login_kehua()
+    if token:
+        headers = {"Authorization": token, "Content-Type": "application/json"}
+        usinas_kehua = Usina.query.filter(Usina.kehua_station_id.isnot(None)).all()
+
+        for usina in usinas_kehua:
+            station_id = usina.kehua_station_id
+            try:
+                resp = requests.post(
+                    "https://energy.kehua.com/necp/north/getDeviceInfo",
+                    headers=headers,
+                    json={"stationId": station_id}
+                )
+                if resp.status_code != 200 or resp.json().get("code") != "0":
+                    print(f"⚠️ Falha ao consultar {usina.nome} ({station_id})")
+                    continue
+
+                inversores = resp.json().get("data", [])
+                total_etoday = 0.0
+
+                for inv in inversores:
+                    sn = inv.get("sn")
+                    etoday = float(inv.get("etoday") or 0)
+                    etotal = float(inv.get("etotal") or 0)
+                    total_etoday += etoday
+
+                    # Salvar geração por inversor
+                    leitura_inv = GeracaoInversor.query.filter_by(inverter_sn=sn, data=hoje).first()
+                    if leitura_inv:
+                        leitura_inv.etoday = etoday
+                        leitura_inv.etotal = etotal
+                    else:
+                        nova_leitura = GeracaoInversor(
+                            data=hoje,
+                            inverter_sn=sn,
+                            etoday=etoday,
+                            etotal=etotal,
+                            usina_id=usina.id
+                        )
+                        db.session.add(nova_leitura)
+
+                usina_kwh_por_dia[usina.id] = usina_kwh_por_dia.get(usina.id, 0) + total_etoday
+                print(f"✅ Kehua: Geração de {usina.nome}: {total_etoday:.2f} kWh")
+
+            except Exception as e:
+                print(f"❌ Erro na estação {usina.nome}: {e}")
+    else:
+        print("❌ Token da Kehua não obtido.")
+
+    # -------------------
+    # 💾 Salvar total por usina
+    # -------------------
     for usina_id, soma_etoday in usina_kwh_por_dia.items():
         leitura = Geracao.query.filter_by(usina_id=usina_id, data=hoje).first()
         if leitura:
@@ -1958,18 +2023,20 @@ def listar_e_salvar_geracoes():
             db.session.add(nova_leitura)
 
     db.session.commit()
+    print("✅ Geração diária salva para todas as usinas.")
 
 def atualizar_geracao_agendada():
     with app.app_context():
         try:
             print(f"[{datetime.now()}] Atualizando geração automaticamente...")
-            listar_e_salvar_geracoes()
-            print("Atualização concluída.")
+            listar_e_salvar_geracoes()         # Solis
+            listar_e_salvar_geracoes_kehua()   # Kehua
+            print("✅ Atualização concluída.")
         except Exception as e:
-            print(f"Erro na atualização agendada: {e}")
+            print(f"❌ Erro na atualização agendada: {e}")
 
 scheduler = BackgroundScheduler()
-scheduler.add_job(func=atualizar_geracao_agendada, trigger="interval", minutes=45)
+scheduler.add_job(func=atualizar_geracao_agendada, trigger="interval", minutes=30)
 scheduler.start()
 
 # Garantir que pare quando o app for encerrado
@@ -3470,7 +3537,178 @@ def relatorio_prestacao():
         ano=ano,
         ano_atual=ano_atual
     )
-    
+
+def listar_e_salvar_geracoes_kehua():
+    def login_kehua():
+        url_login = "https://energy.kehua.com/necp/login/northboundLogin"
+        login_data = {
+            "username": "monitoramento@cgrenergia.com",
+            "password": "12345678",
+            "locale": "en"
+        }
+        response = requests.post(url_login, data=login_data)
+        if response.status_code == 200:
+            json_resp = response.json()
+            return json_resp.get("token") or response.headers.get("Authorization")
+        return None
+
+    hoje = date.today()
+    token = login_kehua()
+
+    if not token:
+        print("❌ Token da Kehua não encontrado.")
+        return
+
+    headers = {
+        "Authorization": token,
+        "Content-Type": "application/x-www-form-urlencoded",
+        "clienttype": "web"
+    }
+
+    usinas = Usina.query.filter(Usina.kehua_station_id.isnot(None)).all()
+
+    for usina in usinas:
+        soma_kwh = 0.0
+
+        if usina.id == 9:  # ID da usina Bloco A Expansão
+            payload = {
+                "stationId": "31080",
+                "companyId": "757",
+                "areaCode": "903",
+                "deviceId": "16872",  # ID numérico válido
+                "deviceType": "00010001",
+                "templateId": "1041"
+            }
+
+            try:
+                resp = requests.post(
+                    "https://energy.kehua.com/necp/monitor/getDeviceRealtimeData",
+                    headers=headers,
+                    data=payload
+                )
+                print(f"📡 Kehua - Status: {resp.status_code}")
+                json_resp = resp.json()
+                print("📥 Resposta JSON:", json_resp)
+
+                if json_resp.get("code") != "0":
+                    print(f"⚠️ Erro API Kehua: {json_resp.get('message')}")
+                    continue
+
+                yc_infos = json_resp.get("data", {}).get("ycInfos", [])
+                kwh = 0.0
+                for grupo in yc_infos:
+                    data_points = grupo.get("dataPoint")
+                    if isinstance(data_points, list):  # ← Correção aqui
+                        for ponto in data_points:
+                            if ponto.get("property") == "dayElec":
+                                kwh = float(ponto.get("val", 0))
+                                break
+
+                print(f"📊 {usina.nome}: {kwh} kWh")
+                soma_kwh += kwh
+
+            except Exception as e:
+                print(f"❌ Erro ao consultar Bloco A Expansão: {e}")
+
+        # Salvar geração
+        if soma_kwh > 0:
+            geracao = Geracao.query.filter_by(usina_id=usina.id, data=hoje).first()
+            if geracao:
+                geracao.energia_kwh = soma_kwh
+            else:
+                nova = Geracao(data=hoje, usina_id=usina.id, energia_kwh=soma_kwh)
+                db.session.add(nova)
+
+            db.session.commit()
+            print(f"✅ Kehua: Geração salva para {usina.nome}: {soma_kwh:.2f} kWh")
+        else:
+            print(f"⚠️ Kehua: {usina.nome} retornou geração 0")
+
+def buscar_estacoes_kehua():
+    url_login = "https://energy.kehua.com/necp/login/northboundLogin"
+    login_data = {
+        "username": "monitoramento@cgrenergia.com",
+        "password": "12345678",
+        "locale": "en"
+    }
+    response = requests.post(url_login, data=login_data)
+    token = response.headers.get("Authorization")
+    print("🔐 Token:", token)
+
+    if not token:
+        return []
+
+    headers = {
+        "Authorization": token,
+        "Content-Type": "application/json"
+    }
+
+    estacoes = []
+    url_lista = "https://energy.kehua.com/necp/north/queryPowerStationInfoPage"
+    body = {"pageSize": 10, "pageNumber": 1}
+    resp_estacoes = requests.post(url_lista, headers=headers, json=body)
+    print("📡 Status estações:", resp_estacoes.status_code)
+    print("📡 Resposta estações:", resp_estacoes.text)
+
+    if resp_estacoes.status_code == 200:
+        lista = resp_estacoes.json().get("data", {}).get("result", [])
+        print("📦 Estações encontradas:", lista)
+        for est in lista:
+            station_id = est.get("stationId")
+            station_name = est.get("stationName")
+
+            # Buscar inversores dessa estação
+            url_inversores = "https://energy.kehua.com/necp/north/getDeviceInfo"
+            resp_inv = requests.post(url_inversores, headers=headers, json={"stationId": station_id})
+            inversores = []
+            if resp_inv.status_code == 200:
+                dados_inversores = resp_inv.json().get("data", [])
+                print(f"📡 Inversores da estação {station_name} ({station_id}):")
+                print(dados_inversores)  # <--- log temporário
+
+                # aqui pode ajustar para o campo correto
+                inversores = [
+                    i.get("sn")
+                    for i in dados_inversores
+                    if i.get("stationId") == station_id
+                ]
+
+            estacoes.append({
+                "station_id": station_id,
+                "station_name": station_name,
+                "inversores": inversores
+            })
+
+    return estacoes
+
+@app.route('/vincular_kehua', methods=['GET', 'POST'])
+@login_required
+def vincular_kehua():    
+    usinas = Usina.query.order_by(Usina.nome).all()
+    estacoes = buscar_estacoes_kehua()
+
+    if request.method == 'POST':
+        usina_id = request.form.get('usina_id')
+        station_id = request.form.get('station_id')
+        inversores_sn = request.form.getlist('inversores')
+
+        # Atualiza station_id na usina
+        usina = Usina.query.get(usina_id)
+        usina.kehua_station_id = station_id
+
+        # Adiciona inversores
+        for sn in inversores_sn:
+            inversor_existente = Inversor.query.filter_by(inverter_sn=sn).first()
+            if not inversor_existente:
+                inversor = Inversor(inverter_sn=sn, usina_id=usina.id)
+                db.session.add(inversor)
+        db.session.commit()
+
+        flash("Estação vinculada com sucesso!", "success")
+        return redirect('/vincular_kehua')
+
+    return render_template('vincular_kehua.html', usinas=usinas, estacoes=estacoes)
+
 
 if __name__ == '__main__':
     with app.app_context():
