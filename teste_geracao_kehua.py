@@ -7,6 +7,7 @@ import time
 import requests
 import os
 
+
 # 🔐 Dados do cliente
 API_2CAPTCHA = "a8a517df68cc0cf9cf37d8e976d8be33"
 CPF_CNPJ = "25091452000157"

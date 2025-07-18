@@ -8,7 +8,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from sqlalchemy import Numeric, text, func, case, cast
 from decimal import Decimal, ROUND_HALF_UP
-import fitz, tempfile, glob
+import fitz, tempfile, glob, platform
 from PIL import Image
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
@@ -17,13 +17,14 @@ from email.utils import formatdate
 from apscheduler.schedulers.background import BackgroundScheduler
 from flask_mail import Mail, Message
 from urllib.parse import quote
-import base64, shutil
+import base64, shutil, logging
 from sqlalchemy.orm import joinedload
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.service import Service
 from pathlib import Path
 from markupsafe import Markup
 from shutil import copyfile
@@ -3734,22 +3735,35 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
     URL_LOGIN = "https://agenciavirtual.neoenergiabrasilia.com.br/Account/EfetuarLogin"
     SITEKEY = "6LdmOIAbAAAAANXdHAociZWz1gqR9Qvy3AN0rJy4"
 
-    # Configuração do navegador
+    # 📁 Diretório de download resolvido
+    download_path = Path(pasta_download).resolve()
+
+    # ⚙️ Configurações do navegador
     options = Options()
-    #options.add_argument("--headless=new")
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
 
-    # Diretório de download resolvido corretamente
-    download_path = Path(pasta_download).resolve()
+    # 📥 Preferências de download
     prefs = {
         "download.default_directory": str(download_path),
         "plugins.always_open_pdf_externally": True,
         "download.prompt_for_download": False
     }
     options.add_experimental_option("prefs", prefs)
-    driver = webdriver.Chrome(options=options)
+
+    # 🌐 Ambiente local ou Render
+    if platform.system() == "Linux" and os.getenv("RENDER") == "true":
+        # Ambiente Render
+        options.add_argument("--headless")  # headless ativado apenas na Render
+        options.binary_location = "/usr/bin/chromium"
+        service = Service("/usr/bin/chromedriver")
+        driver = webdriver.Chrome(service=service, options=options)
+    else:
+        # Ambiente local
+        from webdriver_manager.chrome import ChromeDriverManager
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=options)
 
     try:
         print("🌐 Acessando página de login...")
