@@ -3745,11 +3745,6 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
 
-    # Ativa o modo headless apenas na Render
-    if platform.system() == "Linux" and os.getenv("RENDER") == "true":
-        options.add_argument("--headless")
-        options.binary_location = "/usr/bin/chromium"
-
     # 📥 Preferências de download
     prefs = {
         "download.default_directory": str(download_path),
@@ -3759,7 +3754,14 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
     options.add_experimental_option("prefs", prefs)
 
     # 🔄 Inicializa o navegador (funciona local e na Render)
-    driver = uc.Chrome(options=options)
+    if platform.system() == "Linux" and os.getenv("RENDER") == "true":
+        options.add_argument("--headless")
+        driver = uc.Chrome(
+            options=options,
+            browser_executable_path="/usr/bin/chromium"  # Caminho explícito necessário
+        )
+    else:
+        driver = uc.Chrome(options=options)
 
     try:
         print("🌐 Acessando página de login...")

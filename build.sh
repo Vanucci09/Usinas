@@ -3,17 +3,22 @@
 echo "📦 Instalando Chromium e ChromeDriver..."
 
 # Atualiza os pacotes
-apt-get update && apt-get install -y wget unzip
+apt-get update && apt-get install -y wget unzip curl jq
 
 # Instala o Chromium
 apt-get install -y chromium
 
-# Baixa e instala o ChromeDriver compatível
+# Obtém a versão do Chromium instalada
 CHROME_VERSION=$(chromium --version | grep -oP '\d+\.\d+\.\d+')
-CHROMEDRIVER_VERSION=$(wget -qO- "https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json" | grep -A 2 $CHROME_VERSION | grep "linux64" | grep -oP 'https:\/\/[^"]+')
-wget -O chromedriver.zip $CHROMEDRIVER_VERSION
+
+# Busca o ChromeDriver compatível
+CHROMEDRIVER_URL=$(curl -s "https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json" \
+  | jq -r --arg ver "$CHROME_VERSION" '.versions[] | select(.version | test("^" + $ver)) | .downloads.chromedriver[] | select(.platform == "linux64") | .url')
+
+# Faz o download e instalação
+wget -O chromedriver.zip "$CHROMEDRIVER_URL"
 unzip chromedriver.zip
-mv chromedriver /usr/bin/chromedriver
+mv chromedriver-linux64/chromedriver /usr/bin/chromedriver
 chmod +x /usr/bin/chromedriver
 
 echo "✅ Chromium e ChromeDriver instalados."
