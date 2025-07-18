@@ -8,7 +8,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from sqlalchemy import Numeric, text, func, case, cast
 from decimal import Decimal, ROUND_HALF_UP
-import fitz, tempfile
+import fitz, tempfile, glob
 from PIL import Image
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
@@ -17,8 +17,16 @@ from email.utils import formatdate
 from apscheduler.schedulers.background import BackgroundScheduler
 from flask_mail import Mail, Message
 from urllib.parse import quote
-import base64
+import base64, shutil
 from sqlalchemy.orm import joinedload
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from pathlib import Path
+from markupsafe import Markup
+from shutil import copyfile
 
 
 app = Flask(__name__)
@@ -117,6 +125,10 @@ class Cliente(db.Model):
     telefone = db.Column(db.String, nullable=True)
     mostrar_saldo = db.Column(db.Boolean, default=True)
     consumo_instantaneo = db.Column(db.Boolean, default=False)
+    login_concessionaria = db.Column(db.String, nullable=True)
+    senha_concessionaria = db.Column(db.String, nullable=True)
+    dia_relatorio = db.Column(db.Integer)
+    relatorio_automatico = db.Column(db.Boolean, default=False)
 
     rateios = db.relationship('Rateio', backref='cliente', cascade="all, delete-orphan")
     usina = db.relationship('Usina')
@@ -622,6 +634,12 @@ def cadastrar_cliente():
         mostrar_saldo = request.form.get('mostrar_saldo') == 'on'
         consumo_instantaneo = 'consumo_instantaneo' in request.form
 
+        # Novos campos
+        login_concessionaria = request.form.get('login_concessionaria')
+        senha_concessionaria = request.form.get('senha_concessionaria')
+        dia_relatorio = request.form.get('dia_relatorio', type=int)
+        relatorio_automatico = request.form.get('relatorio_automatico') == 'on'
+
         cliente = Cliente(
             nome=nome,
             cpf_cnpj=cpf_cnpj,
@@ -632,7 +650,11 @@ def cadastrar_cliente():
             telefone=telefone,
             email_cc=email_cc,
             mostrar_saldo=mostrar_saldo,
-            consumo_instantaneo=consumo_instantaneo
+            consumo_instantaneo=consumo_instantaneo,
+            login_concessionaria=login_concessionaria,
+            senha_concessionaria=senha_concessionaria,
+            dia_relatorio=dia_relatorio,
+            relatorio_automatico=relatorio_automatico
         )
         db.session.add(cliente)
         db.session.commit()
@@ -757,6 +779,13 @@ def editar_cliente(id):
         cliente.email_cc = request.form.get('email_cc')
         cliente.mostrar_saldo = request.form.get('mostrar_saldo') == 'on'
         cliente.consumo_instantaneo = 'consumo_instantaneo' in request.form
+
+        # Novos campos
+        cliente.login_concessionaria = request.form.get('login_concessionaria')
+        cliente.senha_concessionaria = request.form.get('senha_concessionaria')
+        cliente.dia_relatorio = request.form.get('dia_relatorio', type=int)
+        cliente.relatorio_automatico = request.form.get('relatorio_automatico') == 'on'
+
         db.session.commit()
         return redirect(url_for('listar_clientes', usina_id=cliente.usina_id))
 
@@ -3597,7 +3626,7 @@ def listar_e_salvar_geracoes_kehua():
                 kwh = 0.0
                 for grupo in yc_infos:
                     data_points = grupo.get("dataPoint")
-                    if isinstance(data_points, list):  # ← Correção aqui
+                    if isinstance(data_points, list):  
                         for ponto in data_points:
                             if ponto.get("property") == "dayElec":
                                 kwh = float(ponto.get("val", 0))
@@ -3700,6 +3729,174 @@ def vincular_kehua():
         return redirect('/vincular_kehua')
 
     return render_template('vincular_kehua.html', usinas=usinas, estacoes=estacoes)
+
+def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pasta_download, api_2captcha):
+    URL_LOGIN = "https://agenciavirtual.neoenergiabrasilia.com.br/Account/EfetuarLogin"
+    SITEKEY = "6LdmOIAbAAAAANXdHAociZWz1gqR9Qvy3AN0rJy4"
+
+    # Configuração do navegador
+    options = Options()
+    #options.add_argument("--headless=new")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+
+    # Diretório de download resolvido corretamente
+    download_path = Path(pasta_download).resolve()
+    prefs = {
+        "download.default_directory": str(download_path),
+        "plugins.always_open_pdf_externally": True,
+        "download.prompt_for_download": False
+    }
+    options.add_experimental_option("prefs", prefs)
+    driver = webdriver.Chrome(options=options)
+
+    try:
+        print("🌐 Acessando página de login...")
+        driver.get(URL_LOGIN)
+        time.sleep(5)
+
+        print("✍️ Preenchendo CPF e senha...")
+        driver.find_element(By.CSS_SELECTOR, "input[placeholder='CPF/CNPJ']").send_keys(cpf_cnpj)
+        driver.find_element(By.CSS_SELECTOR, "input[placeholder='Senha']").send_keys(senha)
+
+        print("🎯 Enviando CAPTCHA para 2Captcha...")
+        resp = requests.get(
+            f"http://2captcha.com/in.php?key={api_2captcha}&method=userrecaptcha&googlekey={SITEKEY}&pageurl={URL_LOGIN}"
+        )
+        if not resp.text.startswith("OK|"):
+            raise Exception(f"Erro ao enviar CAPTCHA: {resp.text}")
+        request_id = resp.text.split('|')[1]
+
+        print("⏳ Aguardando solução do CAPTCHA...")
+        token = ""
+        for _ in range(30):
+            time.sleep(5)
+            check = requests.get(f"http://2captcha.com/res.php?key={api_2captcha}&action=get&id={request_id}")
+            if check.text.startswith("OK|"):
+                token = check.text.split('|')[1]
+                break
+
+        if not token:
+            raise Exception("❌ CAPTCHA não resolvido")
+
+        print("✅ CAPTCHA resolvido!")
+        driver.execute_script("document.getElementById('g-recaptcha-response').style.display = 'block';")
+        driver.execute_script(f"document.getElementById('g-recaptcha-response').innerHTML = '{token}';")
+        driver.execute_script("if (typeof recaptchaCallback === 'function') recaptchaCallback();")
+        time.sleep(3)
+
+        print("🚀 Clicando em entrar...")
+        driver.find_element(By.CSS_SELECTOR, "button[type='submit']").click()
+
+        WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.CSS_SELECTOR, "a.btn")))
+
+        print("🔍 Buscando unidade consumidora...")
+        botoes = driver.find_elements(By.CSS_SELECTOR, "a.btn")
+        for botao in botoes:
+            texto = botao.text.strip().replace("-", "").replace(".", "")
+            if codigo_unidade in texto:
+                driver.execute_script("arguments[0].click();", botao)
+                break
+        else:
+            raise Exception("Unidade consumidora não encontrada.")
+
+        print("📄 Acessando histórico de consumo...")
+        historico = WebDriverWait(driver, 20).until(
+            EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, 'HistoricoConsumo')]"))
+        )
+        historico.click()
+
+        print("🔍 Procurando fatura...")
+        linhas_faturas = WebDriverWait(driver, 30).until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "tr"))
+        )
+
+        for linha in linhas_faturas:
+            if mes_referencia in linha.text:
+                driver.execute_script("arguments[0].scrollIntoView();", linha)
+                time.sleep(1)
+                driver.execute_script("arguments[0].click();", linha)
+                time.sleep(2)
+
+                link_element = linha.find_element(By.XPATH, ".//a[contains(@href, 'SegundaVia')]")
+                driver.execute_script("arguments[0].click();", link_element)
+
+                print("⏬ Aguardando download do PDF...")
+                time.sleep(10)
+
+                # Criar subpasta do CPF
+                cpf_limpo = ''.join(filter(str.isdigit, cpf_cnpj))
+                subpasta_cpf = download_path / cpf_limpo
+                subpasta_cpf.mkdir(parents=True, exist_ok=True)
+
+                # Pega o último PDF
+                arquivos_pdf = list(Path(pasta_download).glob("*.pdf"))
+                if not arquivos_pdf:
+                    return False, "❌ Nenhum PDF encontrado após clique no link da fatura."
+
+                ultimo_pdf = max(arquivos_pdf, key=lambda f: f.stat().st_mtime)
+
+                # Novo nome + destino
+                nome_arquivo = f"fatura_{cpf_limpo}_{codigo_unidade}_{mes_referencia.replace('/', '_')}.pdf"
+                caminho_novo = subpasta_cpf / nome_arquivo
+                # Se o destino já existir, exclui o antigo
+                if caminho_novo.exists():
+                    caminho_novo.unlink()
+
+                # 🔄 Mover e renomear o arquivo
+                ultimo_pdf.rename(caminho_novo)
+
+                # Copia para static/faturas
+                pasta_publica = Path("static/faturas")
+                pasta_publica.mkdir(parents=True, exist_ok=True)
+                caminho_exibicao = pasta_publica / nome_arquivo
+                shutil.copy2(caminho_novo, caminho_exibicao)
+
+                # Retorna a URL relativa para ser usada na view
+                url_pdf = f"/static/faturas/{nome_arquivo}"
+                print(f"✅ PDF disponível em: {url_pdf}")
+                return True, url_pdf  # ✅ este é o único return necessário
+
+        return False, "❌ Fatura do mês não encontrada."
+
+    except Exception as e:
+        print("❌ Erro:", e)
+        return False, f"❌ Erro: {e}"
+
+    finally:
+        driver.quit()
+        
+@app.route('/baixar_fatura', methods=['GET', 'POST'])
+def baixar_fatura():
+    if request.method == 'POST':
+        cpf = request.form['cpf']
+        senha = request.form['senha']
+        codigo = request.form['codigo_unidade']
+        mes = request.form['mes_referencia']
+
+        # 🔐 Chave do 2Captcha
+        captcha_key = "a8a517df68cc0cf9cf37d8e976d8be33"
+
+        # 📁 Pasta base de download
+        pasta_download = Path('data/boletos').resolve()
+        pasta_download.mkdir(parents=True, exist_ok=True)
+
+        # ⬇️ Baixar a fatura
+        sucesso, retorno = baixar_fatura_neoenergia(
+            cpf, senha, codigo, mes, str(pasta_download), captcha_key
+        )
+
+        if sucesso:
+            # `retorno` já é a URL do arquivo, ex: /static/faturas/....
+            link = request.host_url.rstrip('/') + retorno  # monta URL absoluta
+            flash(Markup(f"✅ Fatura baixada com sucesso. <a href='{link}' target='_blank'>Clique aqui para abrir o PDF</a>"))
+        else:
+            flash(f"❌ Erro: {retorno}")
+
+        return redirect(url_for('baixar_fatura'))
+
+    return render_template('form_baixar_fatura.html')
 
 
 if __name__ == '__main__':

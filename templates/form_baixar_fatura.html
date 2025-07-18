@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% block title %}Baixar Fatura Neoenergia{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="p-4 bg-white rounded shadow">
+        <h3 class="text-center mb-4 text-primary">🔽 Baixar Fatura da Neoenergia</h3>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            {% for message in messages %}
+              <div class="alert alert-info text-center">{{ message|safe }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <form method="POST" onsubmit="mostrarLoading()">
+            <div class="mb-3">
+                <label class="form-label">CPF ou CNPJ (somente números)</label>
+                <input type="text" name="cpf" class="form-control" required pattern="^\d{11}|\d{14}$" title="Informe apenas números (CPF: 11 dígitos, CNPJ: 14 dígitos)">
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Senha</label>
+                <input type="text" name="senha" class="form-control" required>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Código da Unidade (somente números e sem dígito verificador)</label>
+                <input type="text" name="codigo_unidade" class="form-control" required pattern="^\d+$" title="Digite apenas números, sem o dígito verificador">
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Mês de Referência (formato MM/AAAA)</label>
+                <input type="text" name="mes_referencia" class="form-control" placeholder="07/2025" pattern="^\d{2}/\d{4}$" required title="Digite no formato MM/AAAA">
+            </div>
+
+            <div class="text-center">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-cloud-download"></i> Baixar Fatura
+                </button>
+            </div>
+
+            <div class="text-center mt-4" id="loading" style="display:none;">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="mt-2">⏳ Processo em execução... Aguarde.</p>
+            </div>
+        </form>
+
+        <div class="text-center mt-3">
+            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">Voltar ao Início</a>
+        </div>
+    </div>
+</div>
+
+<script>
+    function mostrarLoading() {
+        document.getElementById('loading').style.display = 'block';
+    }
+</script>
+{% endblock %}

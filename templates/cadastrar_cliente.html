@@ -6,8 +6,9 @@
 <div class="container mt-5 p-4 bg-white rounded shadow">
     <h2 class="mb-4 text-primary text-center">Cadastro de Clientes</h2>
 
-    <form method="POST" action="{{ url_for('cadastrar_cliente') }}">
+    <form method="POST" action="{{ url_for('cadastrar_cliente') }}" onsubmit="return validarFormulario()">
         <div class="row g-3">
+            <!-- Dados Pessoais -->
             <div class="col-md-6">
                 <label for="nome" class="form-label">Nome</label>
                 <input type="text" class="form-control" id="nome" name="nome" required>
@@ -28,18 +29,22 @@
                 <label for="telefone" class="form-label">Telefone</label>
                 <input type="text" class="form-control" id="telefone" name="telefone" required>
             </div>
-            <div class="form-check mt-2">
+
+            <!-- Checkboxes -->
+            <div class="form-check mt-2 ms-3">
                 <input class="form-check-input" type="checkbox" name="mostrar_saldo" id="mostrar_saldo" checked>
                 <label class="form-check-label" for="mostrar_saldo">
                     Mostrar Saldo Acumulado no Relatório
                 </label>                
             </div>
-            <div class="form-check mt-2">
+            <div class="form-check mt-2 ms-3">
                 <input class="form-check-input" type="checkbox" id="consumo_instantaneo" name="consumo_instantaneo">
                 <label class="form-check-label" for="consumo_instantaneo">
                     Cliente com Consumo Instantâneo
                 </label>
             </div>
+
+            <!-- Endereço e Unidade -->
             <div class="col-md-6">
                 <label for="endereco" class="form-label">Endereço</label>
                 <input type="text" class="form-control" id="endereco" name="endereco" required>
@@ -57,20 +62,70 @@
                     {% endfor %}
                 </select>
             </div>
-        </div>
 
-            <div class="mt-4 text-center">
-                <button type="submit" class="btn btn-primary">Cadastrar Cliente</button>
+            <!-- Novos campos -->
+            <div class="col-md-6">
+                <label for="login_concessionaria" class="form-label">Login da Concessionária</label>
+                <input type="text" class="form-control" id="login_concessionaria" name="login_concessionaria">
             </div>
-        </form>
+            <div class="col-md-6">
+                <label for="senha_concessionaria" class="form-label">Senha da Concessionária</label>
+                <input type="text" class="form-control" id="senha_concessionaria" name="senha_concessionaria">
+            </div>
 
-        <!-- Botões de navegação -->
-        <div class="text-center mt-4 d-flex justify-content-center gap-3 flex-wrap">
-            <a href="{{ url_for('listar_clientes') }}" class="btn btn-primary">
-                <i class="bi bi-list-ul"></i> Ver Clientes Cadastrados
-            </a>
-            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
-                <i class="bi bi-house-door-fill"></i> Voltar para o Início
-            </a>
+            <div class="form-check mt-2 ms-3">
+                <input class="form-check-input" type="checkbox" id="relatorio_automatico" name="relatorio_automatico" onchange="toggleDiaRelatorio()">
+                <label class="form-check-label" for="relatorio_automatico">
+                    Gerar Relatório Automaticamente
+                </label>
+            </div>
+
+            <div class="col-md-4" id="campo_dia_relatorio" style="display: none;">
+                <label for="dia_relatorio" class="form-label">Dia do Relatório</label>
+                <input type="number" class="form-control" id="dia_relatorio" name="dia_relatorio" min="1" max="31">
+            </div>
         </div>
+
+        <div class="mt-4 text-center">
+            <button type="submit" class="btn btn-primary">Cadastrar Cliente</button>
+        </div>
+    </form>
+
+    <!-- Botões de navegação -->
+    <div class="text-center mt-4 d-flex justify-content-center gap-3 flex-wrap">
+        <a href="{{ url_for('listar_clientes') }}" class="btn btn-primary">
+            <i class="bi bi-list-ul"></i> Ver Clientes Cadastrados
+        </a>
+        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-house-door-fill"></i> Voltar para o Início
+        </a>
+    </div>
+</div>
+
+<script>
+    function toggleDiaRelatorio() {
+        const check = document.getElementById('relatorio_automatico');
+        const campo = document.getElementById('campo_dia_relatorio');
+        campo.style.display = check.checked ? 'block' : 'none';
+    }
+
+    function validarFormulario() {
+        const check = document.getElementById('relatorio_automatico');
+        const dia = document.getElementById('dia_relatorio');
+
+        if (check.checked) {
+            const valor = parseInt(dia.value);
+            if (isNaN(valor) || valor < 1 || valor > 31) {
+                alert("Por favor, informe um dia válido entre 1 e 31 para o relatório automático.");
+                dia.focus();
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    window.addEventListener('DOMContentLoaded', toggleDiaRelatorio);
+</script>
+
 {% endblock %}

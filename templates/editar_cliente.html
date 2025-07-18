@@ -9,8 +9,9 @@
     <div class="container mt-5 p-4 bg-white rounded shadow">
         <h2 class="mb-4 text-primary text-center">Editar Cliente</h2>
 
-        <form method="POST">
+        <form method="POST" onsubmit="return validarFormulario()">
             <div class="row g-3">
+                <!-- Campos existentes -->
                 <div class="col-md-6">
                     <label for="nome" class="form-label">Nome</label>
                     <input type="text" class="form-control" id="nome" name="nome" value="{{ cliente.nome }}" required>
@@ -33,14 +34,14 @@
                     <label for="telefone" class="form-label">Telefone</label>
                     <input type="text" class="form-control" id="telefone" name="telefone" value="{{ cliente.telefone }}" required>
                 </div>
-                <div class="form-check mt-3">
+                <div class="form-check mt-3 ms-3">
                     <input class="form-check-input" type="checkbox" name="mostrar_saldo" id="mostrar_saldo"
                         {% if cliente.mostrar_saldo %}checked{% endif %}>
                     <label class="form-check-label" for="mostrar_saldo">
                         Mostrar Saldo Acumulado no Relatório
                     </label>
                 </div>
-                <div class="form-check mt-2">
+                <div class="form-check mt-2 ms-3">
                     <input class="form-check-input" type="checkbox" name="consumo_instantaneo" id="consumo_instantaneo"
                         {% if cliente.consumo_instantaneo %}checked{% endif %}>
                     <label class="form-check-label" for="consumo_instantaneo">
@@ -65,13 +66,63 @@
                         {% endfor %}
                     </select>
                 </div>
+
+                <!-- Novos campos -->
+                <div class="col-md-6">
+                    <label for="login_concessionaria" class="form-label">Login da Concessionária</label>
+                    <input type="text" class="form-control" id="login_concessionaria" name="login_concessionaria" value="{{ cliente.login_concessionaria or '' }}">
+                </div>
+                <div class="col-md-6">
+                    <label for="senha_concessionaria" class="form-label">Senha da Concessionária</label>
+                    <input type="text" class="form-control" id="senha_concessionaria" name="senha_concessionaria" value="{{ cliente.senha_concessionaria or '' }}">
+                </div>
+
+                <div class="form-check mt-2 ms-3">
+                    <input class="form-check-input" type="checkbox" id="relatorio_automatico" name="relatorio_automatico"
+                        {% if cliente.relatorio_automatico %}checked{% endif %} onchange="toggleDiaRelatorio()">
+                    <label class="form-check-label" for="relatorio_automatico">
+                        Gerar Relatório Automaticamente
+                    </label>
+                </div>
+
+                <div class="col-md-4" id="campo_dia_relatorio" style="display: none;">
+                    <label for="dia_relatorio" class="form-label">Dia do Relatório</label>
+                    <input type="number" class="form-control" id="dia_relatorio" name="dia_relatorio" min="1" max="31" value="{{ cliente.dia_relatorio or '' }}">
+                </div>
             </div>
 
             <div class="mt-4 text-center">
                 <button type="submit" class="btn btn-success">Salvar Alterações</button>
-                <a href="{{ url_for('cadastrar_cliente') }}" class="btn btn-secondary">Cancelar</a>
+                <a href="{{ url_for('listar_clientes') }}" class="btn btn-secondary">Cancelar</a>
             </div>
         </form>
     </div>
+
+    <script>
+        function toggleDiaRelatorio() {
+            const check = document.getElementById('relatorio_automatico');
+            const campo = document.getElementById('campo_dia_relatorio');
+            campo.style.display = check.checked ? 'block' : 'none';
+        }
+
+        function validarFormulario() {
+            const check = document.getElementById('relatorio_automatico');
+            const dia = document.getElementById('dia_relatorio');
+
+            if (check.checked) {
+                const valor = parseInt(dia.value);
+                if (isNaN(valor) || valor < 1 || valor > 31) {
+                    alert("Por favor, informe um dia válido entre 1 e 31 para o relatório automático.");
+                    dia.focus();
+                    return false;
+                }
+            }
+
+            return true; // tudo certo, envia o formulário
+        }
+
+        window.addEventListener('DOMContentLoaded', toggleDiaRelatorio);
+    </script>
+
 </body>
 </html>
