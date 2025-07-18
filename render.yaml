@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: usinas
+    env: docker
+    plan: standard
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: RENDER
+        value: "true"
