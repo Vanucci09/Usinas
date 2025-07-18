@@ -28,6 +28,7 @@ from selenium.webdriver.chrome.service import Service
 from pathlib import Path
 from markupsafe import Markup
 from shutil import copyfile
+import undetected_chromedriver as uc
 
 
 app = Flask(__name__)
@@ -3733,16 +3734,21 @@ def vincular_kehua():
 
 def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pasta_download, api_2captcha):
     URL_LOGIN = "https://agenciavirtual.neoenergiabrasilia.com.br/Account/EfetuarLogin"
-    SITEKEY = "6LdmOIAbAAAAANXdHAociZWz1gqR9Qvy3AN0rJy4"
+    SITEKEY = "6LdmOIAbAAAAANXdHAociZWz1gqR9Qvy3AN0rJy4"    
 
     # 📁 Diretório de download resolvido
     download_path = Path(pasta_download).resolve()
 
     # ⚙️ Configurações do navegador
-    options = Options()
+    options = uc.ChromeOptions()
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
+
+    # Ativa o modo headless apenas na Render
+    if platform.system() == "Linux" and os.getenv("RENDER") == "true":
+        options.add_argument("--headless")
+        options.binary_location = "/usr/bin/chromium"
 
     # 📥 Preferências de download
     prefs = {
@@ -3752,18 +3758,8 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
     }
     options.add_experimental_option("prefs", prefs)
 
-    # 🌐 Ambiente local ou Render
-    if platform.system() == "Linux" and os.getenv("RENDER") == "true":
-        # Ambiente Render
-        options.add_argument("--headless")  # headless ativado apenas na Render
-        options.binary_location = "/usr/bin/chromium"
-        service = Service("/usr/bin/chromedriver")
-        driver = webdriver.Chrome(service=service, options=options)
-    else:
-        # Ambiente local
-        from webdriver_manager.chrome import ChromeDriverManager
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=options)
+    # 🔄 Inicializa o navegador (funciona local e na Render)
+    driver = uc.Chrome(options=options)
 
     try:
         print("🌐 Acessando página de login...")
