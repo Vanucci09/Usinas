@@ -3792,30 +3792,28 @@ def vincular_kehua():
 
     return render_template('vincular_kehua.html', usinas=usinas, estacoes=estacoes)
 
-def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pasta_download, api_2captcha):    
-    
-    URL_LOGIN = "https://agenciavirtual.neoenergiabrasilia.com.br/Account/EfetuarLogin"
-    SITEKEY = "6LdmOIAbAAAAANXdHAociZWz1gqR9Qvy3AN0rJy4"    
-
+def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pasta_download, api_2captcha):
     # Detectar se está em produção (Render) ou local
     em_producao = os.getenv("RENDER", "0") == "1"
-    print(f"[DEBUG] Ambiente: {'Render' if em_producao else 'Local'}")
+    print(f"[DEBUG] Ambiente: {'Render' if em_producao else 'Local'}")    
+    
+    URL_LOGIN = "https://agenciavirtual.neoenergiabrasilia.com.br/Account/EfetuarLogin"
+    SITEKEY = "6LdmOIAbAAAAANXdHAociZWz1gqR9Qvy3AN0rJy4" 
+
+    # Criar perfil temporário para evitar conflitos de sessão
+    temp_profile = tempfile.mkdtemp()
 
     # Configuração do navegador
     options = Options()
-    if em_producao:
-        options.add_argument("--headless=new")
-        options.binary_location = "/usr/bin/chromium"
-        
-    # ✅ Diretório temporário exclusivo para evitar conflito de perfil
-    temp_profile = tempfile.mkdtemp()
-    options.add_argument(f"--user-data-dir={temp_profile}")
-
+    options.add_argument("--user-data-dir=" + temp_profile)
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
 
-    # Diretório de download resolvido corretamente
+    if em_producao:
+        options.add_argument("--headless=new")
+        options.binary_location = "/usr/bin/chromium"
+
     download_path = Path(pasta_download).resolve()
     prefs = {
         "download.default_directory": str(download_path),
@@ -3824,15 +3822,13 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
     }
     options.add_experimental_option("prefs", prefs)
 
-    # Diretório de perfil exclusivo para evitar conflitos
-    if em_producao:
-        user_data_dir = tempfile.mkdtemp(prefix="selenium_user_data_")
-        options.add_argument(f"--user-data-dir={user_data_dir}")
-        driver = webdriver.Chrome(executable_path="/usr/bin/chromedriver", options=options)
-    else:
-        driver = webdriver.Chrome(options=options)
-
+    # Inicializa o driver
     try:
+        if em_producao:
+            driver = webdriver.Chrome(executable_path="/usr/bin/chromedriver", options=options)
+        else:
+            driver = webdriver.Chrome(options=options)
+
         print("🌐 Acessando página de login...")
         driver.get(URL_LOGIN)
         time.sleep(5)
@@ -3921,11 +3917,8 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
                 # Novo nome + destino
                 nome_arquivo = f"fatura_{cpf_limpo}_{codigo_unidade}_{mes_referencia.replace('/', '_')}.pdf"
                 caminho_novo = subpasta_cpf / nome_arquivo
-                # Se o destino já existir, exclui o antigo
                 if caminho_novo.exists():
                     caminho_novo.unlink()
-
-                # 🔄 Mover e renomear o arquivo
                 ultimo_pdf.rename(caminho_novo)
 
                 # Copia para static/faturas
@@ -3934,10 +3927,9 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
                 caminho_exibicao = pasta_publica / nome_arquivo
                 shutil.copy2(caminho_novo, caminho_exibicao)
 
-                # Retorna a URL relativa para ser usada na view
                 url_pdf = f"/static/faturas/{nome_arquivo}"
                 print(f"✅ PDF disponível em: {url_pdf}")
-                return True, url_pdf  # ✅ este é o único return necessário
+                return True, url_pdf
 
         return False, "❌ Fatura do mês não encontrada."
 
@@ -3946,7 +3938,15 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
         return False, f"❌ Erro: {e}"
 
     finally:
-        driver.quit()
+        try:
+            driver.quit()
+        except Exception as e:
+            print("[WARNING] Erro ao fechar o driver:", e)
+
+        try:
+            shutil.rmtree(temp_profile, ignore_errors=True)
+        except Exception as e:
+            print("[WARNING] Erro ao remover perfil temporário:", e)
         
 @app.route('/baixar_fatura', methods=['GET', 'POST'])
 def baixar_fatura():
