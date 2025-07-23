@@ -12,7 +12,7 @@ import fitz, tempfile, glob, platform
 from PIL import Image
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
-import time, hashlib, json, hmac, requests, base64, atexit
+import time, hashlib, json, hmac, requests, base64, atexit, math
 from email.utils import formatdate
 from apscheduler.schedulers.background import BackgroundScheduler
 from flask_mail import Mail, Message
@@ -485,11 +485,11 @@ def consulta():
 @login_required
 def producao_mensal(usina_id, ano, mes):
     usina = Usina.query.get_or_404(usina_id)
+    potencia_kw = usina.potencia_kw
 
-    # Define intervalo do mês
     data_inicio = date(ano, mes, 1)
     data_fim = date(ano + 1, 1, 1) if mes == 12 else date(ano, mes + 1, 1)
-    
+
     resultados = Geracao.query.filter(
         Geracao.usina_id == usina_id,
         Geracao.data >= data_inicio,
@@ -506,11 +506,11 @@ def producao_mensal(usina_id, ano, mes):
         totais[dia - 1] = r.energia_kwh
         soma += r.energia_kwh
         detalhes.append({'data': r.data, 'energia_kwh': r.energia_kwh})
-    
+
     dias_com_dado = len(resultados)
     media_diaria = soma / dias_com_dado if dias_com_dado > 0 else 0.0
     previsao_total = round(media_diaria * dias_mes, 2)
-    
+
     previsao_registro = PrevisaoMensal.query.filter_by(
         usina_id=usina_id, ano=ano, mes=mes
     ).first()
@@ -519,7 +519,7 @@ def producao_mensal(usina_id, ano, mes):
     previsoes = [round(previsao_diaria_padrao, 2) for _ in range(dias_mes)]
 
     inicio_ano = date(ano, 1, 1)
-    fim_periodo = data_fim - timedelta(days=1)  
+    fim_periodo = data_fim - timedelta(days=1)
     ano_sum = db.session.query(func.coalesce(func.sum(Geracao.energia_kwh), 0.0)).filter(
         Geracao.usina_id == usina_id,
         Geracao.data >= inicio_ano,
@@ -530,36 +530,68 @@ def producao_mensal(usina_id, ano, mes):
     ano_bruto = round(ano_sum * 0.83, 2)
     ano_liquido = round(ano_bruto * 0.80, 2)
 
-    usinas = Usina.query.all()
-    
-    # Buscar geração agrupada por mês (de janeiro até mês anterior)
-    geracoes_mensais = db.session.query(
-        func.extract('month', Geracao.data).label('mes'),
-        func.sum(Geracao.energia_kwh).label('soma_kwh')
+    # --------------------------
+    # Média Yield acumulado no ano (exceto mês atual)
+    # --------------------------
+    geracoes_diarias = db.session.query(
+        Geracao.data,
+        func.sum(Geracao.energia_kwh)
     ).filter(
         Geracao.usina_id == usina_id,
         extract('year', Geracao.data) == ano,
         extract('month', Geracao.data) < mes
-    ).group_by(func.extract('month', Geracao.data)).all()
+    ).group_by(Geracao.data).all()
 
-    # Calcular yield de cada mês anterior
-    yield_acumulado = []
-    for registro in geracoes_mensais:
-        mes_loop = int(registro.mes)
-        energia_mes = registro.soma_kwh or 0
-        dias_mes = calendar.monthrange(ano, mes_loop)[1]
-        
-        if usina.potencia_kw and usina.potencia_kw > 0:
-            yield_mensal = energia_mes / (usina.potencia_kw * dias_mes)
-            yield_acumulado.append(yield_mensal)
+    dados_por_mes = defaultdict(list)
+    for data, energia in geracoes_diarias:
+        dados_por_mes[data.month].append(float(energia))
 
-    # Média acumulada dos yields anteriores
-    media_yield_acumulado = round(sum(yield_acumulado) / len(yield_acumulado), 2) if yield_acumulado else None
+    yield_mensal = []
+    for mes_ref, energias_diarias in dados_por_mes.items():
+        dias_com_dados = len(energias_diarias)
+        dias_no_mes = monthrange(ano, mes_ref)[1]
+        soma_kwh = sum(energias_diarias)
+
+        if potencia_kw and dias_com_dados > 0:
+            y = (soma_kwh / potencia_kw) * (dias_no_mes / dias_com_dados)
+            yield_mensal.append(y)
+
+    media_yield_acumulado = round(sum(yield_mensal) / len(yield_mensal), 2) if yield_mensal else None
+
+    # --------------------------
+    # Yield do mesmo mês do ano anterior
+    # --------------------------
+    data_inicio_anterior = date(ano - 1, mes, 1)
+    data_fim_anterior = date(ano - 1, mes % 12 + 1, 1) if mes < 12 else date(ano, 1, 1)
+
+    resultados_ano_anterior = Geracao.query.filter(
+        Geracao.usina_id == usina_id,
+        Geracao.data >= data_inicio_anterior,
+        Geracao.data < data_fim_anterior
+    ).all()
+
+    dias_com_dados_ant = len(resultados_ano_anterior)
+    dias_mes_ant = monthrange(ano - 1, mes)[1]
+    soma_ant = sum(r.energia_kwh for r in resultados_ano_anterior)
+
+    if (
+        potencia_kw and potencia_kw > 0 and
+        dias_com_dados_ant > 0 and
+        soma_ant > 0
+    ):
+        valor = (soma_ant / potencia_kw) * (dias_mes_ant / dias_com_dados_ant)
+        yield_ano_anterior = round(valor, 2) if not math.isnan(valor) else None
+    else:
+        yield_ano_anterior = None
+
+    # --------------------------
+
+    usinas = Usina.query.all()
 
     return render_template(
         'producao_mensal.html',
         usina_nome=usina.nome,
-        potencia_kw=usina.potencia_kw,
+        potencia_kw=potencia_kw,
         usina_id=usina_id,
         ano=ano,
         mes=mes,
@@ -576,7 +608,8 @@ def producao_mensal(usina_id, ano, mes):
         ano_faturamento_bruto=ano_bruto,
         ano_faturamento_liquido=ano_liquido,
         dias_no_mes=dias_mes,
-        media_yield_acumulado=media_yield_acumulado
+        media_yield_acumulado=media_yield_acumulado,
+        yield_ano_anterior=yield_ano_anterior
     )
 
 @app.route('/clientes_da_usina/<int:usina_id>')

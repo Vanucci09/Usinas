@@ -1,6 +1,24 @@
 {% extends 'base.html' %}
 
 {% block content %}
+<style>
+    .card-metrica {
+        height: 120px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+    }
+    .card-metrica .fs-5 {
+        font-size: 1.4rem;
+    }
+    .card-metrica small {
+        font-size: 0.8rem;
+        display: block;
+    }
+</style>
+
 <div class="container mt-4">
     <h2 class="mb-4 text-primary">
         Produção Mensal – {{ usina_nome }}
@@ -44,50 +62,60 @@
     <!-- Métricas -->
     <div class="row mb-4">
         <!-- Geração Anual -->
-        <div class="col-md-3 fade-in">
-            <div class="card border-success shadow-sm">
+        <div class="col-12 col-sm-6 col-md-3 fade-in">
+            <div class="card border-success shadow-sm card-metrica">
                 <div class="card-body">
                     <h6 class="text-success">Geração Anual</h6>
-                    <p class="fs-5">{{ "{:,}".format(ano_geracao_total|round(2)).replace(",", "X").replace(".", ",").replace("X", ".") }} kWh</p>
+                    <p class="fs-5 mb-0">
+                        {{ "{:,}".format(ano_geracao_total|round(2)).replace(",", "X").replace(".", ",").replace("X", ".") }} kWh
+                    </p>
                 </div>
             </div>
         </div>
         <!-- Geração Mensal -->
-        <div class="col-md-3 fade-in" style="animation-delay: 0.2s;">
-            <div class="card border-primary shadow-sm">
+        <div class="col-12 col-sm-6 col-md-3 fade-in" style="animation-delay: 0.2s;">
+            <div class="card border-primary shadow-sm card-metrica">
                 <div class="card-body">
                     <h6 class="text-primary">Geração Mensal</h6>
-                    <p class="fs-5">{{ "{:,}".format(soma_total|round(2)).replace(",", "X").replace(".", ",").replace("X", ".") }} kWh</p>
+                    <p class="fs-5 mb-0">
+                        {{ "{:,}".format(soma_total|round(2)).replace(",", "X").replace(".", ",").replace("X", ".") }} kWh
+                    </p>
                 </div>
             </div>
         </div>
         <!-- Previsão Mensal -->
-        <div class="col-md-3 fade-in" style="animation-delay: 0.4s;">
-            <div class="card border-warning shadow-sm">
+        <div class="col-12 col-sm-6 col-md-3 fade-in" style="animation-delay: 0.4s;">
+            <div class="card border-warning shadow-sm card-metrica">
                 <div class="card-body">
                     <h6 class="text-warning">Previsão Mensal</h6>
-                    <p class="fs-5">{{ "{:,}".format(previsao_mensal|round(2)).replace(",", "X").replace(".", ",").replace("X", ".") }} kWh</p>
+                    <p class="fs-5 mb-0">
+                        {{ "{:,}".format(previsao_mensal|round(2)).replace(",", "X").replace(".", ",").replace("X", ".") }} kWh
+                    </p>
                 </div>
             </div>
         </div>
-        <!-- Yield -->
-        <div class="col-md-3 fade-in" style="animation-delay: 0.6s;">
-            <div class="card border-dark shadow-sm">
-                <div class="card-body">
-                    <h6 class="text-dark">Yield (kWh/kWp)</h6>
-                    <p class="fs-5">
-                        {% set dias_com_dados = totais | select("gt", 0) | list | length %}
-                        {% if potencia_kw is not none and potencia_kw > 0 and dias_no_mes > 0 and dias_com_dados > 0 %}
-                            {% set resultado = soma_total / (dias_com_dados * (potencia_kw / dias_no_mes)) %}
-                            {{ resultado | round(2) }}
-                        {% else %}
-                            <span class="text-muted">Não calculável (dados insuficientes)</span>
-                        {% endif %}
-                    </p>
-                    {% if media_yield_acumulado %}
-                        <small class="text-muted">Média acumulada no ano (exceto mês atual): {{ media_yield_acumulado | round(2) }}</small>
+    <!-- Yield -->
+    <div class="col-12 col-sm-6 col-md-3 fade-in" style="animation-delay: 0.6s;">
+        <div class="card border-dark shadow-sm card-metrica">
+            <div class="card-body">
+                <h6 class="text-dark">Yield (kWh/kWp)</h6>
+                <p class="fs-5 mb-1">
+                    {% set dias_com_dados = totais | select("gt", 0) | list | length %}
+                    {% if potencia_kw is not none and potencia_kw > 0 and dias_no_mes > 0 and dias_com_dados > 0 %}
+                        {% set resultado = soma_total / (dias_com_dados * (potencia_kw / dias_no_mes)) %}
+                        {{ resultado | round(2) }}
+                    {% else %}
+                        <span class="text-muted">Não calculável</span>
                     {% endif %}
-                </div>
+                </p>
+                {% if media_yield_acumulado %}
+                    <small class="text-muted">Média anual acumulada: {{ media_yield_acumulado }}</small>
+                {% endif %}
+                {% if yield_ano_anterior is not none %}
+                    <small class="text-muted">Mesmo mês ano anterior: {{ yield_ano_anterior }}</small>
+                {% else %}
+                    <small class="text-danger">Sem dados do ano anterior</small>
+                {% endif %}
             </div>
         </div>
     </div>
