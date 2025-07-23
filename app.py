@@ -29,6 +29,8 @@ from pathlib import Path
 from markupsafe import Markup
 from shutil import copyfile
 import undetected_chromedriver as uc
+from collections import defaultdict
+from sqlalchemy import extract
 
 
 app = Flask(__name__)
@@ -529,6 +531,30 @@ def producao_mensal(usina_id, ano, mes):
     ano_liquido = round(ano_bruto * 0.80, 2)
 
     usinas = Usina.query.all()
+    
+    # Buscar geração agrupada por mês (de janeiro até mês anterior)
+    geracoes_mensais = db.session.query(
+        func.extract('month', Geracao.data).label('mes'),
+        func.sum(Geracao.energia_kwh).label('soma_kwh')
+    ).filter(
+        Geracao.usina_id == usina_id,
+        extract('year', Geracao.data) == ano,
+        extract('month', Geracao.data) < mes
+    ).group_by(func.extract('month', Geracao.data)).all()
+
+    # Calcular yield de cada mês anterior
+    yield_acumulado = []
+    for registro in geracoes_mensais:
+        mes_loop = int(registro.mes)
+        energia_mes = registro.soma_kwh or 0
+        dias_mes = calendar.monthrange(ano, mes_loop)[1]
+        
+        if usina.potencia_kw and usina.potencia_kw > 0:
+            yield_mensal = energia_mes / (usina.potencia_kw * dias_mes)
+            yield_acumulado.append(yield_mensal)
+
+    # Média acumulada dos yields anteriores
+    media_yield_acumulado = round(sum(yield_acumulado) / len(yield_acumulado), 2) if yield_acumulado else None
 
     return render_template(
         'producao_mensal.html',
@@ -549,7 +575,8 @@ def producao_mensal(usina_id, ano, mes):
         ano_geracao_total=round(ano_sum, 2),
         ano_faturamento_bruto=ano_bruto,
         ano_faturamento_liquido=ano_liquido,
-        dias_no_mes=dias_mes
+        dias_no_mes=dias_mes,
+        media_yield_acumulado=media_yield_acumulado
     )
 
 @app.route('/clientes_da_usina/<int:usina_id>')
@@ -3734,34 +3761,24 @@ def vincular_kehua():
 
 def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pasta_download, api_2captcha):
     URL_LOGIN = "https://agenciavirtual.neoenergiabrasilia.com.br/Account/EfetuarLogin"
-    SITEKEY = "6LdmOIAbAAAAANXdHAociZWz1gqR9Qvy3AN0rJy4"    
+    SITEKEY = "6LdmOIAbAAAAANXdHAociZWz1gqR9Qvy3AN0rJy4"
 
-    # 📁 Diretório de download resolvido
-    download_path = Path(pasta_download).resolve()
-
-    # ⚙️ Configurações do navegador
-    options = uc.ChromeOptions()
+    # Configuração do navegador
+    options = Options()
+    #options.add_argument("--headless=new")
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
 
-    # 📥 Preferências de download
+    # Diretório de download resolvido corretamente
+    download_path = Path(pasta_download).resolve()
     prefs = {
         "download.default_directory": str(download_path),
         "plugins.always_open_pdf_externally": True,
         "download.prompt_for_download": False
     }
     options.add_experimental_option("prefs", prefs)
-
-    # 🔄 Inicializa o navegador (funciona local e na Render)
-    if platform.system() == "Linux" and os.getenv("RENDER") == "true":
-        options.add_argument("--headless")
-        driver = uc.Chrome(
-            options=options,
-            browser_executable_path="/usr/bin/chromium"  # Caminho explícito necessário
-        )
-    else:
-        driver = uc.Chrome(options=options)
+    driver = webdriver.Chrome(options=options)
 
     try:
         print("🌐 Acessando página de login...")
@@ -3887,24 +3904,29 @@ def baixar_fatura():
         codigo = request.form['codigo_unidade']
         mes = request.form['mes_referencia']
 
-        # 🔐 Chave do 2Captcha
+        # 🔐 Chave da API 2Captcha
         captcha_key = "a8a517df68cc0cf9cf37d8e976d8be33"
 
-        # 📁 Pasta base de download
+        # 📁 Pasta base para salvar as faturas
         pasta_download = Path('data/boletos').resolve()
         pasta_download.mkdir(parents=True, exist_ok=True)
 
-        # ⬇️ Baixar a fatura
+        # ⬇️ Executa a função de download
         sucesso, retorno = baixar_fatura_neoenergia(
-            cpf, senha, codigo, mes, str(pasta_download), captcha_key
+            cpf_cnpj=cpf,
+            senha=senha,
+            codigo_unidade=codigo,
+            mes_referencia=mes,
+            pasta_download=str(pasta_download),
+            api_2captcha=captcha_key
         )
 
         if sucesso:
-            # `retorno` já é a URL do arquivo, ex: /static/faturas/....
-            link = request.host_url.rstrip('/') + retorno  # monta URL absoluta
+            # Exibe link clicável na mensagem de sucesso
+            link = request.host_url.rstrip('/') + retorno
             flash(Markup(f"✅ Fatura baixada com sucesso. <a href='{link}' target='_blank'>Clique aqui para abrir o PDF</a>"))
         else:
-            flash(f"❌ Erro: {retorno}")
+            flash(retorno)
 
         return redirect(url_for('baixar_fatura'))
 
