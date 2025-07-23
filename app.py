@@ -3800,32 +3800,29 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
     URL_LOGIN = "https://agenciavirtual.neoenergiabrasilia.com.br/Account/EfetuarLogin"
     SITEKEY = "6LdmOIAbAAAAANXdHAociZWz1gqR9Qvy3AN0rJy4" 
 
-    # Criar perfil temporário para evitar conflitos de sessão
-    temp_profile = tempfile.mkdtemp(prefix="chrome_profile_")
+    driver = None
+    user_data_dir = tempfile.mkdtemp(prefix="chrome_user_")
+    print(f"[DEBUG] Criando perfil temporário em: {user_data_dir}")
 
-    # Configuração do navegador
-    options = Options()
-    options.add_argument(f"--user-data-dir={temp_profile}")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-
-    if em_producao:
-        options.add_argument("--headless=new")
-        options.binary_location = "/usr/bin/chromium"
-
-    download_path = Path(pasta_download).resolve()
-    prefs = {
-        "download.default_directory": str(download_path),
-        "plugins.always_open_pdf_externally": True,
-        "download.prompt_for_download": False
-    }
-    options.add_experimental_option("prefs", prefs)
-    
-    print(f"[DEBUG] Criando perfil temporário em: {temp_profile}")
-
-    # Inicializa o driver
     try:
+        # Configuração do navegador
+        options = Options()
+        options.add_argument(f"--user-data-dir={user_data_dir}")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        if em_producao:
+            options.add_argument("--headless=new")
+            options.binary_location = "/usr/bin/chromium"
+
+        download_path = Path(pasta_download).resolve()
+        prefs = {
+            "download.default_directory": str(download_path),
+            "plugins.always_open_pdf_externally": True,
+            "download.prompt_for_download": False
+        }
+        options.add_experimental_option("prefs", prefs)
+
         if em_producao:
             driver = webdriver.Chrome(executable_path="/usr/bin/chromedriver", options=options)
         else:
@@ -3940,13 +3937,14 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
         return False, f"❌ Erro: {e}"
 
     finally:
-        try:
-            driver.quit()
-        except Exception as e:
-            print("[WARNING] Erro ao fechar o driver:", e)
+        if driver:
+            try:
+                driver.quit()
+            except Exception as e:
+                print("[WARNING] Erro ao fechar o driver:", e)
 
         try:
-            shutil.rmtree(temp_profile, ignore_errors=True)
+            shutil.rmtree(user_data_dir, ignore_errors=True)
         except Exception as e:
             print("[WARNING] Erro ao remover perfil temporário:", e)
         
