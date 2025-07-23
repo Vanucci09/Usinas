@@ -36,5 +36,8 @@ RUN pip install -r requirements.txt
 # Expõe a porta usada pela aplicação
 EXPOSE 10000
 
+# Define variável de ambiente indicando que está em produção
+ENV RENDER=1
+
 # Comando para iniciar o app com Gunicorn
 CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:10000"]
