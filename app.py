@@ -3801,17 +3801,16 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
     SITEKEY = "6LdmOIAbAAAAANXdHAociZWz1gqR9Qvy3AN0rJy4" 
 
     driver = None
-    user_data_dir = tempfile.mkdtemp(prefix="chrome_user_")
-    print(f"[DEBUG] Criando perfil temporário em: {user_data_dir}")
+    user_data_dir = tempfile.mkdtemp(prefix="selenium_profile_")
+    print(f"[DEBUG] Criando perfil temporário: {user_data_dir}")
 
     try:
         # Configuração do navegador
         options = Options()
-        user_data_dir = tempfile.mkdtemp(prefix="selenium_profile_")
         options.add_argument(f"--user-data-dir={user_data_dir}")
-        options.add_argument("--disable-gpu")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
         if em_producao:
             options.add_argument("--headless=new")
             options.binary_location = "/usr/bin/chromium"
