@@ -31,6 +31,7 @@ from shutil import copyfile
 import undetected_chromedriver as uc
 from collections import defaultdict
 from sqlalchemy import extract
+from threading import Lock
 
 
 app = Flask(__name__)
@@ -299,6 +300,7 @@ class Usuario(db.Model, UserMixin):
         return check_password_hash(self.senha_hash, senha)
 
 
+lock_selenium = Lock()
 # Pasta para uploads
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -308,8 +310,6 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 @login_required
 def index():
     return render_template('index.html')
-
-from datetime import datetime
 
 @app.route('/cadastrar_usina', methods=['GET', 'POST'])
 @login_required
@@ -3951,34 +3951,43 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
 @app.route('/baixar_fatura', methods=['GET', 'POST'])
 def baixar_fatura():
     if request.method == 'POST':
-        cpf = request.form['cpf']
-        senha = request.form['senha']
-        codigo = request.form['codigo_unidade']
-        mes = request.form['mes_referencia']
+        # ⚠️ Verifica se já está em execução
+        if not lock_selenium.acquire(blocking=False):
+            flash("⚠️ Já existe uma operação de download em andamento. Tente novamente em alguns segundos.")
+            return redirect(url_for('baixar_fatura'))
 
-        # 🔐 Chave da API 2Captcha
-        captcha_key = "a8a517df68cc0cf9cf37d8e976d8be33"
+        try:
+            cpf = request.form['cpf']
+            senha = request.form['senha']
+            codigo = request.form['codigo_unidade']
+            mes = request.form['mes_referencia']
 
-        # 📁 Pasta base para salvar as faturas
-        pasta_download = Path('data/boletos').resolve()
-        pasta_download.mkdir(parents=True, exist_ok=True)
+            # 🔐 Chave da API 2Captcha
+            captcha_key = "a8a517df68cc0cf9cf37d8e976d8be33"
 
-        # ⬇️ Executa a função de download
-        sucesso, retorno = baixar_fatura_neoenergia(
-            cpf_cnpj=cpf,
-            senha=senha,
-            codigo_unidade=codigo,
-            mes_referencia=mes,
-            pasta_download=str(pasta_download),
-            api_2captcha=captcha_key
-        )
+            # 📁 Pasta base para salvar as faturas
+            pasta_download = Path('data/boletos').resolve()
+            pasta_download.mkdir(parents=True, exist_ok=True)
 
-        if sucesso:
-            # Exibe link clicável na mensagem de sucesso
-            link = request.host_url.rstrip('/') + retorno
-            flash(Markup(f"✅ Fatura baixada com sucesso. <a href='{link}' target='_blank'>Clique aqui para abrir o PDF</a>"))
-        else:
-            flash(retorno)
+            # ⬇️ Executa a função de download
+            sucesso, retorno = baixar_fatura_neoenergia(
+                cpf_cnpj=cpf,
+                senha=senha,
+                codigo_unidade=codigo,
+                mes_referencia=mes,
+                pasta_download=str(pasta_download),
+                api_2captcha=captcha_key
+            )
+
+            if sucesso:
+                link = request.host_url.rstrip('/') + retorno
+                flash(Markup(f"✅ Fatura baixada com sucesso. <a href='{link}' target='_blank'>Clique aqui para abrir o PDF</a>"))
+            else:
+                flash(retorno)
+
+        finally:
+            # ✅ Libera o lock mesmo em caso de erro
+            lock_selenium.release()
 
         return redirect(url_for('baixar_fatura'))
 
