@@ -3807,6 +3807,7 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
     try:
         # Configuração do navegador
         options = Options()
+        user_data_dir = tempfile.mkdtemp(prefix="selenium_profile_")
         options.add_argument(f"--user-data-dir={user_data_dir}")
         options.add_argument("--disable-gpu")
         options.add_argument("--no-sandbox")
@@ -3946,7 +3947,7 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
         try:
             shutil.rmtree(user_data_dir, ignore_errors=True)
         except Exception as e:
-            print("[WARNING] Erro ao remover perfil temporário:", e)
+            print("[WARNING] Erro ao remover user_data_dir:", e)
         
 @app.route('/baixar_fatura', methods=['GET', 'POST'])
 def baixar_fatura():
