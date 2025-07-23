@@ -3792,13 +3792,20 @@ def vincular_kehua():
 
     return render_template('vincular_kehua.html', usinas=usinas, estacoes=estacoes)
 
-def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pasta_download, api_2captcha):
+def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pasta_download, api_2captcha):    
+    
     URL_LOGIN = "https://agenciavirtual.neoenergiabrasilia.com.br/Account/EfetuarLogin"
-    SITEKEY = "6LdmOIAbAAAAANXdHAociZWz1gqR9Qvy3AN0rJy4"
+    SITEKEY = "6LdmOIAbAAAAANXdHAociZWz1gqR9Qvy3AN0rJy4"    
+
+    # Detectar se está em produção (Render) ou local
+    em_producao = os.getenv("RENDER", "0") == "1"
+    print(f"[DEBUG] Ambiente: {'Render' if em_producao else 'Local'}")
 
     # Configuração do navegador
     options = Options()
-    #options.add_argument("--headless=new")
+    if em_producao:
+        options.add_argument("--headless=new")
+        options.binary_location = "/usr/bin/chromium"
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
@@ -3811,7 +3818,11 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
         "download.prompt_for_download": False
     }
     options.add_experimental_option("prefs", prefs)
-    driver = webdriver.Chrome(options=options)
+
+    if em_producao:
+        driver = webdriver.Chrome(executable_path="/usr/bin/chromedriver", options=options)
+    else:
+        driver = webdriver.Chrome(options=options)
 
     try:
         print("🌐 Acessando página de login...")
