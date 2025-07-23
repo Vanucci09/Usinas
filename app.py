@@ -3806,6 +3806,10 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
     if em_producao:
         options.add_argument("--headless=new")
         options.binary_location = "/usr/bin/chromium"
+        
+    # ✅ Diretório temporário exclusivo para evitar conflito de perfil
+    temp_profile = tempfile.mkdtemp()
+    options.add_argument(f"--user-data-dir={temp_profile}")
 
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
