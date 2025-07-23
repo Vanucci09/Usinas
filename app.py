@@ -3806,6 +3806,7 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
     if em_producao:
         options.add_argument("--headless=new")
         options.binary_location = "/usr/bin/chromium"
+
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
@@ -3819,7 +3820,10 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
     }
     options.add_experimental_option("prefs", prefs)
 
+    # Diretório de perfil exclusivo para evitar conflitos
     if em_producao:
+        user_data_dir = tempfile.mkdtemp(prefix="selenium_user_data_")
+        options.add_argument(f"--user-data-dir={user_data_dir}")
         driver = webdriver.Chrome(executable_path="/usr/bin/chromedriver", options=options)
     else:
         driver = webdriver.Chrome(options=options)
