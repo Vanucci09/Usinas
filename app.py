@@ -3801,11 +3801,11 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
     SITEKEY = "6LdmOIAbAAAAANXdHAociZWz1gqR9Qvy3AN0rJy4" 
 
     # Criar perfil temporário para evitar conflitos de sessão
-    temp_profile = tempfile.mkdtemp()
+    temp_profile = tempfile.mkdtemp(prefix="chrome_profile_")
 
     # Configuração do navegador
     options = Options()
-    options.add_argument("--user-data-dir=" + temp_profile)
+    options.add_argument(f"--user-data-dir={temp_profile}")
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
@@ -3821,6 +3821,8 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
         "download.prompt_for_download": False
     }
     options.add_experimental_option("prefs", prefs)
+    
+    print(f"[DEBUG] Criando perfil temporário em: {temp_profile}")
 
     # Inicializa o driver
     try:
