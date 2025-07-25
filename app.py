@@ -32,7 +32,6 @@ import undetected_chromedriver as uc
 from collections import defaultdict
 from sqlalchemy import extract
 from threading import Lock
-from webdriver_manager.chrome import ChromeDriverManager
 
 
 app = Flask(__name__)
