@@ -3801,26 +3801,27 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
     SITEKEY = "6LdmOIAbAAAAANXdHAociZWz1gqR9Qvy3AN0rJy4" 
 
     driver = None
-    user_data_dir = tempfile.mkdtemp(prefix="selenium_profile_")
-    print(f"[DEBUG] Criando perfil temporário: {user_data_dir}")
+    user_data_dir = None
+    if not em_producao:
+        user_data_dir = tempfile.mkdtemp(prefix="selenium_profile_")
+        print(f"[DEBUG] Criando perfil temporário: {user_data_dir}")
 
     try:
         options = Options()
 
-        # Apenas em ambiente local usamos --user-data-dir
-        if not em_producao:
+        # Só usa --user-data-dir localmente
+        if user_data_dir:
             options.add_argument(f"--user-data-dir={user_data_dir}")
 
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
-        options.add_argument("--no-first-run")
-        options.add_argument("--no-default-browser-check")
+        options.add_argument("--no-startup-window")
         options.add_argument("--disable-extensions")
-        options.add_argument("--disable-background-networking")
         options.add_argument("--disable-sync")
         options.add_argument("--disable-translate")
-        options.add_argument("--no-startup-window")
+        options.add_argument("--no-default-browser-check")
+        options.add_argument("--no-first-run")
 
         if em_producao:
             options.add_argument("--headless")
@@ -3834,11 +3835,10 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
         }
         options.add_experimental_option("prefs", prefs)
 
-        # Cria o driver
-        if em_producao:
-            driver = webdriver.Chrome(executable_path="/usr/bin/chromedriver", options=options)
-        else:
-            driver = webdriver.Chrome(options=options)
+        driver = webdriver.Chrome(
+            executable_path="/usr/bin/chromedriver" if em_producao else None,
+            options=options
+        )
 
         print("🌐 Acessando página de login...")
         driver.get(URL_LOGIN)
