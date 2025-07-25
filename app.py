@@ -28,7 +28,6 @@ from selenium.webdriver.chrome.service import Service
 from pathlib import Path
 from markupsafe import Markup
 from shutil import copyfile
-import undetected_chromedriver as uc
 from collections import defaultdict
 from sqlalchemy import extract
 from threading import Lock
