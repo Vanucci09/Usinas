@@ -3801,39 +3801,24 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
     SITEKEY = "6LdmOIAbAAAAANXdHAociZWz1gqR9Qvy3AN0rJy4" 
 
     driver = None
-    user_data_dir = None
-    if not em_producao:
-        user_data_dir = tempfile.mkdtemp(prefix="selenium_profile_")
-        print(f"[DEBUG] Criando perfil temporário: {user_data_dir}")
+    user_data_dir = tempfile.mkdtemp(prefix="selenium_profile_")
+    print(f"[DEBUG] Criando perfil temporário: {user_data_dir}")
 
     try:
         options = Options()
-
-        # Só usa --user-data-dir localmente
-        if user_data_dir:
-            options.add_argument(f"--user-data-dir={user_data_dir}")
-
+        options.add_argument(f"--user-data-dir={user_data_dir}")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
-        options.add_argument("--no-startup-window")
+        options.add_argument("--headless")  # Chromium 132 funciona bem com isso
+
+        options.add_argument("--no-first-run")
+        options.add_argument("--no-default-browser-check")
         options.add_argument("--disable-extensions")
         options.add_argument("--disable-sync")
         options.add_argument("--disable-translate")
-        options.add_argument("--no-default-browser-check")
-        options.add_argument("--no-first-run")
 
         if em_producao:
-            options.add_argument("--headless=new")  # ativa o novo headless, sem relançamento escondido
-            options.add_argument("--disable-features=ChromeWhatsNewUI,Translate")
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--disable-gpu")
-            options.add_argument("--disable-extensions")
-            options.add_argument("--disable-background-networking")
-            options.add_argument("--disable-sync")
-            options.add_argument("--no-first-run")
-            options.add_argument("--no-default-browser-check")
             options.binary_location = "/usr/bin/chromium"
 
         download_path = Path(pasta_download).resolve()
@@ -3844,11 +3829,8 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
         }
         options.add_experimental_option("prefs", prefs)
 
-        if em_producao:
-            service = Service(executable_path="/usr/bin/chromedriver")
-        else:
-            service = Service()  # usará o chromedriver do PATH local
-
+        # Cria o driver com Service (forma correta no Selenium 4.6+)
+        service = Service("/usr/bin/chromedriver" if em_producao else None)
         driver = webdriver.Chrome(service=service, options=options)
 
         print("🌐 Acessando página de login...")
