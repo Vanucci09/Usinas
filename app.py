@@ -32,6 +32,7 @@ import undetected_chromedriver as uc
 from collections import defaultdict
 from sqlalchemy import extract
 from threading import Lock
+from webdriver_manager.chrome import ChromeDriverManager
 
 
 app = Flask(__name__)
@@ -3830,7 +3831,7 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
         options.add_experimental_option("prefs", prefs)
 
         # Cria o driver com Service (forma correta no Selenium 4.6+)
-        service = Service("/usr/bin/chromedriver" if em_producao else None)
+        service = Service("/usr/bin/chromedriver")
         driver = webdriver.Chrome(service=service, options=options)
 
         print("🌐 Acessando página de login...")
