@@ -3835,10 +3835,12 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
         }
         options.add_experimental_option("prefs", prefs)
 
-        driver = webdriver.Chrome(
-            executable_path="/usr/bin/chromedriver" if em_producao else None,
-            options=options
-        )
+        if em_producao:
+            service = Service(executable_path="/usr/bin/chromedriver")
+        else:
+            service = Service()  # usará o chromedriver do PATH local
+
+        driver = webdriver.Chrome(service=service, options=options)
 
         print("🌐 Acessando página de login...")
         driver.get(URL_LOGIN)
