@@ -3824,7 +3824,16 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
         options.add_argument("--no-first-run")
 
         if em_producao:
-            options.add_argument("--headless")
+            options.add_argument("--headless=new")  # ativa o novo headless, sem relançamento escondido
+            options.add_argument("--disable-features=ChromeWhatsNewUI,Translate")
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            options.add_argument("--disable-gpu")
+            options.add_argument("--disable-extensions")
+            options.add_argument("--disable-background-networking")
+            options.add_argument("--disable-sync")
+            options.add_argument("--no-first-run")
+            options.add_argument("--no-default-browser-check")
             options.binary_location = "/usr/bin/chromium"
 
         download_path = Path(pasta_download).resolve()
