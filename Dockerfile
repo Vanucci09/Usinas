@@ -6,8 +6,10 @@ RUN apt-get update && apt-get install -y wget gnupg curl unzip \
  && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google.list \
  && apt-get update
 
-# Instala Google Chrome 114 (especificamente)
-RUN apt-get install -y google-chrome-stable=114.0.5735.90-1
+# Baixa e instala manualmente o Chrome 114
+RUN wget -q https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_114.0.5735.90-1_amd64.deb \
+ && apt-get install -y ./google-chrome-stable_114.0.5735.90-1_amd64.deb \
+ && rm google-chrome-stable_114.0.5735.90-1_amd64.deb
 
 # Baixa ChromeDriver compatível
 RUN CHROME_VERSION=114.0.5735.90 && \
