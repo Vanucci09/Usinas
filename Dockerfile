@@ -7,6 +7,9 @@ RUN apt-get update && apt-get install -y \
     unzip \
     gnupg \
     ca-certificates \
+    pkg-config \
+    default-libmysqlclient-dev \
+    build-essential \
     fonts-liberation \
     libappindicator3-1 \
     libasound2 \
