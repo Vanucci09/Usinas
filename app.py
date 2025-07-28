@@ -31,6 +31,7 @@ from shutil import copyfile
 from collections import defaultdict
 from sqlalchemy import extract
 from threading import Lock
+from webdriver_manager.chrome import ChromeDriverManager
 
 
 app = Flask(__name__)
@@ -3809,8 +3810,7 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
-        options.add_argument("--headless") 
-
+        options.add_argument("--headless=new")  # mais compatível com Render e menos detectável
         options.add_argument("--no-first-run")
         options.add_argument("--no-default-browser-check")
         options.add_argument("--disable-extensions")
@@ -3829,7 +3829,14 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
         options.add_experimental_option("prefs", prefs)
 
         # Cria o driver com Service (forma correta no Selenium 4.6+)
-        service = Service("/usr/bin/chromedriver")
+        if em_producao:
+            # No Render: chrome/chromedriver devem estar instalados em /usr/bin
+            caminho_driver = "/usr/bin/chromedriver"
+            service = Service(caminho_driver)
+        else:
+            # Local: usa webdriver-manager para obter o driver correto
+            service = Service(ChromeDriverManager().install())
+
         driver = webdriver.Chrome(service=service, options=options)
 
         print("🌐 Acessando página de login...")
@@ -3837,7 +3844,13 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
         time.sleep(5)
 
         print("✍️ Preenchendo CPF e senha...")
-        driver.find_element(By.CSS_SELECTOR, "input[placeholder='CPF/CNPJ']").send_keys(cpf_cnpj)
+        print("🔍 HTML da página atual:")
+        print(driver.page_source[:1000])  # imprime os primeiros 1000 caracteres
+
+        WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "input[placeholder*='CPF']"))
+        ).send_keys(cpf_cnpj)
+
         driver.find_element(By.CSS_SELECTOR, "input[placeholder='Senha']").send_keys(senha)
 
         print("🎯 Enviando CAPTCHA para 2Captcha...")
