@@ -58,6 +58,15 @@
                 <input type="number" name="referencia_ano" class="form-control" min="2000" max="2100" required>
             </div>
         </div>
+        <div class="mb-3">
+            <label for="credor_id" class="form-label">Credor</label>
+            <select id="credor_id" name="credor_id" class="form-select">
+                <option value="">— Nenhum —</option>
+                {% for credor in credores %}
+                <option value="{{ credor.id }}">{{ credor.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
 
         <div class="text-center">
             <button type="submit" class="btn btn-success">Salvar Despesa</button>

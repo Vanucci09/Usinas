@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify, make_response, send_file, flash, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, jsonify, make_response, send_file, flash, send_from_directory, abort
 from datetime import date, datetime, timedelta
 from calendar import monthrange
 import os, uuid, calendar
@@ -6,7 +6,7 @@ import pandas as pd
 from werkzeug.utils import secure_filename
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-from sqlalchemy import Numeric, text, func, case, cast
+from sqlalchemy import Numeric, text, func, case, cast, or_, and_
 from decimal import Decimal, ROUND_HALF_UP
 import fitz, tempfile, glob, platform
 from PIL import Image
@@ -31,6 +31,7 @@ from shutil import copyfile
 from collections import defaultdict
 from sqlalchemy import extract
 from threading import Lock
+import undetected_chromedriver as uc
 
 
 app = Flask(__name__)
@@ -202,6 +203,7 @@ class FinanceiroUsina(db.Model):
     data_pagamento = db.Column(db.Date)
     juros = db.Column(Numeric(10, 2), default=0)
 
+    credor_id = db.Column(db.Integer, db.ForeignKey('credores.id'), nullable=True)
     usina = db.relationship('Usina', backref='financeiros')
 
 class EconomiaExtra(db.Model):
@@ -280,6 +282,19 @@ class DistribuicaoMensal(db.Model):
 
     empresa = db.relationship('EmpresaInvestidora', backref='distribuicoes_mensais')
     usina = db.relationship('Usina', backref='distribuicoes_mensais')
+    
+class Credor(db.Model):
+    __tablename__ = 'credores'
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(255), nullable=False)
+    cnpj = db.Column(db.String(20), nullable=True, unique=True)
+    endereco = db.Column(db.String(255), nullable=True)
+    telefone = db.Column(db.String(30), nullable=True)
+    email = db.Column(db.String(120), nullable=True)
+
+    def __repr__(self):
+        return f'<Credor {self.nome}>'
     
 class Usuario(db.Model, UserMixin):
     __tablename__ = 'usuarios'
@@ -2262,24 +2277,29 @@ def registrar_despesa():
     if not current_user.pode_acessar_financeiro:
         return "Acesso negado", 403
 
-    usinas = Usina.query.all()
+    usinas     = Usina.query.order_by(Usina.nome).all()
     categorias = CategoriaDespesa.query.order_by(CategoriaDespesa.nome).all()
-    mensagem = None
-    data_hoje = date.today().isoformat()
+    credores   = Credor.query.order_by(Credor.nome).all()       # << nova linha
+    mensagem   = None
+    data_hoje  = date.today().isoformat()
 
     if request.method == 'POST':
         try:
-            usina_id = int(request.form['usina_id'])
-            categoria_id = int(request.form['categoria_id'])
-            valor = float(request.form['valor'].replace(',', '.'))
-            descricao = request.form['descricao']
-            data = datetime.strptime(request.form['data'], '%Y-%m-%d').date()
+            usina_id       = int(request.form['usina_id'])
+            categoria_id   = int(request.form['categoria_id'])
+            credor_id      = request.form.get('credor_id')          # <<< pega do form
+            credor_id      = int(credor_id) if credor_id else None
+
+            valor          = float(request.form['valor'].replace(',', '.'))
+            descricao      = request.form['descricao']
+            data           = datetime.strptime(request.form['data'], '%Y-%m-%d').date()
             referencia_mes = int(request.form['referencia_mes'])
             referencia_ano = int(request.form['referencia_ano'])
 
             nova_despesa = FinanceiroUsina(
                 usina_id=usina_id,
                 categoria_id=categoria_id,
+                credor_id=credor_id,                              # <<< atribui aqui
                 tipo='despesa',
                 valor=valor,
                 descricao=descricao,
@@ -2294,9 +2314,16 @@ def registrar_despesa():
 
         except Exception as e:
             db.session.rollback()
-            mensagem = f'Erro ao registrar despesa: {str(e)}'
+            mensagem = f'Erro ao registrar despesa: {e}'
 
-    return render_template('registrar_despesa.html', usinas=usinas, categorias=categorias, mensagem=mensagem, data_hoje=data_hoje)
+    return render_template(
+        'registrar_despesa.html',
+        usinas=usinas,
+        categorias=categorias,
+        credores=credores,         # <<< passa para o template
+        mensagem=mensagem,
+        data_hoje=data_hoje
+    )
 
 @app.route('/financeiro')
 @login_required
@@ -2450,23 +2477,39 @@ def atualizar_pagamento(id):
     return redirect(request.referrer or url_for('financeiro'))
 
 @app.route('/editar_despesa/<int:despesa_id>', methods=['GET', 'POST'])
+@login_required
 def editar_despesa(despesa_id):
-    despesa = FinanceiroUsina.query.get_or_404(despesa_id)
-    usinas = Usina.query.all()
-    categorias = CategoriaDespesa.query.all()
+    if not current_user.pode_acessar_financeiro:
+        abort(403)
+
+    despesa     = FinanceiroUsina.query.get_or_404(despesa_id)
+    usinas      = Usina.query.order_by(Usina.nome).all()
+    categorias  = CategoriaDespesa.query.order_by(CategoriaDespesa.nome).all()
+    credores    = Credor.query.order_by(Credor.nome).all()
 
     if request.method == 'POST':
-        despesa.usina_id = request.form['usina_id']
-        despesa.categoria_id = request.form['categoria_id']
-        despesa.descricao = request.form['descricao']
-        despesa.valor = float(request.form['valor'].replace(',', '.'))
-        despesa.data = request.form['data']
-        despesa.referencia_mes = int(request.form['referencia_mes'])
-        despesa.referencia_ano = int(request.form['referencia_ano'])
+        despesa.usina_id        = int(request.form['usina_id'])
+        despesa.categoria_id    = int(request.form['categoria_id'])
+        # pega credor_id (ou None se vazio)
+        cid = request.form.get('credor_id')
+        despesa.credor_id       = int(cid) if cid else None
+
+        despesa.descricao       = request.form['descricao']
+        despesa.valor           = float(request.form['valor'].replace(',', '.'))
+        despesa.data            = datetime.strptime(request.form['data'], '%Y-%m-%d').date()
+        despesa.referencia_mes  = int(request.form['referencia_mes'])
+        despesa.referencia_ano  = int(request.form['referencia_ano'])
+
         db.session.commit()
         return redirect(url_for('listar_despesas'))
 
-    return render_template('editar_despesa.html', despesa=despesa, usinas=usinas, categorias=categorias)
+    return render_template(
+        'editar_despesa.html',
+        despesa=despesa,
+        usinas=usinas,
+        categorias=categorias,
+        credores=credores
+    )
 
 @app.route('/listar_despesas', methods=['GET'])
 def listar_despesas():
@@ -2501,6 +2544,23 @@ def listar_despesas():
                            usina_id=usina_id,
                            data_inicio=data_inicio,
                            data_fim=data_fim)
+    
+@app.route('/excluir_despesa/<int:despesa_id>', methods=['POST'])
+@login_required
+def excluir_despesa(despesa_id):
+    despesa = FinanceiroUsina.query.get_or_404(despesa_id)
+
+    db.session.delete(despesa)
+    db.session.commit()
+    flash(f'Despesa #{despesa_id} excluída com sucesso.', 'success')
+
+    # redireciona de volta mantendo filtros (se quiser)
+    return redirect(url_for(
+        'listar_despesas',
+        usina_id=request.args.get('usina_id', ''),
+        data_inicio=request.args.get('data_inicio', ''),
+        data_fim=request.args.get('data_fim', '')
+    ))
 
 @app.route('/relatorio_financeiro', methods=['GET'])
 @login_required
@@ -2560,40 +2620,83 @@ def relatorio_consolidado():
     mes = request.args.get('mes', default=date.today().month, type=int)
     ano = request.args.get('ano', default=date.today().year, type=int)
 
+    # condição para histórico (até o mês/ano selecionado)
+    cond_acum = or_(
+        FinanceiroUsina.referencia_ano < ano,
+        and_(
+            FinanceiroUsina.referencia_ano == ano,
+            FinanceiroUsina.referencia_mes <= mes
+        )
+    )
+
     usinas = Usina.query.order_by(Usina.nome).all()
     resultado = []
 
+    total_receitas = total_despesas = total_saldo = total_saldo_acumulado = 0
+
     for usina in usinas:
-        # Somar apenas receitas com data_pagamento preenchida
+        # — receitas do mês corrente (com data_pagamento)
         receitas = db.session.query(
-            func.sum((FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)))
+            func.coalesce(
+                func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)),
+                0
+            )
         ).filter(
             FinanceiroUsina.usina_id == usina.id,
             FinanceiroUsina.tipo == 'receita',
             FinanceiroUsina.referencia_mes == mes,
             FinanceiroUsina.referencia_ano == ano,
             FinanceiroUsina.data_pagamento.isnot(None)
-        ).scalar() or 0
+        ).scalar()
 
-        despesas = db.session.query(db.func.sum(FinanceiroUsina.valor)).filter(
+        # — despesas do mês corrente
+        despesas = db.session.query(
+            func.coalesce(func.sum(FinanceiroUsina.valor), 0)
+        ).filter(
             FinanceiroUsina.usina_id == usina.id,
             FinanceiroUsina.tipo == 'despesa',
             FinanceiroUsina.referencia_mes == mes,
             FinanceiroUsina.referencia_ano == ano
-        ).scalar() or 0
+        ).scalar()
 
         saldo = receitas - despesas
+
+        # — receitas acumuladas até o período (somente pagas)
+        receitas_acum = db.session.query(
+            func.coalesce(
+                func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)),
+                0
+            )
+        ).filter(
+            FinanceiroUsina.usina_id == usina.id,
+            FinanceiroUsina.tipo == 'receita',
+            FinanceiroUsina.data_pagamento.isnot(None),
+            cond_acum
+        ).scalar()
+
+        # — despesas acumuladas até o período
+        despesas_acum = db.session.query(
+            func.coalesce(func.sum(FinanceiroUsina.valor), 0)
+        ).filter(
+            FinanceiroUsina.usina_id == usina.id,
+            FinanceiroUsina.tipo == 'despesa',
+            cond_acum
+        ).scalar()
+
+        saldo_acumulado = receitas_acum - despesas_acum
 
         resultado.append({
             'usina': usina.nome,
             'receitas': receitas,
             'despesas': despesas,
-            'saldo': saldo
+            'saldo': saldo,
+            'saldo_acumulado': saldo_acumulado
         })
-    
-    total_receitas = sum(r['receitas'] for r in resultado)
-    total_despesas = sum(r['despesas'] for r in resultado)
-    total_saldo = total_receitas - total_despesas
+
+        total_receitas += receitas
+        total_despesas += despesas
+        total_saldo += saldo
+        total_saldo_acumulado += saldo_acumulado
 
     return render_template(
         'relatorio_consolidado.html',
@@ -2602,7 +2705,26 @@ def relatorio_consolidado():
         ano=ano,
         total_receitas=total_receitas,
         total_despesas=total_despesas,
-        total_saldo=total_saldo
+        total_saldo=total_saldo,
+        total_saldo_acum=total_saldo_acumulado 
+    )
+
+@app.route('/autorizacao_pagamento/<int:item_id>', methods=['GET'])
+@login_required
+def autorizacao_pagamento(item_id):
+    # só quem pode acessar financeiro
+    if not current_user.pode_acessar_financeiro:
+        abort(403)
+    current_date = datetime.now().strftime('%d/%m/%Y, %H:%M')
+    item = FinanceiroUsina.query.get_or_404(item_id)
+    # só despesas
+    if item.tipo != 'despesa':
+        abort(404)
+
+    return render_template(
+        'autorizacao_pagamento.html',
+        item=item,
+        current_date=current_date
     )
 
 @app.route('/relatorio_categoria', methods=['GET'])
@@ -3804,34 +3926,39 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
     print(f"[DEBUG] Criando perfil temporário: {user_data_dir}")
 
     try:
-        options = Options()
+        options = uc.ChromeOptions()
         options.add_argument(f"--user-data-dir={user_data_dir}")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
-        options.add_argument("--headless=new")  # mais compatível com Render e menos detectável
-        options.add_argument("--no-first-run")
-        options.add_argument("--no-default-browser-check")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--headless=new")  # importante para Render
         options.add_argument("--disable-extensions")
         options.add_argument("--disable-sync")
         options.add_argument("--disable-translate")
+        options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36")
 
         if em_producao:
             options.binary_location = "/usr/bin/google-chrome"
 
-        download_path = Path(pasta_download).resolve()
         prefs = {
-            "download.default_directory": str(download_path),
+            "download.default_directory": str(Path(pasta_download).resolve()),
             "plugins.always_open_pdf_externally": True,
             "download.prompt_for_download": False
         }
         options.add_experimental_option("prefs", prefs)
 
-        # Cria o driver com Service (forma correta no Selenium 4.6+)
-        if em_producao:
-            options.binary_location = "/usr/bin/google-chrome"
+        driver = uc.Chrome(options=options, headless=True, use_subprocess=True)
 
-        driver = uc.Chrome(headless=True, options=options)
+        # Stealth JavaScript para ocultar webdriver
+        driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+            "source": """
+                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                window.chrome = { runtime: {} };
+                Object.defineProperty(navigator, 'languages', {get: () => ['pt-BR', 'pt']});
+                Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+            """
+        })
 
         print("🌐 Acessando página de login...")
         driver.get(URL_LOGIN)
@@ -3914,7 +4041,7 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
 
                 # Criar subpasta do CPF
                 cpf_limpo = ''.join(filter(str.isdigit, cpf_cnpj))
-                subpasta_cpf = download_path / cpf_limpo
+                subpasta_cpf = Path(pasta_download) / cpf_limpo
                 subpasta_cpf.mkdir(parents=True, exist_ok=True)
 
                 # Pega o último PDF
@@ -4003,6 +4130,76 @@ def baixar_fatura():
         return redirect(url_for('baixar_fatura'))
 
     return render_template('form_baixar_fatura.html')
+
+@app.route('/cadastrar_credor', methods=['GET', 'POST'])
+@login_required
+def cadastrar_credor():
+    if not current_user.pode_acessar_financeiro:
+        return "Acesso negado", 403
+
+    if request.method == 'POST':
+        nome      = request.form['nome']
+        cnpj      = request.form.get('cnpj') or None
+        endereco  = request.form.get('endereco') or None
+        telefone  = request.form.get('telefone') or None
+        email     = request.form.get('email') or None
+
+        novo = Credor(
+            nome=nome,
+            cnpj=cnpj,
+            endereco=endereco,
+            telefone=telefone,
+            email=email
+        )
+        db.session.add(novo)
+        db.session.commit()
+        flash(f'Credor “{nome}” cadastrado com sucesso.', 'success')
+        return redirect(url_for('listar_credores'))
+
+    return render_template('cadastrar_credor.html')
+
+@app.route('/listar_credores')
+@login_required
+def listar_credores():
+    if not current_user.pode_acessar_financeiro:
+        return "Acesso negado", 403
+
+    todos = Credor.query.order_by(Credor.nome).all()
+    return render_template('listar_credores.html', credores=todos)
+
+@app.route('/editar_credor/<int:credor_id>', methods=['GET', 'POST'])
+@login_required
+def editar_credor(credor_id):
+    if not current_user.pode_acessar_financeiro:
+        abort(403)
+    credor = Credor.query.get_or_404(credor_id)
+
+    if request.method == 'POST':
+        # Atualiza campos
+        credor.nome      = request.form['nome']
+        credor.cnpj      = request.form.get('cnpj') or None
+        credor.endereco  = request.form.get('endereco') or None
+        credor.telefone  = request.form.get('telefone') or None
+        credor.email     = request.form.get('email') or None
+
+        db.session.commit()
+        flash(f'Credor “{credor.nome}” atualizado com sucesso.', 'success')
+        return redirect(url_for('listar_credores'))
+
+    # GET: exibe formulário pré-preechido
+    return render_template('editar_credor.html', credor=credor)
+
+@app.route('/excluir_credor/<int:credor_id>', methods=['POST'])
+@login_required
+def excluir_credor(credor_id):
+    if not current_user.pode_acessar_financeiro:
+        abort(403)
+    credor = Credor.query.get_or_404(credor_id)
+
+    db.session.delete(credor)
+    db.session.commit()
+    flash(f'Credor “{credor.nome}” excluído com sucesso.', 'success')
+    return redirect(url_for('listar_credores'))
 
 
 if __name__ == '__main__':

@@ -1,10 +1,7 @@
 {% extends 'base.html' %}
-
-{% block title %}Cadastrar Geração Diária{% endblock %}
+{% block title %}Despesas Registradas{% endblock %}
 
 {% block content %}
-<body class="bg-light">
-
 <div class="container mt-5 p-4 bg-white shadow rounded">
     <h2 class="text-primary mb-4 text-center">Despesas Registradas</h2>
 
@@ -52,11 +49,22 @@
                 <td>{{ usinas.get(despesa.usina_id, 'N/A') }}</td>
                 <td>{{ categorias.get(despesa.categoria_id, 'N/A') }}</td>
                 <td>{{ despesa.descricao }}</td>
-                <td>{{ "%.2f"|format(despesa.valor) }}</td>
+                <td>{{ '%.2f'|format(despesa.valor) }}</td>
                 <td>{{ despesa.data }}</td>
-                <td>{{ despesa.referencia_mes }}/{{ despesa.referencia_ano }}</td>
+                <td>{{ '%02d'|format(despesa.referencia_mes) }}/{{ despesa.referencia_ano }}</td>
                 <td>
-                    <a href="{{ url_for('editar_despesa', despesa_id=despesa.id) }}" class="btn btn-sm btn-warning">Editar</a>
+                    <a href="{{ url_for('editar_despesa', despesa_id=despesa.id) }}" 
+                       class="btn btn-sm btn-warning">Editar</a>
+
+                    <!-- Formulário de exclusão -->
+                    <form method="POST"
+                          action="{{ url_for('excluir_despesa', despesa_id=despesa.id) }}"
+                          style="display:inline;"
+                          onsubmit="return confirm('Confirma exclusão da despesa #{{ despesa.id }}?');">
+                        <button type="submit" class="btn btn-sm btn-danger">
+                            Excluir
+                        </button>
+                    </form>
                 </td>
             </tr>
             {% endfor %}
@@ -67,7 +75,4 @@
         <a href="{{ url_for('index') }}" class="btn btn-secondary">Voltar ao Início</a>
     </div>
 </div>
-
-</body>
-</html>
 {% endblock %}

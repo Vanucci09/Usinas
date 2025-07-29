@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% block title %}Editar Credor{% endblock %}
+
+{% block content %}
+<div class="container mt-5 p-4 bg-white shadow rounded">
+  <h2 class="mb-4 text-primary">Editar Credor</h2>
+  <form method="POST">
+    <div class="mb-3">
+      <label class="form-label">Nome</label>
+      <input type="text" name="nome" class="form-control" required
+             value="{{ credor.nome }}">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">CNPJ</label>
+      <input type="text" name="cnpj" class="form-control"
+             value="{{ credor.cnpj or '' }}">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Endereço</label>
+      <input type="text" name="endereco" class="form-control"
+             value="{{ credor.endereco or '' }}">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Telefone</label>
+      <input type="text" name="telefone" class="form-control"
+             value="{{ credor.telefone or '' }}">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">E‑mail</label>
+      <input type="email" name="email" class="form-control"
+             value="{{ credor.email or '' }}">
+    </div>
+    <button type="submit" class="btn btn-primary">Salvar</button>
+    <a href="{{ url_for('listar_credores') }}" class="btn btn-secondary">Cancelar</a>
+  </form>
+</div>
+{% endblock %}

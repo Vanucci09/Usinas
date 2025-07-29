@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block title %}Credores Cadastrados{% endblock %}
+
+{% block content %}
+<div class="container mt-5 p-4 bg-white shadow rounded">
+  <h2 class="mb-4 text-primary">Credores Cadastrados</h2>
+  <div class="mb-3">
+    <a href="{{ url_for('cadastrar_credor') }}" class="btn btn-success">+ Novo Credor</a>
+  </div>
+
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>ID</th><th>Nome</th><th>CNPJ</th><th>Telefone</th><th>E‑mail</th><th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in credores %}
+      <tr>
+        <td>{{ c.id }}</td>
+        <td>{{ c.nome }}</td>
+        <td>{{ c.cnpj or '-' }}</td>
+        <td>{{ c.telefone or '-' }}</td>
+        <td>{{ c.email or '-' }}</td>
+        <td>
+          <a href="{{ url_for('editar_credor', credor_id=c.id) }}" class="btn btn-sm btn-warning">Editar</a>
+          <form method="POST"
+                action="{{ url_for('excluir_credor', credor_id=c.id) }}"
+                style="display:inline;"
+                onsubmit="return confirm('Excluir o credor {{ c.nome }}?');">
+            <button class="btn btn-sm btn-danger">Excluir</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="text-center mt-4">
+        <a href="{{ url_for('index') }}?aba=financeiro" class="btn btn-secondary">Voltar</a>
+    </div>
+</div>
+{% endblock %}

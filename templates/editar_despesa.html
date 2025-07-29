@@ -30,8 +30,18 @@
         </div>
 
         <div class="mb-3">
+            <label class="form-label">Credor</label>
+            <select name="credor_id" class="form-select">
+                <option value="">— Nenhum —</option>
+                {% for credor in credores %}
+                    <option value="{{ credor.id }}" {% if despesa.credor_id == credor.id %}selected{% endif %}>{{ credor.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="mb-3">
             <label class="form-label">Valor (R$)</label>
-            <input type="text" name="valor" class="form-control" required value="{{ "%.2f"|format(despesa.valor) }}">
+            <input type="text" name="valor" class="form-control" required value="{{ '%.2f'|format(despesa.valor) }}">
         </div>
 
         <div class="mb-3">
@@ -42,7 +52,7 @@
         <div class="row">
             <div class="col-md-4 mb-3">
                 <label class="form-label">Data</label>
-                <input type="date" name="data" class="form-control" required value="{{ despesa.data }}">
+                <input type="date" name="data" class="form-control" required value="{{ despesa.data.isoformat() }}">
             </div>
             <div class="col-md-4 mb-3">
                 <label class="form-label">Mês de Referência</label>
