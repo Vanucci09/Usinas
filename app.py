@@ -2571,22 +2571,17 @@ def relatorio_financeiro():
     usinas = Usina.query.order_by(Usina.nome).all()
 
     # Filtros
-    usina_id = request.args.get('usina_id', type=int)
-    tipo = request.args.get('tipo')
+    usina_id    = request.args.get('usina_id', type=int)
+    tipo        = request.args.get('tipo')
     data_inicio = request.args.get('data_inicio')
-    data_fim = request.args.get('data_fim')
+    data_fim    = request.args.get('data_fim')
 
     query = FinanceiroUsina.query
 
-    # Filtro por usina
     if usina_id:
         query = query.filter(FinanceiroUsina.usina_id == usina_id)
-
-    # Filtro por tipo (receita/despesa)
     if tipo in ['receita', 'despesa']:
         query = query.filter(FinanceiroUsina.tipo == tipo)
-
-    # Filtro por data
     if data_inicio:
         query = query.filter(FinanceiroUsina.data >= data_inicio)
     if data_fim:
@@ -2594,8 +2589,18 @@ def relatorio_financeiro():
 
     registros = query.order_by(FinanceiroUsina.data.asc()).all()
 
-    total_receitas = sum((r.valor or 0) + (r.juros or 0) for r in registros if r.tipo == 'receita')
-    total_despesas = sum(r.valor or 0 for r in registros if r.tipo == 'despesa')
+    # força float tanto para valor quanto para juros
+    total_receitas = sum(
+        (float(r.valor) if r.valor is not None else 0.0)
+        + (float(r.juros) if r.juros is not None else 0.0)
+        for r in registros
+        if r.tipo == 'receita'
+    )
+    total_despesas = sum(
+        float(r.valor) if r.valor is not None else 0.0
+        for r in registros
+        if r.tipo == 'despesa'
+    )
     saldo = total_receitas - total_despesas
 
     return render_template(
