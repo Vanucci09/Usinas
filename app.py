@@ -32,6 +32,7 @@ from collections import defaultdict
 from sqlalchemy import extract
 from threading import Lock
 import undetected_chromedriver as uc
+from sqlalchemy.exc import IntegrityError
 
 
 app = Flask(__name__)
@@ -205,6 +206,12 @@ class FinanceiroUsina(db.Model):
 
     credor_id = db.Column(db.Integer, db.ForeignKey('credores.id'), nullable=True)
     usina = db.relationship('Usina', backref='financeiros')
+    
+    credor = db.relationship(
+        'Credor',
+        backref=db.backref('financeiros', lazy='dynamic'),
+        lazy='joined'
+    )
 
 class EconomiaExtra(db.Model):
     __tablename__ = 'economias_extra'
@@ -2341,10 +2348,12 @@ def financeiro():
     categoria_id = request.args.get('categoria_id', type=int)
 
     # Base da query
-    query = FinanceiroUsina.query.filter(
-        FinanceiroUsina.referencia_mes == mes,
-        FinanceiroUsina.referencia_ano == ano
-    )
+    query = (FinanceiroUsina.query
+             .options(joinedload(FinanceiroUsina.credor))
+             .filter(
+                 FinanceiroUsina.referencia_mes == mes,
+                 FinanceiroUsina.referencia_ano == ano
+             ))
 
     if usina_id:
         query = query.filter(FinanceiroUsina.usina_id == usina_id)
@@ -2370,6 +2379,7 @@ def financeiro():
             'tipo': r.tipo,
             'usina': r.usina.nome if r.usina else 'N/A',
             'categoria': r.categoria.nome if r.categoria else '-',
+            'credor': r.credor.nome   if r.credor   else '-',
             'descricao': r.descricao,
             'valor': valor,
             'juros': float(juros),
@@ -2691,6 +2701,7 @@ def relatorio_consolidado():
         saldo_acumulado = receitas_acum - despesas_acum
 
         resultado.append({
+            'usina_id': usina.id,
             'usina': usina.nome,
             'receitas': receitas,
             'despesas': despesas,
@@ -4148,6 +4159,11 @@ def cadastrar_credor():
         endereco  = request.form.get('endereco') or None
         telefone  = request.form.get('telefone') or None
         email     = request.form.get('email') or None
+        
+        # 1) Validação prévia de unicidade
+        if cnpj and Credor.query.filter_by(cnpj=cnpj).first():
+            flash(f'O CNPJ {cnpj} já está cadastrado.', 'warning')
+            return redirect(url_for('cadastrar_credor'))
 
         novo = Credor(
             nome=nome,
@@ -4158,7 +4174,15 @@ def cadastrar_credor():
         )
         db.session.add(novo)
         db.session.commit()
-        flash(f'Credor “{nome}” cadastrado com sucesso.', 'success')
+        try:
+            db.session.commit()
+        except IntegrityError:
+            # 2) Caso alguma outra violação ocorra
+            db.session.rollback()
+            flash('Não foi possível cadastrar o credor. Verifique os dados e tente novamente.', 'danger')
+            return redirect(url_for('cadastrar_credor'))
+
+        flash('Credor cadastrado com sucesso!', 'success')
         return redirect(url_for('listar_credores'))
 
     return render_template('cadastrar_credor.html')
@@ -4206,6 +4230,58 @@ def excluir_credor(credor_id):
     flash(f'Credor “{credor.nome}” excluído com sucesso.', 'success')
     return redirect(url_for('listar_credores'))
 
+@app.route('/extrato_usina/<int:usina_id>')
+@login_required
+def extrato_usina(usina_id):
+    if not current_user.pode_acessar_financeiro:
+        abort(403)
+
+    mes = request.args.get('mes', type=int)
+    ano = request.args.get('ano', type=int)
+
+    usina = Usina.query.get_or_404(usina_id)
+
+    # Carrega lançamentos do mês/ano com Credor e Categoria
+    registros = (
+        FinanceiroUsina.query
+        .options(joinedload(FinanceiroUsina.credor), joinedload(FinanceiroUsina.categoria))
+        .filter_by(usina_id=usina_id,
+                   referencia_mes=mes,
+                   referencia_ano=ano)
+        .order_by(FinanceiroUsina.data)
+        .all()
+    )
+
+    extrato = []
+    saldo_corrente = Decimal('0')
+    for r in registros:
+        valor = Decimal(str(r.valor or 0))
+        juros = Decimal(str(r.juros or 0))
+        movimento = (valor + juros) if r.tipo=='receita' else -valor
+        saldo_corrente += movimento
+
+        # Se for despesa e tiver credor, use só o nome do credor
+        if r.tipo=='despesa' and r.credor:
+            texto = r.credor.nome
+        else:
+            texto = r.descricao
+
+        extrato.append({
+            'data':      r.data,
+            'tipo':      r.tipo,
+            'descricao': texto,
+            'valor':     movimento,
+            'saldo':     saldo_corrente
+        })
+
+    return render_template(
+        'extrato_usina.html',
+        usina=usina,
+        extrato=extrato,
+        mes=mes,
+        ano=ano
+    )
+    
 
 if __name__ == '__main__':
     with app.app_context():

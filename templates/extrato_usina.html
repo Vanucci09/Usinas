@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+
+{% block title %}
+  Extrato – {{ usina.nome }} ({{ "%02d"|format(mes) }}/{{ ano }})
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2 class="mb-4">
+    Extrato de Movimentações – {{ usina.nome }}
+    <small class="text-muted">({{ "%02d"|format(mes) }}/{{ ano }})</small>
+  </h2>
+
+  <table class="table table-bordered table-striped">
+    <thead class="table-light">
+      <tr>
+        <th>Data</th>
+        <th>Tipo</th>
+        <th>Descrição</th>
+        <th style="white-space: nowrap;">Valor (R$)</th>
+        <th style="white-space: nowrap;">Saldo (R$)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for mov in extrato %}
+      <tr>
+        <td>{{ mov.data.strftime('%d/%m/%Y') }}</td>
+        <td>{{ mov.tipo.title() }}</td>
+        <td>{{ mov.descricao }}</td>
+        <td>{{ mov.valor | formato_brasileiro }}</td>
+        <td>{{ mov.saldo | formato_brasileiro }}</td>
+      </tr>
+      {# Se for o último do dia, mostra o saldo do dia #}
+      {% set next_date = None %}
+      {% if not loop.last %}
+        {% set next_date = extrato[loop.index].data %}
+      {% endif %}
+      {% if loop.last or mov.data != next_date %}
+      <tr class="table-secondary">
+        <td colspan="4" class="text-end"><strong>Saldo em {{ mov.data.strftime('%d/%m/%Y') }}:</strong></td>
+        <td><strong>{{ mov.saldo | formato_brasileiro }}</strong></td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <a href="{{ url_for('relatorio_consolidado', mes=mes, ano=ano) }}"
+     class="btn btn-secondary mt-3">
+    ← Voltar ao Consolidado
+  </a>
+</div>
+{% endblock %}
