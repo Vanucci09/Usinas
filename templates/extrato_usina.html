@@ -11,42 +11,73 @@
     <small class="text-muted">({{ "%02d"|format(mes) }}/{{ ano }})</small>
   </h2>
 
+  {# Seleciona e ordena registros com data_pagamento #}
+  {% set pagos = extrato
+       | selectattr('data_pagamento')
+       | list
+       | sort(attribute='data_pagamento') %}
+
   <table class="table table-bordered table-striped">
     <thead class="table-light">
       <tr>
-        <th>Data</th>
+        <th>Data Pagamento</th>
         <th>Tipo</th>
         <th>Descrição</th>
-        <th style="white-space: nowrap;">Valor (R$)</th>
-        <th style="white-space: nowrap;">Saldo (R$)</th>
+        <th style="white-space: nowrap;">Crédito (R$)</th>
+        <th style="white-space: nowrap;">Débito (R$)</th>
       </tr>
     </thead>
     <tbody>
-      {% for mov in extrato %}
-      <tr>
-        <td>{{ mov.data.strftime('%d/%m/%Y') }}</td>
-        <td>{{ mov.tipo.title() }}</td>
-        <td>{{ mov.descricao }}</td>
-        <td>{{ mov.valor | formato_brasileiro }}</td>
-        <td>{{ mov.saldo | formato_brasileiro }}</td>
-      </tr>
-      {# Se for o último do dia, mostra o saldo do dia #}
-      {% set next_date = None %}
-      {% if not loop.last %}
-        {% set next_date = extrato[loop.index].data %}
-      {% endif %}
-      {% if loop.last or mov.data != next_date %}
+      {# Saldo inicial do mês anterior #}
+      {% if initial_saldo is defined and initial_saldo != 0 %}
       <tr class="table-secondary">
-        <td colspan="4" class="text-end"><strong>Saldo em {{ mov.data.strftime('%d/%m/%Y') }}:</strong></td>
-        <td><strong>{{ mov.saldo | formato_brasileiro }}</strong></td>
+        <td colspan="4" class="text-end"><strong>Saldo anterior:</strong></td>
+        <td><strong>{{ initial_saldo | formato_brasileiro }}</strong></td>
       </tr>
       {% endif %}
+      {# Saldo inicial do mês, vindo da view #}
+      {% if initial_saldo is defined and initial_saldo != 0 %}
+      <tr class="table-secondary">
+        <td colspan="4" class="text-end"><strong>Saldo inicial:</strong></td>
+        <td><strong>{{ initial_saldo | formato_brasileiro }}</strong></td>
+      </tr>
+      {% endif %}
+      {% set prev_date = namespace(value=None) %}
+      {% for mov in pagos %}
+        {% set curr = mov.data_pagamento.strftime('%d/%m/%Y') %}
+        <tr>
+          <td>
+            {% if curr != prev_date.value %}
+              {{ curr }}
+              {% set prev_date.value = curr %}
+            {% endif %}
+          </td>
+          <td>{{ mov.tipo.title() }}</td>
+          <td>{{ mov.descricao }}</td>
+          <td style="white-space: nowrap;">
+            {% if mov.valor > 0 %}
+              {{ mov.valor | formato_brasileiro }}
+            {% endif %}
+          </td>
+          <td style="white-space: nowrap;">
+            {% if mov.valor < 0 %}
+              {{ mov.valor | formato_brasileiro }}
+            {% endif %}
+          </td>
+        </tr>
+        {# exibe saldo ao final de cada dia #}
+        {% set next = (pagos[loop.index].data_pagamento.strftime('%d/%m/%Y') if not loop.last else None) %}
+        {% if loop.last or curr != next %}
+        <tr class="table-secondary">
+          <td colspan="4" class="text-end"><strong>Saldo em {{ curr }}:</strong></td>
+          <td><strong>{{ mov.saldo | formato_brasileiro }}</strong></td>
+        </tr>
+        {% endif %}
       {% endfor %}
     </tbody>
   </table>
 
-  <a href="{{ url_for('relatorio_consolidado', mes=mes, ano=ano) }}"
-     class="btn btn-secondary mt-3">
+  <a href="{{ url_for('relatorio_consolidado', mes=mes, ano=ano) }}" class="btn btn-secondary mt-3">
     ← Voltar ao Consolidado
   </a>
 </div>

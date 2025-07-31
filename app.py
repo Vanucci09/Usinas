@@ -2633,85 +2633,90 @@ def relatorio_consolidado():
         return "Acesso negado", 403
 
     mes = request.args.get('mes', default=date.today().month, type=int)
-    ano = request.args.get('ano', default=date.today().year, type=int)
-
-    # condição para histórico (até o mês/ano selecionado)
-    cond_acum = or_(
-        FinanceiroUsina.referencia_ano < ano,
-        and_(
-            FinanceiroUsina.referencia_ano == ano,
-            FinanceiroUsina.referencia_mes <= mes
-        )
-    )
+    ano = request.args.get('ano', default=date.today().year,  type=int)
 
     usinas = Usina.query.order_by(Usina.nome).all()
     resultado = []
 
-    total_receitas = total_despesas = total_saldo = total_saldo_acumulado = 0
+    total_receitas        = Decimal('0')
+    total_despesas        = Decimal('0')
+    total_saldo           = Decimal('0')
+    total_saldo_acumulado = Decimal('0')
 
-    for usina in usinas:
-        # — receitas do mês corrente (com data_pagamento)
+    # condição equivalente para acumulados por data_pagamento até o mês/ano selecionado
+    cond_dp_acum = or_(
+        extract('year', FinanceiroUsina.data_pagamento) < ano,
+        and_(
+            extract('year',  FinanceiroUsina.data_pagamento) == ano,
+            extract('month', FinanceiroUsina.data_pagamento) <= mes
+        )
+    )
+
+    for u in usinas:
+        # — receitas pagas no mês/ano (data_pagamento)
         receitas = db.session.query(
             func.coalesce(
                 func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)),
                 0
             )
         ).filter(
-            FinanceiroUsina.usina_id == usina.id,
+            FinanceiroUsina.usina_id == u.id,
             FinanceiroUsina.tipo == 'receita',
-            FinanceiroUsina.referencia_mes == mes,
-            FinanceiroUsina.referencia_ano == ano,
-            FinanceiroUsina.data_pagamento.isnot(None)
+            FinanceiroUsina.data_pagamento.isnot(None),
+            extract('year',  FinanceiroUsina.data_pagamento) == ano,
+            extract('month', FinanceiroUsina.data_pagamento) == mes
         ).scalar()
 
-        # — despesas do mês corrente
+        # — despesas pagas no mês/ano (data_pagamento)
         despesas = db.session.query(
             func.coalesce(func.sum(FinanceiroUsina.valor), 0)
         ).filter(
-            FinanceiroUsina.usina_id == usina.id,
+            FinanceiroUsina.usina_id == u.id,
             FinanceiroUsina.tipo == 'despesa',
-            FinanceiroUsina.referencia_mes == mes,
-            FinanceiroUsina.referencia_ano == ano
+            FinanceiroUsina.data_pagamento.isnot(None),
+            extract('year',  FinanceiroUsina.data_pagamento) == ano,
+            extract('month', FinanceiroUsina.data_pagamento) == mes
         ).scalar()
 
-        saldo = receitas - despesas
+        saldo = Decimal(receitas) - Decimal(despesas)
 
-        # — receitas acumuladas até o período (somente pagas)
+        # — acumulado de receitas até o mês (data_pagamento)
         receitas_acum = db.session.query(
             func.coalesce(
                 func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)),
                 0
             )
         ).filter(
-            FinanceiroUsina.usina_id == usina.id,
+            FinanceiroUsina.usina_id == u.id,
             FinanceiroUsina.tipo == 'receita',
             FinanceiroUsina.data_pagamento.isnot(None),
-            cond_acum
+            cond_dp_acum
         ).scalar()
 
-        # — despesas acumuladas até o período
+        # — acumulado de despesas até o mês (data_pagamento)
         despesas_acum = db.session.query(
             func.coalesce(func.sum(FinanceiroUsina.valor), 0)
         ).filter(
-            FinanceiroUsina.usina_id == usina.id,
+            FinanceiroUsina.usina_id == u.id,
             FinanceiroUsina.tipo == 'despesa',
-            cond_acum
+            FinanceiroUsina.data_pagamento.isnot(None),
+            cond_dp_acum
         ).scalar()
 
-        saldo_acumulado = receitas_acum - despesas_acum
+        saldo_acumulado = Decimal(receitas_acum) - Decimal(despesas_acum)
 
         resultado.append({
-            'usina_id': usina.id,
-            'usina': usina.nome,
-            'receitas': receitas,
-            'despesas': despesas,
-            'saldo': saldo,
+            'usina_id':        u.id,
+            'usina':           u.nome,
+            'receitas':        receitas,
+            'despesas':        despesas,
+            'saldo':           saldo,
             'saldo_acumulado': saldo_acumulado
         })
 
-        total_receitas += receitas
-        total_despesas += despesas
-        total_saldo += saldo
+        total_receitas        += Decimal(receitas)
+        total_despesas        += Decimal(despesas)
+        total_saldo           += saldo
         total_saldo_acumulado += saldo_acumulado
 
     return render_template(
@@ -2722,7 +2727,7 @@ def relatorio_consolidado():
         total_receitas=total_receitas,
         total_despesas=total_despesas,
         total_saldo=total_saldo,
-        total_saldo_acum=total_saldo_acumulado 
+        total_saldo_acum=total_saldo_acumulado
     )
 
 @app.route('/autorizacao_pagamento/<int:item_id>', methods=['GET'])
@@ -4233,53 +4238,87 @@ def excluir_credor(credor_id):
 @app.route('/extrato_usina/<int:usina_id>')
 @login_required
 def extrato_usina(usina_id):
+    # permissões
     if not current_user.pode_acessar_financeiro:
         abort(403)
 
-    mes = request.args.get('mes', type=int)
-    ano = request.args.get('ano', type=int)
-
+    # parâmetros de filtro
+    mes = request.args.get('mes',   type=int)
+    ano = request.args.get('ano',   type=int)
     usina = Usina.query.get_or_404(usina_id)
 
-    # Carrega lançamentos do mês/ano com Credor e Categoria
-    registros = (
+    # --- Saldo inicial do mês (até o último dia do mês anterior) ---
+    # 1º dia do mês corrente
+    first_of_month = date(ano, mes, 1)
+    # último dia do mês anterior
+    prev_month_last = first_of_month - timedelta(days=1)
+
+    # busca todos os registros pagos até prev_month_last
+    prev_records = (
         FinanceiroUsina.query
-        .options(joinedload(FinanceiroUsina.credor), joinedload(FinanceiroUsina.categoria))
-        .filter_by(usina_id=usina_id,
-                   referencia_mes=mes,
-                   referencia_ano=ano)
-        .order_by(FinanceiroUsina.data)
+        .filter(
+            FinanceiroUsina.usina_id == usina_id,
+            FinanceiroUsina.data_pagamento.isnot(None),
+            FinanceiroUsina.data_pagamento <= prev_month_last
+        )
         .all()
     )
 
+    initial_saldo = Decimal('0')
+    for r in prev_records:
+        val   = Decimal(str(r.valor  or 0))
+        j     = Decimal(str(r.juros  or 0))
+        mov   = (val + j) if r.tipo == 'receita' else -val
+        initial_saldo += mov
+
+    # --- Movimentações do mês corrente filtradas por data_pagamento ---
+    registros = (
+        FinanceiroUsina.query
+        .options(
+            joinedload(FinanceiroUsina.credor),
+            joinedload(FinanceiroUsina.categoria)
+        )
+        .filter(
+            FinanceiroUsina.usina_id == usina_id,
+            FinanceiroUsina.data_pagamento.isnot(None),
+            extract('year',  FinanceiroUsina.data_pagamento) == ano,
+            extract('month', FinanceiroUsina.data_pagamento) == mes
+        )
+        .order_by(FinanceiroUsina.data_pagamento)
+        .all()
+    )
+
+    # --- Monta o extrato dia a dia com saldo acumulado ---
     extrato = []
-    saldo_corrente = Decimal('0')
+    saldo_corrente = initial_saldo
     for r in registros:
-        valor = Decimal(str(r.valor or 0))
-        juros = Decimal(str(r.juros or 0))
-        movimento = (valor + juros) if r.tipo=='receita' else -valor
+        val      = Decimal(str(r.valor  or 0))
+        j        = Decimal(str(r.juros  or 0))
+        movimento = (val + j) if r.tipo == 'receita' else -val
         saldo_corrente += movimento
 
-        # Se for despesa e tiver credor, use só o nome do credor
-        if r.tipo=='despesa' and r.credor:
+        # descrição: em despesa com credor, mostra apenas o nome do credor
+        if r.tipo == 'despesa' and r.credor:
             texto = r.credor.nome
         else:
             texto = r.descricao
 
         extrato.append({
-            'data':      r.data,
-            'tipo':      r.tipo,
-            'descricao': texto,
-            'valor':     movimento,
-            'saldo':     saldo_corrente
+            'data_pagamento': r.data_pagamento,
+            'tipo':           r.tipo,
+            'descricao':      texto,
+            'valor':          movimento,
+            'saldo':          saldo_corrente
         })
 
+    # renderiza template passando initial_saldo e extrato
     return render_template(
         'extrato_usina.html',
         usina=usina,
         extrato=extrato,
         mes=mes,
-        ano=ano
+        ano=ano,
+        initial_saldo=initial_saldo
     )
     
 
