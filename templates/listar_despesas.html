@@ -1,14 +1,15 @@
 {% extends 'base.html' %}
+
 {% block title %}Despesas Registradas{% endblock %}
 
 {% block content %}
-<div class="container mt-5 p-4 bg-white shadow rounded">
-    <h2 class="text-primary mb-4 text-center">Despesas Registradas</h2>
+<div class="container mt-5 mb-5 p-4 bg-white shadow rounded">
+    <h2 class="mb-4 text-primary text-center">Despesas Registradas</h2>
 
-    <!-- Filtro por Usina e Data -->
+    <!-- Filtros -->
     <form method="get" class="row g-3 mb-4">
         <div class="col-md-4">
-            <label>Usina:</label>
+            <label class="form-label">Usina</label>
             <select name="usina_id" class="form-select">
                 <option value="">Todas as Usinas</option>
                 {% for usina in usinas_lista %}
@@ -17,11 +18,11 @@
             </select>
         </div>
         <div class="col-md-3">
-            <label>Data Início:</label>
+            <label class="form-label">Data Início</label>
             <input type="date" name="data_inicio" class="form-control" value="{{ data_inicio }}">
         </div>
         <div class="col-md-3">
-            <label>Data Fim:</label>
+            <label class="form-label">Data Fim</label>
             <input type="date" name="data_fim" class="form-control" value="{{ data_fim }}">
         </div>
         <div class="col-md-2 d-flex align-items-end">
@@ -29,50 +30,87 @@
         </div>
     </form>
 
-    <table class="table table-bordered table-striped">
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Usina</th>
-                <th>Categoria</th>
-                <th>Descrição</th>
-                <th>Valor (R$)</th>
-                <th>Data</th>
-                <th>Mês/Ano Ref</th>
-                <th>Ações</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for despesa in despesas %}
-            <tr>
-                <td>{{ despesa.id }}</td>
-                <td>{{ usinas.get(despesa.usina_id, 'N/A') }}</td>
-                <td>{{ categorias.get(despesa.categoria_id, 'N/A') }}</td>
-                <td>{{ despesa.descricao }}</td>
-                <td>{{ '%.2f'|format(despesa.valor) }}</td>
-                <td>{{ despesa.data }}</td>
-                <td>{{ '%02d'|format(despesa.referencia_mes) }}/{{ despesa.referencia_ano }}</td>
-                <td>
-                    <a href="{{ url_for('editar_despesa', despesa_id=despesa.id) }}" 
-                       class="btn btn-sm btn-warning">Editar</a>
+    <!-- Tabela -->
+    <div class="table-responsive">
+        <table id="despesas-table" class="table table-bordered table-hover align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>ID</th>
+                    <th>Usina</th>
+                    <th>Categoria</th>
+                    <th>Descrição</th>
+                    <th style="white-space: nowrap;">Valor (R$)</th>
+                    <th>Data</th>
+                    <th>Mês/Ano Ref</th>
+                    <th class="text-center">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for despesa in despesas %}
+                <tr>
+                    <td>{{ despesa.id }}</td>
+                    <td>{{ usinas.get(despesa.usina_id, 'N/A') }}</td>
+                    <td>{{ categorias.get(despesa.categoria_id, 'N/A') }}</td>
+                    <td>{{ despesa.descricao }}</td>
+                    <td>{{ '%.2f'|format(despesa.valor) }}</td>
+                    <td>{{ despesa.data }}</td>
+                    <td>{{ '%02d'|format(despesa.referencia_mes) }}/{{ despesa.referencia_ano }}</td>
+                    <td>
+                        <div class="d-flex flex-wrap justify-content-center gap-1 acoes-btns">
+                            <a href="{{ url_for('editar_despesa', despesa_id=despesa.id) }}"
+                               class="btn btn-sm btn-outline-warning" title="Editar">
+                                <i class="bi bi-pencil-fill"></i>
+                            </a>
 
-                    <!-- Formulário de exclusão -->
-                    <form method="POST"
-                          action="{{ url_for('excluir_despesa', despesa_id=despesa.id) }}"
-                          style="display:inline;"
-                          onsubmit="return confirm('Confirma exclusão da despesa #{{ despesa.id }}?');">
-                        <button type="submit" class="btn btn-sm btn-danger">
-                            Excluir
-                        </button>
-                    </form>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                            <form method="POST"
+                                  action="{{ url_for('excluir_despesa', despesa_id=despesa.id) }}"
+                                  onsubmit="return confirm('Confirma exclusão da despesa #{{ despesa.id }}?');">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir">
+                                    <i class="bi bi-trash-fill"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 
     <div class="text-center mt-4">
-        <a href="{{ url_for('index') }}" class="btn btn-secondary">Voltar ao Início</a>
+        <a href="{{ url_for('index') }}?aba=financeiro" class="btn btn-secondary">Voltar</a>
     </div>
 </div>
+
+<!-- Estilo para coluna Ações -->
+<style>
+    .acoes-btns a,
+    .acoes-btns form {
+        flex: 0 0 auto;
+    }
+
+    .acoes-btns .btn {
+        width: 34px;
+        height: 34px;
+        padding: 0;
+        text-align: center;
+    }
+
+    .acoes-btns i {
+        font-size: 1rem;
+    }
+</style>
+
+<!-- DataTables -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script>
+    $(document).ready(function() {
+        $('#despesas-table').DataTable({
+            language: { url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json' },
+            pageLength: 25
+        });
+    });
+</script>
 {% endblock %}
