@@ -205,8 +205,9 @@ class FinanceiroUsina(db.Model):
     juros = db.Column(Numeric(10, 2), default=0)
 
     credor_id = db.Column(db.Integer, db.ForeignKey('credores.id'), nullable=True)
-    usina = db.relationship('Usina', backref='financeiros')
+    comprovante_arquivo = db.Column(db.String(255))
     
+    usina = db.relationship('Usina', backref='financeiros')    
     credor = db.relationship(
         'Credor',
         backref=db.backref('financeiros', lazy='dynamic'),
@@ -323,9 +324,14 @@ class Usuario(db.Model, UserMixin):
 
 lock_selenium = Lock()
 # Pasta para uploads
-UPLOAD_FOLDER = 'uploads'
+ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg'}
+UPLOAD_FOLDER = os.environ.get('COMPROVANTES_PATH', 'uploads')
+
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route('/')
 @login_required
@@ -1226,6 +1232,27 @@ def extrair_ficha_compensacao(pdf_path, output_path='static/ficha_compensacao.pn
     ficha = imagem.crop((0, top, largura, bottom))
     ficha.save(output_path)
     return output_path
+
+def extrair_comprovante_em_imagens(pdf_path, output_prefix):
+    imagens_base64 = []
+
+    try:
+        doc = fitz.open(pdf_path)
+        for i, page in enumerate(doc):
+            pix = page.get_pixmap(dpi=150)
+            nome_img = f"{output_prefix}_p{i+1}.jpg"
+            output_path = os.path.join('static', nome_img)
+
+            if not os.path.exists(output_path):
+                pix.save(output_path)
+
+            if os.path.exists(output_path):
+                base64_img = imagem_para_base64(output_path)
+                imagens_base64.append(f"data:image/jpeg;base64,{base64_img}")
+    except Exception as e:
+        print(f"Erro ao extrair comprovante em imagens: {e}")
+
+    return imagens_base64
 
 @app.route('/upload_boleto', methods=['GET', 'POST'])
 @login_required
@@ -2284,35 +2311,55 @@ def registrar_despesa():
     if not current_user.pode_acessar_financeiro:
         return "Acesso negado", 403
 
-    usinas     = Usina.query.order_by(Usina.nome).all()
+    usinas = Usina.query.order_by(Usina.nome).all()
     categorias = CategoriaDespesa.query.order_by(CategoriaDespesa.nome).all()
-    credores   = Credor.query.order_by(Credor.nome).all()       # << nova linha
-    mensagem   = None
-    data_hoje  = date.today().isoformat()
+    credores = Credor.query.order_by(Credor.nome).all()
+    mensagem = None
+    data_hoje = date.today().isoformat()
 
     if request.method == 'POST':
         try:
-            usina_id       = int(request.form['usina_id'])
-            categoria_id   = int(request.form['categoria_id'])
-            credor_id      = request.form.get('credor_id')          # <<< pega do form
-            credor_id      = int(credor_id) if credor_id else None
-
-            valor          = float(request.form['valor'].replace(',', '.'))
-            descricao      = request.form['descricao']
-            data           = datetime.strptime(request.form['data'], '%Y-%m-%d').date()
+            # Campos do formulário
+            usina_id = int(request.form['usina_id'])
+            categoria_id = int(request.form['categoria_id'])
+            credor_id = request.form.get('credor_id')
+            credor_id = int(credor_id) if credor_id else None
+            valor = float(request.form['valor'].replace(',', '.'))
+            descricao = request.form['descricao']
+            data = datetime.strptime(request.form['data'], '%Y-%m-%d').date()
             referencia_mes = int(request.form['referencia_mes'])
             referencia_ano = int(request.form['referencia_ano'])
 
+            # Upload de comprovante
+            arquivo = request.files.get('arquivo')
+            comprovante_arquivo = None
+
+            if arquivo and allowed_file(arquivo.filename):
+                filename = secure_filename(arquivo.filename)
+                upload_dir = app.config['UPLOAD_FOLDER']
+                os.makedirs(upload_dir, exist_ok=True)
+                caminho = os.path.join(upload_dir, filename)
+
+                if os.path.exists(caminho):
+                    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+                    filename = f"{timestamp}_{filename}"
+                    caminho = os.path.join(upload_dir, filename)
+
+                arquivo.save(caminho)
+                comprovante_arquivo = filename
+
+            # Criação da despesa
             nova_despesa = FinanceiroUsina(
                 usina_id=usina_id,
                 categoria_id=categoria_id,
-                credor_id=credor_id,                              # <<< atribui aqui
+                credor_id=credor_id,
                 tipo='despesa',
                 valor=valor,
                 descricao=descricao,
                 data=data,
                 referencia_mes=referencia_mes,
-                referencia_ano=referencia_ano
+                referencia_ano=referencia_ano,
+                comprovante_arquivo=comprovante_arquivo
             )
 
             db.session.add(nova_despesa)
@@ -2327,7 +2374,7 @@ def registrar_despesa():
         'registrar_despesa.html',
         usinas=usinas,
         categorias=categorias,
-        credores=credores,         # <<< passa para o template
+        credores=credores,
         mensagem=mensagem,
         data_hoje=data_hoje
     )
@@ -2486,29 +2533,51 @@ def atualizar_pagamento(id):
 
     return redirect(request.referrer or url_for('financeiro'))
 
+def extensao_permitida(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 @app.route('/editar_despesa/<int:despesa_id>', methods=['GET', 'POST'])
 @login_required
 def editar_despesa(despesa_id):
     if not current_user.pode_acessar_financeiro:
         abort(403)
 
-    despesa     = FinanceiroUsina.query.get_or_404(despesa_id)
-    usinas      = Usina.query.order_by(Usina.nome).all()
-    categorias  = CategoriaDespesa.query.order_by(CategoriaDespesa.nome).all()
-    credores    = Credor.query.order_by(Credor.nome).all()
+    despesa = FinanceiroUsina.query.get_or_404(despesa_id)
+    usinas = Usina.query.order_by(Usina.nome).all()
+    categorias = CategoriaDespesa.query.order_by(CategoriaDespesa.nome).all()
+    credores = Credor.query.order_by(Credor.nome).all()
 
     if request.method == 'POST':
-        despesa.usina_id        = int(request.form['usina_id'])
-        despesa.categoria_id    = int(request.form['categoria_id'])
-        # pega credor_id (ou None se vazio)
+        despesa.usina_id = int(request.form['usina_id'])
+        despesa.categoria_id = int(request.form['categoria_id'])
         cid = request.form.get('credor_id')
-        despesa.credor_id       = int(cid) if cid else None
+        despesa.credor_id = int(cid) if cid else None
+        despesa.descricao = request.form['descricao']
+        despesa.valor = float(request.form['valor'].replace(',', '.'))
+        despesa.data = datetime.strptime(request.form['data'], '%Y-%m-%d').date()
+        despesa.referencia_mes = int(request.form['referencia_mes'])
+        despesa.referencia_ano = int(request.form['referencia_ano'])
 
-        despesa.descricao       = request.form['descricao']
-        despesa.valor           = float(request.form['valor'].replace(',', '.'))
-        despesa.data            = datetime.strptime(request.form['data'], '%Y-%m-%d').date()
-        despesa.referencia_mes  = int(request.form['referencia_mes'])
-        despesa.referencia_ano  = int(request.form['referencia_ano'])
+        # ✔️ Verifica e processa novo comprovante
+        if 'comprovante' in request.files:
+            comprovante = request.files['comprovante']
+            if comprovante and comprovante.filename:
+                # Remove comprovante antigo, se houver
+                if despesa.comprovante_arquivo:
+                    antigo_path = os.path.join(app.config['UPLOAD_FOLDER'], despesa.comprovante_arquivo)
+                    if os.path.exists(antigo_path):
+                        os.remove(antigo_path)
+
+                # Gera novo nome com timestamp
+                extensao = secure_filename(comprovante.filename).rsplit('.', 1)[-1].lower()
+                nome_arquivo = f"comprovante_{despesa.id}_{datetime.now().strftime('%Y%m%d%H%M%S')}.{extensao}"
+
+                # Salva o novo arquivo
+                caminho_final = os.path.join(app.config['UPLOAD_FOLDER'], nome_arquivo)
+                comprovante.save(caminho_final)
+
+                # Atualiza no banco
+                despesa.comprovante_arquivo = nome_arquivo
 
         db.session.commit()
         return redirect(url_for('listar_despesas'))
@@ -2733,19 +2802,36 @@ def relatorio_consolidado():
 @app.route('/autorizacao_pagamento/<int:item_id>', methods=['GET'])
 @login_required
 def autorizacao_pagamento(item_id):
-    # só quem pode acessar financeiro
     if not current_user.pode_acessar_financeiro:
         abort(403)
+
     current_date = datetime.now().strftime('%d/%m/%Y, %H:%M')
     item = FinanceiroUsina.query.get_or_404(item_id)
-    # só despesas
+
     if item.tipo != 'despesa':
         abort(404)
+
+    # ⬇️ Processar comprovante (imagem ou PDF)
+    comprovante_imagens = []
+    if item.comprovante_arquivo:
+        caminho = os.path.join(app.config['UPLOAD_FOLDER'], item.comprovante_arquivo)
+        ext = item.comprovante_arquivo.lower().split('.')[-1]
+
+        if ext == 'pdf':
+            comprovante_imagens = extrair_comprovante_em_imagens(
+                pdf_path=caminho,
+                output_prefix=f"comprovante_{item.id}"
+            )
+        elif ext in ['jpg', 'jpeg', 'png']:
+            if os.path.exists(caminho):
+                base64_img = imagem_para_base64(caminho)
+                comprovante_imagens = [f"data:image/jpeg;base64,{base64_img}"]
 
     return render_template(
         'autorizacao_pagamento.html',
         item=item,
-        current_date=current_date
+        current_date=current_date,
+        comprovante_imagens=comprovante_imagens
     )
 
 @app.route('/relatorio_categoria', methods=['GET'])
@@ -4320,6 +4406,14 @@ def extrato_usina(usina_id):
         ano=ano,
         initial_saldo=initial_saldo
     )
+    
+@app.route('/comprovantes/<path:nome_arquivo>')
+@login_required
+def visualizar_comprovante(nome_arquivo):
+    if not current_user.pode_acessar_financeiro:
+        abort(403)
+
+    return send_from_directory(app.config['UPLOAD_FOLDER'], nome_arquivo)
     
 
 if __name__ == '__main__':
