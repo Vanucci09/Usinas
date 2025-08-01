@@ -88,7 +88,11 @@
                         {% endif %}
                     </td>
 
-                    <td>{{ fatura.cliente.nome }}</td>
+                    <td>
+                        <div>{{ fatura.cliente.nome }}</div>
+                        <div class="text-muted small">{{ fatura.cliente.usina.nome }}</div>
+                    </td>
+
                     <td>{{ fatura.mes_referencia }}/{{ fatura.ano_referencia }}</td>
 
                     <td style="white-space: nowrap;">
