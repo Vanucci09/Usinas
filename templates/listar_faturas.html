@@ -109,15 +109,25 @@
 
                     <td>
                         <div class="d-flex flex-wrap justify-content-center gap-1 acoes-btns">
-                            <a href="{{ url_for('editar_fatura', id=fatura.id) }}" class="btn btn-sm btn-outline-warning" title="Editar">
-                                <i class="bi bi-pencil-fill"></i>
-                            </a>
+                            {% if not fatura.tem_boleto %}
+                                <a href="{{ url_for('editar_fatura', id=fatura.id) }}" class="btn btn-sm btn-outline-warning" title="Editar">
+                                    <i class="bi bi-pencil-fill"></i>
+                                </a>
 
-                            <form method="POST" action="{{ url_for('excluir_fatura', id=fatura.id) }}" onsubmit="return confirm('Confirmar exclusão?');">
-                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir">
+                                <form method="POST" action="{{ url_for('excluir_fatura', id=fatura.id) }}" onsubmit="return confirm('Confirmar exclusão?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir">
+                                        <i class="bi bi-trash-fill"></i>
+                                    </button>
+                                </form>
+                            {% else %}
+                                <button class="btn btn-sm btn-outline-warning" disabled title="Editar desabilitado (fatura com boleto)">
+                                    <i class="bi bi-pencil-fill"></i>
+                                </button>
+
+                                <button class="btn btn-sm btn-outline-danger" disabled title="Excluir desabilitado (fatura com boleto)">
                                     <i class="bi bi-trash-fill"></i>
                                 </button>
-                            </form>
+                            {% endif %}
 
                             <a href="{{ url_for('upload_boleto') }}?fatura_id={{ fatura.id }}" class="btn btn-sm {% if fatura.tem_boleto %}btn-info{% else %}btn-outline-info{% endif %}" title="Boleto">
                                 {% if fatura.tem_boleto %}

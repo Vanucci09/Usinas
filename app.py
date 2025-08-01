@@ -2633,21 +2633,21 @@ def relatorio_consolidado():
         return "Acesso negado", 403
 
     mes = request.args.get('mes', default=date.today().month, type=int)
-    ano = request.args.get('ano', default=date.today().year,  type=int)
+    ano = request.args.get('ano', default=date.today().year, type=int)
 
     usinas = Usina.query.order_by(Usina.nome).all()
     resultado = []
 
-    total_receitas        = Decimal('0')
-    total_despesas        = Decimal('0')
-    total_saldo           = Decimal('0')
+    total_receitas = Decimal('0')
+    total_despesas = Decimal('0')
+    total_saldo = Decimal('0')
     total_saldo_acumulado = Decimal('0')
 
     # condição equivalente para acumulados por data_pagamento até o mês/ano selecionado
     cond_dp_acum = or_(
         extract('year', FinanceiroUsina.data_pagamento) < ano,
         and_(
-            extract('year',  FinanceiroUsina.data_pagamento) == ano,
+            extract('year', FinanceiroUsina.data_pagamento) == ano,
             extract('month', FinanceiroUsina.data_pagamento) <= mes
         )
     )
@@ -2663,7 +2663,7 @@ def relatorio_consolidado():
             FinanceiroUsina.usina_id == u.id,
             FinanceiroUsina.tipo == 'receita',
             FinanceiroUsina.data_pagamento.isnot(None),
-            extract('year',  FinanceiroUsina.data_pagamento) == ano,
+            extract('year', FinanceiroUsina.data_pagamento) == ano,
             extract('month', FinanceiroUsina.data_pagamento) == mes
         ).scalar()
 
@@ -2674,7 +2674,7 @@ def relatorio_consolidado():
             FinanceiroUsina.usina_id == u.id,
             FinanceiroUsina.tipo == 'despesa',
             FinanceiroUsina.data_pagamento.isnot(None),
-            extract('year',  FinanceiroUsina.data_pagamento) == ano,
+            extract('year', FinanceiroUsina.data_pagamento) == ano,
             extract('month', FinanceiroUsina.data_pagamento) == mes
         ).scalar()
 
@@ -2706,17 +2706,17 @@ def relatorio_consolidado():
         saldo_acumulado = Decimal(receitas_acum) - Decimal(despesas_acum)
 
         resultado.append({
-            'usina_id':        u.id,
-            'usina':           u.nome,
-            'receitas':        receitas,
-            'despesas':        despesas,
-            'saldo':           saldo,
+            'usina_id': u.id,
+            'usina': u.nome,
+            'receitas': receitas,
+            'despesas': despesas,
+            'saldo': saldo,
             'saldo_acumulado': saldo_acumulado
         })
 
-        total_receitas        += Decimal(receitas)
-        total_despesas        += Decimal(despesas)
-        total_saldo           += saldo
+        total_receitas += Decimal(receitas)
+        total_despesas += Decimal(despesas)
+        total_saldo += saldo
         total_saldo_acumulado += saldo_acumulado
 
     return render_template(
@@ -4266,9 +4266,9 @@ def extrato_usina(usina_id):
 
     initial_saldo = Decimal('0')
     for r in prev_records:
-        val   = Decimal(str(r.valor  or 0))
-        j     = Decimal(str(r.juros  or 0))
-        mov   = (val + j) if r.tipo == 'receita' else -val
+        val = Decimal(str(r.valor  or 0))
+        j = Decimal(str(r.juros  or 0))
+        mov = (val + j) if r.tipo == 'receita' else -val
         initial_saldo += mov
 
     # --- Movimentações do mês corrente filtradas por data_pagamento ---
@@ -4292,8 +4292,8 @@ def extrato_usina(usina_id):
     extrato = []
     saldo_corrente = initial_saldo
     for r in registros:
-        val      = Decimal(str(r.valor  or 0))
-        j        = Decimal(str(r.juros  or 0))
+        val = Decimal(str(r.valor  or 0))
+        j = Decimal(str(r.juros  or 0))
         movimento = (val + j) if r.tipo == 'receita' else -val
         saldo_corrente += movimento
 
@@ -4305,10 +4305,10 @@ def extrato_usina(usina_id):
 
         extrato.append({
             'data_pagamento': r.data_pagamento,
-            'tipo':           r.tipo,
-            'descricao':      texto,
-            'valor':          movimento,
-            'saldo':          saldo_corrente
+            'tipo': r.tipo,
+            'descricao': texto,
+            'valor': movimento,
+            'saldo': saldo_corrente
         })
 
     # renderiza template passando initial_saldo e extrato
