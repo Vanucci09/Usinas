@@ -4414,7 +4414,47 @@ def visualizar_comprovante(nome_arquivo):
         abort(403)
 
     return send_from_directory(app.config['UPLOAD_FOLDER'], nome_arquivo)
-    
+
+@app.route('/receita_avulsa', methods=['GET', 'POST'])
+@login_required
+def receita_avulsa():
+    usinas = Usina.query.order_by(Usina.nome).all()
+    credores = Credor.query.order_by(Credor.nome).all()
+
+    if request.method == 'POST':
+        try:
+            usina_id = int(request.form['usina_id'])
+            data = request.form['data']
+            descricao = request.form['descricao']
+            valor = float(request.form['valor'])
+            referencia_mes = int(request.form['referencia_mes']) if request.form['referencia_mes'] else None
+            referencia_ano = int(request.form['referencia_ano']) if request.form['referencia_ano'] else None
+            data_pagamento = request.form['data_pagamento'] or None
+            credor_id = int(request.form['credor_id']) if request.form['credor_id'] else None
+
+            nova_receita = FinanceiroUsina(
+                usina_id=usina_id,
+                tipo='receita',
+                data=data,
+                descricao=descricao,
+                valor=valor,
+                referencia_mes=referencia_mes,
+                referencia_ano=referencia_ano,
+                data_pagamento=data_pagamento,
+                credor_id=credor_id
+            )
+
+            db.session.add(nova_receita)
+            db.session.commit()
+            flash("✅ Receita cadastrada com sucesso!", "success")
+            return redirect(url_for('receita_avulsa'))
+
+        except Exception as e:
+            db.session.rollback()
+            flash(f"❌ Erro ao cadastrar receita: {e}", "danger")
+
+    return render_template('receita_avulsa.html', usinas=usinas, credores=credores)
+
 
 if __name__ == '__main__':
     with app.app_context():
