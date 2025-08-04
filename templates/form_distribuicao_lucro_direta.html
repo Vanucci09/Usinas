@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+
+{% block title %}Distribuição de Lucro Direta{% endblock %}
+
+{% block content %}
+<div class="container mt-5 mb-4 p-4 bg-white shadow rounded">
+    <h2 class="mb-4 text-primary">Distribuição de Lucro Direta por Usina</h2>
+
+    <form method="POST" class="row g-3">
+        <div class="col-md-6">
+            <label class="form-label">Usina</label>
+            <select name="usina_id" class="form-select" required>
+                <option value="">Selecione uma usina</option>
+                {% for usina in usinas %}
+                    <option value="{{ usina.id }}">{{ usina.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="col-md-3">
+            <label class="form-label">Mês</label>
+            <select name="mes" class="form-select" required>
+                {% for m in range(1, 13) %}
+                    <option value="{{ m }}">{{ "%02d"|format(m) }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="col-md-3">
+            <label class="form-label">Ano</label>
+            <select name="ano" class="form-select" required>
+                {% for a in anos %}
+                    <option value="{{ a }}">{{ a }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="col-12 d-flex justify-content-end mt-3">
+            <button type="submit" class="btn btn-success">
+                <i class="bi bi-arrow-right-circle"></i> Continuar
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

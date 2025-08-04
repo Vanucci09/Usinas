@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+
+{% block title %}Distribuição Direta – {{ usina.nome }}{% endblock %}
+
+{% block content %}
+<div class="container mt-5 mb-4 p-4 bg-white shadow rounded">
+    <h2 class="mb-4 text-primary">Distribuição Direta de Lucro</h2>
+
+    <p><strong>Usina:</strong> {{ usina.nome }}</p>
+    <p><strong>Referência:</strong> {{ "%02d"|format(mes) }}/{{ ano }}</p>
+    <p><strong>Lucro Total:</strong> R$ {{ lucro_total | formato_brasileiro }}</p>
+
+    <hr>
+
+    <h4 class="mb-3">Distribuição entre Acionistas</h4>
+    <table class="table table-bordered table-striped">
+        <thead class="table-light">
+            <tr>
+                <th>Acionista</th>
+                <th>Percentual</th>
+                <th>Valor Distribuído (R$)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for d in distribuicoes %}
+            <tr>
+                <td>{{ d.acionista }}</td>
+                <td>{{ "%.2f"|format(d.percentual) }}%</td>
+                <td>{{ d.valor | formato_brasileiro }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="text-end mt-4">
+        <a href="{{ url_for('distribuicao_lucro_direta') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+    </div>
+</div>
+{% endblock %}

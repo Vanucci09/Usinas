@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+
+{% block title %}Participações Diretas{% endblock %}
+
+{% block content %}
+<div class="container mt-5 mb-5 p-4 bg-white shadow rounded">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="text-primary m-0">👥 Participações Diretas nas Usinas</h2>
+        <a href="{{ url_for('cadastrar_participacao_direta') }}" class="btn btn-success">
+            <i class="bi bi-plus-circle"></i> Nova Participação
+        </a>
+    </div>
+
+    {% if participacoes %}
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Usina</th>
+                        <th>Acionista</th>
+                        <th>CPF</th>
+                        <th style="width: 150px;">Percentual (%)</th>
+                        <th class="text-center">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in participacoes %}
+                    <tr>
+                        <td>{{ p.usina.nome }}</td>
+                        <td>{{ p.acionista.nome }}</td>
+                        <td>{{ p.acionista.cpf }}</td>
+                        <td>{{ '%.2f'|format(p.percentual) }}</td>
+                        <td class="text-center">
+                            <a href="{{ url_for('editar_participacao_direta', id=p.id) }}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-pencil-square"></i> Editar
+                            </a>
+                            <form method="POST" action="{{ url_for('excluir_participacao_direta', id=p.id) }}" class="d-inline" onsubmit="return confirm('Tem certeza que deseja excluir esta participação?');">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                    <i class="bi bi-trash"></i> Excluir
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p class="text-muted">Nenhuma participação cadastrada ainda.</p>
+    {% endif %}
+
+    <div class="text-center mt-4">
+        <a href="{{ url_for('index') }}?aba=investidores" class="btn btn-secondary">Voltar</a>
+    </div>
+</div>
+{% endblock %}

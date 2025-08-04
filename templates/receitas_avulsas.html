@@ -64,7 +64,7 @@
                 <td>{{ receita.data.strftime('%d/%m/%Y') }}</td>
                 <td>{{ receita.usina.nome }}</td>
                 <td>{{ receita.descricao }}</td>
-                <td>R$ {{ '%.2f'|format(receita.valor) }}</td>
+                <td>{{ (receita.valor | formato_brasileiro) }}</td>
                 <td>{{ receita.credor.nome if receita.credor else '' }}</td>
                 <td>
                     {% if receita.referencia_mes and receita.referencia_ano %}

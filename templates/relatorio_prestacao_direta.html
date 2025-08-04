@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+
+{% block title %}Relatório de Prestação de Contas - Direto pela Usina{% endblock %}
+
+{% block content %}
+<div class="container mt-5 mb-5 p-4 bg-white shadow rounded">
+    <h2 class="text-center text-primary mb-4">📊 Prestação de Contas da Usina</h2>
+
+    <form method="GET" class="row g-3 mb-4">
+        <div class="col-md-4">
+            <label for="usina_id" class="form-label">Usina</label>
+            <select name="usina_id" id="usina_id" class="form-select" required onchange="this.form.submit()">
+                <option value="">Selecione</option>
+                {% for usina in usinas %}
+                    <option value="{{ usina.id }}" {% if usina.id == usina_id %}selected{% endif %}>{{ usina.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label for="mes" class="form-label">Mês</label>
+            <input type="number" min="1" max="12" name="mes" id="mes" class="form-control" value="{{ mes or '' }}">
+        </div>
+        <div class="col-md-2">
+            <label for="ano" class="form-label">Ano</label>
+            <input type="number" name="ano" id="ano" class="form-control" value="{{ ano or ano_atual }}">
+        </div>
+        <div class="col-md-4 d-flex align-items-end justify-content-end">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-funnel"></i> Filtrar</button>
+        </div>
+    </form>
+
+    {% if relatorio %}
+        <!-- dados gerais da usina -->
+        <div class="card mb-4">
+            <div class="card-header bg-success text-white fw-bold">⚡ Usina: {{ relatorio.usina.nome }}</div>
+            <div class="card-body">
+                <p><strong>Potência:</strong> {{ relatorio.usina.potencia_kw or 'Não informada' }} kW</p>
+                <p><strong>Previsto:</strong> {{ relatorio.previsto | formato_brasileiro }} kWh</p>
+                <p><strong>Realizado:</strong> {{ relatorio.realizado | formato_brasileiro }} kWh</p>
+                <p><strong>Eficiência:</strong> {{ relatorio.eficiencia }}%</p>
+                <p><strong>Yield:</strong> {{ relatorio.yield_kwp or 'Não calculado' }}</p>
+            </div>
+        </div>
+
+        <!-- fluxo financeiro -->
+        <h5 class="text-primary">💰 Fluxo Financeiro do Consórcio</h5>
+        <table class="table table-bordered table-sm">
+            <thead class="table-light">
+                <tr>
+                    <th>Data</th>
+                    <th>Descrição</th>
+                    <th class="text-end">Crédito</th>
+                    <th class="text-end">Débito</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for f in relatorio.fluxo %}
+                <tr>
+                    <td>{{ f.data.strftime('%d/%m/%Y') if f.data else '-' }}</td>
+                    <td>{{ f.descricao }}</td>
+                    <td class="text-end">{{ f.credito | formato_brasileiro }}</td>
+                    <td class="text-end">{{ f.debito | formato_brasileiro }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- distribuição entre acionistas -->
+        <h5 class="text-primary mt-4">📈 Distribuição entre Acionistas</h5>
+        <ul>
+            {% for d in relatorio.distribuicao %}
+                <li>{{ d.acionista }} ({{ d.percentual }}%) → <strong>{{ d.valor | formato_brasileiro }}</strong></li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+</div>
+{% endblock %}

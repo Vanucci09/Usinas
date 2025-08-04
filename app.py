@@ -304,6 +304,17 @@ class Credor(db.Model):
     def __repr__(self):
         return f'<Credor {self.nome}>'
     
+class ParticipacaoAcionistaDireta(db.Model):
+    __tablename__ = 'participacoes_diretas'
+
+    id = db.Column(db.Integer, primary_key=True)
+    usina_id = db.Column(db.Integer, db.ForeignKey('usinas.id'), nullable=False)
+    acionista_id = db.Column(db.Integer, db.ForeignKey('acionistas.id'), nullable=False)
+    percentual = db.Column(db.Float, nullable=False)  # Exemplo: 25.00 para 25%
+
+    usina = db.relationship('Usina', backref='participacoes_diretas')
+    acionista = db.relationship('Acionista', backref='participacoes_diretas')
+    
 class Usuario(db.Model, UserMixin):
     __tablename__ = 'usuarios'
     id = db.Column(db.Integer, primary_key=True)
@@ -4533,6 +4544,229 @@ def excluir_receita_avulsa(id):
     db.session.commit()
     flash('Receita excluída com sucesso.', 'success')
     return redirect(url_for('receitas_avulsas'))
+
+def calcular_distribuicao_direta(usina, valor_total):
+    distribuicoes = []
+    for participacao in usina.participacoes_diretas:
+        valor = valor_total * (participacao.percentual / 100)
+        distribuicoes.append({
+            'acionista': participacao.acionista.nome,
+            'percentual': participacao.percentual,
+            'valor': valor
+        })
+    return distribuicoes
+
+@app.route('/participacao_direta', methods=['GET', 'POST'])
+@login_required
+def participacao_direta():
+    usinas = Usina.query.order_by(Usina.nome).all()
+    acionistas = Acionista.query.order_by(Acionista.nome).all()
+
+    if request.method == 'POST':
+        usina_id = request.form.get('usina_id', type=int)
+        acionista_id = request.form.get('acionista_id', type=int)
+        percentual = request.form.get('percentual', type=float)
+
+        if not (usina_id and acionista_id and percentual):
+            flash('Todos os campos são obrigatórios.', 'danger')
+            return redirect(url_for('participacao_direta'))
+
+        nova_participacao = ParticipacaoAcionistaDireta(
+            usina_id=usina_id,
+            acionista_id=acionista_id,
+            percentual=percentual
+        )
+
+        db.session.add(nova_participacao)
+        db.session.commit()
+        flash('Participação direta cadastrada com sucesso!', 'success')
+        return redirect(url_for('participacao_direta'))
+
+    participacoes = ParticipacaoAcionistaDireta.query.join(Usina).join(Acionista).order_by(Usina.nome).all()
+    return render_template('participacao_direta.html', usinas=usinas, acionistas=acionistas, participacoes=participacoes)
+
+@app.route('/distribuicao_lucro_direta', methods=['GET', 'POST'])
+@login_required
+def distribuicao_lucro_direta():
+    usinas_sem_empresa = Usina.query.outerjoin(UsinaInvestidora).filter(UsinaInvestidora.id == None).all()
+    anos = list(range(2022, date.today().year + 1))
+
+    if request.method == 'POST':
+        usina_id = int(request.form['usina_id'])
+        mes = int(request.form['mes'])
+        ano = int(request.form['ano'])
+        return redirect(url_for('distribuicao_lucro_direta_resultado', usina_id=usina_id, mes=mes, ano=ano))
+
+    return render_template('form_distribuicao_lucro_direta.html', usinas=usinas_sem_empresa, anos=anos)
+
+def calcular_lucro_usina(usina_id, mes, ano):
+    receitas = db.session.query(func.sum(FinanceiroUsina.valor)).filter_by(
+        usina_id=usina_id,
+        tipo='receita',
+        referencia_mes=mes,
+        referencia_ano=ano
+    ).scalar() or 0
+
+    despesas = db.session.query(func.sum(FinanceiroUsina.valor)).filter_by(
+        usina_id=usina_id,
+        tipo='despesa',
+        referencia_mes=mes,
+        referencia_ano=ano
+    ).scalar() or 0
+
+    return round(receitas - despesas, 2)
+
+@app.route('/distribuicao_lucro_direta_resultado')
+@login_required
+def distribuicao_lucro_direta_resultado():
+    usina_id = request.args.get('usina_id', type=int)
+    mes = request.args.get('mes', type=int)
+    ano = request.args.get('ano', type=int)
+
+    usina = Usina.query.get_or_404(usina_id)
+    participacoes = ParticipacaoAcionistaDireta.query.filter_by(usina_id=usina_id).all()
+
+    # Substitua pela sua lógica real de lucro
+    lucro_total = calcular_lucro_usina(usina_id, mes, ano)
+
+    distribuicoes = []
+    for p in participacoes:
+        valor = lucro_total * (p.percentual / 100)
+        distribuicoes.append({
+            'acionista': p.acionista.nome,
+            'percentual': p.percentual,
+            'valor': valor
+        })
+
+    return render_template(
+        'resultado_distribuicao_direta.html',
+        usina=usina,
+        mes=mes,
+        ano=ano,
+        lucro_total=lucro_total,
+        distribuicoes=distribuicoes
+    )
+    
+# Rota e formulário para cadastrar participação direta
+@app.route('/cadastrar_participacao_direta', methods=['GET', 'POST'])
+@login_required
+def cadastrar_participacao_direta():
+    usinas = Usina.query.order_by(Usina.nome).all()
+    acionistas = Acionista.query.order_by(Acionista.nome).all()
+
+    if request.method == 'POST':
+        usina_id = int(request.form['usina_id'])
+        acionista_id = int(request.form['acionista_id'])
+        percentual = float(request.form['percentual'])
+
+        participacao = ParticipacaoAcionistaDireta(
+            usina_id=usina_id,
+            acionista_id=acionista_id,
+            percentual=percentual
+        )
+        db.session.add(participacao)
+        db.session.commit()
+        flash("Participação cadastrada com sucesso!", "success")
+        return redirect(url_for('cadastrar_participacao_direta'))
+
+    return render_template('cadastrar_participacao_direta.html', usinas=usinas, acionistas=acionistas)
+
+@app.route('/participacoes_diretas')
+@login_required
+def listar_participacoes_diretas():
+    participacoes = ParticipacaoAcionistaDireta.query.join(Usina).join(Acionista).all()
+    return render_template('listar_participacoes_diretas.html', participacoes=participacoes)
+
+@app.route('/participacoes_diretas/editar/<int:id>', methods=['GET', 'POST'])
+@login_required
+def editar_participacao_direta(id):
+    participacao = ParticipacaoAcionistaDireta.query.get_or_404(id)
+
+    if request.method == 'POST':
+        participacao.percentual = request.form['percentual']
+        db.session.commit()
+        flash("Participação atualizada com sucesso!", "success")
+        return redirect(url_for('listar_participacoes_diretas'))
+
+    return render_template('editar_participacao_direta.html', participacao=participacao)
+
+@app.route('/participacoes_diretas/excluir/<int:id>', methods=['POST'])
+@login_required
+def excluir_participacao_direta(id):
+    participacao = ParticipacaoAcionistaDireta.query.get_or_404(id)
+    db.session.delete(participacao)
+    db.session.commit()
+    flash("Participação removida com sucesso.", "success")
+    return redirect(url_for('listar_participacoes_diretas'))
+
+@app.route('/relatorio_prestacao_direta', methods=['GET'])
+@login_required
+def relatorio_prestacao_direta():
+    usinas = Usina.query.order_by(Usina.nome).all()
+    usina_id = request.args.get('usina_id', type=int)
+    mes = request.args.get('mes', type=int)
+    ano = request.args.get('ano', type=int) or datetime.today().year
+    relatorio = None
+
+    if usina_id:
+        usina = Usina.query.get(usina_id)
+
+        previsto = sum(p.previsao_kwh for p in usina.previsoes if (not mes or p.mes == mes) and p.ano == ano)
+        realizado = sum(g.energia_kwh for g in usina.geracoes if (not mes or g.data.month == mes) and g.data.year == ano)
+        eficiencia = round((realizado / previsto * 100), 2) if previsto else 0
+
+        # fluxo financeiro
+        fluxo = []
+        receitas = despesas = 0
+        for f in usina.financeiros:
+            if (not mes or f.referencia_mes == mes) and f.referencia_ano == ano:
+                if f.tipo == 'receita':
+                    receitas += f.valor
+                    fluxo.append({'data': f.data, 'descricao': f.descricao, 'credito': f.valor, 'debito': 0})
+                elif f.tipo == 'despesa':
+                    despesas += f.valor
+                    fluxo.append({'data': f.data, 'descricao': f.descricao, 'credito': 0, 'debito': f.valor})
+
+        liquido = receitas - despesas
+
+        distribuicao = []
+        participacoes = ParticipacaoAcionistaDireta.query.filter_by(usina_id=usina_id).all()
+        for p in participacoes:
+            valor = round(liquido * (p.percentual / 100), 2)
+            distribuicao.append({
+                'acionista': p.acionista.nome,
+                'percentual': p.percentual,
+                'valor': valor
+            })
+
+        # yield cálculo
+        dias_no_mes = calendar.monthrange(ano, mes or 1)[1]
+        dias_validos = len([
+            g for g in usina.geracoes if g.data.month == mes and g.data.year == ano and g.energia_kwh > 0
+        ])
+        soma_total = sum(
+            g.energia_kwh for g in usina.geracoes if g.data.month == mes and g.data.year == ano
+        )
+        potencia_kw = usina.potencia_kw or 0
+        yield_kwp = round(soma_total / (dias_validos * (potencia_kw / dias_no_mes)), 2) if potencia_kw and dias_validos else None
+
+        relatorio = {
+            'usina': usina,
+            'previsto': previsto,
+            'realizado': realizado,
+            'eficiencia': eficiencia,
+            'fluxo': fluxo,
+            'distribuicao': distribuicao,
+            'yield_kwp': yield_kwp
+        }
+
+    return render_template('relatorio_prestacao_direta.html',
+                           usinas=usinas,
+                           usina_id=usina_id,
+                           relatorio=relatorio,
+                           mes=mes,
+                           ano=ano,
+                           ano_atual=datetime.today().year)
 
 
 if __name__ == '__main__':

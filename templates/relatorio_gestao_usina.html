@@ -46,14 +46,14 @@
             {% for item in dados %}
             <tr>
                 <td>{{ item.usina }}</td>
-                <td>{{ "%.2f"|format(item.geracao) }}</td>
-                <td>{{ "%.2f"|format(item.previsto) }}</td>
-                <td>{{ "%.2f"|format(item.recebido) }}</td>
+                <td>{{ "{:,.2f}".format(item.geracao).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
+                <td>{{ (item.previsto | formato_brasileiro) }}</td>
+                <td>{{ (item.recebido | formato_brasileiro) }}</td>
                 <td>
                     {% if item.diferenca < 0 %}
-                        <span class="text-danger">{{ "%.2f"|format(item.diferenca) }}</span>
+                        <span class="text-danger">{{ (item.diferenca | formato_brasileiro) }}</span>
                     {% else %}
-                        <span class="text-success">{{ "%.2f"|format(item.diferenca) }}</span>
+                        <span class="text-success">{{ (item.diferenca | formato_brasileiro) }}</span>
                     {% endif %}
                 </td>
             </tr>

@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+
+{% block title %}Editar Participação Direta{% endblock %}
+
+{% block content %}
+<div class="container mt-5 mb-5 p-4 bg-white shadow rounded">
+    <h2 class="text-primary mb-4">✏️ Editar Participação Direta</h2>
+
+    <form method="POST">
+        <div class="mb-3">
+            <label class="form-label">Usina</label>
+            <input type="text" class="form-control" value="{{ participacao.usina.nome }}" readonly>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Acionista</label>
+            <input type="text" class="form-control" value="{{ participacao.acionista.nome }} - {{ participacao.acionista.cpf }}" readonly>
+        </div>
+
+        <div class="mb-3">
+            <label for="percentual" class="form-label">Percentual de Participação (%)</label>
+            <input type="number" step="0.01" min="0" max="100" name="percentual" id="percentual" class="form-control" value="{{ participacao.percentual }}" required>
+        </div>
+
+        <div class="d-flex justify-content-between">
+            <a href="{{ url_for('listar_participacoes_diretas') }}" class="btn btn-secondary">Voltar</a>
+            <div>
+                <button type="submit" class="btn btn-success me-2">
+                    <i class="bi bi-save"></i> Salvar Alterações
+                </button>
+
+                <!-- Botão para abrir o modal de confirmação -->
+                <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#confirmarExclusaoModal">
+                    <i class="bi bi-trash"></i> Excluir
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Modal de Confirmação -->
+<div class="modal fade" id="confirmarExclusaoModal" tabindex="-1" aria-labelledby="confirmarExclusaoModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form action="{{ url_for('excluir_participacao_direta', id=participacao.id) }}" method="POST">
+        <div class="modal-header">
+          <h5 class="modal-title text-danger" id="confirmarExclusaoModalLabel">Confirmar Exclusão</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          Tem certeza que deseja excluir esta participação direta de <strong>{{ participacao.acionista.nome }}</strong> na usina <strong>{{ participacao.usina.nome }}</strong>?
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-danger">Sim, excluir</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

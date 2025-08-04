@@ -36,8 +36,27 @@
             </div>
         </div>
 
-    </div>
+        <div class="col">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Distribuição de Lucro por Usina</h5>
+                    <p class="card-text">Para usinas sem empresa investidora, distribua o lucro diretamente entre acionistas vinculados.</p>
+                    <a href="{{ url_for('distribuicao_lucro_direta') }}" class="btn btn-outline-primary">Acessar</a>
+                </div>
+            </div>
+        </div>
 
+        <div class="col">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Prestação de Contas por Usina</h5>
+                    <p class="card-text">Relatório de prestação de contas para usinas vinculadas diretamente a acionistas, sem empresa investidora.</p>
+                    <a href="{{ url_for('relatorio_prestacao_direta') }}" class="btn btn-outline-primary">Acessar</a>
+                </div>
+            </div>
+        </div>
+
+    </div>
     <div class="mt-4 text-center">
         <a href="{{ url_for('index') }}" class="btn btn-secondary">Voltar ao Início</a>
     </div>
