@@ -69,8 +69,8 @@
                 <tr>
                     <th>Tipo</th>
                     <th>Usina</th>
-                    <th>Plano Financeiro</th>
                     <th>Descrição</th>
+                    <th>Plano Financeiro</th>                    
                     <th style="white-space: nowrap; width: 120px;">Valor (R$)</th>
                     <th>Juros (R$)</th>
                     <th>Referência</th>
@@ -82,19 +82,15 @@
                 {% for item in financeiro %}
                 <tr class="{% if item.tipo == 'receita' %}table-success{% else %}table-danger{% endif %}">
                     <td>{{ item.tipo.title() }}</td>
-                    <td>{{ item.usina }}</td>
-                    <td>{{ item.categoria }}</td>
+                    <td>{{ item.usina }}</td>                    
                     <td>
-                        {% if item.tipo == 'despesa' %}
-                            {% if item.credor and item.credor != '-' %}
-                                {{ item.credor }}
-                            {% else %}
-                                {{ item.descricao }}
-                            {% endif %}
+                        {% if item.credor and item.credor != '-' %}
+                            {{ item.credor }}
                         {% else %}
                             {{ item.descricao }}
                         {% endif %}
                     </td>
+                    <td>{{ item.categoria }}</td>
                     <td style="white-space: nowrap;">{{ item.valor | formato_brasileiro }}</td>
                     <td>{{ item.juros | default(0) | formato_brasileiro }}</td>
                     <td>{{ item.referencia }}</td>

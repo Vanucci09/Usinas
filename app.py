@@ -4245,34 +4245,40 @@ def cadastrar_credor():
         return "Acesso negado", 403
 
     if request.method == 'POST':
-        nome      = request.form['nome']
+        nome      = request.form.get('nome')
         cnpj      = request.form.get('cnpj') or None
         endereco  = request.form.get('endereco') or None
         telefone  = request.form.get('telefone') or None
         email     = request.form.get('email') or None
-        
-        # 1) Validação prévia de unicidade
+
+        # Validação para submissões rápidas (via modal)
+        if not nome:
+            if request.accept_mimetypes.best == 'application/json':
+                return jsonify({'erro': 'Nome é obrigatório'}), 400
+            flash('Nome é obrigatório', 'danger')
+            return redirect(url_for('cadastrar_credor'))
+
         if cnpj and Credor.query.filter_by(cnpj=cnpj).first():
+            if request.accept_mimetypes.best == 'application/json':
+                return jsonify({'erro': f'CNPJ {cnpj} já cadastrado'}), 400
             flash(f'O CNPJ {cnpj} já está cadastrado.', 'warning')
             return redirect(url_for('cadastrar_credor'))
 
-        novo = Credor(
-            nome=nome,
-            cnpj=cnpj,
-            endereco=endereco,
-            telefone=telefone,
-            email=email
-        )
+        novo = Credor(nome=nome, cnpj=cnpj, endereco=endereco, telefone=telefone, email=email)
         db.session.add(novo)
-        db.session.commit()
+
         try:
             db.session.commit()
         except IntegrityError:
-            # 2) Caso alguma outra violação ocorra
             db.session.rollback()
+            if request.accept_mimetypes.best == 'application/json':
+                return jsonify({'erro': 'Erro ao salvar credor. Dados inválidos ou duplicados.'}), 500
             flash('Não foi possível cadastrar o credor. Verifique os dados e tente novamente.', 'danger')
             return redirect(url_for('cadastrar_credor'))
 
+        # ✅ Sucesso
+        if request.accept_mimetypes.best == 'application/json':
+            return jsonify({'id': novo.id, 'nome': novo.nome})
         flash('Credor cadastrado com sucesso!', 'success')
         return redirect(url_for('listar_credores'))
 
@@ -4454,6 +4460,79 @@ def receita_avulsa():
             flash(f"❌ Erro ao cadastrar receita: {e}", "danger")
 
     return render_template('receita_avulsa.html', usinas=usinas, credores=credores)
+
+@app.route('/editar_receita_avulsa/<int:id>', methods=['GET', 'POST'])
+@login_required
+def editar_receita_avulsa(id):
+    receita = FinanceiroUsina.query.get_or_404(id)
+
+    if receita.tipo != 'receita':
+        flash("❌ Registro não é do tipo 'receita'.", "danger")
+        return redirect(url_for('relatorio_financeiro'))
+
+    usinas = Usina.query.order_by(Usina.nome).all()
+    credores = Credor.query.order_by(Credor.nome).all()
+
+    if request.method == 'POST':
+        try:
+            receita.usina_id = int(request.form['usina_id'])
+            receita.data = request.form['data']
+            receita.descricao = request.form['descricao']
+            receita.valor = float(request.form['valor'])
+            receita.referencia_mes = int(request.form['referencia_mes']) if request.form['referencia_mes'] else None
+            receita.referencia_ano = int(request.form['referencia_ano']) if request.form['referencia_ano'] else None
+            receita.data_pagamento = request.form['data_pagamento'] or None
+            receita.credor_id = int(request.form['credor_id']) if request.form['credor_id'] else None
+
+            db.session.commit()
+            flash("✅ Receita atualizada com sucesso!", "success")
+            return redirect(url_for('editar_receita_avulsa', id=receita.id))
+        except Exception as e:
+            db.session.rollback()
+            flash(f"❌ Erro ao atualizar receita: {e}", "danger")
+
+    return render_template('receita_avulsa.html', receita=receita, usinas=usinas, credores=credores)
+
+@app.route('/receitas_avulsas')
+@login_required
+def receitas_avulsas():
+    if not current_user.pode_acessar_financeiro:
+        return "Acesso negado", 403
+
+    usinas = Usina.query.order_by(Usina.nome).all()
+    usina_id = request.args.get('usina_id', type=int)
+    data_inicio = request.args.get('data_inicio')
+    data_fim = request.args.get('data_fim')
+
+    query = FinanceiroUsina.query.filter(
+        FinanceiroUsina.tipo == 'receita',
+        ~func.lower(FinanceiroUsina.descricao).like('fatura%')  # exclui descrições que começam com "fatura"
+    )
+
+    if usina_id:
+        query = query.filter(FinanceiroUsina.usina_id == usina_id)
+    if data_inicio:
+        query = query.filter(FinanceiroUsina.data >= data_inicio)
+    if data_fim:
+        query = query.filter(FinanceiroUsina.data <= data_fim)
+
+    receitas = query.order_by(FinanceiroUsina.data.desc()).all()
+
+    return render_template('receitas_avulsas.html', receitas=receitas, usinas=usinas,
+                           usina_id=usina_id, data_inicio=data_inicio, data_fim=data_fim)
+
+@app.route('/excluir_receita_avulsa/<int:id>', methods=['POST'])
+@login_required
+def excluir_receita_avulsa(id):
+    receita = FinanceiroUsina.query.get_or_404(id)
+    if receita.tipo != 'receita':
+        flash('Registro não é uma receita.', 'danger')
+        return redirect(url_for('receitas_avulsas'))
+
+    db.session.delete(receita)
+    db.session.commit()
+    flash('Receita excluída com sucesso.', 'success')
+    return redirect(url_for('receitas_avulsas'))
 
 
 if __name__ == '__main__':

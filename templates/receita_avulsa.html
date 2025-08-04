@@ -1,12 +1,16 @@
 {% extends 'base.html' %}
 
-{% block title %}Nova Receita Avulsa{% endblock %}
+{% block title %}
+  {% if receita %}Editar Receita{% else %}Nova Receita Avulsa{% endif %}
+{% endblock %}
 
 {% block content %}
 <div class="container mt-5 mb-5 p-4 bg-white shadow rounded">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="text-primary">Cadastrar Receita Avulsa</h2>
-        <a href="{{ url_for('index') }}?aba=financeiro" class="btn btn-secondary">
+        <h2 class="text-primary">
+            {% if receita %}Editar Receita Avulsa{% else %}Cadastrar Receita Avulsa{% endif %}
+        </h2>
+        <a href="{{ url_for('receitas_avulsas') }}" class="btn btn-secondary">
             <i class="bi bi-arrow-left"></i> Voltar
         </a>
     </div>
@@ -28,53 +32,60 @@
             <select name="usina_id" class="form-select" required>
                 <option value="">Selecione</option>
                 {% for usina in usinas %}
-                    <option value="{{ usina.id }}">{{ usina.nome }}</option>
+                    <option value="{{ usina.id }}" {% if receita and receita.usina_id == usina.id %}selected{% endif %}>{{ usina.nome }}</option>
                 {% endfor %}
             </select>
         </div>
+
         <div class="col-md-6">
             <label class="form-label">Credor (opcional)</label>
-            <select name="credor_id" class="form-select">
+            <select name="credor_id" class="form-select" id="credor_id_select">
                 <option value="">Nenhum</option>
                 {% for credor in credores %}
-                    <option value="{{ credor.id }}">{{ credor.nome }}</option>
+                    <option value="{{ credor.id }}" {% if receita and receita.credor_id == credor.id %}selected{% endif %}>{{ credor.nome }}</option>
                 {% endfor %}
             </select>
         </div>
 
         <div class="col-md-6">
             <label class="form-label">Data</label>
-            <input type="date" name="data" class="form-control" required>
-        </div>
-
-        <div class="col-md-8">
-            <label class="form-label">Descrição</label>
-            <input type="text" name="descricao" class="form-control" required>
-        </div>
-
-        <div class="col-md-4">
-            <label class="form-label">Valor (R$)</label>
-            <input type="number" name="valor" step="0.01" class="form-control" required>
-        </div>
-
-        <div class="col-md-3">
-            <label class="form-label">Mês Referência</label>
-            <input type="number" name="referencia_mes" min="1" max="12" class="form-control">
-        </div>
-
-        <div class="col-md-3">
-            <label class="form-label">Ano Referência</label>
-            <input type="number" name="referencia_ano" class="form-control">
+            <input type="date" name="data" class="form-control" required
+                   value="{{ receita.data if receita else '' }}">
         </div>
 
         <div class="col-md-6">
             <label class="form-label">Data Pagamento (opcional)</label>
-            <input type="date" name="data_pagamento" class="form-control">
+            <input type="date" name="data_pagamento" class="form-control"
+                   value="{{ receita.data_pagamento if receita and receita.data_pagamento else '' }}">
+        </div>
+
+        <div class="col-md-8">
+            <label class="form-label">Descrição</label>
+            <input type="text" name="descricao" class="form-control" required
+                   value="{{ receita.descricao if receita else '' }}">
+        </div>
+
+        <div class="col-md-4">
+            <label class="form-label">Valor (R$)</label>
+            <input type="number" name="valor" step="0.01" class="form-control" required
+                   value="{{ receita.valor if receita else '' }}">
+        </div>
+
+        <div class="col-md-3">
+            <label class="form-label">Mês Referência</label>
+            <input type="number" name="referencia_mes" min="1" max="12" class="form-control"
+                   value="{{ receita.referencia_mes if receita else '' }}">
+        </div>
+
+        <div class="col-md-3">
+            <label class="form-label">Ano Referência</label>
+            <input type="number" name="referencia_ano" class="form-control"
+                   value="{{ receita.referencia_ano if receita else '' }}">
         </div>
 
         <div class="col-12 d-flex justify-content-end mt-3">
             <button type="submit" class="btn btn-success">
-                <i class="bi bi-plus-circle"></i> Salvar Receita
+                <i class="bi bi-check-circle"></i> {% if receita %}Atualizar{% else %}Salvar Receita{% endif %}
             </button>
         </div>
     </form>
