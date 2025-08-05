@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="container mt-4">
-    <h2 class="mb-4 text-primary text-center">📊 Relatório Financeiro por Usina – {{ ano }}</h2>
+    <h2 class="mb-4 text-primary text-center">Relatório Financeiro por Usina – {{ ano }}</h2>
 
     <!-- Filtros -->
     <form method="get" class="row g-3 mb-4">
@@ -30,8 +30,10 @@
         </div>
     </form>
 
-    <!-- Tabela -->
-    <div class="table-responsive">
+    {% if relatorio %}
+    <!-- Primeira tabela: geração, injeção e consumo -->
+    <div class="table-responsive mb-5">
+        <h4 class="text-center text-success">Geração, Injeção e Consumo</h4>
         <table class="table table-bordered table-striped align-middle text-center">
             <thead class="table-light">
                 <tr>
@@ -39,10 +41,7 @@
                     <th>Usina</th>
                     <th>Geração (kWh)</th>
                     <th>Injeção (kWh)</th>
-                    <th>Diferença (kWh)</th>
-                    <th>kWh Consumido</th>
-                    <th>Faturado (R$)</th>
-                    <th>kWh Acumulado</th>
+                    <th>Compensação Kwh</th>
                 </tr>
             </thead>
             <tbody>
@@ -52,17 +51,68 @@
                     <td>{{ linha.usina_nome }}</td>
                     <td>{{ linha.geracao | formato_kwh }}</td>
                     <td>{{ linha.injecao | formato_kwh }}</td>
-                    <td>{{ (linha.geracao|default(0)|float - linha.injecao|default(0)|float) | formato_kwh }}</td>
                     <td>{{ linha.consumo | formato_kwh }}</td>
-                    <td>{{ linha.faturado | formato_brasileiro }}</td>
-                    <td>{{ linha.acumulado | formato_kwh }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 
-    {% if not relatorio %}
+    <!-- Segunda tabela: valores financeiros -->
+    <div class="table-responsive">
+        <h4 class="text-center text-primary">Faturamento e Acumulado</h4>
+        <table class="table table-bordered table-striped align-middle text-center">
+            <thead class="table-light">
+                <tr>
+                    <th>Mês</th>
+                    <th>Usina</th>
+                    <th>Faturado (R$)</th>
+                    <th>Faturado Acumulado (R$)</th>
+                    <th>Saldo (kWh)</th>                    
+                </tr>
+            </thead>
+            <tbody>
+                {% set faturado_acumulado = 0 %}
+                {% for linha in relatorio %}
+                {% set faturado_acumulado = faturado_acumulado + (linha.faturado or 0) %}
+                <tr>
+                    <td>{{ "%02d"|format(linha.mes) }}/{{ ano }}</td>
+                    <td>{{ linha.usina_nome }}</td>
+                    <td>{{ linha.faturado | formato_brasileiro }}</td>
+                    <td>{{ linha.faturado_acumulado | formato_brasileiro }}</td>
+                    <td>{{ linha.saldo_unidade | formato_kwh }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Tabela de Consolidação -->
+    <div class="table-responsive mt-5">
+        <h4 class="text-center text-dark">Consolidação por Usina – {{ ano }}</h4>
+        <table class="table table-bordered table-striped align-middle text-center">
+            <thead class="table-light">
+                <tr>
+                    <th>Usina</th>
+                    <th>Geração Total (kWh)</th>
+                    <th>Faturado Total (R$)</th>
+                    <th>Saldo Acumulado (kWh)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in consolidacao %}
+                <tr>
+                    <td>{{ item.usina_nome }}</td>
+                    <td>{{ item.geracao_total | formato_kwh }}</td>
+                    <td>{{ item.faturado_total | formato_brasileiro }}</td>
+                    <td>{{ item.ultimo_saldo | formato_kwh }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% else %}
         <div class="alert alert-warning mt-4 text-center">Nenhum dado encontrado para o ano selecionado.</div>
     {% endif %}
 

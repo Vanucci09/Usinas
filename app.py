@@ -2735,6 +2735,7 @@ def relatorio_financeiro():
 
     for usina in usinas_filtradas:
         kwh_acumulado = 0
+        faturado_acumulado = 0  # ← inicializa por usina
         mes_limite = 12
         if ano == datetime.now().year:
             mes_limite = datetime.now().month
@@ -2766,7 +2767,28 @@ def relatorio_financeiro():
             ).scalar() or 0
 
             kwh_acumulado += consumo
+            faturado_acumulado += faturado or 0  # ← acumula aqui
+            
+            saldo_unidade = db.session.query(db.func.sum(FaturaMensal.saldo_unidade)).join(Cliente).filter(
+                Cliente.usina_id == usina.id,
+                FaturaMensal.mes_referencia == mes,
+                FaturaMensal.ano_referencia == ano
+            ).scalar() or 0
+            
+            consolidacao = []
 
+            for usina in usinas_filtradas:
+                geracao_total = sum(l['geracao'] for l in dados if l['usina_nome'] == usina.nome)
+                faturado_total = sum(l['faturado'] for l in dados if l['usina_nome'] == usina.nome)
+                ultimo_saldo = next((l['saldo_unidade'] for l in reversed(dados) if l['usina_nome'] == usina.nome and l['saldo_unidade']), 0)
+
+                consolidacao.append({
+                    'usina_nome': usina.nome,
+                    'geracao_total': geracao_total,
+                    'faturado_total': faturado_total,
+                    'ultimo_saldo': ultimo_saldo
+                })
+                            
             dados.append({
                 'mes': mes,
                 'usina_nome': usina.nome,
@@ -2774,13 +2796,15 @@ def relatorio_financeiro():
                 'injecao': round(injecao, 2),
                 'diferenca': round(geracao - injecao, 2),
                 'consumo': round(consumo, 2),
-                'faturado': faturado,
-                'acumulado': round(kwh_acumulado, 2)
+                'faturado': round(faturado or 0, 2),
+                'faturado_acumulado': round(faturado_acumulado, 2),
+                'saldo_unidade': round(saldo_unidade, 2),
             })
 
     return render_template(
         'relatorio_financeiro.html',
         relatorio=dados,
+        consolidacao=consolidacao,
         usinas=usinas,
         usina_id=usina_id,
         ano=ano,
