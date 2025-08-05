@@ -317,6 +317,21 @@ class ParticipacaoAcionistaDireta(db.Model):
     usina = db.relationship('Usina', backref='participacoes_diretas')
     acionista = db.relationship('Acionista', backref='participacoes_diretas')
     
+class InjecaoMensalUsina(db.Model):
+    __tablename__ = 'injecoes_mensais_usina'
+
+    id = db.Column(db.Integer, primary_key=True)
+    usina_id = db.Column(db.Integer, db.ForeignKey('usinas.id'), nullable=False)
+    ano = db.Column(db.Integer, nullable=False)
+    mes = db.Column(db.Integer, nullable=False)
+    kwh_injetado = db.Column(db.Float, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint('usina_id', 'ano', 'mes', name='uniq_usina_ano_mes'),
+    )
+
+    usina = db.relationship('Usina', backref='injecoes')
+    
 class Usuario(db.Model, UserMixin):
     __tablename__ = 'usuarios'
     id = db.Column(db.Integer, primary_key=True)
@@ -712,9 +727,19 @@ def formato_tarifa(valor):
         return f"R$ {float(valor):,.7f}".replace(',', 'X').replace('.', ',').replace('X', '.')
     except (ValueError, TypeError):
         return "R$ 0,0000000"
+    
+@app.template_filter('formato_kwh')
+def formato_kwh(valor):
+    if valor is None:
+        return "0,00"
+    try:
+        return f"{float(valor):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except:
+        return valor
 
 app.jinja_env.filters['formato_brasileiro'] = formato_brasileiro
 app.jinja_env.filters['formato_tarifa'] = formato_tarifa
+app.jinja_env.filters['formato_kwh'] = formato_kwh
 
 @app.route('/cadastrar_cliente', methods=['GET', 'POST'])
 @login_required
@@ -2697,52 +2722,65 @@ def relatorio_financeiro():
     if not current_user.pode_acessar_financeiro:
         return "Acesso negado", 403
 
+    ano = request.args.get('ano', type=int, default=datetime.now().year)
+    usina_id = request.args.get('usina_id', type=int)
+
     usinas = Usina.query.order_by(Usina.nome).all()
+    anos_disponiveis = sorted({
+        r[0] for r in db.session.query(db.extract('year', Geracao.data)).distinct().all()
+    }, reverse=True)
 
-    # Filtros
-    usina_id    = request.args.get('usina_id', type=int)
-    tipo        = request.args.get('tipo')
-    data_inicio = request.args.get('data_inicio')
-    data_fim    = request.args.get('data_fim')
+    dados = []
+    usinas_filtradas = [u for u in usinas if not usina_id or u.id == usina_id]
 
-    query = FinanceiroUsina.query
+    for usina in usinas_filtradas:
+        kwh_acumulado = 0
+        for mes in range(1, 13):
+            geracao = db.session.query(db.func.sum(Geracao.energia_kwh)).filter(
+                Geracao.usina_id == usina.id,
+                db.extract('month', Geracao.data) == mes,
+                db.extract('year', Geracao.data) == ano
+            ).scalar() or 0
 
-    if usina_id:
-        query = query.filter(FinanceiroUsina.usina_id == usina_id)
-    if tipo in ['receita', 'despesa']:
-        query = query.filter(FinanceiroUsina.tipo == tipo)
-    if data_inicio:
-        query = query.filter(FinanceiroUsina.data >= data_inicio)
-    if data_fim:
-        query = query.filter(FinanceiroUsina.data <= data_fim)
+            injecao = db.session.query(db.func.sum(InjecaoMensalUsina.kwh_injetado)).filter(
+                InjecaoMensalUsina.usina_id == usina.id,
+                InjecaoMensalUsina.mes == mes,
+                InjecaoMensalUsina.ano == ano
+            ).scalar() or 0
 
-    registros = query.order_by(FinanceiroUsina.data.asc()).all()
+            consumo = db.session.query(db.func.sum(FaturaMensal.consumo_usina)).join(Cliente).filter(
+                Cliente.usina_id == usina.id,
+                FaturaMensal.mes_referencia == mes,
+                FaturaMensal.ano_referencia == ano
+            ).scalar() or 0
 
-    # força float tanto para valor quanto para juros
-    total_receitas = sum(
-        (float(r.valor) if r.valor is not None else 0.0)
-        + (float(r.juros) if r.juros is not None else 0.0)
-        for r in registros
-        if r.tipo == 'receita'
-    )
-    total_despesas = sum(
-        float(r.valor) if r.valor is not None else 0.0
-        for r in registros
-        if r.tipo == 'despesa'
-    )
-    saldo = total_receitas - total_despesas
+            faturado = db.session.query(db.func.sum(FinanceiroUsina.valor)).filter(
+                FinanceiroUsina.usina_id == usina.id,
+                FinanceiroUsina.tipo == 'receita',
+                db.extract('month', FinanceiroUsina.data) == mes,
+                db.extract('year', FinanceiroUsina.data) == ano
+            ).scalar() or 0
+
+            kwh_acumulado += consumo
+
+            dados.append({
+                'mes': mes,
+                'usina_nome': usina.nome,
+                'geracao': round(geracao, 2),
+                'injecao': round(injecao, 2),
+                'diferenca': round(geracao - injecao, 2),
+                'consumo': round(consumo, 2),
+                'faturado': faturado,
+                'acumulado': round(kwh_acumulado, 2)
+            })
 
     return render_template(
         'relatorio_financeiro.html',
-        registros=registros,
+        relatorio=dados,
         usinas=usinas,
         usina_id=usina_id,
-        tipo=tipo,
-        data_inicio=data_inicio,
-        data_fim=data_fim,
-        total_receitas=total_receitas,
-        total_despesas=total_despesas,
-        saldo=saldo
+        ano=ano,
+        anos_disponiveis=anos_disponiveis
     )
 
 @app.route('/relatorio_consolidado', methods=['GET'])
@@ -2944,14 +2982,49 @@ def relatorio_cliente():
     mes = request.args.get('mes', default=date.today().month, type=int)
     ano = request.args.get('ano', default=date.today().year, type=int)
     usina_id = request.args.get('usina_id', type=int)
+    cliente_id = request.args.get('cliente_id', type=int)
 
+    # Subquery com previsão mensal por usina
+    sub_previsao = db.session.query(
+        PrevisaoMensal.usina_id.label('usina_id'),
+        PrevisaoMensal.previsao_kwh.label('previsao_kwh')
+    ).filter(
+        PrevisaoMensal.mes == mes,
+        PrevisaoMensal.ano == ano
+    ).subquery()
+
+    # Query principal
     query = db.session.query(
-        Cliente.nome.label('cliente'),
-        db.func.sum(FaturaMensal.consumo_usina).label('consumo_total'),
-        db.func.sum(FaturaMensal.consumo_usina * Rateio.tarifa_kwh).label('faturamento_total')
-    ).join(Cliente, FaturaMensal.cliente_id == Cliente.id
-    ).join(Rateio, Rateio.cliente_id == Cliente.id
-    ).join(Usina, Cliente.usina_id == Usina.id
+        Cliente.id.label("cliente_id"),
+        Cliente.nome.label("cliente"),
+        Usina.nome.label("usina"),
+        Rateio.percentual.label("percentual"),
+        FaturaMensal.mes_referencia,
+        FaturaMensal.ano_referencia,
+        db.func.sum(FaturaMensal.consumo_usina).label("consumo_total"),
+        (Rateio.percentual / 100 * sub_previsao.c.previsao_kwh).label("kwh_contratado"),
+        (
+            db.func.sum(FaturaMensal.consumo_usina) - 
+            (Rateio.percentual / 100 * sub_previsao.c.previsao_kwh)
+        ).label("diferenca_kwh"),
+        (
+            (
+                db.func.sum(FaturaMensal.consumo_usina) - 
+                (Rateio.percentual / 100 * sub_previsao.c.previsao_kwh)
+            ) / func.nullif((Rateio.percentual / 100 * sub_previsao.c.previsao_kwh), 0) * 100
+        ).label("percentual_diferenca"),
+        db.func.sum(
+            (FaturaMensal.consumo_usina * (FaturaMensal.tarifa_neoenergia * 1.2625)) -
+            (FaturaMensal.consumo_usina * Rateio.tarifa_kwh)
+        ).label("economia")
+    ).join(
+        Cliente, FaturaMensal.cliente_id == Cliente.id
+    ).join(
+        Rateio, Rateio.cliente_id == Cliente.id
+    ).join(
+        Usina, Cliente.usina_id == Usina.id
+    ).join(
+        sub_previsao, sub_previsao.c.usina_id == Usina.id
     ).filter(
         FaturaMensal.mes_referencia == mes,
         FaturaMensal.ano_referencia == ano
@@ -2960,7 +3033,14 @@ def relatorio_cliente():
     if usina_id:
         query = query.filter(Cliente.usina_id == usina_id)
 
-    query = query.group_by(Cliente.nome).order_by(Cliente.nome)
+    if cliente_id:
+        query = query.filter(Cliente.id == cliente_id)
+
+    query = query.group_by(
+        Cliente.id, Cliente.nome, Usina.nome, Rateio.percentual,
+        FaturaMensal.mes_referencia, FaturaMensal.ano_referencia,
+        sub_previsao.c.previsao_kwh
+    ).order_by(Cliente.nome)
 
     resultados = query.all()
 
@@ -2970,7 +3050,9 @@ def relatorio_cliente():
         mes=mes,
         ano=ano,
         usina_id=usina_id,
-        usinas=Usina.query.order_by(Usina.nome).all()
+        cliente_id=cliente_id,
+        usinas=Usina.query.order_by(Usina.nome).all(),
+        clientes=Cliente.query.order_by(Cliente.nome).all()
     )
 
 @app.route('/relatorio_recebido_vs_previsto')
@@ -4814,6 +4896,41 @@ def relatorio_prestacao_direta():
                            mes=mes,
                            ano=ano,
                            ano_atual=datetime.today().year)
+
+@app.route('/cadastrar_injecao', methods=['GET', 'POST'])
+@login_required
+def cadastrar_injecao():
+    if not current_user.pode_acessar_financeiro:
+        return "Acesso negado", 403
+
+    usinas = Usina.query.order_by(Usina.nome).all()
+    ano_atual = datetime.now().year
+
+    if request.method == 'POST':
+        usina_id = request.form.get('usina_id', type=int)
+        ano = request.form.get('ano', type=int)
+        mes = request.form.get('mes', type=int)
+        kwh_injetado = request.form.get('kwh_injetado', type=float)
+
+        existente = InjecaoMensalUsina.query.filter_by(
+            usina_id=usina_id, ano=ano, mes=mes
+        ).first()
+        if existente:
+            flash('❌ Já existe um registro para esta usina nesse mês/ano.', 'danger')
+            return redirect(url_for('cadastrar_injecao'))
+
+        nova = InjecaoMensalUsina(
+            usina_id=usina_id,
+            ano=ano,
+            mes=mes,
+            kwh_injetado=kwh_injetado
+        )
+        db.session.add(nova)
+        db.session.commit()
+        flash('✅ Injeção cadastrada com sucesso.', 'success')
+        return redirect(url_for('cadastrar_injecao'))
+
+    return render_template('cadastrar_injecao.html', usinas=usinas, ano_atual=ano_atual)
 
 
 if __name__ == '__main__':

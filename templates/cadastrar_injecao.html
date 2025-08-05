@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+
+{% block title %}Cadastrar Injeção Mensal{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <h2 class="mb-4 text-center text-primary">📈 Cadastrar Injeção Mensal de Crédito</h2>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <form method="post" class="row g-3">
+        <div class="col-md-4">
+            <label for="usina_id" class="form-label">Usina</label>
+            <select name="usina_id" id="usina_id" class="form-select" required>
+                {% for usina in usinas %}
+                    <option value="{{ usina.id }}">{{ usina.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label for="mes" class="form-label">Mês</label>
+            <select name="mes" id="mes" class="form-select" required>
+                {% for m in range(1, 13) %}
+                    <option value="{{ m }}">{{ "%02d"|format(m) }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label for="ano" class="form-label">Ano</label>
+            <input type="number" name="ano" id="ano" class="form-control" value="{{ ano_atual }}" required>
+        </div>
+        <div class="col-md-4">
+            <label for="kwh_injetado" class="form-label">kWh Injetado</label>
+            <input type="number" step="0.01" name="kwh_injetado" id="kwh_injetado" class="form-control" required>
+        </div>
+
+        <div class="col-12 text-end">
+            <button type="submit" class="btn btn-success">Salvar</button>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancelar</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -1,77 +1,73 @@
 {% extends 'base.html' %}
 
-{% block title %}Relatório Financeiro{% endblock %}
+{% block title %}Relatório Financeiro por Usina{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
-    <h2 class="mb-4 text-primary">Relatório Financeiro</h2>
+    <h2 class="mb-4 text-primary text-center">📊 Relatório Financeiro por Usina – {{ ano }}</h2>
 
-    <form class="row g-3 mb-4" method="get">
+    <!-- Filtros -->
+    <form method="get" class="row g-3 mb-4">
+        <div class="col-md-3">
+            <label for="ano" class="form-label">Ano</label>
+            <select name="ano" id="ano" class="form-select">
+                {% for a in anos_disponiveis %}
+                    <option value="{{ a }}" {% if a == ano %}selected{% endif %}>{{ a }}</option>
+                {% endfor %}
+            </select>
+        </div>
         <div class="col-md-3">
             <label for="usina_id" class="form-label">Usina</label>
             <select name="usina_id" id="usina_id" class="form-select">
                 <option value="">Todas</option>
-                {% for u in usinas %}
-                    <option value="{{ u.id }}" {% if u.id == usina_id %}selected{% endif %}>{{ u.nome }}</option>
+                {% for usina in usinas %}
+                    <option value="{{ usina.id }}" {% if usina.id == usina_id %}selected{% endif %}>{{ usina.nome }}</option>
                 {% endfor %}
             </select>
-        </div>
-        <div class="col-md-2">
-            <label for="tipo" class="form-label">Tipo</label>
-            <select name="tipo" id="tipo" class="form-select">
-                <option value="">Todos</option>
-                <option value="receita" {% if tipo == 'receita' %}selected{% endif %}>Receitas</option>
-                <option value="despesa" {% if tipo == 'despesa' %}selected{% endif %}>Despesas</option>
-            </select>
-        </div>
-        <div class="col-md-2">
-            <label for="data_inicio" class="form-label">Data Início</label>
-            <input type="date" id="data_inicio" name="data_inicio" class="form-control" value="{{ data_inicio }}">
-        </div>
-        <div class="col-md-2">
-            <label for="data_fim" class="form-label">Data Fim</label>
-            <input type="date" id="data_fim" name="data_fim" class="form-control" value="{{ data_fim }}">
         </div>
         <div class="col-md-2 align-self-end">
             <button type="submit" class="btn btn-primary w-100">Filtrar</button>
         </div>
     </form>
 
-    <table class="table table-bordered">
-        <thead class="table-light">
-            <tr>
-                <th>Data</th>
-                <th>Usina</th>
-                <th>Tipo</th>
-                <th>Categoria</th>
-                <th>Descrição</th>
-                <th>Valor (R$)</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for r in registros %}
-            <tr>
-                <td>{{ r.data.strftime('%d/%m/%Y') }}</td>
-                <td>{{ r.usina.nome if r.usina else 'N/A' }}</td>
-                <td>{{ r.tipo.title() }}</td>
-                <td>{{ r.categoria.nome if r.categoria else '-' }}</td>
-                <td>{{ r.descricao }}</td>
-                <td>{{ r.valor | formato_brasileiro }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    <div class="mt-4">
-        <div class="alert alert-success"><strong>Total Receitas:</strong> {{ total_receitas | formato_brasileiro }}</div>
-        <div class="alert alert-danger"><strong>Total Despesas:</strong> {{ total_despesas | formato_brasileiro }}</div>
-        <div class="alert alert-info"><strong>Saldo:</strong> {{ saldo | formato_brasileiro }}</div>
+    <!-- Tabela -->
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped align-middle text-center">
+            <thead class="table-light">
+                <tr>
+                    <th>Mês</th>
+                    <th>Usina</th>
+                    <th>Geração (kWh)</th>
+                    <th>Injeção (kWh)</th>
+                    <th>Diferença (kWh)</th>
+                    <th>kWh Consumido</th>
+                    <th>Faturado (R$)</th>
+                    <th>kWh Acumulado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for linha in relatorio %}
+                <tr>
+                    <td>{{ "%02d"|format(linha.mes) }}/{{ ano }}</td>
+                    <td>{{ linha.usina_nome }}</td>
+                    <td>{{ linha.geracao | formato_kwh }}</td>
+                    <td>{{ linha.injecao | formato_kwh }}</td>
+                    <td>{{ (linha.geracao|default(0)|float - linha.injecao|default(0)|float) | formato_kwh }}</td>
+                    <td>{{ linha.consumo | formato_kwh }}</td>
+                    <td>{{ linha.faturado | formato_brasileiro }}</td>
+                    <td>{{ linha.acumulado | formato_kwh }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
+
+    {% if not relatorio %}
+        <div class="alert alert-warning mt-4 text-center">Nenhum dado encontrado para o ano selecionado.</div>
+    {% endif %}
+
     <div class="text-center mt-4">
-        <a href="{{ url_for('financeiro') }}" class="btn btn-secondary">
-            Voltar
-        </a>
+        <a href="{{ url_for('financeiro') }}" class="btn btn-secondary">Voltar</a>
     </div>
-
 </div>
 {% endblock %}

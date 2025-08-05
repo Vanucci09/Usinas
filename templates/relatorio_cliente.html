@@ -16,6 +16,15 @@
                 {% endfor %}
             </select>
         </div>
+        <div class="col-md-3">
+            <label for="cliente_id" class="form-label">Cliente</label>
+            <select id="cliente_id" name="cliente_id" class="form-select">
+                <option value="">Todos</option>
+                {% for c in clientes %}
+                    <option value="{{ c.id }}" {% if c.id == cliente_id %}selected{% endif %}>{{ c.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
         <div class="col-md-2">
             <label for="mes" class="form-label">Mês</label>
             <select id="mes" name="mes" class="form-select">
@@ -37,7 +46,11 @@
         <thead class="table-light">
             <tr>
                 <th>Cliente</th>
-                <th>Consumo Compensado (kWh)</th>
+                <th>Alocação</th>
+                <th>kWh/mês Contratado</th>
+                <th>kWh/mês Consumido</th>
+                <th>% Diferença</th>
+                <th>Economia (R$)</th>
                 <th>Faturamento Estimado (R$)</th>
             </tr>
         </thead>
@@ -45,17 +58,19 @@
             {% for r in resultados %}
             <tr>
                 <td>{{ r.cliente }}</td>
+                <td>{{ r.usina }}</td>
+                <td>{{ r.kwh_contratado | round(2) }}</td>
                 <td>{{ r.consumo_total | round(2) }}</td>
-                <td>{{ r.faturamento_total | formato_brasileiro }}</td>
+                <td>{{ r.percentual_diferenca | round(2) }}%</td>
+                <td>{{ r.economia | formato_brasileiro }}</td>
+                <td>{{ r.economia | formato_brasileiro }}</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
 
     <div class="text-center mt-4">
-        <a href="{{ url_for('financeiro') }}" class="btn btn-secondary">
-            Voltar
-        </a>
+        <a href="{{ url_for('financeiro') }}" class="btn btn-secondary">Voltar</a>
     </div>
 </div>
 {% endblock %}
