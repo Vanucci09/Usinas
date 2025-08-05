@@ -2735,7 +2735,11 @@ def relatorio_financeiro():
 
     for usina in usinas_filtradas:
         kwh_acumulado = 0
-        for mes in range(1, 13):
+        mes_limite = 12
+        if ano == datetime.now().year:
+            mes_limite = datetime.now().month
+
+        for mes in range(1, mes_limite + 1):
             geracao = db.session.query(db.func.sum(Geracao.energia_kwh)).filter(
                 Geracao.usina_id == usina.id,
                 db.extract('month', Geracao.data) == mes,
