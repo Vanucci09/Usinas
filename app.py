@@ -170,6 +170,8 @@ class FaturaMensal(db.Model):
     identificador = db.Column(db.String, unique=True, nullable=False)
     email_enviado = db.Column(db.Boolean, default=False)
     energia_injetada_real = db.Column(db.Float, default=0.0)
+    
+    data_cadastro = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     cliente = db.relationship('Cliente', backref='faturas')
     
@@ -820,12 +822,37 @@ def listar_rateios():
     usinas = Usina.query.all()
     usina_id_filtro = request.args.get('usina_id', type=int)
 
-    if usina_id_filtro:
-        rateios = Rateio.query.filter_by(usina_id=usina_id_filtro).all()
-    else:
-        rateios = Rateio.query.all()
+    # Subquery que pega o maior ID de rateio por cliente + usina
+    subquery = (
+        db.session.query(
+            Rateio.cliente_id,
+            Rateio.usina_id,
+            func.max(Rateio.id).label("max_id")
+        )
+        .group_by(Rateio.cliente_id, Rateio.usina_id)
+    )
 
-    return render_template('listar_rateios.html', rateios=rateios, usinas=usinas, usina_id_filtro=usina_id_filtro)
+    if usina_id_filtro:
+        subquery = subquery.filter(Rateio.usina_id == usina_id_filtro)
+
+    subquery = subquery.subquery()
+
+    # Junta com Rateio para pegar os registros completos
+    rateios = (
+        db.session.query(Rateio)
+        .join(subquery, and_(
+            Rateio.id == subquery.c.max_id
+        ))
+        .order_by(Rateio.usina_id, Rateio.cliente_id)
+        .all()
+    )
+
+    return render_template(
+        'listar_rateios.html',
+        rateios=rateios,
+        usinas=usinas,
+        usina_id_filtro=usina_id_filtro
+    )
 
 @app.route('/editar_rateio/<int:id>', methods=['GET', 'POST'])
 @login_required
@@ -1127,7 +1154,25 @@ def relatorio_fatura(fatura_id):
     consumo_usina = Decimal(str(fatura.consumo_usina))
     valor_conta = Decimal(str(fatura.valor_conta_neoenergia))
 
-    rateio = Rateio.query.filter_by(cliente_id=cliente.id, usina_id=usina.id).first()
+    # Usa data_cadastro se disponível, senão usa o primeiro dia do mês da fatura
+    if fatura.data_cadastro:
+        data_base = fatura.data_cadastro.date()
+
+        rateio = Rateio.query.filter(
+            Rateio.cliente_id == cliente.id,
+            Rateio.usina_id == usina.id,
+            Rateio.data_inicio <= data_base
+        ).order_by(Rateio.data_inicio.desc()).first()
+    else:
+        # Se não tem data_cadastro, usa ontem como referência
+        ontem = date.today() - timedelta(days=1)
+
+        rateio = Rateio.query.filter(
+            Rateio.cliente_id == cliente.id,
+            Rateio.usina_id == usina.id,
+            Rateio.data_inicio <= ontem
+        ).order_by(Rateio.data_inicio.desc()).first()
+
     tarifa_cliente = Decimal(str(rateio.tarifa_kwh)) if rateio else Decimal('0')
 
     valor_usina = consumo_usina * tarifa_cliente
@@ -2950,7 +2995,15 @@ def relatorio_recebido_vs_previsto():
         usina = cliente.usina
 
         # Tarifa do rateio
-        rateio = Rateio.query.filter_by(cliente_id=cliente.id, usina_id=usina.id).first()
+        data_referencia = date(ano, mes, 1)
+
+        # Buscar o rateio vigente até essa data
+        rateio = Rateio.query.filter(
+            Rateio.cliente_id == cliente.id,
+            Rateio.usina_id == usina.id,
+            Rateio.data_inicio <= data_referencia
+        ).order_by(Rateio.data_inicio.desc()).first()
+
         tarifa = rateio.tarifa_kwh if rateio else 0
 
         # Valor previsto (geração * tarifa)
