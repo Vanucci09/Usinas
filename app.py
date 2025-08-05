@@ -1154,24 +1154,18 @@ def relatorio_fatura(fatura_id):
     consumo_usina = Decimal(str(fatura.consumo_usina))
     valor_conta = Decimal(str(fatura.valor_conta_neoenergia))
 
-    # Usa data_cadastro se disponível, senão usa o primeiro dia do mês da fatura
     if fatura.data_cadastro:
         data_base = fatura.data_cadastro.date()
-
-        rateio = Rateio.query.filter(
-            Rateio.cliente_id == cliente.id,
-            Rateio.usina_id == usina.id,
-            Rateio.data_inicio <= data_base
-        ).order_by(Rateio.data_inicio.desc()).first()
     else:
-        # Se não tem data_cadastro, usa ontem como referência
-        ontem = date.today() - timedelta(days=1)
+        # Data fixa que você quer como base (vinda da fatura mais recente)
+        data_base = date(2025, 8, 4)
 
-        rateio = Rateio.query.filter(
-            Rateio.cliente_id == cliente.id,
-            Rateio.usina_id == usina.id,
-            Rateio.data_inicio <= ontem
-        ).order_by(Rateio.data_inicio.desc()).first()
+    # Busca o rateio mais recente até a data_base (inclusive)
+    rateio = Rateio.query.filter(
+        Rateio.cliente_id == cliente.id,
+        Rateio.usina_id == usina.id,
+        Rateio.data_inicio <= data_base
+    ).order_by(Rateio.data_inicio.desc()).first()
 
     tarifa_cliente = Decimal(str(rateio.tarifa_kwh)) if rateio else Decimal('0')
 
