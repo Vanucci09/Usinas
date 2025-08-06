@@ -5106,7 +5106,7 @@ def relatorio_financeiro_com_perda():
             'geracao_total': geracao_total,
             'injecao_total': injecao_total,
             'perda_total': perda_total,
-            'saldo_kwh': saldo_final_unidade,
+            'saldo_kwh': usina.saldo_kwh or 0,
             'eficiencia': round(eficiencia, 2),
             'faturado_total': faturado_total,
             'payback_percentual': round(payback_percentual, 2),

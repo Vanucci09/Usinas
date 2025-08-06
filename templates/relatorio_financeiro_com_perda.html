@@ -118,20 +118,21 @@
 
     <!-- Tabela de Consolidação -->
     <div class="table-responsive mt-5">
-        <h4 class="text-center text-dark">Consolidação por Usina – {{ "%02d"|format(mes_inicio) }}/{{ ano_inicio }} até {{ "%02d"|format(mes_fim) }}/{{ ano_fim }}</h4>
+        <h4 class="text-center text-dark">
+            Consolidação por Usina – {{ "%02d"|format(mes_inicio) }}/{{ ano_inicio }} até {{ "%02d"|format(mes_fim) }}/{{ ano_fim }}
+        </h4>
         <table class="table table-bordered table-striped align-middle text-center">
             <thead class="table-light">
                 <tr>
                     <th>Usina</th>
                     <th>Geração Total (kWh)</th>
-                    <th>Injeção Total (kWh)</th>
+                    <th>Injeção (kWh)</th>
                     <th>Perda Total (kWh)</th>
+                    <th>Crédito na Usina (kWh)</th>
                     <th>Faturado Total (R$)</th>
                     <th>Payback (%)</th>
                     <th>Meses p/ Retorno</th>
-                    <th>Crédito Acumulado (kWh)</th>
-                    <th>Injeção Total (kWh)</th>
-                    <th>Crédito Usina (kWh)</th>
+                    <th>Crédito nas Unidades (kWh)</th>                    
                     <th>Eficiência (%)</th>
                 </tr>
             </thead>
@@ -142,12 +143,11 @@
                     <td>{{ item.geracao_total | formato_kwh }}</td>
                     <td>{{ (item.geracao_total - item.perda_total) | formato_kwh }}</td>
                     <td class="text-danger">{{ item.perda_total | formato_kwh }}</td>
+                    <td class="text-success">{{ item.saldo_kwh | formato_kwh }}</td>
                     <td>{{ item.faturado_total | formato_brasileiro }}</td>
                     <td>{{ item.payback_percentual }}%</td>
                     <td>{{ item.meses_payback }}</td>
-                    <td>{{ item.ultimo_saldo | formato_kwh }}</td>
-                    <td>{{ item.injecao_total | formato_kwh }}</td>
-                    <td class="text-success">{{ item.saldo_kwh | formato_kwh }}</td>
+                    <td>{{ item.ultimo_saldo | formato_kwh }}</td>                    
                     <td>{{ item.eficiencia }}%</td>
                 </tr>
                 {% endfor %}
