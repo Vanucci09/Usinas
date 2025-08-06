@@ -3,67 +3,141 @@
 {% block title %}Relatório Financeiro com Perda{% endblock %}
 
 {% block content %}
+<!-- Logo visível apenas na impressão -->
+<div class="only-logo-print">
+    <img src="{{ url_for('static', filename='img/LogoEmpresa.jpg') }}" alt="CGR Logo" height="60">
+</div>
+
+<style>
+@media print {
+    #filtros-relatorio,
+    #voltar-relatorio,
+    #print-btn,
+    header,       /* se você tiver um header fixo */
+    .user-info,   /* classe de login / nome do usuário */
+    .logout-btn,  /* botão de logout */
+    nav,          /* menu lateral se houver */
+    footer {
+        display: none !important;
+    }
+
+    .only-logo-print {
+        display: block !important;
+        text-align: center;
+        margin-bottom: 20px;
+    }
+}
+
+/* Oculta a logo fora da impressão */
+.only-logo-print {
+    display: none;
+}
+</style>
+<style>
+@media print {
+    .table {
+        font-size: 11px !important;
+    }
+
+    .table th, .table td {
+        padding: 4px !important;
+        white-space: nowrap;
+    }
+
+    .table-responsive {
+        overflow: visible !important;
+    }
+
+    body {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .table th:nth-child(6), .table td:nth-child(6) {
+        white-space: nowrap;
+    }
+
+    /* Força a tabela a caber na largura da página */
+    .table-consolidada-print {
+        width: 100% !important;
+        table-layout: fixed;
+    }
+
+    .table-consolidada-print th,
+    .table-consolidada-print td {
+        word-wrap: break-word;
+        font-size: 10px;
+    }
+}
+</style>
+
+
 <div class="container mt-4">
     <h2 class="mb-4 text-primary text-center">
         Prestação de Contas– {{ "%02d"|format(mes_inicio) }}/{{ ano_inicio }} até {{ "%02d"|format(mes_fim) }}/{{ ano_fim }}
     </h2>
 
     <!-- Filtros -->
-    <form method="get" class="row g-3 mb-4">
-        <div class="col-md-2">
-            <label for="mes_inicio" class="form-label">Mês Inicial</label>
-            <select name="mes_inicio" id="mes_inicio" class="form-select">
-                {% for i in range(1, 13) %}
-                    <option value="{{ i }}" {% if i == mes_inicio %}selected{% endif %}>{{ "%02d"|format(i) }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-2">
-            <label for="ano_inicio" class="form-label">Ano Inicial</label>
-            <select name="ano_inicio" id="ano_inicio" class="form-select">
-                {% for a in anos_disponiveis %}
-                    <option value="{{ a }}" {% if a == ano_inicio %}selected{% endif %}>{{ a }}</option>
-                {% endfor %}
-            </select>
-        </div>
+    <div id="filtros-relatorio">
+        <form method="get" class="row g-3 mb-4">
+            <div class="col-md-2">
+                <label for="mes_inicio" class="form-label">Mês Inicial</label>
+                <select name="mes_inicio" id="mes_inicio" class="form-select">
+                    {% for i in range(1, 13) %}
+                        <option value="{{ i }}" {% if i == mes_inicio %}selected{% endif %}>{{ "%02d"|format(i) }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="ano_inicio" class="form-label">Ano Inicial</label>
+                <select name="ano_inicio" id="ano_inicio" class="form-select">
+                    {% for a in anos_disponiveis %}
+                        <option value="{{ a }}" {% if a == ano_inicio %}selected{% endif %}>{{ a }}</option>
+                    {% endfor %}
+                </select>
+            </div>
 
-        <div class="col-md-2">
-            <label for="mes_fim" class="form-label">Mês Final</label>
-            <select name="mes_fim" id="mes_fim" class="form-select">
-                {% for i in range(1, 13) %}
-                    <option value="{{ i }}" {% if i == mes_fim %}selected{% endif %}>{{ "%02d"|format(i) }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-2">
-            <label for="ano_fim" class="form-label">Ano Final</label>
-            <select name="ano_fim" id="ano_fim" class="form-select">
-                {% for a in anos_disponiveis %}
-                    <option value="{{ a }}" {% if a == ano_fim %}selected{% endif %}>{{ a }}</option>
-                {% endfor %}
-            </select>
-        </div>
+            <div class="col-md-2">
+                <label for="mes_fim" class="form-label">Mês Final</label>
+                <select name="mes_fim" id="mes_fim" class="form-select">
+                    {% for i in range(1, 13) %}
+                        <option value="{{ i }}" {% if i == mes_fim %}selected{% endif %}>{{ "%02d"|format(i) }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="ano_fim" class="form-label">Ano Final</label>
+                <select name="ano_fim" id="ano_fim" class="form-select">
+                    {% for a in anos_disponiveis %}
+                        <option value="{{ a }}" {% if a == ano_fim %}selected{% endif %}>{{ a }}</option>
+                    {% endfor %}
+                </select>
+            </div>
 
-        <div class="col-md-3">
-            <label for="usina_id" class="form-label">Usina</label>
-            <select name="usina_id" id="usina_id" class="form-select">
-                <option value="">Todas</option>
-                {% for usina in usinas %}
-                    <option value="{{ usina.id }}" {% if usina.id == usina_id %}selected{% endif %}>{{ usina.nome }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        
-        <div class="col-md-1 align-self-end">
-            <button type="submit" class="btn btn-primary w-100">Filtrar</button>
-        </div>
-    </form>
+            <div class="col-md-3">
+                <label for="usina_id" class="form-label">Usina</label>
+                <select name="usina_id" id="usina_id" class="form-select">
+                    <option value="">Todas</option>
+                    {% for usina in usinas %}
+                        <option value="{{ usina.id }}" {% if usina.id == usina_id %}selected{% endif %}>{{ usina.nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="col-md-1 align-self-end">
+                <button type="submit" class="btn btn-primary w-100">Filtrar</button>
+            </div>
+        </form>
+    </div>
+    <div class="text-end mb-3" id="print-btn">
+        <button class="btn btn-outline-secondary" onclick="window.print()">🖨️ Imprimir</button>
+    </div>
 
     {% if relatorio %}
     <!-- Tabela com Perda incluída -->
     <div class="table-responsive mb-5">
         <h4 class="text-center text-success">Geração, Injeção, Perda e Consumo</h4>
-        <table class="table table-bordered table-striped align-middle text-center">
+        <table class="table table-bordered table-striped align-middle text-center table-consolidada-print">
             <thead class="table-light">
                 <tr>
                     <th>Mês</th>
@@ -92,7 +166,7 @@
     <!-- Tabela de faturamento -->
     <div class="table-responsive">
         <h4 class="text-center text-primary">Faturamento e Acumulado</h4>
-        <table class="table table-bordered table-striped align-middle text-center">
+        <table class="table table-bordered table-striped align-middle text-center table-consolidada-print">
             <thead class="table-light">
                 <tr>
                     <th>Mês</th>
@@ -116,10 +190,10 @@
         </table>
     </div>
 
-    <!-- Tabela de Consolidação -->
+    <!-- Consolidação – Parte 1 -->
     <div class="table-responsive mt-5">
         <h4 class="text-center text-dark">
-            Consolidação por Usina – {{ "%02d"|format(mes_inicio) }}/{{ ano_inicio }} até {{ "%02d"|format(mes_fim) }}/{{ ano_fim }}
+            Consolidação - Energia ({{ "%02d"|format(mes_inicio) }}/{{ ano_inicio }} até {{ "%02d"|format(mes_fim) }}/{{ ano_fim }})
         </h4>
         <table class="table table-bordered table-striped align-middle text-center">
             <thead class="table-light">
@@ -129,11 +203,7 @@
                     <th>Injeção (kWh)</th>
                     <th>Perda Total (kWh)</th>
                     <th>Crédito na Usina (kWh)</th>
-                    <th>Faturado Total (R$)</th>
-                    <th>Payback (%)</th>
-                    <th>Meses p/ Retorno</th>
-                    <th>Crédito nas Unidades (kWh)</th>                    
-                    <th>Eficiência (%)</th>
+                    <th>Crédito nas Unidades (kWh)</th>
                 </tr>
             </thead>
             <tbody>
@@ -141,13 +211,38 @@
                 <tr>
                     <td>{{ item.usina_nome }}</td>
                     <td>{{ item.geracao_total | formato_kwh }}</td>
-                    <td>{{ (item.geracao_total - item.perda_total) | formato_kwh }}</td>
+                    <td>{{ item.injecao_total | formato_kwh }}</td>
                     <td class="text-danger">{{ item.perda_total | formato_kwh }}</td>
                     <td class="text-success">{{ item.saldo_kwh | formato_kwh }}</td>
+                    <td>{{ item.ultimo_saldo | formato_kwh }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Consolidação – Parte 2 -->
+    <div class="table-responsive mt-4">
+        <h4 class="text-center text-dark">
+            Consolidação - Financeiro ({{ "%02d"|format(mes_inicio) }}/{{ ano_inicio }} até {{ "%02d"|format(mes_fim) }}/{{ ano_fim }})
+        </h4>
+        <table class="table table-bordered table-striped align-middle text-center">
+            <thead class="table-light">
+                <tr>
+                    <th>Usina</th>
+                    <th>Faturado Total (R$)</th>
+                    <th>Payback (%)</th>
+                    <th>Meses p/ Retorno</th>
+                    <th>Eficiência (%)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in consolidacao %}
+                <tr>
+                    <td>{{ item.usina_nome }}</td>
                     <td style="white-space: nowrap;">{{ item.faturado_total | formato_brasileiro }}</td>
                     <td>{{ item.payback_percentual }}%</td>
                     <td>{{ item.meses_payback }}</td>
-                    <td>{{ item.ultimo_saldo | formato_kwh }}</td>                    
                     <td>{{ item.eficiencia }}%</td>
                 </tr>
                 {% endfor %}
@@ -159,7 +254,7 @@
         <div class="alert alert-warning mt-4 text-center">Nenhum dado encontrado para o período selecionado.</div>
     {% endif %}
 
-    <div class="text-center mt-4">
+    <div class="text-center mt-4" id="voltar-relatorio">
         <a href="{{ url_for('menu_relatorios') }}?aba=investidores" class="btn btn-secondary mt-3">Voltar</a>
     </div>
 </div>
