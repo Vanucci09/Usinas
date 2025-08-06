@@ -232,7 +232,7 @@
                     <th>Usina</th>
                     <th>Faturado Total (R$)</th>
                     <th>Payback (%)</th>
-                    <th>Meses p/ Retorno</th>
+                    
                     <th>Eficiência (%)</th>
                 </tr>
             </thead>
@@ -242,7 +242,7 @@
                     <td>{{ item.usina_nome }}</td>
                     <td style="white-space: nowrap;">{{ item.faturado_total | formato_brasileiro }}</td>
                     <td>{{ item.payback_percentual }}%</td>
-                    <td>{{ item.meses_payback }}</td>
+                    
                     <td>{{ item.eficiencia }}%</td>
                 </tr>
                 {% endfor %}
