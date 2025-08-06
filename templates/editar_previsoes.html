@@ -46,6 +46,12 @@
                        value="{{ usina.valor_investido }}">
             </div>
 
+            <div class="mb-3">
+                <label for="saldo_kwh" class="form-label">Saldo Atual da Usina (kWh)</label>
+                <input type="text" class="form-control" id="saldo_kwh" name="saldo_kwh"
+                    value="{{ usina.saldo_kwh or '' }}" placeholder="Ex: 1200.50">
+            </div>
+
             <!-- Logo atual -->
             {% if usina.logo_url %}
                 <div class="col-md-6">

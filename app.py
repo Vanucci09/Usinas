@@ -86,6 +86,7 @@ class Usina(db.Model):
     logo_url = db.Column(db.String(200))
     data_ligacao = db.Column(db.Date)
     valor_investido = db.Column(db.Numeric(precision=12, scale=2))
+    saldo_kwh = db.Column(db.Float, default=0)
     kehua_station_id = db.Column(db.String, nullable=True, unique=True)
     
     rateios = db.relationship('Rateio', backref='usina', cascade="all, delete-orphan")
@@ -378,6 +379,8 @@ def cadastrar_usina():
         data_ligacao_str = request.form.get('data_ligacao')
         valor_investido_str = request.form.get('valor_investido')
         ano_atual = date.today().year
+        saldo_kwh_str = request.form.get('saldo_kwh')
+        saldo_kwh = float(saldo_kwh_str.replace(',', '.')) if saldo_kwh_str else 0
 
         # Conversão dos valores
         data_ligacao = datetime.strptime(data_ligacao_str, '%Y-%m-%d').date() if data_ligacao_str else None
@@ -388,7 +391,8 @@ def cadastrar_usina():
             nome=nome,
             potencia_kw=potencia,
             data_ligacao=data_ligacao,
-            valor_investido=valor_investido
+            valor_investido=valor_investido,
+            saldo_kwh=saldo_kwh
         )
         db.session.add(nova_usina)
         db.session.commit()
@@ -1581,6 +1585,10 @@ def editar_previsoes(usina_id):
             valor_investido_str = request.form.get('valor_investido')
             if valor_investido_str:
                 usina.valor_investido = float(valor_investido_str.replace(',', '.'))
+                
+            saldo_kwh_str = request.form.get('saldo_kwh')
+            if saldo_kwh_str:
+                usina.saldo_kwh = float(saldo_kwh_str.replace(',', '.'))
 
             # Atualiza previsões mensais
             for mes in range(1, 13):
@@ -4975,14 +4983,13 @@ def relatorio_financeiro_com_perda():
 
     mes_inicio = request.args.get('mes_inicio', type=int, default=1)
     ano_inicio = request.args.get('ano_inicio', type=int, default=datetime.now().year)
-
     mes_fim = request.args.get('mes_fim', type=int, default=datetime.now().month)
     ano_fim = request.args.get('ano_fim', type=int, default=datetime.now().year)
 
     data_inicio = datetime(ano_inicio, mes_inicio, 1)
-    data_fim = datetime(ano_fim, mes_fim, 28)  # 28 é seguro para qualquer mês
+    data_fim = datetime(ano_fim, mes_fim, 28)
 
-    # 📋 Listas auxiliares
+    # 📋 Dados auxiliares
     usinas = Usina.query.order_by(Usina.nome).all()
     anos_disponiveis = sorted({
         r[0] for r in db.session.query(db.extract('year', Geracao.data)).distinct().all()
@@ -5042,7 +5049,7 @@ def relatorio_financeiro_com_perda():
                 'geracao': round(geracao, 2),
                 'injecao': round(injecao, 2),
                 'perda': round(perda, 2),
-                'diferenca': round(perda, 2),  # compatibilidade com outros templates
+                'diferenca': round(perda, 2),
                 'consumo': round(consumo, 2),
                 'faturado': round(faturado or 0, 2),
                 'faturado_acumulado': round(faturado_acumulado, 2),
@@ -5057,31 +5064,54 @@ def relatorio_financeiro_com_perda():
         geracao_total = sum(l['geracao'] for l in dados if l['usina_nome'] == usina.nome)
         faturado_total = sum(l['faturado'] for l in dados if l['usina_nome'] == usina.nome)
         perda_total = sum(l['perda'] for l in dados if l['usina_nome'] == usina.nome)
-        ultimo_saldo = next(
+        injecao_total = geracao_total - perda_total
+        saldo_final_unidade = next(
             (l['saldo_unidade'] for l in reversed(dados) if l['usina_nome'] == usina.nome),
             0
         )
 
+        # ✅ Eficiência com base em previsão
+        previsao_total = db.session.query(db.func.sum(PrevisaoMensal.previsao_kwh)).filter(
+            PrevisaoMensal.usina_id == usina.id,
+            db.or_(
+                db.and_(
+                    PrevisaoMensal.ano == ano_inicio,
+                    PrevisaoMensal.mes >= mes_inicio
+                ),
+                db.and_(
+                    PrevisaoMensal.ano == ano_fim,
+                    PrevisaoMensal.mes <= mes_fim
+                ),
+                db.and_(
+                    PrevisaoMensal.ano > ano_inicio,
+                    PrevisaoMensal.ano < ano_fim
+                )
+            )
+        ).scalar() or 0
+
+        eficiencia = (geracao_total / previsao_total * 100) if previsao_total else 0
+
         investimento = float(usina.valor_investido or 0)
         payback_percentual = (faturado_total / investimento * 100) if investimento else 0
-        
-        # Conta quantos meses a usina teve faturamento no período
+
         meses_validos = sum(
             1 for l in dados if l['usina_nome'] == usina.nome and l['faturado'] > 0
         )
 
         media_mensal_faturamento = (faturado_total / meses_validos) if meses_validos else 0
-
         meses_payback = (investimento / media_mensal_faturamento) if media_mensal_faturamento else 0
 
         consolidacao.append({
             'usina_nome': usina.nome,
             'geracao_total': geracao_total,
-            'faturado_total': faturado_total,
+            'injecao_total': injecao_total,
             'perda_total': perda_total,
-            'ultimo_saldo': ultimo_saldo,
+            'saldo_kwh': saldo_final_unidade,
+            'eficiencia': round(eficiencia, 2),
+            'faturado_total': faturado_total,
             'payback_percentual': round(payback_percentual, 2),
-            'meses_payback': round(meses_payback, 1)
+            'meses_payback': round(meses_payback, 1),
+            'ultimo_saldo': saldo_final_unidade
         })
 
     return render_template(

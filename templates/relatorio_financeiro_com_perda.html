@@ -129,7 +129,10 @@
                     <th>Faturado Total (R$)</th>
                     <th>Payback (%)</th>
                     <th>Meses p/ Retorno</th>
-                    <th>Saldo Acumulado (kWh)</th>
+                    <th>Crédito Acumulado (kWh)</th>
+                    <th>Injeção Total (kWh)</th>
+                    <th>Crédito Usina (kWh)</th>
+                    <th>Eficiência (%)</th>
                 </tr>
             </thead>
             <tbody>
@@ -143,6 +146,9 @@
                     <td>{{ item.payback_percentual }}%</td>
                     <td>{{ item.meses_payback }}</td>
                     <td>{{ item.ultimo_saldo | formato_kwh }}</td>
+                    <td>{{ item.injecao_total | formato_kwh }}</td>
+                    <td class="text-success">{{ item.saldo_kwh | formato_kwh }}</td>
+                    <td>{{ item.eficiencia }}%</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -154,7 +160,7 @@
     {% endif %}
 
     <div class="text-center mt-4">
-        <a href="{{ url_for('financeiro') }}" class="btn btn-secondary">Voltar</a>
+        <a href="{{ url_for('menu_relatorios') }}?aba=investidores" class="btn btn-secondary mt-3">Voltar</a>
     </div>
 </div>
 {% endblock %}
