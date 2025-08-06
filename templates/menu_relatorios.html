@@ -56,6 +56,16 @@
             </div>
         </div>
 
+        <div class="col">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Relatório Financeiro</h5>
+                    <p class="card-text">Visualize geração, injeção e a perda (diferença) mensal de cada usina.</p>
+                    <a href="{{ url_for('relatorio_financeiro_com_perda') }}" class="btn btn-outline-danger">Acessar</a>
+                </div>
+            </div>
+        </div>
+
     </div>
     <div class="mt-4 text-center">
         <a href="{{ url_for('index') }}" class="btn btn-secondary">Voltar ao Início</a>

@@ -33,6 +33,7 @@ from sqlalchemy import extract
 from threading import Lock
 import undetected_chromedriver as uc
 from sqlalchemy.exc import IntegrityError
+from dateutil.relativedelta import relativedelta
 
 
 app = Flask(__name__)
@@ -4962,6 +4963,139 @@ def cadastrar_injecao():
         return redirect(url_for('cadastrar_injecao'))
 
     return render_template('cadastrar_injecao.html', usinas=usinas, ano_atual=ano_atual)
+
+@app.route('/relatorio_financeiro_com_perda', methods=['GET'])
+@login_required
+def relatorio_financeiro_com_perda():
+    if not current_user.pode_acessar_financeiro:
+        return "Acesso negado", 403
+
+    # 🔎 Filtros
+    usina_id = request.args.get('usina_id', type=int)
+
+    mes_inicio = request.args.get('mes_inicio', type=int, default=1)
+    ano_inicio = request.args.get('ano_inicio', type=int, default=datetime.now().year)
+
+    mes_fim = request.args.get('mes_fim', type=int, default=datetime.now().month)
+    ano_fim = request.args.get('ano_fim', type=int, default=datetime.now().year)
+
+    data_inicio = datetime(ano_inicio, mes_inicio, 1)
+    data_fim = datetime(ano_fim, mes_fim, 28)  # 28 é seguro para qualquer mês
+
+    # 📋 Listas auxiliares
+    usinas = Usina.query.order_by(Usina.nome).all()
+    anos_disponiveis = sorted({
+        r[0] for r in db.session.query(db.extract('year', Geracao.data)).distinct().all()
+    }, reverse=True)
+
+    dados = []
+    usinas_filtradas = [u for u in usinas if not usina_id or u.id == usina_id]
+
+    for usina in usinas_filtradas:
+        kwh_acumulado = 0
+        faturado_acumulado = 0
+
+        data_atual = data_inicio
+        while data_atual <= data_fim:
+            mes = data_atual.month
+            ano = data_atual.year
+
+            geracao = db.session.query(db.func.sum(Geracao.energia_kwh)).filter(
+                Geracao.usina_id == usina.id,
+                db.extract('month', Geracao.data) == mes,
+                db.extract('year', Geracao.data) == ano
+            ).scalar() or 0
+
+            injecao = db.session.query(db.func.sum(InjecaoMensalUsina.kwh_injetado)).filter(
+                InjecaoMensalUsina.usina_id == usina.id,
+                InjecaoMensalUsina.mes == mes,
+                InjecaoMensalUsina.ano == ano
+            ).scalar() or 0
+
+            consumo = db.session.query(db.func.sum(FaturaMensal.consumo_usina)).join(Cliente).filter(
+                Cliente.usina_id == usina.id,
+                FaturaMensal.mes_referencia == mes,
+                FaturaMensal.ano_referencia == ano
+            ).scalar() or 0
+
+            faturado = db.session.query(db.func.sum(FinanceiroUsina.valor)).filter(
+                FinanceiroUsina.usina_id == usina.id,
+                FinanceiroUsina.tipo == 'receita',
+                db.extract('month', FinanceiroUsina.data) == mes,
+                db.extract('year', FinanceiroUsina.data) == ano
+            ).scalar() or 0
+
+            saldo_unidade = db.session.query(db.func.sum(FaturaMensal.saldo_unidade)).join(Cliente).filter(
+                Cliente.usina_id == usina.id,
+                FaturaMensal.mes_referencia == mes,
+                FaturaMensal.ano_referencia == ano
+            ).scalar() or 0
+
+            perda = geracao - injecao
+            kwh_acumulado += consumo
+            faturado_acumulado += faturado or 0
+
+            dados.append({
+                'mes': mes,
+                'ano': ano,
+                'usina_nome': usina.nome,
+                'geracao': round(geracao, 2),
+                'injecao': round(injecao, 2),
+                'perda': round(perda, 2),
+                'diferenca': round(perda, 2),  # compatibilidade com outros templates
+                'consumo': round(consumo, 2),
+                'faturado': round(faturado or 0, 2),
+                'faturado_acumulado': round(faturado_acumulado, 2),
+                'saldo_unidade': round(saldo_unidade, 2),
+            })
+
+            data_atual += relativedelta(months=1)
+
+    # 🔄 Consolidação por usina
+    consolidacao = []
+    for usina in usinas_filtradas:
+        geracao_total = sum(l['geracao'] for l in dados if l['usina_nome'] == usina.nome)
+        faturado_total = sum(l['faturado'] for l in dados if l['usina_nome'] == usina.nome)
+        perda_total = sum(l['perda'] for l in dados if l['usina_nome'] == usina.nome)
+        ultimo_saldo = next(
+            (l['saldo_unidade'] for l in reversed(dados) if l['usina_nome'] == usina.nome),
+            0
+        )
+
+        investimento = float(usina.valor_investido or 0)
+        payback_percentual = (faturado_total / investimento * 100) if investimento else 0
+        
+        # Conta quantos meses a usina teve faturamento no período
+        meses_validos = sum(
+            1 for l in dados if l['usina_nome'] == usina.nome and l['faturado'] > 0
+        )
+
+        media_mensal_faturamento = (faturado_total / meses_validos) if meses_validos else 0
+
+        meses_payback = (investimento / media_mensal_faturamento) if media_mensal_faturamento else 0
+
+        consolidacao.append({
+            'usina_nome': usina.nome,
+            'geracao_total': geracao_total,
+            'faturado_total': faturado_total,
+            'perda_total': perda_total,
+            'ultimo_saldo': ultimo_saldo,
+            'payback_percentual': round(payback_percentual, 2),
+            'meses_payback': round(meses_payback, 1)
+        })
+
+    return render_template(
+        'relatorio_financeiro_com_perda.html',
+        relatorio=dados,
+        consolidacao=consolidacao,
+        usinas=usinas,
+        usina_id=usina_id,
+        anos_disponiveis=anos_disponiveis,
+        mes_inicio=mes_inicio,
+        ano_inicio=ano_inicio,
+        mes_fim=mes_fim,
+        ano_fim=ano_fim
+    )
 
 
 if __name__ == '__main__':
