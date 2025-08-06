@@ -144,7 +144,7 @@
                     <td>{{ (item.geracao_total - item.perda_total) | formato_kwh }}</td>
                     <td class="text-danger">{{ item.perda_total | formato_kwh }}</td>
                     <td class="text-success">{{ item.saldo_kwh | formato_kwh }}</td>
-                    <td>{{ item.faturado_total | formato_brasileiro }}</td>
+                    <td style="white-space: nowrap;">{{ item.faturado_total | formato_brasileiro }}</td>
                     <td>{{ item.payback_percentual }}%</td>
                     <td>{{ item.meses_payback }}</td>
                     <td>{{ item.ultimo_saldo | formato_kwh }}</td>                    

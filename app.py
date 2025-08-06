@@ -4978,9 +4978,7 @@ def relatorio_financeiro_com_perda():
     if not current_user.pode_acessar_financeiro:
         return "Acesso negado", 403
 
-    # 🔎 Filtros
     usina_id = request.args.get('usina_id', type=int)
-
     mes_inicio = request.args.get('mes_inicio', type=int, default=1)
     ano_inicio = request.args.get('ano_inicio', type=int, default=datetime.now().year)
     mes_fim = request.args.get('mes_fim', type=int, default=datetime.now().month)
@@ -4989,7 +4987,6 @@ def relatorio_financeiro_com_perda():
     data_inicio = datetime(ano_inicio, mes_inicio, 1)
     data_fim = datetime(ano_fim, mes_fim, 28)
 
-    # 📋 Dados auxiliares
     usinas = Usina.query.order_by(Usina.nome).all()
     anos_disponiveis = sorted({
         r[0] for r in db.session.query(db.extract('year', Geracao.data)).distinct().all()
@@ -5001,11 +4998,10 @@ def relatorio_financeiro_com_perda():
     for usina in usinas_filtradas:
         kwh_acumulado = 0
         faturado_acumulado = 0
-
         data_atual = data_inicio
+
         while data_atual <= data_fim:
-            mes = data_atual.month
-            ano = data_atual.year
+            mes, ano = data_atual.month, data_atual.year
 
             geracao = db.session.query(db.func.sum(Geracao.energia_kwh)).filter(
                 Geracao.usina_id == usina.id,
@@ -5043,75 +5039,65 @@ def relatorio_financeiro_com_perda():
             faturado_acumulado += faturado or 0
 
             dados.append({
-                'mes': mes,
-                'ano': ano,
-                'usina_nome': usina.nome,
-                'geracao': round(geracao, 2),
-                'injecao': round(injecao, 2),
-                'perda': round(perda, 2),
-                'diferenca': round(perda, 2),
-                'consumo': round(consumo, 2),
-                'faturado': round(faturado or 0, 2),
+                'mes': mes, 'ano': ano, 'usina_nome': usina.nome,
+                'geracao': round(geracao, 2), 'injecao': round(injecao, 2),
+                'perda': round(perda, 2), 'diferenca': round(perda, 2),
+                'consumo': round(consumo, 2), 'faturado': round(faturado or 0, 2),
                 'faturado_acumulado': round(faturado_acumulado, 2),
                 'saldo_unidade': round(saldo_unidade, 2),
             })
-
             data_atual += relativedelta(months=1)
 
-    # 🔄 Consolidação por usina
     consolidacao = []
     for usina in usinas_filtradas:
         geracao_total = sum(l['geracao'] for l in dados if l['usina_nome'] == usina.nome)
         faturado_total = sum(l['faturado'] for l in dados if l['usina_nome'] == usina.nome)
-        perda_total = sum(l['perda'] for l in dados if l['usina_nome'] == usina.nome)
-        injecao_total = geracao_total - perda_total
-        saldo_final_unidade = next(
-            (l['saldo_unidade'] for l in reversed(dados) if l['usina_nome'] == usina.nome),
-            0
-        )
+        perda_total_bruta = sum(l['perda'] for l in dados if l['usina_nome'] == usina.nome)
+        saldo_kwh = float(usina.saldo_kwh or 0)
+        perda_liquida = perda_total_bruta - saldo_kwh
+        injecao_total = geracao_total - perda_total_bruta
 
-        # ✅ Eficiência com base em previsão
         previsao_total = db.session.query(db.func.sum(PrevisaoMensal.previsao_kwh)).filter(
             PrevisaoMensal.usina_id == usina.id,
             db.or_(
-                db.and_(
-                    PrevisaoMensal.ano == ano_inicio,
-                    PrevisaoMensal.mes >= mes_inicio
-                ),
-                db.and_(
-                    PrevisaoMensal.ano == ano_fim,
-                    PrevisaoMensal.mes <= mes_fim
-                ),
-                db.and_(
-                    PrevisaoMensal.ano > ano_inicio,
-                    PrevisaoMensal.ano < ano_fim
-                )
+                db.and_(PrevisaoMensal.ano == ano_inicio, PrevisaoMensal.mes >= mes_inicio),
+                db.and_(PrevisaoMensal.ano == ano_fim, PrevisaoMensal.mes <= mes_fim),
+                db.and_(PrevisaoMensal.ano > ano_inicio, PrevisaoMensal.ano < ano_fim)
             )
         ).scalar() or 0
 
         eficiencia = (geracao_total / previsao_total * 100) if previsao_total else 0
-
         investimento = float(usina.valor_investido or 0)
-        payback_percentual = (faturado_total / investimento * 100) if investimento else 0
 
-        meses_validos = sum(
-            1 for l in dados if l['usina_nome'] == usina.nome and l['faturado'] > 0
-        )
+        tarifa_kwh = db.session.query(Rateio.tarifa_kwh).filter_by(usina_id=usina.id)
+        tarifa_kwh = tarifa_kwh.order_by(Rateio.id.desc()).first()
+        tarifa_kwh = float(tarifa_kwh[0]) if tarifa_kwh else 0
 
+        credito_unidades = next(
+            (l['saldo_unidade'] for l in reversed(dados) if l['usina_nome'] == usina.nome), 0)
+
+        if investimento:
+            payback_percentual = (
+                (saldo_kwh * tarifa_kwh) + (credito_unidades * tarifa_kwh) + faturado_total
+            ) / investimento * 100
+        else:
+            payback_percentual = 0
+
+        meses_validos = sum(1 for l in dados if l['usina_nome'] == usina.nome and l['faturado'] > 0)
         media_mensal_faturamento = (faturado_total / meses_validos) if meses_validos else 0
         meses_payback = (investimento / media_mensal_faturamento) if media_mensal_faturamento else 0
 
         consolidacao.append({
             'usina_nome': usina.nome,
             'geracao_total': geracao_total,
-            'injecao_total': injecao_total,
-            'perda_total': perda_total,
-            'saldo_kwh': usina.saldo_kwh or 0,
-            'eficiencia': round(eficiencia, 2),
             'faturado_total': faturado_total,
+            'perda_total': perda_liquida,
+            'ultimo_saldo': credito_unidades,
             'payback_percentual': round(payback_percentual, 2),
             'meses_payback': round(meses_payback, 1),
-            'ultimo_saldo': saldo_final_unidade
+            'injecao_total': injecao_total,
+            'saldo_kwh': saldo_kwh,
+            'eficiencia': round(eficiencia, 2)
         })
 
     return render_template(
