@@ -61,7 +61,13 @@
                 <td>{{ r.usina }}</td>
                 <td>{{ r.kwh_contratado | round(2) }}</td>
                 <td>{{ r.consumo_total | round(2) }}</td>
-                <td>{{ r.percentual_diferenca | round(2) }}%</td>
+                <td>
+                {% if r.percentual_diferenca is not none %}
+                    {{ r.percentual_diferenca | round(2) }}%
+                {% else %}
+                    -
+                {% endif %}
+                </td>
                 <td>{{ r.economia | formato_brasileiro }}</td>
                 <td>{{ r.economia | formato_brasileiro }}</td>
             </tr>

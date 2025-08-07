@@ -74,7 +74,16 @@
 
 <div class="container mt-4">
     <h2 class="mb-4 text-primary text-center">
-        Prestação de Contas– {{ "%02d"|format(mes_inicio) }}/{{ ano_inicio }} até {{ "%02d"|format(mes_fim) }}/{{ ano_fim }}
+    Prestação de Contas – 
+    {# seleciona o nome ou “Todas Usinas” #}
+    {{ (usinas 
+            | selectattr("id", "equalto", usina_id) 
+            | map(attribute="nome") 
+            | first) 
+        or "Todas Usinas" 
+    }} – 
+    {{ "%02d"|format(mes_inicio) }}/{{ ano_inicio }} até 
+    {{ "%02d"|format(mes_fim) }}/{{ ano_fim }}
     </h2>
 
     <!-- Filtros -->
@@ -214,7 +223,7 @@
                     <td>{{ item.injecao_total | formato_kwh }}</td>
                     <td class="text-danger">{{ item.perda_total | formato_kwh }}</td>
                     <td class="text-success">{{ item.saldo_kwh | formato_kwh }}</td>
-                    <td>{{ item.ultimo_saldo | formato_kwh }}</td>
+                    <td>{{ item.ultimo_saldo    | formato_kwh }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
