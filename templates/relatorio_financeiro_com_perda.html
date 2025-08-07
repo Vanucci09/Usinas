@@ -221,7 +221,9 @@
                     <td>{{ item.usina_nome }}</td>
                     <td>{{ item.geracao_total | formato_kwh }}</td>
                     <td>{{ item.injecao_total | formato_kwh }}</td>
-                    <td class="text-danger">{{ item.perda_total | formato_kwh }}</td>
+                    <td class="text-danger">
+                        {{ (item.perda_total + item.saldo_kwh) | formato_kwh }}
+                    </td>
                     <td class="text-success">{{ item.saldo_kwh | formato_kwh }}</td>
                     <td>{{ item.ultimo_saldo    | formato_kwh }}</td>
                 </tr>
