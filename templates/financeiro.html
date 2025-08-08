@@ -6,6 +6,19 @@
 <div class="container mt-4">
     <h2 class="mb-4 text-primary">Caixas e Bancos</h2>
 
+    {# Macro para ordenar colunas com setinhas alinhadas #}
+    {% macro th_sort(label, col_key) %}
+        <th>
+            <div class="d-flex align-items-center">
+                <span>{{ label }}</span>
+                <div class="ms-2 d-flex flex-column" style="line-height: 0.8;">
+                    <a href="{{ url_for('financeiro', usina_id=usina_id, mes=mes, ano=ano, tipo=tipo, categoria_id=categoria_id, sort=col_key, direction='asc') }}" class="text-decoration-none" style="font-size: 0.75rem;">&#9650;</a>
+                    <a href="{{ url_for('financeiro', usina_id=usina_id, mes=mes, ano=ano, tipo=tipo, categoria_id=categoria_id, sort=col_key, direction='desc') }}" class="text-decoration-none" style="font-size: 0.75rem;">&#9660;</a>
+                </div>
+            </div>
+        </th>
+    {% endmacro %}
+
     <!-- Links para Relatórios -->
     <div class="mb-4">
         <div class="btn-group" role="group">
@@ -22,7 +35,7 @@
         <div class="col-md-2">
             <label for="usina_id" class="form-label">Usina</label>
             <select id="usina_id" name="usina_id" class="form-select">
-                <option value="">Todas</option>
+                <option value="" {% if not usina_id %}selected{% endif %}>Todas</option>
                 {% for u in usinas %}
                     <option value="{{ u.id }}" {% if u.id == usina_id %}selected{% endif %}>{{ u.nome }}</option>
                 {% endfor %}
@@ -31,6 +44,7 @@
         <div class="col-md-1">
             <label for="mes" class="form-label">Mês</label>
             <select id="mes" name="mes" class="form-select">
+                <option value="" {% if not mes %}selected{% endif %}>Todos</option>
                 {% for m in range(1, 13) %}
                     <option value="{{ m }}" {% if m == mes %}selected{% endif %}>{{ "%02d"|format(m) }}</option>
                 {% endfor %}
@@ -38,12 +52,12 @@
         </div>
         <div class="col-md-1">
             <label for="ano" class="form-label">Ano</label>
-            <input type="number" id="ano" name="ano" class="form-control" value="{{ ano }}">
+            <input type="number" id="ano" name="ano" class="form-control" placeholder="Todos" value="{{ ano or '' }}">
         </div>
         <div class="col-md-2">
             <label for="tipo" class="form-label">Tipo</label>
             <select id="tipo" name="tipo" class="form-select">
-                <option value="">Todos</option>
+                <option value="" {% if not tipo %}selected{% endif %}>Todos</option>
                 <option value="receita" {% if tipo == 'receita' %}selected{% endif %}>Receitas</option>
                 <option value="despesa" {% if tipo == 'despesa' %}selected{% endif %}>Despesas</option>
             </select>
@@ -51,7 +65,7 @@
         <div class="col-md-3">
             <label for="categoria_id" class="form-label">Plano Financeiro</label>
             <select id="categoria_id" name="categoria_id" class="form-select">
-                <option value="">Todas</option>
+                <option value="" {% if not categoria_id %}selected{% endif %}>Todas</option>
                 {% for c in categorias %}
                     <option value="{{ c.id }}" {% if c.id == categoria_id %}selected{% endif %}>{{ c.nome }}</option>
                 {% endfor %}
@@ -67,14 +81,14 @@
         <table class="table table-bordered table-striped align-middle">
             <thead class="table-light">
                 <tr>
-                    <th>Tipo</th>
-                    <th>Usina</th>
-                    <th>Descrição</th>
-                    <th>Plano Financeiro</th>                    
-                    <th style="white-space: nowrap; width: 120px;">Valor (R$)</th>
-                    <th>Juros (R$)</th>
-                    <th>Referência</th>
-                    <th>Data Pagamento</th>
+                    {{ th_sort('Tipo', 'tipo') }}
+                    {{ th_sort('Usina', 'usina') }}
+                    {{ th_sort('Descrição', 'descricao') }}
+                    {{ th_sort('Plano Financeiro', 'categoria') }}
+                    {{ th_sort('Valor (R$)', 'valor') }}
+                    {{ th_sort('Juros (R$)', 'juros') }}
+                    {{ th_sort('Referência', 'referencia') }}
+                    {{ th_sort('Data Pagamento', 'data_pagamento') }}
                     <th>Autorização</th>
                 </tr>
             </thead>
@@ -82,7 +96,7 @@
                 {% for item in financeiro %}
                 <tr class="{% if item.tipo == 'receita' %}table-success{% else %}table-danger{% endif %}">
                     <td>{{ item.tipo.title() }}</td>
-                    <td>{{ item.usina }}</td>                    
+                    <td>{{ item.usina }}</td>
                     <td>
                         {% if item.credor and item.credor != '-' %}
                             {{ item.credor }}
