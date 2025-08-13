@@ -54,7 +54,7 @@
             <label for="ano" class="form-label">Ano</label>
             <input type="number" id="ano" name="ano" class="form-control" placeholder="Todos" value="{{ ano or '' }}">
         </div>
-        <div class="col-md-2">
+        <div class="col-md-2">            
             <label for="tipo" class="form-label">Tipo</label>
             <select id="tipo" name="tipo" class="form-select">
                 <option value="" {% if not tipo %}selected{% endif %}>Todos</option>
@@ -81,6 +81,7 @@
         <table class="table table-bordered table-striped align-middle">
             <thead class="table-light">
                 <tr>
+                    <th>ID</th>
                     {{ th_sort('Tipo', 'tipo') }}
                     {{ th_sort('Usina', 'usina') }}
                     {{ th_sort('Descrição', 'descricao') }}
@@ -95,6 +96,7 @@
             <tbody>
                 {% for item in financeiro %}
                 <tr class="{% if item.tipo == 'receita' %}table-success{% else %}table-danger{% endif %}">
+                    <td>{{ item.id }}</td>
                     <td>{{ item.tipo.title() }}</td>
                     <td>{{ item.usina }}</td>
                     <td>

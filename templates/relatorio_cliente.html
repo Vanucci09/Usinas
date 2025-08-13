@@ -49,30 +49,34 @@
                 <th>Alocação</th>
                 <th>kWh/mês Contratado</th>
                 <th>kWh/mês Consumido</th>
+                <th>Diferença (kWh)</th>
                 <th>% Diferença</th>
                 <th>Economia (R$)</th>
-                <th>Faturamento Estimado (R$)</th>
+                <th>Economia Acumulada (R$)</th>  {# novo #}
+                <th>Saldo na Unidade (kWh)</th>
             </tr>
-        </thead>
-        <tbody>
+            </thead>
+            <tbody>
             {% for r in resultados %}
+            {% set diff = (r.kwh_contratado or 0) - (r.consumo_total or 0) %}
             <tr>
                 <td>{{ r.cliente }}</td>
                 <td>{{ r.usina }}</td>
                 <td>{{ r.kwh_contratado | round(2) }}</td>
                 <td>{{ r.consumo_total | round(2) }}</td>
+                <td class="{% if diff > 0 %}text-success{% elif diff < 0 %}text-danger{% endif %}">{{ diff | round(2) }}</td>
                 <td>
                 {% if r.percentual_diferenca is not none %}
                     {{ r.percentual_diferenca | round(2) }}%
-                {% else %}
-                    -
-                {% endif %}
+                {% else %}-{% endif %}
                 </td>
                 <td>{{ r.economia | formato_brasileiro }}</td>
-                <td>{{ r.economia | formato_brasileiro }}</td>
+                <td>{{ r.economia_acumulada | formato_brasileiro }}</td>  {# ← aqui #}
+                <td>{{ r.saldo_unidade | round(2) }}</td>
             </tr>
             {% endfor %}
-        </tbody>
+            </tbody>
+
     </table>
 
     <div class="text-center mt-4">

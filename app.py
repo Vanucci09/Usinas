@@ -137,6 +137,7 @@ class Cliente(db.Model):
     senha_concessionaria = db.Column(db.String, nullable=True)
     dia_relatorio = db.Column(db.Integer)
     relatorio_automatico = db.Column(db.Boolean, default=False)
+    ativo = db.Column(db.Boolean, default=True)
 
     rateios = db.relationship('Rateio', backref='cliente', cascade="all, delete-orphan")
     usina = db.relationship('Usina')
@@ -759,18 +760,24 @@ def cadastrar_cliente():
         cpf_cnpj = request.form['cpf_cnpj']
         endereco = request.form['endereco']
         codigo_unidade = request.form['codigo_unidade']
-        usina_id = request.form['usina_id']
+        usina_id = int(request.form['usina_id']) 
         email = request.form['email']
         telefone = request.form['telefone']
         email_cc = request.form.get('email_cc')
+
         mostrar_saldo = request.form.get('mostrar_saldo') == 'on'
         consumo_instantaneo = 'consumo_instantaneo' in request.form
 
-        # Novos campos
         login_concessionaria = request.form.get('login_concessionaria')
         senha_concessionaria = request.form.get('senha_concessionaria')
-        dia_relatorio = request.form.get('dia_relatorio', type=int)
+
+        # request.form.get(..., type=int) não funciona; faz a conversão manual:
+        _dia_rel = request.form.get('dia_relatorio')
+        dia_relatorio = int(_dia_rel) if _dia_rel else None
+
         relatorio_automatico = request.form.get('relatorio_automatico') == 'on'
+
+        ativo = request.form.get('ativo') == 'on' if 'ativo' in request.form else True
 
         cliente = Cliente(
             nome=nome,
@@ -786,7 +793,8 @@ def cadastrar_cliente():
             login_concessionaria=login_concessionaria,
             senha_concessionaria=senha_concessionaria,
             dia_relatorio=dia_relatorio,
-            relatorio_automatico=relatorio_automatico
+            relatorio_automatico=relatorio_automatico,
+            ativo=ativo 
         )
         db.session.add(cliente)
         db.session.commit()
@@ -930,18 +938,19 @@ def editar_cliente(id):
         cliente.cpf_cnpj = request.form['cpf_cnpj']
         cliente.endereco = request.form['endereco']
         cliente.codigo_unidade = request.form['codigo_unidade']
-        cliente.usina_id = request.form['usina_id']
+        cliente.usina_id = int(request.form['usina_id'])
         cliente.email = request.form['email']
         cliente.telefone = request.form['telefone']
         cliente.email_cc = request.form.get('email_cc')
         cliente.mostrar_saldo = request.form.get('mostrar_saldo') == 'on'
         cliente.consumo_instantaneo = 'consumo_instantaneo' in request.form
 
-        # Novos campos
         cliente.login_concessionaria = request.form.get('login_concessionaria')
         cliente.senha_concessionaria = request.form.get('senha_concessionaria')
-        cliente.dia_relatorio = request.form.get('dia_relatorio', type=int)
+        cliente.dia_relatorio = request.form.get('dia_relatorio', type=int)  # mantém None se vazio
         cliente.relatorio_automatico = request.form.get('relatorio_automatico') == 'on'
+
+        cliente.ativo = request.form.get('ativo') == 'on'
 
         db.session.commit()
         return redirect(url_for('listar_clientes', usina_id=cliente.usina_id))
@@ -2134,9 +2143,8 @@ def listar_e_salvar_geracoes():
     hoje = date.today()
     usina_kwh_por_dia = {}
 
-    # -------------------
-    # 🔆 PARTE SOLIS
-    # -------------------
+    #  PARTE SOLIS
+    
     registros = listar_todos_inversores()
 
     for r in registros:
@@ -2168,9 +2176,8 @@ def listar_e_salvar_geracoes():
 
         usina_kwh_por_dia[inversor.usina_id] = usina_kwh_por_dia.get(inversor.usina_id, 0) + etoday
 
-    # -------------------
-    # ⚡ PARTE KEHUA
-    # -------------------
+    #  PARTE KEHUA
+    
     def login_kehua():
         url_login = "https://energy.kehua.com/necp/login/northboundLogin"
         login_data = {
@@ -2230,9 +2237,8 @@ def listar_e_salvar_geracoes():
     else:
         print("❌ Token da Kehua não obtido.")
 
-    # -------------------
-    # 💾 Salvar total por usina
-    # -------------------
+    #  Salvar total por usina
+    
     for usina_id, soma_etoday in usina_kwh_por_dia.items():
         leitura = Geracao.query.filter_by(usina_id=usina_id, data=hoje).first()
         if leitura:
@@ -2470,29 +2476,29 @@ def financeiro():
         return "Acesso negado", 403
 
     # Dados para os selects
-    usinas     = Usina.query.order_by(Usina.nome).all()
+    usinas = Usina.query.order_by(Usina.nome).all()
     categorias = CategoriaDespesa.query.order_by(CategoriaDespesa.nome).all()
 
     # Filtros de período e entidades
-    mes          = request.args.get('mes',      default=date.today().month, type=int)
-    ano          = request.args.get('ano',      default=date.today().year,  type=int)
-    usina_id     = request.args.get('usina_id', type=int)
-    tipo         = request.args.get('tipo')                   # 'receita' ou 'despesa'
+    mes = request.args.get('mes', default=date.today().month, type=int)
+    ano = request.args.get('ano', default=date.today().year, type=int)
+    usina_id = request.args.get('usina_id', type=int)
+    tipo = request.args.get('tipo')                   # 'receita' ou 'despesa'
     categoria_id = request.args.get('categoria_id', type=int)
 
     # Parâmetros de ordenação
-    sort      = request.args.get('sort',      default='data_pagamento')
+    sort = request.args.get('sort', default='data_pagamento')
     direction = request.args.get('direction', default='desc')  # 'asc' ou 'desc'
 
     # Mapeamento seguro das colunas ordenáveis
     allowed_sorts = {
-        'tipo':           FinanceiroUsina.tipo,
-        'usina':          Usina.nome,
-        'descricao':      FinanceiroUsina.descricao,
-        'categoria':      CategoriaDespesa.nome,
-        'valor':          FinanceiroUsina.valor,
-        'juros':          FinanceiroUsina.juros,
-        'referencia':     FinanceiroUsina.referencia_ano,   # ou combine mês/ano
+        'tipo': FinanceiroUsina.tipo,
+        'usina': Usina.nome,
+        'descricao': FinanceiroUsina.descricao,
+        'categoria': CategoriaDespesa.nome,
+        'valor': FinanceiroUsina.valor,
+        'juros': FinanceiroUsina.juros,
+        'referencia': FinanceiroUsina.referencia_ano,
         'data_pagamento': FinanceiroUsina.data_pagamento,
     }
     sort_col = allowed_sorts.get(sort, FinanceiroUsina.data_pagamento)
@@ -2505,7 +2511,7 @@ def financeiro():
             joinedload(FinanceiroUsina.usina),
             joinedload(FinanceiroUsina.categoria)
         )
-        .outerjoin(Usina,            FinanceiroUsina.usina_id    == Usina.id)
+        .outerjoin(Usina, FinanceiroUsina.usina_id == Usina.id)
         .outerjoin(CategoriaDespesa, FinanceiroUsina.categoria_id == CategoriaDespesa.id)
         .filter(
             FinanceiroUsina.referencia_mes == mes,
@@ -2530,7 +2536,7 @@ def financeiro():
     registros = query.all()
 
     # Monta lista para o template e calcula totais
-    financeiro     = []
+    financeiro = []
     total_receitas = Decimal('0')
     total_despesas = Decimal('0')
 
@@ -2539,15 +2545,15 @@ def financeiro():
         juros = Decimal(str(r.juros or 0))
 
         financeiro.append({
-            'id':             r.id,
-            'tipo':           r.tipo,
-            'usina':          r.usina.nome if r.usina else 'N/A',
-            'categoria':      r.categoria.nome if r.categoria else '-',
-            'credor':         r.credor.nome   if r.credor   else '-',
-            'descricao':      r.descricao,
-            'valor':          valor,
-            'juros':          float(juros),
-            'referencia':     f"{r.referencia_mes:02d}/{r.referencia_ano}",
+            'id': r.id,
+            'tipo': r.tipo,
+            'usina': r.usina.nome if r.usina else 'N/A',
+            'categoria': r.categoria.nome if r.categoria else '-',
+            'credor': r.credor.nome if r.credor else '-',
+            'descricao': r.descricao,
+            'valor': valor,
+            'juros': float(juros),
+            'referencia': f"{r.referencia_mes:02d}/{r.referencia_ano}",
             'data_pagamento': r.data_pagamento
         })
 
@@ -2561,16 +2567,13 @@ def financeiro():
         financeiro=financeiro,
         usinas=usinas,
         categorias=categorias,
-        # filtros
         mes=mes,
         ano=ano,
         usina_id=usina_id,
         tipo=tipo,
         categoria_id=categoria_id,
-        # ordenação
         sort=sort,
         direction=direction,
-        # totais
         total_receitas=total_receitas,
         total_despesas=total_despesas
     )
@@ -3060,50 +3063,71 @@ def relatorio_cliente():
     usina_id = request.args.get('usina_id', type=int)
     cliente_id = request.args.get('cliente_id', type=int)
 
-    # Subquery com previsão mensal por usina
-    sub_previsao = db.session.query(
-        PrevisaoMensal.usina_id.label('usina_id'),
-        PrevisaoMensal.previsao_kwh.label('previsao_kwh')
-    ).filter(
-        PrevisaoMensal.mes == mes,
-        PrevisaoMensal.ano == ano
-    ).subquery()
+    # 1) kWh injetado por usina no mês/ano
+    sub_injecao = (
+        db.session.query(
+            InjecaoMensalUsina.usina_id.label('usina_id'),
+            func.coalesce(InjecaoMensalUsina.kwh_injetado, 0.0).label('kwh_injetado')
+        )
+        .filter(
+            InjecaoMensalUsina.mes == mes,
+            InjecaoMensalUsina.ano == ano
+        )
+        .subquery()
+    )
 
-    # Query principal
-    query = db.session.query(
-        Cliente.id.label("cliente_id"),
-        Cliente.nome.label("cliente"),
-        Usina.nome.label("usina"),
-        Rateio.percentual.label("percentual"),
-        FaturaMensal.mes_referencia,
-        FaturaMensal.ano_referencia,
-        db.func.sum(FaturaMensal.consumo_usina).label("consumo_total"),
-        (Rateio.percentual / 100 * sub_previsao.c.previsao_kwh).label("kwh_contratado"),
-        (
-            db.func.sum(FaturaMensal.consumo_usina) - 
-            (Rateio.percentual / 100 * sub_previsao.c.previsao_kwh)
-        ).label("diferenca_kwh"),
-        (
-            (
-                db.func.sum(FaturaMensal.consumo_usina) - 
-                (Rateio.percentual / 100 * sub_previsao.c.previsao_kwh)
-            ) / func.nullif((Rateio.percentual / 100 * sub_previsao.c.previsao_kwh), 0) * 100
-        ).label("percentual_diferenca"),
-        db.func.sum(
-            (FaturaMensal.consumo_usina * (FaturaMensal.tarifa_neoenergia * 1.2625)) -
-            (FaturaMensal.consumo_usina * Rateio.tarifa_kwh)
-        ).label("economia")
-    ).join(
-        Cliente, FaturaMensal.cliente_id == Cliente.id
-    ).join(
-        Rateio, Rateio.cliente_id == Cliente.id
-    ).join(
-        Usina, Cliente.usina_id == Usina.id
-    ).join(
-        sub_previsao, sub_previsao.c.usina_id == Usina.id
-    ).filter(
-        FaturaMensal.mes_referencia == mes,
-        FaturaMensal.ano_referencia == ano
+    # 2) Rateios agregados por cliente+usina (apenas ativos) para o kWh contratado
+    sub_rateio = (
+        db.session.query(
+            Rateio.cliente_id.label('cliente_id'),
+            Rateio.usina_id.label('usina_id'),
+            func.sum(Rateio.percentual).label('percentual_total')
+        )
+        .filter(Rateio.ativo.is_(True))
+        .group_by(Rateio.cliente_id, Rateio.usina_id)
+        .subquery()
+    )
+
+    # Expressões derivadas
+    pct_total = func.coalesce(sub_rateio.c.percentual_total, 0.0)
+    kwh_injetado = func.coalesce(sub_injecao.c.kwh_injetado, 0.0)
+    kwh_contratado_expr = (pct_total / 100.0) * kwh_injetado
+
+    consumo_sum_expr = func.sum(FaturaMensal.consumo_usina)
+    # Se quiser contratado − consumido, inverta estes dois:
+    diferenca_expr = consumo_sum_expr - kwh_contratado_expr
+    percentual_diferenca_expr = (
+        diferenca_expr / func.nullif(kwh_contratado_expr, 0) * 100.0
+    )
+    saldo_unidade_sum = func.sum(FaturaMensal.saldo_unidade)
+
+    # 3) Query base (sem duplicar FaturaMensal) — inclui usina_id pra uso no cálculo Python
+    query = (
+        db.session.query(
+            Cliente.id.label("cliente_id"),
+            Cliente.nome.label("cliente"),
+            Usina.id.label("usina_id"),
+            Usina.nome.label("usina"),
+            pct_total.label("percentual"),
+            FaturaMensal.mes_referencia,
+            FaturaMensal.ano_referencia,
+            consumo_sum_expr.label("consumo_total"),
+            kwh_contratado_expr.label("kwh_contratado"),
+            diferenca_expr.label("diferenca_kwh"),
+            percentual_diferenca_expr.label("percentual_diferenca"),
+            saldo_unidade_sum.label("saldo_unidade")
+        )
+        .join(Cliente, FaturaMensal.cliente_id == Cliente.id)
+        .join(Usina, Cliente.usina_id == Usina.id)
+        .join(sub_rateio, and_(
+            sub_rateio.c.cliente_id == Cliente.id,
+            sub_rateio.c.usina_id == Usina.id
+        ), isouter=True)
+        .join(sub_injecao, sub_injecao.c.usina_id == Usina.id, isouter=True)
+        .filter(
+            FaturaMensal.mes_referencia == mes,
+            FaturaMensal.ano_referencia == ano
+        )
     )
 
     if usina_id:
@@ -3112,17 +3136,122 @@ def relatorio_cliente():
     if cliente_id:
         query = query.filter(Cliente.id == cliente_id)
 
-    query = query.group_by(
-        Cliente.id, Cliente.nome, Usina.nome, Rateio.percentual,
-        FaturaMensal.mes_referencia, FaturaMensal.ano_referencia,
-        sub_previsao.c.previsao_kwh
-    ).order_by(Cliente.nome)
+    query = (
+        query.group_by(
+            Cliente.id, Cliente.nome, Usina.id, Usina.nome,
+            FaturaMensal.mes_referencia, FaturaMensal.ano_referencia,
+            sub_injecao.c.kwh_injetado,
+            sub_rateio.c.percentual_total
+        )
+        .order_by(Cliente.nome)
+    )
 
-    resultados = query.all()
+    base_rows = query.all()
+
+    # --------- Cálculo de economia do MÊS e ACUMULADA (mesma regra da relatorio_fatura) ----------
+    def tarifa_aplicada_por_icms(tarifa_base: Decimal, icms: int) -> Decimal:
+        if icms == 0:
+            return tarifa_base * Decimal('1.2625')
+        elif icms == 20:
+            return tarifa_base
+        else:
+            return tarifa_base * Decimal('1.1023232323')
+
+    linhas = []
+    for r in base_rows:
+        cid = r.cliente_id
+        uid = r.usina_id
+
+        # ---- economia do mês (somando todas as faturas daquele cliente no mês/ano filtrados) ----
+        faturas_mes = FaturaMensal.query.filter(
+            FaturaMensal.cliente_id == cid,
+            FaturaMensal.mes_referencia == mes,
+            FaturaMensal.ano_referencia == ano
+        ).all()
+
+        economia_mes = Decimal('0')
+
+        for f in faturas_mes:
+            tarifa_base = Decimal(str(f.tarifa_neoenergia or 0))
+            t_aplicada = tarifa_aplicada_por_icms(tarifa_base, int(f.icms or 0))
+            consumo = Decimal(str(f.consumo_usina or 0))
+
+            # data base (igual à rota relatorio_fatura)
+            if f.data_cadastro:
+                data_base = f.data_cadastro.date()
+            else:
+                data_base = date(2025, 8, 4)  # fallback idêntico ao seu exemplo
+
+            # rateio vigente (apenas ativos)
+            rateio = Rateio.query.filter(
+                Rateio.cliente_id == cid,
+                Rateio.usina_id == uid,
+                Rateio.ativo.is_(True),
+                Rateio.data_inicio <= data_base
+            ).order_by(Rateio.data_inicio.desc()).first()
+
+            tarifa_cliente = Decimal(str(rateio.tarifa_kwh)) if rateio else Decimal('0')
+
+            # economia da fatura (valor_conta cancela nos dois lados)
+            economia_mes += consumo * (t_aplicada - tarifa_cliente)
+
+        # ---- economia acumulada (meses anteriores) + extras + mês atual ----
+        faturas_prev = FaturaMensal.query.filter(
+            FaturaMensal.cliente_id == cid,
+            (FaturaMensal.ano_referencia < ano) |
+            ((FaturaMensal.ano_referencia == ano) &
+             (FaturaMensal.mes_referencia < mes))
+        ).all()
+
+        economia_prev = Decimal('0')
+        for f in faturas_prev:
+            tarifa_base = Decimal(str(f.tarifa_neoenergia or 0))
+            t_aplicada = tarifa_aplicada_por_icms(tarifa_base, int(f.icms or 0))
+            consumo = Decimal(str(f.consumo_usina or 0))
+
+            if f.data_cadastro:
+                data_base = f.data_cadastro.date()
+            else:
+                data_base = date(2025, 8, 4)
+
+            rateio = Rateio.query.filter(
+                Rateio.cliente_id == cid,
+                Rateio.usina_id == uid,
+                Rateio.ativo.is_(True),
+                Rateio.data_inicio <= data_base
+            ).order_by(Rateio.data_inicio.desc()).first()
+
+            tarifa_cliente = Decimal(str(rateio.tarifa_kwh)) if rateio else Decimal('0')
+            economia_prev += consumo * (t_aplicada - tarifa_cliente)
+
+        economia_extra_total = db.session.query(
+            func.coalesce(func.sum(EconomiaExtra.valor_extra), 0)
+        ).filter(EconomiaExtra.cliente_id == cid).scalar() or 0
+
+        economia_extra_total = Decimal(str(economia_extra_total))
+        economia_acumulada = economia_prev + economia_mes + economia_extra_total
+
+        # monta linha final (dict) com todos os campos que o template usa
+        linhas.append({
+            "cliente_id": r.cliente_id,
+            "cliente": r.cliente,
+            "usina_id": r.usina_id,
+            "usina": r.usina,
+            "percentual": r.percentual,
+            "mes_referencia": r.mes_referencia,
+            "ano_referencia": r.ano_referencia,
+            "consumo_total": float(r.consumo_total or 0),
+            "kwh_contratado": float(r.kwh_contratado or 0),
+            "diferenca_kwh": float(r.diferenca_kwh or 0),
+            "percentual_diferenca": float(r.percentual_diferenca or 0) if r.percentual_diferenca is not None else None,
+            "saldo_unidade": float(r.saldo_unidade or 0),
+            "economia": float(economia_mes),                 # ✅ mesma regra da relatorio_fatura (no mês)
+            "economia_acumulada": float(economia_acumulada)  # ✅ acumulada (anteriores + extras + mês)
+        })
 
     return render_template(
         'relatorio_cliente.html',
-        resultados=resultados,
+        resultados=linhas,     # passa as linhas com economia e economia_acumulada
         mes=mes,
         ano=ano,
         usina_id=usina_id,
@@ -3354,11 +3483,6 @@ def excluir_vinculo(empresa_id, usina_id):
     flash('Vínculo removido com sucesso.', 'info')
     return redirect(url_for('vincular_empresa_usina'))
 
-from flask import request, render_template, redirect, url_for, flash
-from flask_login import login_required
-from datetime import datetime
-from decimal import Decimal
-
 @app.route('/cadastrar_financeiro_empresa', methods=['GET', 'POST'])
 @login_required
 def cadastrar_financeiro_empresa():
@@ -3581,7 +3705,7 @@ def distribuicao_lucro_empresa(empresa_id, mes, ano):
 @login_required
 def selecionar_distribuicao_lucro():
     empresas = EmpresaInvestidora.query.all()
-    anos_disponiveis = [2024, 2025, 2026]  # Você pode montar dinamicamente depois se quiser.
+    anos_disponiveis = [2024, 2025, 2026]  # pode montar dinamicamente depois se quiser.
 
     if request.method == 'POST':
         empresa_id = int(request.form['empresa_id'])
@@ -4461,11 +4585,11 @@ def cadastrar_credor():
         return "Acesso negado", 403
 
     if request.method == 'POST':
-        nome      = request.form.get('nome')
-        cnpj      = request.form.get('cnpj') or None
-        endereco  = request.form.get('endereco') or None
-        telefone  = request.form.get('telefone') or None
-        email     = request.form.get('email') or None
+        nome = request.form.get('nome')
+        cnpj = request.form.get('cnpj') or None
+        endereco = request.form.get('endereco') or None
+        telefone = request.form.get('telefone') or None
+        email = request.form.get('email') or None
 
         # Validação para submissões rápidas (via modal)
         if not nome:
@@ -4518,11 +4642,11 @@ def editar_credor(credor_id):
 
     if request.method == 'POST':
         # Atualiza campos
-        credor.nome      = request.form['nome']
-        credor.cnpj      = request.form.get('cnpj') or None
-        credor.endereco  = request.form.get('endereco') or None
-        credor.telefone  = request.form.get('telefone') or None
-        credor.email     = request.form.get('email') or None
+        credor.nome = request.form['nome']
+        credor.cnpj = request.form.get('cnpj') or None
+        credor.endereco = request.form.get('endereco') or None
+        credor.telefone = request.form.get('telefone') or None
+        credor.email = request.form.get('email') or None
 
         db.session.commit()
         flash(f'Credor “{credor.nome}” atualizado com sucesso.', 'success')
@@ -4551,8 +4675,8 @@ def extrato_usina(usina_id):
         abort(403)
 
     # parâmetros de filtro
-    mes = request.args.get('mes',   type=int)
-    ano = request.args.get('ano',   type=int)
+    mes = request.args.get('mes', type=int)
+    ano = request.args.get('ano', type=int)
     usina = Usina.query.get_or_404(usina_id)
 
     # --- Saldo inicial do mês (até o último dia do mês anterior) ---
@@ -4589,7 +4713,7 @@ def extrato_usina(usina_id):
         .filter(
             FinanceiroUsina.usina_id == usina_id,
             FinanceiroUsina.data_pagamento.isnot(None),
-            extract('year',  FinanceiroUsina.data_pagamento) == ano,
+            extract('year', FinanceiroUsina.data_pagamento) == ano,
             extract('month', FinanceiroUsina.data_pagamento) == mes
         )
         .order_by(FinanceiroUsina.data_pagamento)

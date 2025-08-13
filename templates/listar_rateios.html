@@ -26,6 +26,7 @@
                 <tr>
                     <th>Usina</th>
                     <th>Cliente</th>
+                    <th>Status</th>
                     <th>% Energia</th>
                     <th>Tarifa (R$)</th>
                     <th>Código</th>
@@ -37,6 +38,13 @@
                 <tr>
                     <td>{{ rateio.usina.nome }}</td>
                     <td>{{ rateio.cliente.nome }}</td>
+                    <td>
+                        {% if rateio.cliente.ativo %}
+                            <span class="badge bg-success">Ativo</span>
+                        {% else %}
+                            <span class="badge bg-danger">Inativo</span>
+                        {% endif %}
+                    </td>
                     <td>{{ rateio.percentual }}%</td>
                     <td>{{ rateio.tarifa_kwh|formato_tarifa }}</td>
                     <td>{{ rateio.codigo_rateio }}</td>
