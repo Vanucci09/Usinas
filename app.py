@@ -3094,8 +3094,8 @@ def relatorio_cliente():
     kwh_contratado_expr = (pct_total / 100.0) * kwh_injetado
 
     consumo_sum_expr = func.sum(FaturaMensal.consumo_usina)
-    # Se quiser contratado − consumido, inverta estes dois:
-    diferenca_expr = consumo_sum_expr - kwh_contratado_expr
+    # ✅ Diferença = Contratado − Consumido
+    diferenca_expr = kwh_contratado_expr - consumo_sum_expr
     percentual_diferenca_expr = (
         diferenca_expr / func.nullif(kwh_contratado_expr, 0) * 100.0
     )
@@ -3242,22 +3242,34 @@ def relatorio_cliente():
             "ano_referencia": r.ano_referencia,
             "consumo_total": float(r.consumo_total or 0),
             "kwh_contratado": float(r.kwh_contratado or 0),
-            "diferenca_kwh": float(r.diferenca_kwh or 0),
+            "diferenca_kwh": float(r.diferenca_kwh or 0),  # contratado − consumido
             "percentual_diferenca": float(r.percentual_diferenca or 0) if r.percentual_diferenca is not None else None,
             "saldo_unidade": float(r.saldo_unidade or 0),
-            "economia": float(economia_mes),                 # ✅ mesma regra da relatorio_fatura (no mês)
-            "economia_acumulada": float(economia_acumulada)  # ✅ acumulada (anteriores + extras + mês)
+            "economia": float(economia_mes),                 # mês
+            "economia_acumulada": float(economia_acumulada)  # anteriores + extras + mês
         })
+
+    # ✅ Totais calculados DEPOIS do loop (e funcionam mesmo se não houver linhas)
+    totais = {
+        "kwh_contratado": sum((x.get("kwh_contratado") or 0) for x in linhas),
+        "consumo_total":  sum((x.get("consumo_total")  or 0) for x in linhas),
+        # Diferença total (Contratado − Consumido)
+        "diferenca_kwh":  sum((x.get("kwh_contratado") or 0) - (x.get("consumo_total") or 0) for x in linhas),
+        "economia":       sum((x.get("economia") or 0) for x in linhas),
+        "economia_acumulada": sum((x.get("economia_acumulada") or 0) for x in linhas),
+        "saldo_unidade":  sum((x.get("saldo_unidade") or 0) for x in linhas),
+    }
 
     return render_template(
         'relatorio_cliente.html',
-        resultados=linhas,     # passa as linhas com economia e economia_acumulada
+        resultados=linhas,
         mes=mes,
         ano=ano,
         usina_id=usina_id,
         cliente_id=cliente_id,
         usinas=Usina.query.order_by(Usina.nome).all(),
-        clientes=Cliente.query.order_by(Cliente.nome).all()
+        clientes=Cliente.query.order_by(Cliente.nome).all(),
+        totais=totais,
     )
 
 @app.route('/relatorio_recebido_vs_previsto')

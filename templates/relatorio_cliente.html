@@ -6,6 +6,7 @@
 <div class="container mt-4">
     <h2 class="mb-4 text-primary">Relatório Financeiro por Cliente – {{ "%02d"|format(mes) }}/{{ ano }}</h2>
 
+    <!-- Filtros -->
     <form class="row g-3 mb-4" method="get">
         <div class="col-md-3">
             <label for="usina_id" class="form-label">Usina</label>
@@ -42,42 +43,67 @@
         </div>
     </form>
 
-    <table class="table table-bordered table-striped">
-        <thead class="table-light">
-            <tr>
-                <th>Cliente</th>
-                <th>Alocação</th>
-                <th>kWh/mês Contratado</th>
-                <th>kWh/mês Consumido</th>
-                <th>Diferença (kWh)</th>
-                <th>% Diferença</th>
-                <th>Economia (R$)</th>
-                <th>Economia Acumulada (R$)</th>  {# novo #}
-                <th>Saldo na Unidade (kWh)</th>
-            </tr>
+    {% if resultados and resultados|length > 0 %}
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Cliente</th>
+                    <th>Alocação</th>
+                    <th class="text-end">kWh/mês Contratado</th>
+                    <th class="text-end">kWh/mês Consumido</th>
+                    <th class="text-end">Diferença (kWh)</th>
+                    <th class="text-end">% Diferença</th>
+                    <th class="text-end">Economia (R$)</th>
+                    <th class="text-end">Economia Acumulada (R$)</th>
+                    <th class="text-end">Saldo na Unidade (kWh)</th>
+                </tr>
             </thead>
             <tbody>
-            {% for r in resultados %}
-            {% set diff = (r.kwh_contratado or 0) - (r.consumo_total or 0) %}
-            <tr>
-                <td>{{ r.cliente }}</td>
-                <td>{{ r.usina }}</td>
-                <td>{{ r.kwh_contratado | round(2) }}</td>
-                <td>{{ r.consumo_total | round(2) }}</td>
-                <td class="{% if diff > 0 %}text-success{% elif diff < 0 %}text-danger{% endif %}">{{ diff | round(2) }}</td>
-                <td>
-                {% if r.percentual_diferenca is not none %}
-                    {{ r.percentual_diferenca | round(2) }}%
-                {% else %}-{% endif %}
-                </td>
-                <td>{{ r.economia | formato_brasileiro }}</td>
-                <td>{{ r.economia_acumulada | formato_brasileiro }}</td>  {# ← aqui #}
-                <td>{{ r.saldo_unidade | round(2) }}</td>
-            </tr>
-            {% endfor %}
+                {% for r in resultados %}
+                <tr>
+                    <td>{{ r.cliente }}</td>
+                    <td>{{ r.usina }}</td>
+                    <td class="text-end">{{ r.kwh_contratado | formato_kwh }}</td>
+                    <td class="text-end">{{ r.consumo_total  | formato_kwh }}</td>
+
+                    <td class="text-end {% if (r.diferenca_kwh or 0) > 0 %}text-success{% elif (r.diferenca_kwh or 0) < 0 %}text-danger{% endif %}">
+                        {{ r.diferenca_kwh | formato_kwh }}
+                    </td>
+
+                    <td class="text-end">
+                        {% if r.percentual_diferenca is not none %}
+                            {{ r.percentual_diferenca | round(2) }}%
+                        {% else %}-{% endif %}
+                    </td>
+
+                    <td class="text-end text-nowrap">{{ r.economia | formato_brasileiro }}</td>
+                    <td class="text-end text-nowrap">{{ r.economia_acumulada | formato_brasileiro }}</td>
+                    <td class="text-end">{{ r.saldo_unidade | formato_kwh }}</td>
+                </tr>
+                {% endfor %}
             </tbody>
 
-    </table>
+            <tfoot>
+                {% set diffTot = (totais.diferenca_kwh or 0) %}
+                <tr class="table-secondary fw-semibold">
+                    <td colspan="2" class="text-end">Totais:</td>
+                    <td class="text-end">{{ (totais.kwh_contratado or 0) | formato_kwh }}</td>
+                    <td class="text-end">{{ (totais.consumo_total  or 0) | formato_kwh }}</td>
+                    <td class="text-end {% if diffTot > 0 %}text-success{% elif diffTot < 0 %}text-danger{% endif %}">
+                        {{ diffTot | formato_kwh }}
+                    </td>
+                    <td class="text-end">—</td> {# % diferença não soma #}
+                    <td class="text-end text-nowrap">{{ (totais.economia or 0) | formato_brasileiro }}</td>
+                    <td class="text-end text-nowrap">{{ (totais.economia_acumulada or 0) | formato_brasileiro }}</td>
+                    <td class="text-end">{{ (totais.saldo_unidade or 0) | formato_kwh }}</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+    {% else %}
+        <div class="alert alert-info">Nenhum resultado encontrado para os filtros informados.</div>
+    {% endif %}
 
     <div class="text-center mt-4">
         <a href="{{ url_for('financeiro') }}" class="btn btn-secondary">Voltar</a>
