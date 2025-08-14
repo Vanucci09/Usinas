@@ -148,29 +148,34 @@
         <h4 class="text-center text-success">Geração, Injeção, Perda e Consumo</h4>
         <table class="table table-bordered table-striped align-middle text-center table-consolidada-print">
             <thead class="table-light">
-                <tr>
-                    <th>Mês</th>
-                    <th>Usina</th>
-                    <th>Geração (kWh)</th>
-                    <th>Injeção (kWh)</th>
-                    <th>Perda (kWh)</th>
-                    <th>Compensação (kWh)</th>
-                </tr>
+            <tr>
+                <th>Mês</th>
+                <th>Usina</th>
+                <th>Geração (kWh)</th>
+                <th>Injeção (kWh)</th>
+                <th>Perda (kWh)</th>
+                <th>Perda (%)</th>  <!-- nova coluna -->
+                <th>Compensação (kWh)</th>
+            </tr>
             </thead>
             <tbody>
-                {% for linha in relatorio %}
-                <tr>
-                    <td>{{ "%02d"|format(linha.mes) }}/{{ linha.ano }}</td>
-                    <td>{{ linha.usina_nome }}</td>
-                    <td>{{ linha.geracao | formato_kwh }}</td>
-                    <td>{{ linha.injecao | formato_kwh }}</td>
-                    <td class="text-danger">{{ linha.perda | formato_kwh }}</td>
-                    <td>{{ linha.consumo | formato_kwh }}</td>
-                </tr>
-                {% endfor %}
+            {% for linha in relatorio %}
+            {% set perc = ((linha.perda / linha.geracao) * 100) if linha.geracao else 0 %}
+            <tr>
+                <td>{{ "%02d"|format(linha.mes) }}/{{ linha.ano }}</td>
+                <td>{{ linha.usina_nome }}</td>
+                <td>{{ linha.geracao | formato_kwh }}</td>
+                <td>{{ linha.injecao | formato_kwh }}</td>
+                <td class="text-danger">{{ linha.perda | formato_kwh }}</td>
+                <td class="{% if perc > 7 %}text-danger fw-semibold{% endif %}">
+                {{ ('%.2f'|format(perc)).replace('.', ',') }}%
+                </td>
+                <td>{{ linha.consumo | formato_kwh }}</td>
+            </tr>
+            {% endfor %}
             </tbody>
         </table>
-    </div>
+        </div>
 
     <!-- Tabela de faturamento -->
     <div class="table-responsive">
