@@ -5205,14 +5205,14 @@ def relatorio_financeiro_com_perda():
                 ).scalar() or 0
 
             # faturado R$
-            faturado = db.session.query(db.func.sum(FinanceiroUsina.valor)).filter(
-            FinanceiroUsina.usina_id == usina.id,
-            FinanceiroUsina.tipo == 'receita',
-            # db.extract('month', FinanceiroUsina.referencia_mes) == mes,
-            # db.extract('year', FinanceiroUsina.referencia_ano) == ano
-            FinanceiroUsina.referencia_mes == mes,
-            FinanceiroUsina.referencia_ano == ano,
-        ).scalar() or 0
+            faturado = db.session.query(
+                func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0))
+            ).filter(
+                FinanceiroUsina.usina_id == usina.id,
+                FinanceiroUsina.tipo == 'receita',
+                FinanceiroUsina.referencia_mes == mes,
+                FinanceiroUsina.referencia_ano == ano
+            ).scalar() or 0
             faturado_acumulado += float(faturado)
             
             saldo_unidade = db.session.query(db.func.sum(FaturaMensal.saldo_unidade)).join(Cliente).filter(
@@ -5221,7 +5221,11 @@ def relatorio_financeiro_com_perda():
                 FaturaMensal.ano_referencia == ano
             ).scalar() or 0
 
-            perda = geracao - injecao
+            # zera perda se injeção for zero
+            if (injecao or 0) > 0:
+                perda = geracao - injecao
+            else:
+                perda = 0
 
             dados.append({
                 'mes': mes,
@@ -5238,33 +5242,6 @@ def relatorio_financeiro_com_perda():
             })
 
             data_atual += relativedelta(months=1)
-        
-        # acumula índices até o primeiro mês com injecção>0
-        inicial_idxs = []
-        for idx, linha in enumerate(dados):
-            if linha['usina_nome'] != usina.nome:
-                continue
-            if linha['injecao'] == 0:
-                inicial_idxs.append(idx)
-            else:
-                break
-
-        if inicial_idxs:
-            soma_geracao = sum(dados[i]['geracao'] for i in inicial_idxs)
-            saldo_kwh_orig = saldos_originais[usina.id]
-            perda_ajustada = round(soma_geracao - saldo_kwh_orig, 2)
-
-            # zera perda nos meses iniciais
-            for i in inicial_idxs:
-                dados[i]['perda'] = 0
-                dados[i]['diferenca'] = 0
-
-            # joga toda a perda ajustada no último desses meses
-            last = inicial_idxs[-1]
-            dados[last]['perda'] = perda_ajustada
-            dados[last]['diferenca'] = perda_ajustada
-
-        # NAO zera usina.saldo_kwh!
 
     # — Consolidação por usina —
     consolidacao = []
