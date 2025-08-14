@@ -3077,9 +3077,67 @@ def relatorio_cliente():
         else:
             return tarifa_base * Decimal('1.1023232323')
 
+    def rateio_contratado_para_mes(cid: int, uid: int, d1: date, dF: date):
+        """
+        Contratado (% e tarifa) para o mês:
+        1) último rateio DENTRO do mês [d1, dF]
+        2) senão, último rateio ATÉ o fim do mês (<= dF)
+        3) senão, PRIMEIRO rateio APÓS o início do mês (>= d1)
+        (sem filtro por 'ativo', seguindo relatorio_fatura)
+        """
+        # 1) dentro do mês
+        r = (Rateio.query
+            .filter(
+                Rateio.cliente_id == cid,
+                Rateio.usina_id == uid,
+                Rateio.data_inicio >= d1,
+                Rateio.data_inicio <= dF,
+            )
+            .order_by(Rateio.data_inicio.desc(), Rateio.id.desc())
+            .first())
+        if r:
+            return float(r.percentual or 0.0), Decimal(str(r.tarifa_kwh or 0))
+
+        # 2) até o fim do mês
+        r = (Rateio.query
+            .filter(
+                Rateio.cliente_id == cid,
+                Rateio.usina_id == uid,
+                Rateio.data_inicio <= dF,
+            )
+            .order_by(Rateio.data_inicio.desc(), Rateio.id.desc())
+            .first())
+        if r:
+            return float(r.percentual or 0.0), Decimal(str(r.tarifa_kwh or 0))
+
+        # 3) primeiro após o início do mês (próximo futuro)
+        r = (Rateio.query
+            .filter(
+                Rateio.cliente_id == cid,
+                Rateio.usina_id == uid,
+                Rateio.data_inicio >= d1,
+            )
+            .order_by(Rateio.data_inicio.asc(), Rateio.id.asc())
+            .first())
+        if r:
+            return float(r.percentual or 0.0), Decimal(str(r.tarifa_kwh or 0))
+
+        return 0.0, Decimal('0')
+
+    def rateio_vigente_na_data(cid: int, uid: int, data_ref: date):
+        """Para economia por fatura: último rateio com data_inicio <= data_ref (sem 'ativo')."""
+        return (Rateio.query
+                .filter(
+                    Rateio.cliente_id == cid,
+                    Rateio.usina_id == uid,
+                    Rateio.data_inicio <= data_ref,
+                )
+                .order_by(Rateio.data_inicio.desc(), Rateio.id.desc())
+                .first())
+
     d1_mes, dF_mes = periodo_mes(ano, mes)
 
-    # ---------- Subquery: kWh injetado por usina no mês/ano ----------
+    # ---------- kWh injetado por usina no mês/ano ----------
     sub_injecao = (
         db.session.query(
             InjecaoMensalUsina.usina_id.label('usina_id'),
@@ -3092,39 +3150,7 @@ def relatorio_cliente():
         .subquery()
     )
 
-    # ---------- Subquery: ÚLTIMO rateio do mês (sem data_fim) para pegar o % ----------
-    filtros_last_start = [
-        Rateio.ativo.is_(True),
-        Rateio.data_inicio <= dF_mes,
-    ]
-    sub_rateio_last_start = (
-        db.session.query(
-            Rateio.cliente_id.label('cliente_id'),
-            Rateio.usina_id.label('usina_id'),
-            func.max(Rateio.data_inicio).label('data_ini_max')
-        )
-        .filter(*filtros_last_start)
-        .group_by(Rateio.cliente_id, Rateio.usina_id)
-        .subquery()
-    )
-    sub_rateio_mes = (
-        db.session.query(
-            Rateio.cliente_id.label('cliente_id'),
-            Rateio.usina_id.label('usina_id'),
-            Rateio.percentual.label('percentual_mes')
-        )
-        .join(
-            sub_rateio_last_start,
-            and_(
-                Rateio.cliente_id == sub_rateio_last_start.c.cliente_id,
-                Rateio.usina_id   == sub_rateio_last_start.c.usina_id,
-                Rateio.data_inicio == sub_rateio_last_start.c.data_ini_max
-            )
-        )
-        .subquery()
-    )
-
-    # ---------- Query base: consumo/saldo por cliente/usina (no mês/ano) ----------
+    # ---------- Base por cliente/usina (consumo e saldo no mês) ----------
     consumo_sum_expr = func.sum(FaturaMensal.consumo_usina)
     saldo_unidade_sum = func.sum(FaturaMensal.saldo_unidade)
 
@@ -3139,17 +3165,10 @@ def relatorio_cliente():
             consumo_sum_expr.label("consumo_total"),
             saldo_unidade_sum.label("saldo_unidade"),
             sub_injecao.c.kwh_injetado.label("kwh_injetado"),
-            func.coalesce(sub_rateio_mes.c.percentual_mes, 0.0).label("percentual_mes")
         )
         .join(Cliente, FaturaMensal.cliente_id == Cliente.id)
         .join(Usina, Cliente.usina_id == Usina.id)
         .join(sub_injecao, sub_injecao.c.usina_id == Usina.id, isouter=True)
-        .join(
-            sub_rateio_mes,
-            and_(sub_rateio_mes.c.cliente_id == Cliente.id,
-                 sub_rateio_mes.c.usina_id   == Usina.id),
-            isouter=True
-        )
         .filter(
             FaturaMensal.mes_referencia == mes,
             FaturaMensal.ano_referencia == ano
@@ -3167,7 +3186,6 @@ def relatorio_cliente():
             Usina.id, Usina.nome,
             FaturaMensal.mes_referencia, FaturaMensal.ano_referencia,
             sub_injecao.c.kwh_injetado,
-            sub_rateio_mes.c.percentual_mes
         )
         .order_by(Cliente.nome)
     )
@@ -3180,16 +3198,18 @@ def relatorio_cliente():
         cid = r.cliente_id
         uid = r.usina_id
 
-        # % do último rateio do mês (para kWh contratado)
-        pct_mes = float(r.percentual_mes or 0.0)
-        kwh_injetado = float(r.kwh_injetado or 0.0)
-        kwh_contratado = (pct_mes / 100.0) * kwh_injetado
+        # Percentual do mês (com fallback para último <= fim do mês)
+        pct_mes, _tarifa_mes = rateio_contratado_para_mes(cid, uid, d1_mes, dF_mes)
+
+        # Base do contratado: injeção do mês
+        kwh_base = float(r.kwh_injetado or 0.0)
+        kwh_contratado = (pct_mes / 100.0) * kwh_base
 
         consumo_total = float(r.consumo_total or 0.0)
         diferenca_kwh = kwh_contratado - consumo_total
         percentual_dif = (diferenca_kwh / kwh_contratado * 100.0) if kwh_contratado else None
 
-        # -------- 1) ECONOMIA DO MÊS (somando faturas do cliente no mês) --------
+        # 1) Economia do mês (somatório por fatura) — igual ao relatorio_fatura
         faturas_mes = (FaturaMensal.query
             .filter(
                 FaturaMensal.cliente_id == cid,
@@ -3199,41 +3219,26 @@ def relatorio_cliente():
 
         economia_mes = Decimal('0')
         for f in faturas_mes:
-            # tarifa aplicada (Neoenergia) considerando ICMS da fatura
             tarifa_base = Decimal(str(f.tarifa_neoenergia or 0))
             t_aplicada = tarifa_aplicada_por_icms(tarifa_base, int(f.icms or 0))
-
             consumo = Decimal(str(f.consumo_usina or 0))
 
-            # data base (igual ao relatorio_fatura)
             data_base = f.data_cadastro.date() if f.data_cadastro else date(2025, 8, 4)
+            rvig = rateio_vigente_na_data(cid, uid, data_base)
+            tarifa_cliente = Decimal(str(rvig.tarifa_kwh)) if rvig else Decimal('0')
 
-            # rateio mais recente até a data_base
-            rateio = (Rateio.query
-                      .filter(
-                          Rateio.cliente_id == cid,
-                          Rateio.usina_id == uid,
-                          Rateio.data_inicio <= data_base
-                      )
-                      .order_by(Rateio.data_inicio.desc())
-                      .first())
-            tarifa_cliente = Decimal(str(rateio.tarifa_kwh)) if rateio else Decimal('0')
-
-            # economia da fatura
-            # (valor_conta cancela dos dois lados, então usamos só o termo de energia)
             economia_mes += consumo * (t_aplicada - tarifa_cliente)
 
-        # -------- 2) ECONOMIA ACUMULADA (meses anteriores) --------
-        # usa a MESMA tarifa_cliente do mês corrente (rateio mais recente até o fim do mês)
-        rateio_mes = (Rateio.query
-                      .filter(
-                          Rateio.cliente_id == cid,
-                          Rateio.usina_id == uid,
-                          Rateio.data_inicio <= dF_mes
-                      )
-                      .order_by(Rateio.data_inicio.desc())
-                      .first())
-        tarifa_cliente_mes = Decimal(str(rateio_mes.tarifa_kwh)) if rateio_mes else Decimal('0')
+        # 2) Economia acumulada (meses anteriores) com tarifa do mês corrente
+        rvig_mes = (Rateio.query
+                    .filter(
+                        Rateio.cliente_id == cid,
+                        Rateio.usina_id == uid,
+                        Rateio.data_inicio <= dF_mes
+                    )
+                    .order_by(Rateio.data_inicio.desc(), Rateio.id.desc())
+                    .first())
+        tarifa_cliente_mes = Decimal(str(rvig_mes.tarifa_kwh)) if rvig_mes else Decimal('0')
 
         faturas_prev = (FaturaMensal.query
             .filter(
@@ -3252,11 +3257,9 @@ def relatorio_cliente():
             tarifa_base_ant = Decimal(str(f.tarifa_neoenergia or 0))
             t_aplicada_ant = tarifa_aplicada_por_icms(tarifa_base_ant, int(f.icms or 0))
             consumo_ant = Decimal(str(f.consumo_usina or 0))
-
-            # usa a tarifa_cliente do mês corrente (igual ao relatorio_fatura)
             economia_prev += consumo_ant * (t_aplicada_ant - tarifa_cliente_mes)
 
-        # -------- 3) Economia Extra (igual ao relatorio_fatura: soma total) --------
+        # 3) Economia Extra (soma total, como no relatorio_fatura)
         economia_extra_total = Decimal('0')
         if 'EconomiaExtra' in globals():
             economia_extra_total = Decimal(str(
@@ -3272,7 +3275,7 @@ def relatorio_cliente():
             "cliente": r.cliente,
             "usina_id": r.usina_id,
             "usina": r.usina,
-            "percentual": pct_mes,                 # % do último rateio do mês
+            "percentual": pct_mes,                 # % efetivo do mês
             "mes_referencia": r.mes_referencia,
             "ano_referencia": r.ano_referencia,
             "consumo_total": consumo_total,
@@ -3280,7 +3283,7 @@ def relatorio_cliente():
             "diferenca_kwh": diferenca_kwh,        # contratado − consumido
             "percentual_diferenca": percentual_dif,# None se contratado == 0
             "saldo_unidade": float(r.saldo_unidade or 0),
-            "economia": float(economia_mes),       # mês (somatório das faturas do mês)
+            "economia": float(economia_mes),
             "economia_acumulada": float(economia_acumulada)
         })
 
