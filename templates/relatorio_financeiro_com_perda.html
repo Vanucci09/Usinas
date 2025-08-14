@@ -218,6 +218,8 @@
                     <th>Perda Total (kWh)</th>
                     <th>Crédito na Usina (kWh)</th>
                     <th>Crédito nas Unidades (kWh)</th>
+                    <th>À recuperar</th>
+
                 </tr>
             </thead>
             <tbody>
@@ -231,6 +233,14 @@
                     </td>
                     <td class="text-success">{{ item.saldo_kwh | formato_kwh }}</td>
                     <td>{{ item.ultimo_saldo    | formato_kwh }}</td>
+                    {% set a_recuperar = (item.geracao_total - item.perda_total - item.injecao_total - item.saldo_kwh) %}
+                    <td>
+                    {% if a_recuperar > 0 %}
+                        <span class="badge bg-warning text-dark">À recuperar</span>
+                        <span class="ms-1">{{ a_recuperar | formato_kwh }}</span>
+                    {% endif %}
+                    </td>
+
                 </tr>
                 {% endfor %}
             </tbody>
