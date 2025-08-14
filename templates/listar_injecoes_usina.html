@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Injeções Mensais{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="text-primary">Injeções Mensais</h2>
+    <div class="d-flex justify-content-start gap-2 mb-3">
+      <a href="{{ url_for('cadastrar_injecao') }}" class="btn btn-success">
+        <i class="bi bi-plus-circle"></i> Cadastrar
+      </a>
+      <a href="{{ url_for('index') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Voltar
+      </a>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <form method="get" class="row g-3 mb-4">
+    <div class="col-md-4">
+      <label class="form-label">Usina</label>
+      <select name="usina_id" class="form-select">
+        <option value="">Todas</option>
+        {% for u in usinas %}
+          <option value="{{ u.id }}" {% if usina_id == u.id %}selected{% endif %}>
+            {{ u.nome }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Ano</label>
+      <select name="ano" class="form-select">
+        <option value="">Todos</option>
+        {% for a in anos_disponiveis %}
+          <option value="{{ a }}" {% if ano == a %}selected{% endif %}>{{ a }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3 d-flex align-items-end">
+      <button class="btn btn-primary w-100">Filtrar</button>
+    </div>
+  </form>
+
+  <!-- Tabela -->
+  <table class="table table-striped align-middle">
+    <thead class="table-light">
+      <tr>
+        <th>ID</th>
+        <th>Usina</th>
+        <th>Ano</th>
+        <th>Mês</th>
+        <th class="text-end">kWh Injetado</th>
+        <th style="width: 140px;">Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for it in itens %}
+      <tr>
+        <td>{{ it.id }}</td>
+        <td>{{ it.usina.nome if it.usina else it.usina_id }}</td>
+        <td>{{ it.ano }}</td>
+        <td>{{ "%02d"|format(it.mes) }}</td>
+        <td class="text-end">{{ "%.2f"|format(it.kwh_injetado) }}</td>
+        <td>
+          <a class="btn btn-sm btn-outline-primary"
+             href="{{ url_for('editar_injecao_mensal', item_id=it.id,
+                              usina_id=usina_id, ano=ano) }}">
+            Editar
+          </a>
+          <form class="d-inline" method="post"
+                action="{{ url_for('excluir_injecao_mensal', item_id=it.id,
+                                   usina_id=usina_id, ano=ano) }}"
+                onsubmit="return confirm('Excluir este registro?');">
+            <button class="btn btn-sm btn-outline-danger">Excluir</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="6" class="text-center text-muted">Nenhum registro encontrado.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- Paginação -->
+  {% if paginacao.pages > 1 %}
+  <nav>
+    <ul class="pagination">
+      <li class="page-item {% if not paginacao.has_prev %}disabled{% endif %}">
+        <a class="page-link" href="{{ url_for('listar_injecoes_mensais', page=paginacao.prev_num, usina_id=usina_id, ano=ano) }}">«</a>
+      </li>
+      {% for p in range(1, paginacao.pages + 1) %}
+      <li class="page-item {% if p == paginacao.page %}active{% endif %}">
+        <a class="page-link" href="{{ url_for('listar_injecoes_mensais', page=p, usina_id=usina_id, ano=ano) }}">{{ p }}</a>
+      </li>
+      {% endfor %}
+      <li class="page-item {% if not paginacao.has_next %}disabled{% endif %}">
+        <a class="page-link" href="{{ url_for('listar_injecoes_mensais', page=paginacao.next_num, usina_id=usina_id, ano=ano) }}">»</a>
+      </li>
+    </ul>
+  </nav>
+  {% endif %}
+</div>
+{% endblock %}

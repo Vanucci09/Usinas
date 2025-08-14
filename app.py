@@ -5322,6 +5322,95 @@ def relatorio_financeiro_com_perda():
         mes_fim = mes_fim,
         ano_fim = ano_fim
     )
+    
+@app.route("/injecoes_mensais")
+@login_required
+def listar_injecoes_mensais():
+    page = request.args.get("page", 1, type=int)
+    usina_id = request.args.get("usina_id", type=int)
+    ano = request.args.get("ano", type=int)
+
+    query = InjecaoMensalUsina.query
+    if usina_id:
+        query = query.filter(InjecaoMensalUsina.usina_id == usina_id)
+    if ano:
+        query = query.filter(InjecaoMensalUsina.ano == ano)
+
+    query = query.order_by(
+        InjecaoMensalUsina.ano.desc(),
+        InjecaoMensalUsina.mes.desc(),
+        InjecaoMensalUsina.usina_id.asc()
+    )
+
+    paginacao = query.paginate(page=page, per_page=20, error_out=False)
+
+    usinas = Usina.query.order_by(Usina.nome).all()
+    anos_disponiveis = sorted(
+        {r[0] for r in db.session.query(InjecaoMensalUsina.ano).distinct()},
+        reverse=True
+    )
+
+    return render_template(
+        "listar_injecoes_usina.html", 
+        paginacao=paginacao,
+        itens=paginacao.items,
+        usinas=usinas,
+        anos_disponiveis=anos_disponiveis,
+        usina_id=usina_id,
+        ano=ano,
+    )
+
+
+@app.route("/injecoes_mensais/<int:item_id>/editar", methods=["GET", "POST"])
+@login_required
+def editar_injecao_mensal(item_id):
+    item = InjecaoMensalUsina.query.get_or_404(item_id)
+    usinas = Usina.query.order_by(Usina.nome).all()
+
+    if request.method == "POST":
+        try:
+            item.usina_id = request.form.get("usina_id", type=int)
+            item.ano = request.form.get("ano", type=int)
+            item.mes = request.form.get("mes", type=int)
+            item.kwh_injetado = request.form.get("kwh_injetado", type=float)
+
+            db.session.commit()
+            flash("Injeção mensal atualizada com sucesso.", "success")
+
+            return redirect(url_for(
+                "listar_injecoes_mensais",
+                usina_id=request.args.get("usina_id"),
+                ano=request.args.get("ano")
+            ))
+        except IntegrityError:
+            db.session.rollback()
+            flash("Já existe registro para essa combinação Usina/Ano/Mês.", "danger")
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Erro ao salvar: {e}", "danger")
+
+    # Use o nome do arquivo que você criou para o editar (ajuste se for outro):
+    return render_template("editar_injecao_usina.html", item=item, usinas=usinas)
+
+
+@app.route("/injecoes_mensais/<int:item_id>/excluir", methods=["POST"])
+@login_required
+def excluir_injecao_mensal(item_id):
+    item = InjecaoMensalUsina.query.get_or_404(item_id)
+
+    try:
+        db.session.delete(item)
+        db.session.commit()
+        flash("Registro excluído com sucesso.", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Erro ao excluir: {e}", "danger")
+
+    return redirect(url_for(
+        "listar_injecoes_mensais",  # <-- corrigido
+        usina_id=request.args.get("usina_id"),
+        ano=request.args.get("ano")
+    ))
 
 
 if __name__ == '__main__':

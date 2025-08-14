@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Editar Injeção Mensal{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <h3 class="mb-3 text-primary">Editar Injeção Mensal</h3>
+
+  {# Exibe mensagens flash (sucesso/erro) se seu base.html não faz isso automaticamente #}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="mb-3">
+        {% for category, message in messages %}
+          <div class="alert alert-{{ 'warning' if category == 'danger' else category }} mb-2">
+            {{ message }}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <form method="post" class="row g-3">
+    <div class="col-md-5">
+      <label class="form-label">Usina</label>
+      <select name="usina_id" class="form-select" required>
+        {% for u in usinas %}
+          <option value="{{ u.id }}" {% if u.id == item.usina_id %}selected{% endif %}>
+            {{ u.nome }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="col-md-2">
+      <label class="form-label">Ano</label>
+      <input type="number" name="ano" class="form-control" value="{{ item.ano }}" min="2000" required>
+    </div>
+
+    <div class="col-md-2">
+      <label class="form-label">Mês</label>
+      <select name="mes" class="form-select" required>
+        {% for m in range(1, 13) %}
+          <option value="{{ m }}" {% if m == item.mes %}selected{% endif %}>
+            {{ "%02d"|format(m) }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="col-md-3">
+      <label class="form-label">kWh Injetado</label>
+      <input type="number" step="0.01" name="kwh_injetado" class="form-control" value="{{ item.kwh_injetado }}" required>
+    </div>
+
+    <div class="col-12 d-flex gap-2">
+      <button class="btn btn-primary">Salvar</button>
+      <a class="btn btn-outline-secondary"
+         href="{{ url_for('listar_injecoes_mensais',
+                          usina_id=request.args.get('usina_id'),
+                          ano=request.args.get('ano')) }}">
+        Voltar
+      </a>
+    </div>
+  </form>
+
+  <hr class="my-4">
+
+  <div class="text-muted small">
+    <strong>Observação:</strong> Existe restrição de unicidade (<code>usina_id</code>, <code>ano</code>, <code>mes</code>).
+    Se já houver um registro para a combinação escolhida, ao salvar será exibida mensagem de erro.
+  </div>
+</div>
+{% endblock %}
