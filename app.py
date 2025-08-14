@@ -5206,11 +5206,13 @@ def relatorio_financeiro_com_perda():
 
             # faturado R$
             faturado = db.session.query(db.func.sum(FinanceiroUsina.valor)).filter(
-                FinanceiroUsina.usina_id == usina.id,
-                FinanceiroUsina.tipo == 'receita',
-                db.extract('month', FinanceiroUsina.data) == mes,
-                db.extract('year', FinanceiroUsina.data) == ano
-            ).scalar() or 0
+            FinanceiroUsina.usina_id == usina.id,
+            FinanceiroUsina.tipo == 'receita',
+            # db.extract('month', FinanceiroUsina.referencia_mes) == mes,
+            # db.extract('year', FinanceiroUsina.referencia_ano) == ano
+            FinanceiroUsina.referencia_mes == mes,
+            FinanceiroUsina.referencia_ano == ano,
+        ).scalar() or 0
             faturado_acumulado += float(faturado)
             
             saldo_unidade = db.session.query(db.func.sum(FaturaMensal.saldo_unidade)).join(Cliente).filter(
