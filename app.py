@@ -1119,8 +1119,7 @@ def listar_faturas():
 
     faturas = query.order_by(FaturaMensal.ano_referencia.desc(), FaturaMensal.mes_referencia.desc()).all()
 
-    # Verifica se existe boleto PDF no sistema de arquivos
-    import os
+    # Verifica se existe boleto PDF no sistema de arquivos    
     BOLETOS_PATH = os.getenv('BOLETOS_PATH', '/data/boletos')
 
     for f in faturas:
@@ -1137,6 +1136,27 @@ def listar_faturas():
     usinas = Usina.query.all()
     clientes = Cliente.query.all()
     anos = sorted({f.ano_referencia for f in FaturaMensal.query.all()}, reverse=True)
+    
+    # === Clientes ativos SEM fatura na competência (respeitando filtros) ===
+    qtd_sem_fatura = None
+    clientes_sem_fatura = []
+    if mes and ano:
+        clientes_q = Cliente.query.filter(Cliente.ativo.is_(True))
+        if usina_id:
+            clientes_q = clientes_q.filter(Cliente.usina_id == usina_id)
+        if cliente_id:
+            clientes_q = clientes_q.filter(Cliente.id == cliente_id)
+
+        fatura_existe = db.session.query(FaturaMensal.id).filter(
+            FaturaMensal.cliente_id == Cliente.id,
+            FaturaMensal.mes_referencia == mes,
+            FaturaMensal.ano_referencia == ano
+        ).exists()
+
+        sem_fatura_q = clientes_q.filter(~fatura_existe)
+
+        qtd_sem_fatura = sem_fatura_q.count()
+        clientes_sem_fatura = sem_fatura_q.order_by(Cliente.nome).all()
 
     return render_template(
         'listar_faturas.html',
@@ -1149,7 +1169,9 @@ def listar_faturas():
         ano=ano,
         cliente_id=cliente_id,
         com_boleto=com_boleto,
-        email_enviado=email_enviado
+        email_enviado=email_enviado,
+        qtd_sem_fatura=qtd_sem_fatura,
+        clientes_sem_fatura=clientes_sem_fatura
     )
 
 @app.route('/editar_fatura/<int:id>', methods=['GET', 'POST'])
@@ -3290,11 +3312,11 @@ def relatorio_cliente():
     # Totais
     totais = {
         "kwh_contratado": sum((x.get("kwh_contratado") or 0) for x in linhas),
-        "consumo_total":  sum((x.get("consumo_total")  or 0) for x in linhas),
-        "diferenca_kwh":  sum((x.get("kwh_contratado") or 0) - (x.get("consumo_total") or 0) for x in linhas),
-        "economia":       sum((x.get("economia") or 0) for x in linhas),
+        "consumo_total": sum((x.get("consumo_total")  or 0) for x in linhas),
+        "diferenca_kwh": sum((x.get("kwh_contratado") or 0) - (x.get("consumo_total") or 0) for x in linhas),
+        "economia": sum((x.get("economia") or 0) for x in linhas),
         "economia_acumulada": sum((x.get("economia_acumulada") or 0) for x in linhas),
-        "saldo_unidade":  sum((x.get("saldo_unidade") or 0) for x in linhas),
+        "saldo_unidade": sum((x.get("saldo_unidade") or 0) for x in linhas),
     }
 
     return render_template(
