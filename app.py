@@ -2287,7 +2287,7 @@ def atualizar_geracao_agendada():
             print(f"❌ Erro na atualização agendada: {e}")
 
 scheduler = BackgroundScheduler()
-scheduler.add_job(func=atualizar_geracao_agendada, trigger="interval", minutes=30)
+scheduler.add_job(func=atualizar_geracao_agendada, trigger="interval", minutes=15)
 scheduler.start()
 
 # Garantir que pare quando o app for encerrado
@@ -4821,7 +4821,7 @@ def extrato_usina(usina_id):
         ano=ano,
         initial_saldo=initial_saldo
     )
-    
+
 @app.route('/comprovantes/<path:nome_arquivo>')
 @login_required
 def visualizar_comprovante(nome_arquivo):
@@ -5425,7 +5425,6 @@ def editar_injecao_mensal(item_id):
             db.session.rollback()
             flash(f"Erro ao salvar: {e}", "danger")
 
-    # Use o nome do arquivo que você criou para o editar (ajuste se for outro):
     return render_template("editar_injecao_usina.html", item=item, usinas=usinas)
 
 
@@ -5443,7 +5442,7 @@ def excluir_injecao_mensal(item_id):
         flash(f"Erro ao excluir: {e}", "danger")
 
     return redirect(url_for(
-        "listar_injecoes_mensais",  # <-- corrigido
+        "listar_injecoes_mensais", 
         usina_id=request.args.get("usina_id"),
         ano=request.args.get("ano")
     ))

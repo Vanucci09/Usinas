@@ -57,6 +57,7 @@
                     <th class="text-end">Economia (R$)</th>
                     <th class="text-end">Economia Acumulada (R$)</th>
                     <th class="text-end">Saldo na Unidade (kWh)</th>
+                    <th class="text-end">Meses cobertos pelo saldo</th>
                 </tr>
             </thead>
             <tbody>
@@ -80,6 +81,24 @@
                     <td class="text-end text-nowrap">{{ r.economia | formato_brasileiro }}</td>
                     <td class="text-end text-nowrap">{{ r.economia_acumulada | formato_brasileiro }}</td>
                     <td class="text-end">{{ r.saldo_unidade | formato_kwh }}</td>
+                    {% set consumo = (r.consumo_total or 0) %}
+                    {% set saldo   = (r.saldo_unidade or 0) %}
+
+                    {% if saldo > 0 and consumo > 0 %}
+                        {% set meses = saldo / consumo %}
+                        <td class="text-end
+                                {% if meses < 1 %}text-danger
+                                {% elif meses < 3 %}text-warning
+                                {% else %}text-success{% endif %}">
+                            {{ meses|round(2) }}
+                        </td>
+                    {% elif saldo > 0 and consumo == 0 %}
+                        {# consumo zero: saldo não se consome — escolha entre "∞" ou "—" #}
+                        <td class="text-end text-success">∞</td>
+                    {% else %}
+                        <td class="text-end text-muted">0</td>
+                    {% endif %}
+
                 </tr>
                 {% endfor %}
             </tbody>
@@ -97,6 +116,7 @@
                     <td class="text-end text-nowrap">{{ (totais.economia or 0) | formato_brasileiro }}</td>
                     <td class="text-end text-nowrap">{{ (totais.economia_acumulada or 0) | formato_brasileiro }}</td>
                     <td class="text-end">{{ (totais.saldo_unidade or 0) | formato_kwh }}</td>
+                    <td class="text-end">—</td>
                 </tr>
             </tfoot>
         </table>
