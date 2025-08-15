@@ -86,14 +86,12 @@
 
                     {% if saldo > 0 and consumo > 0 %}
                         {% set meses = saldo / consumo %}
-                        <td class="text-end
-                                {% if meses < 1 %}text-danger
-                                {% elif meses < 3 %}text-warning
-                                {% else %}text-success{% endif %}">
-                            {{ meses|round(2) }}
-                        </td>
+                        {% set meses_floor = meses|round(0, 'floor') %}
+                        {% set fracao = meses - meses_floor %}
+                        {% set meses_final = meses_floor + (1 if fracao > 0.5 else 0) %}
+
+                        <td class="text-end"> {{ meses_final }} </td>
                     {% elif saldo > 0 and consumo == 0 %}
-                        {# consumo zero: saldo não se consome — escolha entre "∞" ou "—" #}
                         <td class="text-end text-success">∞</td>
                     {% else %}
                         <td class="text-end text-muted">0</td>
