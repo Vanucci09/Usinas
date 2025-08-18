@@ -235,8 +235,7 @@
                     <td>{{ item.ultimo_saldo | formato_kwh }}</td>
                     {% set a_recuperar = (item.geracao_total - (item.perda_total + item.saldo_kwh) - item.injecao_total - item.saldo_kwh) %}
                     <td>
-                    {% if a_recuperar > 0 %}
-                        <span class="badge bg-warning text-dark">À recuperar</span>
+                    {% if a_recuperar > 0 %}                        
                         <span class="ms-1">{{ a_recuperar | formato_kwh }}</span>
                     {% endif %}
                     </td>

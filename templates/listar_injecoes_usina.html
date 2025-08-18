@@ -62,7 +62,7 @@
         <td>{{ it.usina.nome if it.usina else it.usina_id }}</td>
         <td>{{ it.ano }}</td>
         <td>{{ "%02d"|format(it.mes) }}</td>
-        <td class="text-end">{{ "%.2f"|format(it.kwh_injetado) }}</td>
+        <td class="text-end">{{ it.kwh_injetado | formato_kwh}}</td>
         <td>
           <a class="btn btn-sm btn-outline-primary"
              href="{{ url_for('editar_injecao_mensal', item_id=it.id,

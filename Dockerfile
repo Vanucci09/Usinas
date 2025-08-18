@@ -3,19 +3,23 @@ FROM python:3.11-slim
 ENV DEBIAN_FRONTEND=noninteractive
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# Dependências de sistema (Bookworm)
+# Dependências do SO (Bookworm) + fallback para MySQL/MariaDB
 RUN set -eux; \
   apt-get update; \
   apt-get install -y --no-install-recommends \
     wget curl unzip gnupg ca-certificates \
-    pkg-config default-libmysqlclient-dev build-essential \
+    pkg-config build-essential \
     fonts-liberation \
-    # substitui libappindicator3-1 em Debian 12
     libayatana-appindicator3-1 \
     libasound2 libatk-bridge2.0-0 libatk1.0-0 libcups2 libdbus-1-3 \
     libgdk-pixbuf2.0-0 libnspr4 libnss3 libx11-xcb1 libxcomposite1 \
     libxdamage1 libxrandr2 xdg-utils libu2f-udev libvulkan1 \
+    libxkbcommon0 libxshmfence1 libdrm2 libgbm1 libgtk-3-0 \
+    libpango-1.0-0 libpangocairo-1.0-0 libcairo2 \
   ; \
+  # Se default-libmysqlclient-dev não existir, usa MariaDB
+  apt-get install -y --no-install-recommends default-libmysqlclient-dev \
+  || apt-get install -y --no-install-recommends libmariadb-dev-compat libmariadb-dev; \
   apt-get clean; \
   rm -rf /var/lib/apt/lists/*
 
@@ -31,7 +35,7 @@ RUN set -eux; \
   apt-get clean; \
   rm -rf /var/lib/apt/lists/*
 
-# Chromedriver compatível com o Chrome instalado
+# Chromedriver compatível com o major do Chrome instalado
 RUN set -eux; \
   CHROME_VERSION="$(google-chrome --version | awk '{print $3}')"; \
   CHROME_MAJOR="${CHROME_VERSION%%.*}"; \
