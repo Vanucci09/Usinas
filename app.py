@@ -4438,19 +4438,19 @@ lock_selenium = globals().get("lock_selenium") or threading.Lock()
 # -------------------------------
 # utilitários do Chrome/Selenium
 # -------------------------------
+
+def _running_on_container() -> bool:
+    # Render/Docker: binários do Chrome + Chromedriver instalados na imagem
+    return Path("/usr/bin/google-chrome").exists() and Path("/usr/bin/chromedriver").exists()
+
 def _chrome_major_linux():
-    """Retorna o major do Chrome no container (Render)."""
     try:
-        out = subprocess.check_output(
-            ["/usr/bin/google-chrome", "--version"], text=True
-        ).strip()
+        out = subprocess.check_output(["/usr/bin/google-chrome", "--version"], text=True).strip()
         return out.split()[-1].split(".")[0]
     except Exception:
         return None
 
-
-def _build_options(pasta_download: str, em_producao: bool,
-                   proxy_url: str | None, user_data_dir: str):
+def _build_options(pasta_download: str, em_producao: bool, proxy_url: str|None, user_data_dir: str):
     opts = uc.ChromeOptions()
     opts.add_argument(f"--user-data-dir={user_data_dir}")
     opts.add_argument("--no-sandbox")
@@ -4461,10 +4461,16 @@ def _build_options(pasta_download: str, em_producao: bool,
     opts.add_argument("--disable-translate")
     opts.add_argument("--lang=pt-BR")
     opts.add_argument("--window-size=1366,850")
+
+    # HEADLESS se for produção OU se não houver DISPLAY (Render)
+    if em_producao or not os.getenv("DISPLAY"):
+        opts.add_argument("--headless=new")
+
     if proxy_url:
         opts.add_argument(f"--proxy-server={proxy_url}")
+
+    # quando rodar no container, aponte para o binário do Chrome da imagem
     if em_producao:
-        opts.add_argument("--headless=new")          # headless só no Render
         opts.binary_location = "/usr/bin/google-chrome"
 
     prefs = {
@@ -4475,43 +4481,35 @@ def _build_options(pasta_download: str, em_producao: bool,
     opts.add_experimental_option("prefs", prefs)
     return opts
 
-
-def _new_driver(pasta_download: str, em_producao: bool,
-                proxy_url: str | None, user_data_dir: str):
+def _new_driver(pasta_download: str, em_producao: bool, proxy_url: str|None, user_data_dir: str):
     opts = _build_options(pasta_download, em_producao, proxy_url, user_data_dir)
     kwargs = {"options": opts, "use_subprocess": True}
 
-    # no Render, use o chromedriver do container e informe version_main
-    if em_producao:
+    # **SEMPRE** que estivermos no container, use os binários da imagem (nada de download)
+    if em_producao or _running_on_container():
         major = _chrome_major_linux()
-        kwargs["driver_executable_path"] = "/usr/bin/chromedriver"
         if major and major.isdigit():
             kwargs["version_main"] = int(major)
+        kwargs["driver_executable_path"] = "/usr/bin/chromedriver"
+        # algumas versões do uc aceitam browser_executable_path explicitamente
+        kwargs["browser_executable_path"] = "/usr/bin/google-chrome"
 
     driver = uc.Chrome(**kwargs)
 
-    # stealth + UA coerente com o próprio navegador
+    # (stealth extra opcional)
     try:
         driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
             "source": """
-                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-                Object.defineProperty(navigator, 'languages', {get: () => ['pt-BR','pt']});
-                Object.defineProperty(navigator, 'platform',  {get: () => 'Win32'});
-                window.chrome = { runtime: {} };
+              Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+              Object.defineProperty(navigator, 'languages', {get: () => ['pt-BR','pt']});
+              Object.defineProperty(navigator, 'platform',  {get: () => 'Win32'});
+              window.chrome = { runtime: {} };
             """
-        })
-        ua = driver.execute_script("return navigator.userAgent")
-        driver.execute_cdp_cmd("Network.enable", {})
-        driver.execute_cdp_cmd("Network.setUserAgentOverride", {
-            "userAgent": ua,
-            "acceptLanguage": "pt-BR,pt;q=0.9",
-            "platform": "Windows",
         })
     except Exception:
         pass
 
     return driver
-
 
 def _hit_home_then_login(driver, URL_HOME, URL_LOGIN):
     """Akamai alivia se você passa pela home antes do login."""
@@ -4525,7 +4523,7 @@ def _hit_home_then_login(driver, URL_HOME, URL_LOGIN):
 # --------------------------------------------
 def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade,
                              mes_referencia, pasta_download, api_2captcha):
-    em_producao = os.getenv("RENDER", "0") == "1"
+    em_producao = (os.getenv("RENDER", "0") == "1") or _running_on_container()
     proxy_url = os.getenv("PROXY_URL")  # opcional, recomendado no Render
     print(f"[DEBUG] Ambiente: {'Render' if em_producao else 'Local'}")
 
