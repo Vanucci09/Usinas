@@ -27,7 +27,7 @@ RUN set -eux; \
   apt-get clean; \
   rm -rf /var/lib/apt/lists/*
 
-# Repositório do Google Chrome
+# Repositório e instalação do Google Chrome
 RUN set -eux; \
   curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
     | gpg --dearmor -o /usr/share/keyrings/google.gpg; \
@@ -39,23 +39,20 @@ RUN set -eux; \
   apt-get clean; \
   rm -rf /var/lib/apt/lists/*
 
-# ChromeDriver compatível com a versão major do Chrome
+# ChromeDriver via Chrome for Testing (compatível com a versão major do Chrome)
 RUN set -eux; \
   CHROME_VERSION="$(google-chrome --version | awk '{print $3}')" ; \
   CHROME_MAJOR="${CHROME_VERSION%%.*}" ; \
-  DRIVER_VERSION="$(curl -fsSL "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_MAJOR}")" ; \
-  URL1="https://chromedriver.storage.googleapis.com/${DRIVER_VERSION}/chromedriver_linux64.zip" ; \
-  URL2="https://chromedriver.storage.googleapis.com/${DRIVER_VERSION}/chromedriver-linux64.zip" ; \
-  if curl -fsI "$URL1" >/dev/null; then URL="$URL1"; else URL="$URL2"; fi; \
-  wget -q -O /tmp/chromedriver.zip "$URL"; \
-  unzip /tmp/chromedriver.zip -d /usr/local/bin/; \
-  if [ -f /usr/local/bin/chromedriver ]; then \
-    mv /usr/local/bin/chromedriver /usr/bin/chromedriver; \
-  else \
-    mv /usr/local/bin/chromedriver*/chromedriver /usr/bin/chromedriver; \
-  fi; \
+  JSON_URL="https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json" ; \
+  curl -fsSL "$JSON_URL" -o /tmp/cft.json; \
+  DRIVER_URL="$(python3 -c "import json,os,sys; mj=os.environ.get('CHROME_MAJOR'); data=json.load(open('/tmp/cft.json')); c=[v for v in data['versions'] if v['version'].split('.')[0]==mj]; sys.exit(1) if not c else print([d['url'] for d in c[-1]['downloads']['chromedriver'] if d['platform']=='linux64'][0],end='')")"; \
+  test -n "$DRIVER_URL"; \
+  wget -q -O /tmp/chromedriver.zip "$DRIVER_URL"; \
+  unzip -o /tmp/chromedriver.zip -d /usr/local/bin/; \
+  mv /usr/local/bin/chromedriver-linux64/chromedriver /usr/bin/chromedriver; \
   chmod +x /usr/bin/chromedriver; \
-  rm -rf /tmp/chromedriver.zip /usr/local/bin/chromedriver*
+  rm -rf /usr/local/bin/chromedriver-linux64 /tmp/chromedriver.zip /tmp/cft.json
+
 
 ENV CHROME_BIN=/usr/bin/google-chrome
 ENV PATH="${PATH}:/usr/bin"
