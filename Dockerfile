@@ -3,7 +3,7 @@ FROM python:3.11-slim
 ENV DEBIAN_FRONTEND=noninteractive
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# Dependências do SO (Bookworm) + fallback para MySQL/MariaDB
+# Dependências do SO (Bookworm)
 RUN set -eux; \
   apt-get update; \
   apt-get install -y --no-install-recommends \
@@ -15,11 +15,13 @@ RUN set -eux; \
     libgdk-pixbuf2.0-0 libnspr4 libnss3 libx11-xcb1 libxcomposite1 \
     libxdamage1 libxrandr2 xdg-utils libu2f-udev libvulkan1 \
     libxkbcommon0 libxshmfence1 libdrm2 libgbm1 libgtk-3-0 \
-    libpango-1.0-0 libpangocairo-1.0-0 libcairo2 \
-  ; \
-  # Se default-libmysqlclient-dev não existir, usa MariaDB
-  apt-get install -y --no-install-recommends default-libmysqlclient-dev \
-  || apt-get install -y --no-install-recommends libmariadb-dev-compat libmariadb-dev; \
+    libpango-1.0-0 libpangocairo-1.0-0 libcairo2; \
+  # MySQL/MariaDB headers (sem "||")
+  if apt-cache show default-libmysqlclient-dev >/dev/null 2>&1; then \
+    apt-get install -y --no-install-recommends default-libmysqlclient-dev; \
+  else \
+    apt-get install -y --no-install-recommends libmariadb-dev-compat libmariadb-dev; \
+  fi; \
   apt-get clean; \
   rm -rf /var/lib/apt/lists/*
 
@@ -36,15 +38,24 @@ RUN set -eux; \
   rm -rf /var/lib/apt/lists/*
 
 # Chromedriver compatível com o major do Chrome instalado
+# (tenta os dois formatos de arquivo usados pelo Google: _linux64.zip e -linux64.zip)
 RUN set -eux; \
-  CHROME_VERSION="$(google-chrome --version | awk '{print $3}')"; \
-  CHROME_MAJOR="${CHROME_VERSION%%.*}"; \
-  DRIVER_VERSION="$(curl -fsSL "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_MAJOR}")"; \
-  wget -q -O /tmp/chromedriver.zip "https://chromedriver.storage.googleapis.com/${DRIVER_VERSION}/chromedriver_linux64.zip"; \
+  CHROME_VERSION="$(google-chrome --version | awk '{print $3}')" ; \
+  CHROME_MAJOR="${CHROME_VERSION%%.*}" ; \
+  DRIVER_VERSION="$(curl -fsSL "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_MAJOR}")" ; \
+  URL1="https://chromedriver.storage.googleapis.com/${DRIVER_VERSION}/chromedriver_linux64.zip" ; \
+  URL2="https://chromedriver.storage.googleapis.com/${DRIVER_VERSION}/chromedriver-linux64.zip" ; \
+  if curl -fsI "$URL1" >/dev/null; then URL="$URL1"; else URL="$URL2"; fi; \
+  wget -q -O /tmp/chromedriver.zip "$URL"; \
   unzip /tmp/chromedriver.zip -d /usr/local/bin/; \
-  mv /usr/local/bin/chromedriver /usr/bin/chromedriver; \
+  # o zip geralmente contém 'chromedriver' ou 'chromedriver-linux64/chromedriver'
+  if [ -f /usr/local/bin/chromedriver ]; then \
+    mv /usr/local/bin/chromedriver /usr/bin/chromedriver; \
+  else \
+    mv /usr/local/bin/chromedriver*/chromedriver /usr/bin/chromedriver; \
+  fi; \
   chmod +x /usr/bin/chromedriver; \
-  rm -rf /tmp/chromedriver.zip
+  rm -rf /tmp/chromedriver.zip /usr/local/bin/chromedriver*
 
 ENV CHROME_BIN=/usr/bin/google-chrome
 ENV PATH="${PATH}:/usr/bin"
