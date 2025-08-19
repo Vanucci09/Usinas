@@ -39,7 +39,7 @@ RUN set -eux; \
   apt-get clean; \
   rm -rf /var/lib/apt/lists/*
 
-# ChromeDriver via Chrome for Testing (compatível com a versão major do Chrome)# ChromeDriver via Chrome for Testing (tenta a versão exata; se 404, usa known-good do major)
+# ChromeDriver via Chrome for Testing (tenta a versão exata; se 404, usa known-good do major)
 RUN set -eux; \
   CHROME_VERSION="$(google-chrome --version | awk '{print $3}')" ; \
   CHROME_MAJOR="${CHROME_VERSION%%.*}" ; \
@@ -49,28 +49,24 @@ RUN set -eux; \
   else \
     JSON_URL="https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json"; \
     curl -fsSL "$JSON_URL" -o /tmp/cft.json; \
-    DRIVER_URL="$(python3 <<EOF
-import json, os, sys
-mj = os.environ.get("CHROME_MAJOR")
-with open("/tmp/cft.json","r",encoding="utf-8") as f:
-    data = json.load(f)
-cands = [v for v in data["versions"] if v["version"].split(".")[0] == mj]
-if not cands:
-    sys.exit(1)
-ver = cands[-1]
-for d in ver["downloads"]["chromedriver"]:
-    if d["platform"] == "linux64":
-        print(d["url"], end="")
-        break
-EOF
-)"; \
+    printf '%s\n' \
+      'import json, os, sys' \
+      'mj = os.environ.get("CHROME_MAJOR")' \
+      'with open("/tmp/cft.json","r",encoding="utf-8") as f: data = json.load(f)' \
+      'c = [v for v in data["versions"] if v["version"].split(".")[0] == mj]' \
+      'sys.exit(1) if not c else None' \
+      'ver = c[-1]' \
+      'urls = [d["url"] for d in ver["downloads"]["chromedriver"] if d["platform"] == "linux64"]' \
+      'print(urls[0] if urls else "", end="")' \
+      > /tmp/cft.py; \
+    DRIVER_URL="$(CHROME_MAJOR="$CHROME_MAJOR" python3 /tmp/cft.py)"; \
   fi; \
   test -n "$DRIVER_URL"; \
   wget -q -O /tmp/chromedriver.zip "$DRIVER_URL"; \
   unzip -o /tmp/chromedriver.zip -d /usr/local/bin/; \
   mv /usr/local/bin/chromedriver-linux64/chromedriver /usr/bin/chromedriver; \
   chmod +x /usr/bin/chromedriver; \
-  rm -rf /usr/local/bin/chromedriver-linux64 /tmp/chromedriver.zip /tmp/cft.json
+  rm -rf /usr/local/bin/chromedriver-linux64 /tmp/chromedriver.zip /tmp/cft.json /tmp/cft.py
 
 ENV CHROME_BIN=/usr/bin/google-chrome
 ENV PATH="${PATH}:/usr/bin"
