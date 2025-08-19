@@ -4434,10 +4434,7 @@ def vincular_kehua():
 # lock global para evitar concorrência do Selenium
 lock_selenium = globals().get("lock_selenium") or threading.Lock()
 
-
-# -------------------------------
 # utilitários do Chrome/Selenium
-# -------------------------------
 
 def _running_on_container() -> bool:
     # Render/Docker: binários do Chrome + Chromedriver instalados na imagem
@@ -4462,14 +4459,14 @@ def _build_options(pasta_download: str, em_producao: bool,
     opts.add_argument("--disable-translate")
     opts.add_argument("--lang=pt-BR")
     opts.add_argument("--window-size=1366,850")
+    opts.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                      "AppleWebKit/537.36 (KHTML, like Gecko) "
+                      "Chrome/139.0.0.0 Safari/537.36")
 
-    # ✅ só headless em produção ou se você pedir explicitamente
-    headless_flag = em_producao or (os.getenv("HEADLESS", "0") == "1")
-    if headless_flag:
+    # Headless apenas em produção ou se HEADLESS=1
+    if em_producao or (os.getenv("HEADLESS", "0") == "1"):
         opts.add_argument("--headless=new")
 
-    if proxy_url:
-        opts.add_argument(f"--proxy-server={proxy_url}")
     if em_producao:
         opts.binary_location = "/usr/bin/google-chrome"
 
@@ -4483,20 +4480,24 @@ def _build_options(pasta_download: str, em_producao: bool,
 
 def _new_driver(pasta_download: str, em_producao: bool, proxy_url: str|None, user_data_dir: str):
     opts = _build_options(pasta_download, em_producao, proxy_url, user_data_dir)
-    kwargs = {"options": opts, "use_subprocess": True}
 
-    # **SEMPRE** que estivermos no container, use os binários da imagem (nada de download)
+    # APLICA proxy corretamente e captura credenciais (se houver)
+    proxy_creds = _apply_proxy_to_options(opts, proxy_url)
+
+    kwargs = {"options": opts, "use_subprocess": True}
     if em_producao or _running_on_container():
         major = _chrome_major_linux()
         if major and major.isdigit():
             kwargs["version_main"] = int(major)
         kwargs["driver_executable_path"] = "/usr/bin/chromedriver"
-        # algumas versões do uc aceitam browser_executable_path explicitamente
         kwargs["browser_executable_path"] = "/usr/bin/google-chrome"
 
     driver = uc.Chrome(**kwargs)
 
-    # (stealth extra opcional)
+    # Autenticação do proxy via CDP (para HTTP 407)
+    _enable_proxy_auth_via_cdp(driver, proxy_creds)
+
+    # (stealth extra opcional) — você já tem
     try:
         driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
             "source": """
@@ -4517,10 +4518,53 @@ def _hit_home_then_login(driver, URL_HOME, URL_LOGIN):
     time.sleep(2.5)
     driver.get(URL_LOGIN)
 
+def _apply_proxy_to_options(opts, proxy_url: str | None):
+    """
+    Configura --proxy-server em formato esquema://host:port e
+    retorna (user, pass) se houver credenciais na URL.
+    """
+    if not proxy_url:
+        return None
+    u = urlparse(proxy_url)
+    if not u.scheme or not u.hostname or not u.port:
+        print(f"[PROXY] URL inválida: {proxy_url}")
+        return None
 
-# --------------------------------------------
+    opts.add_argument(f"--proxy-server={u.scheme}://{u.hostname}:{u.port}")
+    if u.username or u.password:
+        return (u.username or "", u.password or "")
+    return None
+
+def _enable_proxy_auth_via_cdp(driver, creds):
+    """
+    Atende desafios HTTP 407 (proxy) em headless usando CDP.
+    Requer undetected_chromedriver.
+    """
+    if not creds:
+        return
+    try:
+        user, pwd = creds
+        driver.execute_cdp_cmd("Fetch.enable", {"handleAuthRequests": True})
+
+        def _on_auth_required(params):
+            if params.get("authChallenge", {}).get("isProxy"):
+                driver.execute_cdp_cmd("Fetch.continueWithAuth", {
+                    "requestId": params["requestId"],
+                    "authChallengeResponse": {
+                        "response": "ProvideCredentials",
+                        "username": user,
+                        "password": pwd
+                    }
+                })
+            else:
+                driver.execute_cdp_cmd("Fetch.continueRequest", {"requestId": params["requestId"]})
+
+        driver.add_cdp_listener("Fetch.authRequired", _on_auth_required)
+    except Exception as e:
+        print("[PROXY] Falha ao habilitar auth via CDP:", e)
+
 # Função principal: baixa fatura Neoenergia
-# --------------------------------------------
+
 def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade,
                              mes_referencia, pasta_download, api_2captcha):
     em_producao = (os.getenv("RENDER", "0") == "1") or _running_on_container()
@@ -4826,10 +4870,8 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade,
         except Exception as e:
             print("[WARNING] Erro ao remover user_data_dir:", e)
 
-
-# -------------------------------
 # ROTA /baixar_fatura (GET/POST)
-# -------------------------------
+
 @app.route("/baixar_fatura", methods=["GET", "POST"])
 def baixar_fatura():
     if request.method == "POST":
@@ -4876,6 +4918,90 @@ def baixar_fatura():
 
     # GET
     return render_template("form_baixar_fatura.html")
+
+@app.route("/debug_ip")
+def debug_ip():
+    # evita concorrer com /baixar_fatura
+    acquired = lock_selenium.acquire(blocking=False)
+    if not acquired:
+        return "Outro navegador está em execução. Tente novamente em alguns segundos.", 429
+
+    em_producao = (os.getenv("RENDER", "0") == "1") or _running_on_container()
+    proxy_url = os.getenv("PROXY_URL")
+    tmp = tempfile.mkdtemp(prefix="selenium_profile_")
+    d = None
+    last_err = "sem erro"
+
+    try:
+        d = _new_driver(str(Path("data/boletos").resolve()), em_producao, proxy_url, tmp)
+
+        # garante que há uma janela/aba ativa
+        try:
+            handles = d.window_handles
+            if not handles:
+                d.execute_script("window.open('about:blank','_blank');")
+                WebDriverWait(d, 5).until(lambda x: len(x.window_handles) > 0)
+            d.switch_to.window(d.window_handles[-1])
+        except Exception as e:
+            # cria nova aba como fallback
+            try:
+                d.execute_script("window.open('about:blank','_blank');")
+                WebDriverWait(d, 5).until(lambda x: len(x.window_handles) > 0)
+                d.switch_to.window(d.window_handles[-1])
+            except Exception:
+                return f"Erro inicializando aba: {e}", 500
+
+        test_urls = [
+            "https://api64.ipify.org?format=text",
+            "https://api.ipify.org?format=text",
+            "https://ifconfig.me/ip",
+            "https://icanhazip.com",
+        ]
+
+        ip_txt = None
+        for url in test_urls:
+            try:
+                d.get(url)
+                # espera DOM pronto
+                WebDriverWait(d, 10).until(
+                    lambda x: x.execute_script("return document.readyState") == "complete"
+                )
+                # lê via JS (mais robusto que find_element)
+                ip_txt = d.execute_script(
+                    "return (document.body ? document.body.innerText : document.documentElement.innerText) || '';"
+                )
+                ip_txt = (ip_txt or "").strip()
+                if ip_txt:
+                    break
+            except Exception as e:
+                last_err = str(e)
+                # se a janela fechou, reabre uma aba e continua
+                try:
+                    if not d.window_handles:
+                        d.execute_script("window.open('about:blank','_blank');")
+                        WebDriverWait(d, 5).until(lambda x: len(x.window_handles) > 0)
+                        d.switch_to.window(d.window_handles[-1])
+                except Exception:
+                    pass
+                continue
+
+        if not ip_txt:
+            return f"Falha ao obter IP. Último erro: {last_err}", 502
+
+        return f"IP visto pelo navegador: {ip_txt}\nProxy: {proxy_url or 'N/A'}", 200
+
+    except Exception as e:
+        return f"Erro debug_ip: {e}", 500
+
+    finally:
+        try:
+            if d:
+                d.quit()
+        except Exception:
+            pass
+        shutil.rmtree(tmp, ignore_errors=True)
+        if acquired:
+            lock_selenium.release()
 
 @app.route('/cadastrar_credor', methods=['GET', 'POST'])
 @login_required
