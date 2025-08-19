@@ -4450,7 +4450,8 @@ def _chrome_major_linux():
     except Exception:
         return None
 
-def _build_options(pasta_download: str, em_producao: bool, proxy_url: str|None, user_data_dir: str):
+def _build_options(pasta_download: str, em_producao: bool,
+                   proxy_url: str | None, user_data_dir: str):
     opts = uc.ChromeOptions()
     opts.add_argument(f"--user-data-dir={user_data_dir}")
     opts.add_argument("--no-sandbox")
@@ -4462,14 +4463,13 @@ def _build_options(pasta_download: str, em_producao: bool, proxy_url: str|None, 
     opts.add_argument("--lang=pt-BR")
     opts.add_argument("--window-size=1366,850")
 
-    # HEADLESS se for produção OU se não houver DISPLAY (Render)
-    if em_producao or not os.getenv("DISPLAY"):
+    # ✅ só headless em produção ou se você pedir explicitamente
+    headless_flag = em_producao or (os.getenv("HEADLESS", "0") == "1")
+    if headless_flag:
         opts.add_argument("--headless=new")
 
     if proxy_url:
         opts.add_argument(f"--proxy-server={proxy_url}")
-
-    # quando rodar no container, aponte para o binário do Chrome da imagem
     if em_producao:
         opts.binary_location = "/usr/bin/google-chrome"
 
