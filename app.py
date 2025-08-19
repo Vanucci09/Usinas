@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify, make_response, send_file, flash, send_from_directory, abort
 from datetime import date, datetime, timedelta
 from calendar import monthrange
-import os, uuid, calendar
+import os, uuid, calendar, subprocess, threading
 import pandas as pd
 from werkzeug.utils import secure_filename
 from flask_sqlalchemy import SQLAlchemy
@@ -16,11 +16,13 @@ import time, hashlib, json, hmac, requests, base64, atexit, math
 from email.utils import formatdate
 from apscheduler.schedulers.background import BackgroundScheduler
 from flask_mail import Mail, Message
-from urllib.parse import quote
+from urllib.parse import quote, parse_qs, urlparse
 import base64, shutil, logging
 from sqlalchemy.orm import joinedload
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -4429,162 +4431,387 @@ def vincular_kehua():
 
     return render_template('vincular_kehua.html', usinas=usinas, estacoes=estacoes)
 
-def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pasta_download, api_2captcha):
-    # Detectar se está em produção (Render) ou local
+# lock global para evitar concorrência do Selenium
+lock_selenium = globals().get("lock_selenium") or threading.Lock()
+
+
+# -------------------------------
+# utilitários do Chrome/Selenium
+# -------------------------------
+def _chrome_major_linux():
+    """Retorna o major do Chrome no container (Render)."""
+    try:
+        out = subprocess.check_output(
+            ["/usr/bin/google-chrome", "--version"], text=True
+        ).strip()
+        return out.split()[-1].split(".")[0]
+    except Exception:
+        return None
+
+
+def _build_options(pasta_download: str, em_producao: bool,
+                   proxy_url: str | None, user_data_dir: str):
+    opts = uc.ChromeOptions()
+    opts.add_argument(f"--user-data-dir={user_data_dir}")
+    opts.add_argument("--no-sandbox")
+    opts.add_argument("--disable-dev-shm-usage")
+    opts.add_argument("--disable-blink-features=AutomationControlled")
+    opts.add_argument("--disable-extensions")
+    opts.add_argument("--disable-sync")
+    opts.add_argument("--disable-translate")
+    opts.add_argument("--lang=pt-BR")
+    opts.add_argument("--window-size=1366,850")
+    if proxy_url:
+        opts.add_argument(f"--proxy-server={proxy_url}")
+    if em_producao:
+        opts.add_argument("--headless=new")          # headless só no Render
+        opts.binary_location = "/usr/bin/google-chrome"
+
+    prefs = {
+        "download.default_directory": str(Path(pasta_download).resolve()),
+        "plugins.always_open_pdf_externally": True,
+        "download.prompt_for_download": False,
+    }
+    opts.add_experimental_option("prefs", prefs)
+    return opts
+
+
+def _new_driver(pasta_download: str, em_producao: bool,
+                proxy_url: str | None, user_data_dir: str):
+    opts = _build_options(pasta_download, em_producao, proxy_url, user_data_dir)
+    kwargs = {"options": opts, "use_subprocess": True}
+
+    # no Render, use o chromedriver do container e informe version_main
+    if em_producao:
+        major = _chrome_major_linux()
+        kwargs["driver_executable_path"] = "/usr/bin/chromedriver"
+        if major and major.isdigit():
+            kwargs["version_main"] = int(major)
+
+    driver = uc.Chrome(**kwargs)
+
+    # stealth + UA coerente com o próprio navegador
+    try:
+        driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+            "source": """
+                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                Object.defineProperty(navigator, 'languages', {get: () => ['pt-BR','pt']});
+                Object.defineProperty(navigator, 'platform',  {get: () => 'Win32'});
+                window.chrome = { runtime: {} };
+            """
+        })
+        ua = driver.execute_script("return navigator.userAgent")
+        driver.execute_cdp_cmd("Network.enable", {})
+        driver.execute_cdp_cmd("Network.setUserAgentOverride", {
+            "userAgent": ua,
+            "acceptLanguage": "pt-BR,pt;q=0.9",
+            "platform": "Windows",
+        })
+    except Exception:
+        pass
+
+    return driver
+
+
+def _hit_home_then_login(driver, URL_HOME, URL_LOGIN):
+    """Akamai alivia se você passa pela home antes do login."""
+    driver.get(URL_HOME)
+    time.sleep(2.5)
+    driver.get(URL_LOGIN)
+
+
+# --------------------------------------------
+# Função principal: baixa fatura Neoenergia
+# --------------------------------------------
+def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade,
+                             mes_referencia, pasta_download, api_2captcha):
     em_producao = os.getenv("RENDER", "0") == "1"
-    print(f"[DEBUG] Ambiente: {'Render' if em_producao else 'Local'}")    
-    
+    proxy_url = os.getenv("PROXY_URL")  # opcional, recomendado no Render
+    print(f"[DEBUG] Ambiente: {'Render' if em_producao else 'Local'}")
+
+    URL_HOME  = "https://agenciavirtual.neoenergiabrasilia.com.br/"
     URL_LOGIN = "https://agenciavirtual.neoenergiabrasilia.com.br/Account/EfetuarLogin"
-    SITEKEY = "6LdmOIAbAAAAANXdHAociZWz1gqR9Qvy3AN0rJy4" 
+    SITEKEY   = "6LdmOIAbAAAAANXdHAociZWz1gqR9Qvy3AN0rJy4"
 
     driver = None
     user_data_dir = tempfile.mkdtemp(prefix="selenium_profile_")
     print(f"[DEBUG] Criando perfil temporário: {user_data_dir}")
 
     try:
-        options = uc.ChromeOptions()
-        options.add_argument(f"--user-data-dir={user_data_dir}")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--disable-blink-features=AutomationControlled")
-        options.add_argument("--headless=new")  # importante para Render
-        options.add_argument("--disable-extensions")
-        options.add_argument("--disable-sync")
-        options.add_argument("--disable-translate")
-        options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36")
+        # até 2 tentativas (perfil novo ajuda a derrubar Access Denied)
+        for tentativa in (1, 2):
+            if driver:
+                try:
+                    driver.quit()
+                except Exception:
+                    pass
 
-        if em_producao:
-            options.binary_location = "/usr/bin/google-chrome"
+            driver = _new_driver(pasta_download, em_producao, proxy_url, user_data_dir)
 
-        prefs = {
-            "download.default_directory": str(Path(pasta_download).resolve()),
-            "plugins.always_open_pdf_externally": True,
-            "download.prompt_for_download": False
-        }
-        options.add_experimental_option("prefs", prefs)
+            print("🌐 Acessando site...")
+            _hit_home_then_login(driver, URL_HOME, URL_LOGIN)
+            time.sleep(3)
 
-        driver = uc.Chrome(options=options, headless=True, use_subprocess=True)
+            html = driver.page_source[:1500]
+            if "Access Denied" in html or "You don't have permission to access" in html:
+                print("⚠️ Access Denied detectado. Recriando perfil...")
+                shutil.rmtree(user_data_dir, ignore_errors=True)
+                user_data_dir = tempfile.mkdtemp(prefix="selenium_profile_")
+                continue
 
-        # Stealth JavaScript para ocultar webdriver
-        driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
-            "source": """
-                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-                window.chrome = { runtime: {} };
-                Object.defineProperty(navigator, 'languages', {get: () => ['pt-BR', 'pt']});
-                Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
-            """
-        })
+            # -------- login --------
+            print("✍️ Preenchendo CPF e senha...")
+            WebDriverWait(driver, 30).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "input[placeholder*='CPF']"))
+            ).send_keys(cpf_cnpj)
+            driver.find_element(By.CSS_SELECTOR, "input[placeholder='Senha']").send_keys(senha)
 
-        print("🌐 Acessando página de login...")
-        driver.get(URL_LOGIN)
-        time.sleep(5)
+            # CAPTCHA 2Captcha
+            print("🎯 Enviando CAPTCHA para 2Captcha...")
+            resp = requests.get(
+                "http://2captcha.com/in.php",
+                params={
+                    "key": api_2captcha,
+                    "method": "userrecaptcha",
+                    "googlekey": SITEKEY,
+                    "pageurl": URL_LOGIN,
+                },
+                timeout=30,
+            )
+            if not resp.text.startswith("OK|"):
+                raise Exception(f"Erro ao enviar CAPTCHA: {resp.text}")
+            request_id = resp.text.split("|")[1]
 
-        print("✍️ Preenchendo CPF e senha...")
-        print("🔍 HTML da página atual:")
-        print(driver.page_source[:1000])  # imprime os primeiros 1000 caracteres
+            print("⏳ Aguardando solução do CAPTCHA...")
+            token = ""
+            for _ in range(40):  # ~200s
+                time.sleep(5)
+                chk = requests.get(
+                    "http://2captcha.com/res.php",
+                    params={"key": api_2captcha, "action": "get", "id": request_id},
+                    timeout=30,
+                )
+                if chk.text.startswith("OK|"):
+                    token = chk.text.split("|")[1]
+                    break
+                if chk.text not in ("CAPCHA_NOT_READY", "CAPTCHA_NOT_READY"):
+                    raise Exception(f"Erro no CAPTCHA: {chk.text}")
+            if not token:
+                raise Exception("❌ CAPTCHA não resolvido a tempo")
 
-        WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "input[placeholder*='CPF']"))
-        ).send_keys(cpf_cnpj)
+            print("✅ CAPTCHA resolvido!")
+            driver.execute_script("""
+                var el = document.getElementById('g-recaptcha-response');
+                if (el) {
+                    el.style.display = 'block';
+                    el.value = arguments[0];
+                    el.dispatchEvent(new Event('change', {bubbles:true}));
+                }
+            """, token)
+            time.sleep(2)
 
-        driver.find_element(By.CSS_SELECTOR, "input[placeholder='Senha']").send_keys(senha)
+            print("🚀 Clicando em entrar...")
 
-        print("🎯 Enviando CAPTCHA para 2Captcha...")
-        resp = requests.get(
-            f"http://2captcha.com/in.php?key={api_2captcha}&method=userrecaptcha&googlekey={SITEKEY}&pageurl={URL_LOGIN}"
-        )
-        if not resp.text.startswith("OK|"):
-            raise Exception(f"Erro ao enviar CAPTCHA: {resp.text}")
-        request_id = resp.text.split('|')[1]
+            # 1) sair de iframes do reCAPTCHA (se houver)
+            try:
+                driver.switch_to.default_content()
+            except Exception:
+                pass
 
-        print("⏳ Aguardando solução do CAPTCHA...")
-        token = ""
-        for _ in range(30):
-            time.sleep(5)
-            check = requests.get(f"http://2captcha.com/res.php?key={api_2captcha}&action=get&id={request_id}")
-            if check.text.startswith("OK|"):
-                token = check.text.split('|')[1]
-                break
+            # 2) garantir token no FORM e acionar callbacks do site
+            form = WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "form[action*='EfetuarLogin'], form#loginForm, form"))
+            )
+            driver.execute_script("""
+                const form = arguments[0], tok = arguments[1];
+                let el = form.querySelector('#g-recaptcha-response') || document.getElementById('g-recaptcha-response');
+                if (!el) {
+                    el = document.createElement('textarea');
+                    el.id = 'g-recaptcha-response';
+                    el.name = 'g-recaptcha-response';
+                    el.style.display = 'none';
+                    form.appendChild(el);
+                }
+                el.value = tok;
+                el.dispatchEvent(new Event('change', {bubbles:true}));
 
-        if not token:
-            raise Exception("❌ CAPTCHA não resolvido")
+                // callbacks comuns que habilitam o submit
+                if (typeof window.recaptchaCallback === 'function') { try { window.recaptchaCallback(tok); } catch(e){} }
+                if (typeof window.onReCaptchaSuccess === 'function') { try { window.onReCaptchaSuccess(tok); } catch(e){} }
+            """, form, token)
 
-        print("✅ CAPTCHA resolvido!")
-        driver.execute_script("document.getElementById('g-recaptcha-response').style.display = 'block';")
-        driver.execute_script(f"document.getElementById('g-recaptcha-response').innerHTML = '{token}';")
-        driver.execute_script("if (typeof recaptchaCallback === 'function') recaptchaCallback();")
-        time.sleep(3)
+            # 3) localizar botão e tentar clique robusto
+            btn = WebDriverWait(driver, 20).until(
+                EC.element_to_be_clickable((
+                    By.CSS_SELECTOR,
+                    "form[action*='EfetuarLogin'] button[type='submit'], form#loginForm button[type='submit'], button[type='submit']"
+                ))
+            )
 
-        print("🚀 Clicando em entrar...")
-        driver.find_element(By.CSS_SELECTOR, "button[type='submit']").click()
+            clicked = False
+            for _ in range(3):
+                try:
+                    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", btn)
+                    time.sleep(0.2)
+                    btn.click()
+                    clicked = True
+                    break
+                except Exception as e1:
+                    print("[CLICK] click() falhou; tentando JS click:", e1)
+                    try:
+                        driver.execute_script("arguments[0].click();", btn)
+                        clicked = True
+                        break
+                    except Exception as e2:
+                        print("[CLICK] JS click falhou:", e2)
+                        # remove overlays/desabilitação e tenta novamente
+                        driver.execute_script("""
+                            try { arguments[0].removeAttribute('disabled'); } catch(e){}
+                            document.querySelectorAll('.modal-backdrop,.blockUI,.overlay,.loader,[aria-busy=true]')
+                                    .forEach(el => { try{ el.remove(); }catch(e){} });
+                        """, btn)
+                        time.sleep(0.3)
 
-        WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.CSS_SELECTOR, "a.btn")))
+            if not clicked:
+                # 4) fallback: ENTER no campo de senha ou submit do form
+                try:
+                    pwd = driver.find_element(By.CSS_SELECTOR, "input[type='password'], input[placeholder='Senha']")
+                    pwd.send_keys(Keys.ENTER)
+                except Exception:
+                    driver.execute_script("arguments[0].submit();", form)
 
-        print("🔍 Buscando unidade consumidora...")
-        botoes = driver.find_elements(By.CSS_SELECTOR, "a.btn")
-        for botao in botoes:
-            texto = botao.text.strip().replace("-", "").replace(".", "")
-            if codigo_unidade in texto:
-                driver.execute_script("arguments[0].click();", botao)
-                break
-        else:
-            raise Exception("Unidade consumidora não encontrada.")
+            # 5) esperar próxima tela OU erro visível
+            try:
+                WebDriverWait(driver, 35).until(
+                    EC.presence_of_element_located(
+                        (By.CSS_SELECTOR, "table#unidades a.btn, table.dataTable a.btn")
+                    )
+                )
+            except TimeoutException:
+                # salva HTML/screenshot para depurar
+                try:
+                    Path("debug").mkdir(exist_ok=True)
+                    Path("debug/login_click.html").write_text(driver.page_source, encoding="utf-8")
+                    driver.save_screenshot("debug/login_click.png")
+                except Exception:
+                    pass
 
-        print("📄 Acessando histórico de consumo...")
-        historico = WebDriverWait(driver, 20).until(
-            EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, 'HistoricoConsumo')]"))
-        )
-        historico.click()
+                if "Access Denied" in driver.page_source or "permission to access" in driver.page_source:
+                    print("⚠️ Access Denied após login. Tentando novo perfil/proxy...")
+                    shutil.rmtree(user_data_dir, ignore_errors=True)
+                    user_data_dir = tempfile.mkdtemp(prefix="selenium_profile_")
+                    continue
 
-        print("🔍 Procurando fatura...")
-        linhas_faturas = WebDriverWait(driver, 30).until(
-            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "tr"))
-        )
+                # se houver mensagens de erro de validação, exponha
+                msgs = driver.find_elements(
+                    By.CSS_SELECTOR, ".alert, .text-danger, .validation-summary-errors, .validation-summary-errors li"
+                )
+                if msgs:
+                    raise Exception(f"Falha no login: {msgs[0].text.strip()}")
 
-        for linha in linhas_faturas:
-            if mes_referencia in linha.text:
-                driver.execute_script("arguments[0].scrollIntoView();", linha)
-                time.sleep(1)
-                driver.execute_script("arguments[0].click();", linha)
-                time.sleep(2)
+                # sem pistas → propaga o timeout
+                raise
 
-                link_element = linha.find_element(By.XPATH, ".//a[contains(@href, 'SegundaVia')]")
-                driver.execute_script("arguments[0].click();", link_element)
+            # -------- seleção da unidade (match pelo href?codigo=) --------
+            print("🔍 Buscando unidade consumidora...")
+            alvo = ''.join(filter(str.isdigit, str(codigo_unidade)))  # mantém zeros à esquerda
+            print(f"[DEBUG] código alvo normalizado: {alvo}")
 
-                print("⏬ Aguardando download do PDF...")
-                time.sleep(10)
+            table = WebDriverWait(driver, 30).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "table#unidades, table.dataTable"))
+            )
+            WebDriverWait(driver, 30).until(
+                lambda d: len(table.find_elements(By.CSS_SELECTOR, "tbody a.btn[href*='Menu?codigo=']")) > 0
+            )
 
-                # Criar subpasta do CPF
-                cpf_limpo = ''.join(filter(str.isdigit, cpf_cnpj))
-                subpasta_cpf = Path(pasta_download) / cpf_limpo
-                subpasta_cpf.mkdir(parents=True, exist_ok=True)
+            links = table.find_elements(By.CSS_SELECTOR, "tbody a.btn[href*='Menu?codigo=']")
+            encontrou = False
+            vistos = []
 
-                # Pega o último PDF
-                arquivos_pdf = list(Path(pasta_download).glob("*.pdf"))
-                if not arquivos_pdf:
-                    return False, "❌ Nenhum PDF encontrado após clique no link da fatura."
+            for a in links:
+                href = a.get_attribute("href") or ""
+                codigo_param = ""
+                if "?" in href:
+                    from urllib.parse import urlparse, parse_qs
+                    q = parse_qs(urlparse(href).query)
+                    codigo_param = (q.get("codigo", [""])[0]).strip()
+                cand = ''.join(filter(str.isdigit, codigo_param))  # ex.: 030082005
+                if cand:
+                    vistos.append(cand)
+                # ignora dígito verificador: 03008200 casa com 030082005
+                if cand.startswith(alvo) or alvo.startswith(cand):
+                    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", a)
+                    time.sleep(0.3)
+                    driver.execute_script("arguments[0].click();", a)
+                    encontrou = True
+                    break
 
-                ultimo_pdf = max(arquivos_pdf, key=lambda f: f.stat().st_mtime)
+            if not encontrou:
+                # fallback por texto se mudarem o href
+                for a in links:
+                    text_digits = ''.join(filter(str.isdigit, a.text or ""))
+                    if text_digits.startswith(alvo) or alvo.startswith(text_digits):
+                        driver.execute_script("arguments[0].click();", a)
+                        encontrou = True
+                        break
 
-                # Novo nome + destino
-                nome_arquivo = f"fatura_{cpf_limpo}_{codigo_unidade}_{mes_referencia.replace('/', '_')}.pdf"
-                caminho_novo = subpasta_cpf / nome_arquivo
-                if caminho_novo.exists():
-                    caminho_novo.unlink()
-                ultimo_pdf.rename(caminho_novo)
+            if not encontrou:
+                print(f"[DEBUG] códigos visíveis: {vistos}")
+                raise Exception(f"Unidade consumidora não encontrada (procurado: {alvo}).")
 
-                # Copia para static/faturas
-                pasta_publica = Path("static/faturas")
-                pasta_publica.mkdir(parents=True, exist_ok=True)
-                caminho_exibicao = pasta_publica / nome_arquivo
-                shutil.copy2(caminho_novo, caminho_exibicao)
+            # -------- histórico e download --------
+            print("📄 Acessando histórico de consumo...")
+            historico = WebDriverWait(driver, 25).until(
+                EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, 'HistoricoConsumo')]"))
+            )
+            historico.click()
 
-                url_pdf = f"/static/faturas/{nome_arquivo}"
-                print(f"✅ PDF disponível em: {url_pdf}")
-                return True, url_pdf
+            print("🔍 Procurando fatura...")
+            linhas = WebDriverWait(driver, 30).until(
+                EC.presence_of_all_elements_located((By.CSS_SELECTOR, "tr"))
+            )
 
-        return False, "❌ Fatura do mês não encontrada."
+            for linha in linhas:
+                if mes_referencia in linha.text:
+                    driver.execute_script("arguments[0].scrollIntoView();", linha)
+                    time.sleep(0.8)
+                    driver.execute_script("arguments[0].click();", linha)
+                    time.sleep(1.6)
+
+                    link = linha.find_element(By.XPATH, ".//a[contains(@href, 'SegundaVia')]")
+                    driver.execute_script("arguments[0].click();", link)
+
+                    print("⏬ Aguardando download do PDF...")
+                    time.sleep(10)
+
+                    cpf_limpo = ''.join(filter(str.isdigit, cpf_cnpj))
+                    subpasta_cpf = Path(pasta_download) / cpf_limpo
+                    subpasta_cpf.mkdir(parents=True, exist_ok=True)
+
+                    arquivos_pdf = list(Path(pasta_download).glob("*.pdf"))
+                    if not arquivos_pdf:
+                        return False, "❌ Nenhum PDF encontrado após clique no link da fatura."
+
+                    ultimo_pdf = max(arquivos_pdf, key=lambda f: f.stat().st_mtime)
+                    nome_arquivo = f"fatura_{cpf_limpo}_{codigo_unidade}_{mes_referencia.replace('/', '_')}.pdf"
+                    destino = subpasta_cpf / nome_arquivo
+                    if destino.exists():
+                        destino.unlink()
+                    ultimo_pdf.rename(destino)
+
+                    pasta_publica = Path("static/faturas")
+                    pasta_publica.mkdir(parents=True, exist_ok=True)
+                    publico = pasta_publica / nome_arquivo
+                    shutil.copy2(destino, publico)
+
+                    url_pdf = f"/static/faturas/{nome_arquivo}"
+                    print(f"✅ PDF disponível em: {url_pdf}")
+                    return True, url_pdf
+
+            return False, "❌ Fatura do mês não encontrada."
+
+        # saiu do loop sem sucesso
+        return False, "❌ Bloqueio de acesso persistente. Defina PROXY_URL (proxy residencial) e tente novamente."
 
     except Exception as e:
         print("❌ Erro:", e)
@@ -4596,56 +4823,61 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade, mes_referencia, pa
                 driver.quit()
             except Exception as e:
                 print("[WARNING] Erro ao fechar o driver:", e)
-
         try:
             shutil.rmtree(user_data_dir, ignore_errors=True)
         except Exception as e:
             print("[WARNING] Erro ao remover user_data_dir:", e)
-        
-@app.route('/baixar_fatura', methods=['GET', 'POST'])
+
+
+# -------------------------------
+# ROTA /baixar_fatura (GET/POST)
+# -------------------------------
+@app.route("/baixar_fatura", methods=["GET", "POST"])
 def baixar_fatura():
-    if request.method == 'POST':
-        # ⚠️ Verifica se já está em execução
+    if request.method == "POST":
+        # evita concorrência simultânea do Selenium
         if not lock_selenium.acquire(blocking=False):
             flash("⚠️ Já existe uma operação de download em andamento. Tente novamente em alguns segundos.")
-            return redirect(url_for('baixar_fatura'))
+            return redirect(url_for("baixar_fatura"))
 
         try:
-            cpf = request.form['cpf']
-            senha = request.form['senha']
-            codigo = request.form['codigo_unidade']
-            mes = request.form['mes_referencia']
+            cpf   = request.form["cpf"].strip()
+            senha = request.form["senha"].strip()
+            codigo = request.form["codigo_unidade"].strip()
+            mes    = request.form["mes_referencia"].strip()
 
-            # 🔐 Chave da API 2Captcha
-            captcha_key = "a8a517df68cc0cf9cf37d8e976d8be33"
+            # chave do 2Captcha (use variável de ambiente em produção)
+            captcha_key = (os.getenv("CAPTCHA_KEY") or "a8a517df68cc0cf9cf37d8e976d8be33").strip()
 
-            # 📁 Pasta base para salvar as faturas
-            pasta_download = Path('data/boletos').resolve()
+            # pasta base para salvar as faturas
+            pasta_download = Path("data/boletos").resolve()
             pasta_download.mkdir(parents=True, exist_ok=True)
 
-            # ⬇️ Executa a função de download
             sucesso, retorno = baixar_fatura_neoenergia(
                 cpf_cnpj=cpf,
                 senha=senha,
                 codigo_unidade=codigo,
                 mes_referencia=mes,
                 pasta_download=str(pasta_download),
-                api_2captcha=captcha_key
+                api_2captcha=captcha_key,
             )
 
             if sucesso:
-                link = request.host_url.rstrip('/') + retorno
-                flash(Markup(f"✅ Fatura baixada com sucesso. <a href='{link}' target='_blank'>Clique aqui para abrir o PDF</a>"))
+                link = request.host_url.rstrip("/") + retorno
+                flash(Markup(
+                    f"✅ Fatura baixada com sucesso. "
+                    f"<a href='{link}' target='_blank' rel='noopener'>Clique aqui para abrir o PDF</a>"
+                ))
             else:
                 flash(retorno)
 
         finally:
-            # ✅ Libera o lock mesmo em caso de erro
             lock_selenium.release()
 
-        return redirect(url_for('baixar_fatura'))
+        return redirect(url_for("baixar_fatura"))
 
-    return render_template('form_baixar_fatura.html')
+    # GET
+    return render_template("form_baixar_fatura.html")
 
 @app.route('/cadastrar_credor', methods=['GET', 'POST'])
 @login_required
