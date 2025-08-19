@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
 ENV DEBIAN_FRONTEND=noninteractive
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -12,11 +12,13 @@ RUN set -eux; \
     fonts-liberation \
     libayatana-appindicator3-1 \
     libasound2 libatk-bridge2.0-0 libatk1.0-0 libcups2 libdbus-1-3 \
-    libgdk-pixbuf2.0-0 libnspr4 libnss3 libx11-xcb1 libxcomposite1 \
+    libgdk-pixbuf-2.0-0 libnspr4 libnss3 libx11-xcb1 libxcomposite1 \
     libxdamage1 libxrandr2 xdg-utils libu2f-udev libvulkan1 \
     libxkbcommon0 libxshmfence1 libdrm2 libgbm1 libgtk-3-0 \
-    libpango-1.0-0 libpangocairo-1.0-0 libcairo2; \
-  # MySQL/MariaDB headers (sem "||")
+    libpango-1.0-0 libpangocairo-1.0-0 libcairo2 \
+    # opcionais úteis p/ Chrome headless
+    libxss1 lsb-release; \
+  # MySQL/MariaDB headers
   if apt-cache show default-libmysqlclient-dev >/dev/null 2>&1; then \
     apt-get install -y --no-install-recommends default-libmysqlclient-dev; \
   else \
@@ -37,8 +39,7 @@ RUN set -eux; \
   apt-get clean; \
   rm -rf /var/lib/apt/lists/*
 
-# Chromedriver compatível com o major do Chrome instalado
-# (tenta os dois formatos de arquivo usados pelo Google: _linux64.zip e -linux64.zip)
+# ChromeDriver compatível com a versão major do Chrome
 RUN set -eux; \
   CHROME_VERSION="$(google-chrome --version | awk '{print $3}')" ; \
   CHROME_MAJOR="${CHROME_VERSION%%.*}" ; \
@@ -48,7 +49,6 @@ RUN set -eux; \
   if curl -fsI "$URL1" >/dev/null; then URL="$URL1"; else URL="$URL2"; fi; \
   wget -q -O /tmp/chromedriver.zip "$URL"; \
   unzip /tmp/chromedriver.zip -d /usr/local/bin/; \
-  # o zip geralmente contém 'chromedriver' ou 'chromedriver-linux64/chromedriver'
   if [ -f /usr/local/bin/chromedriver ]; then \
     mv /usr/local/bin/chromedriver /usr/bin/chromedriver; \
   else \
@@ -63,6 +63,9 @@ ENV PATH="${PATH}:/usr/bin"
 WORKDIR /app
 COPY . /app
 
-RUN pip install --upgrade pip && pip install -r requirements.txt
+# Cache de pacotes pip para builds mais rápidos
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip && \
+    pip install -r requirements.txt
 
 CMD ["python", "app.py"]
