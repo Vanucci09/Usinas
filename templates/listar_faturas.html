@@ -65,57 +65,49 @@
     {% if mes and ano %}
         <div class="alert alert-warning d-flex align-items-center justify-content-between">
             <div>
-            <strong>Clientes ativos sem fatura</strong>
-            <span class="text-muted">({{ "%02d"|format(mes) }}/{{ ano }})</span>
+                <strong>Clientes ativos sem fatura</strong>
+                <span class="text-muted">({{ "%02d"|format(mes) }}/{{ ano }})</span>
             </div>
 
             <div class="d-flex align-items-center gap-2">
-            <span class="badge bg-warning text-dark fs-6">{{ qtd_sem_fatura or 0 }}</span>
+                <span class="badge bg-warning text-dark fs-6">{{ qtd_sem_fatura or 0 }}</span>
 
-            <button class="btn btn-sm btn-outline-secondary"
-                    type="button"
-                    data-bs-toggle="collapse"
-                    data-bs-target="#listaSemFatura"
-                    aria-expanded="false"
-                    aria-controls="listaSemFatura">
-                Ver lista
-            </button>
+                <button class="btn btn-sm btn-outline-secondary"
+                        type="button"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#listaSemFatura"
+                        aria-expanded="false"
+                        aria-controls="listaSemFatura">
+                    Ver lista
+                </button>
             </div>
         </div>
 
         <div class="collapse mb-3" id="listaSemFatura">
             <ul class="list-group">
-            {% if clientes_sem_fatura and clientes_sem_fatura|length > 0 %}
-                {% for c in clientes_sem_fatura %}
-                <li class="list-group-item d-flex justify-content-between align-items-center">
-                    <div>
-                    {{ c.nome }}
-                    <small class="text-muted">– {{ c.usina.nome }}</small>
-                    </div>
-                    <div class="d-flex gap-2">
-                    <!-- Atalho opcional para criar fatura já com mês/ano -->
-                    <a href="{{ url_for('faturamento', cliente_id=c.id, mes=mes, ano=ano) }}"
-                        class="btn btn-sm btn-primary">
-                        Criar fatura
-                    </a>
-                    <!-- Atalho para o cliente -->
-                    <a href="{{ url_for('editar_cliente', id=c.id) }}"
-                        class="btn btn-sm btn-outline-secondary">
-                        Cliente
-                    </a>
-                    </div>
-                </li>
-                {% endfor %}
-            {% else %}
-                <li class="list-group-item">Tudo certo ✅ — todos os clientes ativos têm fatura nesta competência.</li>
-            {% endif %}
+                {% if clientes_sem_fatura and clientes_sem_fatura|length > 0 %}
+                    {% for c in clientes_sem_fatura %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                {{ c.nome }}
+                                <small class="text-muted">– {{ c.usina.nome }}</small>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <a href="{{ url_for('faturamento', cliente_id=c.id, mes=mes, ano=ano) }}" class="btn btn-sm btn-primary">Criar fatura</a>
+                                <a href="{{ url_for('editar_cliente', id=c.id) }}" class="btn btn-sm btn-outline-secondary">Cliente</a>
+                            </div>
+                        </li>
+                    {% endfor %}
+                {% else %}
+                    <li class="list-group-item">Tudo certo ✅ — todos os clientes ativos têm fatura nesta competência.</li>
+                {% endif %}
             </ul>
         </div>
-        {% else %}
+    {% else %}
         <div class="alert alert-info">
             Selecione <strong>Mês</strong> e <strong>Ano</strong> para ver quantos clientes ativos estão sem fatura.
         </div>
-        {% endif %}
+    {% endif %}
 
     <!-- Tabela -->
     <div class="table-responsive">
@@ -130,11 +122,15 @@
                     <th class="text-center">Ações</th>
                 </tr>
             </thead>
-            <tbody>
-            {% for fatura in faturas %}
-                <tr>
-                    {% set rateio = fatura.cliente.rateios[0] if fatura.cliente.rateios else None %}
 
+            <tbody>
+            {% set ns = namespace(total=0) %}
+            {% for fatura in faturas %}
+                {% set rateio = fatura.cliente.rateios[0] if fatura.cliente.rateios else None %}
+                {% set valor_boleto = (fatura.consumo_usina * rateio.tarifa_kwh) if rateio else 0 %}
+                {% set ns.total = ns.total + valor_boleto %}
+
+                <tr>
                     <td>
                         {% if rateio %}
                             {{ rateio.codigo_rateio }}
@@ -148,11 +144,11 @@
                         <div class="text-muted small">{{ fatura.cliente.usina.nome }}</div>
                     </td>
 
-                    <td>{{ fatura.mes_referencia }}/{{ fatura.ano_referencia }}</td>
+                    <td>{{ "%02d"|format(fatura.mes_referencia) }}/{{ fatura.ano_referencia }}</td>
 
                     <td style="white-space: nowrap;">
                         {% if rateio %}
-                            {{ (fatura.consumo_usina * rateio.tarifa_kwh)|formato_brasileiro }}
+                            {{ valor_boleto | formato_brasileiro }}
                         {% else %}
                             R$ 0,00
                         {% endif %}
@@ -172,7 +168,6 @@
                                 <a href="{{ url_for('editar_fatura', id=fatura.id) }}" class="btn btn-sm btn-outline-warning" title="Editar">
                                     <i class="bi bi-pencil-fill"></i>
                                 </a>
-
                                 <form method="POST" action="{{ url_for('excluir_fatura', id=fatura.id) }}" onsubmit="return confirm('Confirmar exclusão?');">
                                     <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir">
                                         <i class="bi bi-trash-fill"></i>
@@ -182,7 +177,6 @@
                                 <button class="btn btn-sm btn-outline-warning" disabled title="Editar desabilitado (fatura com boleto)">
                                     <i class="bi bi-pencil-fill"></i>
                                 </button>
-
                                 <button class="btn btn-sm btn-outline-danger" disabled title="Excluir desabilitado (fatura com boleto)">
                                     <i class="bi bi-trash-fill"></i>
                                 </button>
@@ -223,6 +217,14 @@
                 </tr>
             {% endfor %}
             </tbody>
+
+            <tfoot>
+                <tr>
+                    <th colspan="3" class="text-end">Total:</th>
+                    <th>{{ ns.total | formato_brasileiro }}</th>
+                    <th colspan="2"></th>
+                </tr>
+            </tfoot>
         </table>
     </div>
 
@@ -234,20 +236,11 @@
 <!-- Estilo para coluna Ações -->
 <style>
     .acoes-btns a,
-    .acoes-btns form {
-        flex: 0 0 auto;
-    }
-
+    .acoes-btns form { flex: 0 0 auto; }
     .acoes-btns .btn {
-        width: 34px;
-        height: 34px;
-        padding: 0;
-        text-align: center;
+        width: 34px; height: 34px; padding: 0; text-align: center;
     }
-
-    .acoes-btns i {
-        font-size: 1rem;
-    }
+    .acoes-btns i { font-size: 1rem; }
 </style>
 
 <!-- DataTables -->
@@ -255,7 +248,7 @@
 <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 <script>
-$(document).ready(function() {
+$(function() {
     $('#faturas-table').DataTable({
         language: { url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json' },
         pageLength: 25
@@ -264,8 +257,6 @@ $(document).ready(function() {
 </script>
 
 {% if email_enviado %}
-<script>
-    alert("E-mail enviado com sucesso!");
-</script>
+<script>alert("E-mail enviado com sucesso!");</script>
 {% endif %}
 {% endblock %}
