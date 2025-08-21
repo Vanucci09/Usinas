@@ -15,9 +15,16 @@
         <label class="form-label">Importar PDF da Fatura</label>
         <input type="file" id="arquivo_pdf" class="form-control" accept=".pdf">
         <button type="button" class="btn btn-secondary mt-2" onclick="preencherAutomatico()">Preencher Automaticamente</button>
+
         <div id="preview_pdf" class="mt-4" style="display: none;">
             <label class="form-label">Pré-visualização do PDF</label>
             <iframe id="iframe_pdf" class="w-100 border rounded" height="500px"></iframe>
+        </div>
+
+        <!-- feedback da detecção -->
+        <div id="detector_codigo" class="alert alert-secondary mt-3 d-none">
+            <strong>Código detectado:</strong> <span id="codigo_detectado"></span>
+            <span id="cliente_detectado" class="ms-3"></span>
         </div>
     </div>
 
@@ -91,20 +98,24 @@
     <a href="{{ url_for('index') }}" class="btn btn-secondary"><i class="bi bi-house-door-fill"></i> Início</a>
     <a href="{{ url_for('listar_faturas') }}" class="btn btn-primary"><i class="bi bi-file-text"></i> Ver Faturas</a>
 </div>
+{% endblock %}
 
-<!-- Scripts -->
+{% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/inputmask@5.0.8/dist/inputmask.min.js"></script>
 <script>
 document.addEventListener("DOMContentLoaded", function () {
+    // máscaras
     Inputmask({ alias: "decimal", digits: 7, radixPoint: ",", groupSeparator: ".", autoUnmask: true }).mask('.tarifa-mask');
     Inputmask({ alias: "decimal", digits: 2, radixPoint: ",", groupSeparator: ".", autoUnmask: true }).mask('.decimal-mask');
     Inputmask({ alias: "currency", prefix: "R$ ", groupSeparator: ".", radixPoint: ",", digits: 2, autoUnmask: true }).mask('.money-mask');
     Inputmask({ alias: "percentage", suffix: " %", digits: 2, radixPoint: ",", autoUnmask: true }).mask('.percent-mask');
 
+    // troca de usina -> carrega clientes da usina
     document.getElementById('usina_id').addEventListener('change', function () {
         const usinaId = this.value;
         const clienteSelect = document.getElementById('cliente_id');
+
         clienteSelect.innerHTML = '<option>Carregando...</option>';
         clienteSelect.disabled = true;
 
@@ -126,7 +137,71 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 });
 
-function preencherAutomatico() {
+// ---- helpers ----
+function preencherCampo(nomeCampo, valor) {
+    const campo = document.querySelector(`[name="${nomeCampo}"]`);
+    if (campo && valor !== undefined && valor !== null && valor !== '') {
+        campo.value = valor.toString().replace('.', ',');
+    }
+}
+function formatarDataBR2ISO(dataStr) {
+    const partes = dataStr.split('/');
+    return `${partes[2]}-${partes[1]}-${partes[0]}`;
+}
+async function preencherUsinaEClientePeloCodigo(codigo) {
+    try {
+        if (!codigo) return;
+
+        // mostra código detectado
+        const box = document.getElementById('detector_codigo');
+        document.getElementById('codigo_detectado').textContent = codigo;
+        box.classList.remove('d-none');
+
+        // busca cliente/usina por código
+        const resp = await fetch(`/cliente_por_codigo/${encodeURIComponent(codigo)}`);
+        if (!resp.ok) {
+            document.getElementById('cliente_detectado').textContent = '• não encontrado no sistema';
+            return;
+        }
+        const info = await resp.json();
+        if (!info.encontrado) {
+            document.getElementById('cliente_detectado').textContent = '• não encontrado no sistema';
+            return;
+        }
+
+        // Preenche usina
+        const usinaSel = document.getElementById('usina_id');
+        const clienteSel = document.getElementById('cliente_id');
+        usinaSel.value = info.usina.id;
+
+        // Carrega clientes dessa usina e seleciona o correspondente
+        clienteSel.innerHTML = '<option>Carregando...</option>';
+        clienteSel.disabled = true;
+
+        const r = await fetch(`/clientes_por_usina/${info.usina.id}`);
+        const lista = await r.json();
+
+        clienteSel.innerHTML = '<option value="" disabled selected>Selecione um cliente</option>';
+        lista.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = `(${c.codigo_rateio}) ${c.nome}`;
+            clienteSel.appendChild(opt);
+        });
+        clienteSel.value = info.cliente.id;
+        clienteSel.disabled = false;
+
+        // feedback visual
+        document.getElementById('cliente_detectado').innerHTML =
+            `• <strong>Usina</strong>: ${info.usina.nome} &nbsp; <strong>Cliente</strong>: ${info.cliente.nome}`;
+
+    } catch (e) {
+        console.error('Erro ao preencher usina/cliente pelo código:', e);
+    }
+}
+
+// ---- fluxo principal ----
+async function preencherAutomatico() {
     const input = document.getElementById('arquivo_pdf');
     const arquivo = input.files[0];
     if (!arquivo) {
@@ -137,58 +212,52 @@ function preencherAutomatico() {
     const formData = new FormData();
     formData.append('arquivo', arquivo);
 
-    fetch('/salvar_pdf_temp', {
-        method: 'POST',
-        body: formData
-    }).then(() => {
-        document.getElementById('preview_pdf').style.display = 'block';
-        document.getElementById('iframe_pdf').src = '/visualizar_pdf_temp/temp_preview.pdf';
-    });
+    // salva e mostra preview
+    fetch('/salvar_pdf_temp', { method: 'POST', body: formData })
+        .then(() => {
+            document.getElementById('preview_pdf').style.display = 'block';
+            document.getElementById('iframe_pdf').src = '/visualizar_pdf_temp/temp_preview.pdf';
+        });
 
-    fetch('/extrair_dados_fatura', {
-        method: 'POST',
-        body: formData
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.erro) {
-            alert(data.erro);
-            return;
-        }
+    try {
+        const res = await fetch('/extrair_dados_fatura', { method: 'POST', body: formData });
+        const data = await res.json();
 
-        function preencher(nomeCampo, valor) {
-            const campo = document.querySelector(`[name="${nomeCampo}"]`);
-            if (campo && valor) campo.value = valor.replace('.', ',');
-        }
+        if (data.erro) { alert(data.erro); return; }
 
-        function formatarData(dataStr) {
-            const partes = dataStr.split('/');
-            return `${partes[2]}-${partes[1]}-${partes[0]}`;
-        }
-
-        if (data.inicio_leitura) document.querySelector('[name="inicio_leitura"]').value = formatarData(data.inicio_leitura);
-        if (data.fim_leitura) document.querySelector('[name="fim_leitura"]').value = formatarData(data.fim_leitura);
+        // datas e competência
+        if (data.inicio_leitura) document.querySelector('[name="inicio_leitura"]').value = formatarDataBR2ISO(data.inicio_leitura);
+        if (data.fim_leitura)    document.querySelector('[name="fim_leitura"]').value    = formatarDataBR2ISO(data.fim_leitura);
         if (data.mes) document.querySelector('[name="mes"]').value = data.mes;
         if (data.ano) document.querySelector('[name="ano"]').value = data.ano;
 
-        preencher("tarifa_neoenergia", data.tarifa);
-        preencher("icms", data.icms);
-        preencher("consumo_total", data.consumo_total);
-        preencher("consumo_neoenergia", data.consumo_neoenergia);
-        preencher("consumo_usina", data.consumo_usina);
-        preencher("saldo_unidade", data.saldo_unidade);
-        preencher("injetado", data.injetado);
-        preencher("valor_conta_neoenergia", data.valor_conta);
+        // campos numéricos
+        preencherCampo("tarifa_neoenergia", data.tarifa);
+        preencherCampo("icms", data.icms);
+        preencherCampo("consumo_total", data.consumo_total);
+        preencherCampo("consumo_neoenergia", data.consumo_neoenergia);
+        preencherCampo("consumo_usina", data.consumo_usina);
+        preencherCampo("saldo_unidade", data.saldo_unidade);
+        preencherCampo("injetado", data.injetado);
+        preencherCampo("valor_conta_neoenergia", data.valor_conta);
 
         // Energia Injetada Real
         if (data.energia_injetada_real !== undefined && data.energia_injetada_real !== null) {
-            const valor = data.energia_injetada_real.toString().replace('.', ',');
             document.getElementById('energia_injetada_real').value = data.energia_injetada_real;
-            document.getElementById('valor_energia_injetada_real').textContent = valor;
+            document.getElementById('valor_energia_injetada_real').textContent =
+                data.energia_injetada_real.toString().replace('.', ',');
             document.getElementById('exibicao_energia_injetada_real').style.display = 'block';
         }
-    })
-    .catch(() => alert('Erro ao processar o PDF.'));
+
+        // 👉 NOVO: se extraiu o código do cliente/unidade, faz o lookup e preenche selects
+        if (data.codigo_cliente) {
+            await preencherUsinaEClientePeloCodigo(data.codigo_cliente);
+        }
+
+    } catch (e) {
+        console.error(e);
+        alert('Erro ao processar o PDF.');
+    }
 }
 </script>
 {% endblock %}

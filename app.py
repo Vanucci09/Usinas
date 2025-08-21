@@ -36,6 +36,7 @@ from threading import Lock
 import undetected_chromedriver as uc
 from sqlalchemy.exc import IntegrityError
 from dateutil.relativedelta import relativedelta
+import re, unicodedata
 
 
 app = Flask(__name__)
@@ -1458,11 +1459,40 @@ def excluir_fatura(id):
 
     return redirect(url_for('listar_faturas'))
 
+@app.route('/cliente_por_codigo/<codigo>', methods=['GET'])
+@login_required
+def cliente_por_codigo(codigo):
+    
+    cod_limpo = re.sub(r'\D', '', codigo or '')
+
+    if not cod_limpo:
+        return jsonify({'encontrado': False, 'erro': 'codigo vazio'}), 400
+
+    # compara Cliente.codigo_unidade ignorando pontos e hífen
+    # Postgres: regexp_replace(string, pattern, replacement, flags)
+    cliente = (db.session.query(Cliente)
+               .filter(func.regexp_replace(Cliente.codigo_unidade, '[^0-9]', '', 'g') == cod_limpo)
+               .first())
+
+    if not cliente:
+        return jsonify({'encontrado': False}), 404
+
+    return jsonify({
+        'encontrado': True,
+        'cliente': {
+            'id': cliente.id,
+            'nome': cliente.nome,
+            'codigo_unidade': cliente.codigo_unidade
+        },
+        'usina': {
+            'id': cliente.usina.id,
+            'nome': cliente.usina.nome
+        }
+    })
+
 @app.route('/extrair_dados_fatura', methods=['POST'])
 @login_required
 def extrair_dados_fatura():
-    import re
-
     arquivo = request.files.get('arquivo')
     if not arquivo or not arquivo.filename.endswith('.pdf'):
         return jsonify({'erro': 'Arquivo inválido.'}), 400
@@ -1497,7 +1527,6 @@ def extrair_dados_fatura():
         match = re.search(r'KWh\s+\d+\s+([\d.,]+)', texto)
         return match.group(1).replace('.', '').replace(',', '.') if match else None
     
-    print(linhas)
     def buscar_aliquota_icms():
         for i, linha in enumerate(linhas):
             if "ICMS" in linha.upper():
@@ -1557,6 +1586,55 @@ def extrair_dados_fatura():
                         valor_float = float(valor_str.replace('.', '').replace(',', '.'))
                         return valor_float
         return None
+    
+    def buscar_codigo_cliente():
+
+        # Normaliza acentos p/ achar o rótulo mesmo se vier "CÓDIGO" ou "CODIGO"
+        def norm(s: str) -> str:
+            s = unicodedata.normalize('NFKD', s)
+            s = ''.join(ch for ch in s if not unicodedata.category(ch).startswith('M'))
+            return s.upper()
+
+        # Padrões estritos (NÃO permitem espaço/quebra de linha entre os grupos)
+        patt_dotted = re.compile(r'\b\d{1,3}\.\d{3}(?:\.\d{3})?[-–]\d\b')
+        patt_plain  = re.compile(r'\b\d{6,7}[-–]\d\b')
+
+        def pick_one(text: str):
+            # tenta pontuado primeiro, depois “seco”
+            m = patt_dotted.search(text)
+            if m:
+                return m.group(0)
+            m = patt_plain.search(text)
+            if m:
+                return m.group(0)
+            return None
+
+        # 1) Prioriza achar perto do rótulo (mesma linha e próximas 4)
+        for i, linha in enumerate(linhas):
+            up = norm(linha)
+            if ("CODIGO" in up and "CLIENTE" in up):
+                for k in range(0, 5):
+                    if i + k < len(linhas):
+                        trecho = linhas[i + k]
+                        code = pick_one(trecho)
+                        if code:
+                            print(f"[DEBUG] codigo_cliente (perto do rotulo): {code}")
+                            return code
+                # junta algumas linhas (sem quebras) caso quebre no PDF
+                joined = " ".join(linhas[i:i+5])
+                code = pick_one(joined)
+                if code:
+                    print(f"[DEBUG] codigo_cliente (linhas concatenadas): {code}")
+                    return code
+
+        # 2) Fallback no texto inteiro, mas removendo quebras de linha antes de procurar
+        code = pick_one(texto.replace("\n", " "))
+        if code:
+            print(f"[DEBUG] codigo_cliente (fallback): {code}")
+            return code
+
+        print("[DEBUG] codigo_cliente não encontrado")
+        return None
 
     # Buscar dados
     inicio_leitura, fim_leitura = buscar_datas()
@@ -1574,8 +1652,10 @@ def extrair_dados_fatura():
         'injetado': encontrar_valor_com_rotulo("INJETADO") or "0",
         'consumo_usina': encontrar_valor_com_rotulo("COMPENSADO") or "0",
         'saldo_unidade': encontrar_valor_com_rotulo("SALDO ATUAL") or "0",
-        'energia_injetada_real': buscar_energia_injetada_real()
+        'energia_injetada_real': buscar_energia_injetada_real(),
+        'codigo_cliente': buscar_codigo_cliente()
     }
+    print(f"[DEBUG] codigo_cliente extraído: {dados['codigo_cliente']}")
 
     return jsonify(dados)
 
