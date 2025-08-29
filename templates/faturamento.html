@@ -227,7 +227,7 @@ async function preencherAutomatico() {
 
         // datas e competência
         if (data.inicio_leitura) document.querySelector('[name="inicio_leitura"]').value = formatarDataBR2ISO(data.inicio_leitura);
-        if (data.fim_leitura)    document.querySelector('[name="fim_leitura"]').value    = formatarDataBR2ISO(data.fim_leitura);
+        if (data.fim_leitura) document.querySelector('[name="fim_leitura"]').value = formatarDataBR2ISO(data.fim_leitura);
         if (data.mes) document.querySelector('[name="mes"]').value = data.mes;
         if (data.ano) document.querySelector('[name="ano"]').value = data.ano;
 
@@ -249,7 +249,7 @@ async function preencherAutomatico() {
             document.getElementById('exibicao_energia_injetada_real').style.display = 'block';
         }
 
-        // 👉 NOVO: se extraiu o código do cliente/unidade, faz o lookup e preenche selects
+        // Se extraiu o código do cliente/unidade, faz o lookup e preenche selects
         if (data.codigo_cliente) {
             await preencherUsinaEClientePeloCodigo(data.codigo_cliente);
         }

@@ -829,18 +829,56 @@ def listar_clientes():
 @app.route('/cadastrar_rateio', methods=['GET', 'POST'])
 @login_required
 def cadastrar_rateio():
-    usinas = Usina.query.all()
+    # -----------------------------
+    # GET Ajax: retorna clientes sem rateio na usina
+    # /cadastrar_rateio?ajax=1&usina_id=123
+    # -----------------------------
+    if request.method == 'GET' and request.args.get('ajax') == '1':
+        usina_id = request.args.get('usina_id', type=int)
+        if not usina_id:
+            return jsonify([])
 
+        # Clientes da usina SEM rateio nessa mesma usina
+        clientes = (
+            db.session.query(Cliente)
+            .outerjoin(
+                Rateio,
+                and_(Rateio.usina_id == usina_id,
+                     Rateio.cliente_id == Cliente.id)
+            )
+            .filter(Cliente.usina_id == usina_id)
+            .filter(Rateio.id.is_(None))  # só quem não tem rateio na usina
+            .order_by(Cliente.nome)
+            .all()
+        )
+
+        return jsonify([{"id": c.id, "nome": c.nome} for c in clientes])
+
+    # -----------------------------
+    # POST: cadastra rateio (com proteção contra duplicidade)
+    # -----------------------------
     if request.method == 'POST':
         usina_id = int(request.form['usina_id'])
         cliente_id = int(request.form['cliente_id'])
         percentual = float(request.form['percentual'])
         tarifa_kwh = float(request.form['tarifa_kwh'])
 
-        ultimo_codigo = db.session.query(
-            db.func.max(Rateio.codigo_rateio)
-        ).filter_by(usina_id=usina_id).scalar()
+        # (opcional mas recomendado) impede duplicidade por segurança
+        existe = (
+            db.session.query(Rateio.id)
+            .filter(Rateio.usina_id == usina_id,
+                    Rateio.cliente_id == cliente_id)
+            .first()
+        )
+        if existe:
+            flash('Este cliente já possui rateio vinculado nesta usina.', 'warning')
+            return redirect(url_for('cadastrar_rateio'))
 
+        ultimo_codigo = (
+            db.session.query(db.func.max(Rateio.codigo_rateio))
+            .filter(Rateio.usina_id == usina_id)
+            .scalar()
+        )
         proximo_codigo = 1 if ultimo_codigo is None else ultimo_codigo + 1
 
         rateio = Rateio(
@@ -853,8 +891,13 @@ def cadastrar_rateio():
 
         db.session.add(rateio)
         db.session.commit()
+        flash('Rateio cadastrado com sucesso!', 'success')
         return redirect(url_for('cadastrar_rateio'))
 
+    # -----------------------------
+    # GET normal: renderiza página
+    # -----------------------------
+    usinas = Usina.query.order_by(Usina.nome).all()
     return render_template('cadastrar_rateio.html', usinas=usinas)
 
 @app.route('/listar_rateios')
@@ -1469,7 +1512,6 @@ def cliente_por_codigo(codigo):
         return jsonify({'encontrado': False, 'erro': 'codigo vazio'}), 400
 
     # compara Cliente.codigo_unidade ignorando pontos e hífen
-    # Postgres: regexp_replace(string, pattern, replacement, flags)
     cliente = (db.session.query(Cliente)
                .filter(func.regexp_replace(Cliente.codigo_unidade, '[^0-9]', '', 'g') == cod_limpo)
                .first())
@@ -5605,9 +5647,6 @@ def relatorio_prestacao_direta():
 @app.route('/cadastrar_injecao', methods=['GET', 'POST'])
 @login_required
 def cadastrar_injecao():
-    if not current_user.pode_acessar_financeiro:
-        return "Acesso negado", 403
-
     usinas = Usina.query.order_by(Usina.nome).all()
     ano_atual = datetime.now().year
 

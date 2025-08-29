@@ -1,152 +1,56 @@
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-import time
-import requests
-import os
+# deye_login_and_station_list.py
+import os, json, hashlib, requests
 
-# 🔐 Dados do cliente
-API_2CAPTCHA = "a8a517df68cc0cf9cf37d8e976d8be33"
-CPF_CNPJ = "25091452000157"
-SENHA = "cgr2020"
-CODIGO_UNIDADE = "03008200"
-MES_REFERENCIA = "07/2025"
+BASE_URL = "https://us1-developer.deyecloud.com"
+APP_ID   = "202507084069006"
+APP_SEC  = "c5e239738a63d1c614e6603f8246a66b"
 
-# Caminho para salvar o PDF
-PASTA_DOWNLOAD = r"\\192.168.65.1\oem"
+IDENT = os.getenv("DEYE_EMAIL_OR_USER", "monitoramento@cgrenergia.com.br")  # email/username/mobile
+PWD   = os.getenv("DEYE_PASSWORD_PLAIN", "Cgr@2020")  # senha da CONTA DeyeCloud (texto plano)
 
-# 🔗 Dados da página
-URL_LOGIN = "https://agenciavirtual.neoenergiabrasilia.com.br/Account/EfetuarLogin"
-SITEKEY = "6LdmOIAbAAAAANXdHAociZWz1gqR9Qvy3AN0rJy4"
+def sha256_lower(s): return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
-# 🔧 Opções do navegador
-options = Options()
-options.add_argument("--start-maximized")
-options.add_argument("--disable-blink-features=AutomationControlled")
-options.add_argument("--disable-gpu")
-options.add_argument("--disable-infobars")
-options.add_argument("--disable-dev-shm-usage")
-options.add_argument("--no-sandbox")
-options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
+def post(path, body, headers=None):
+    url = f"{BASE_URL}{path}"
+    h = {"Content-Type":"application/json"}
+    if headers: h.update(headers)
+    r = requests.post(url, json=body, headers=h, timeout=30)
+    print(f"POST {url} -> {r.status_code}")
+    print(r.text)
+    r.raise_for_status()
+    return r.json()
 
-prefs = {
-    "download.default_directory": PASTA_DOWNLOAD,
-    "plugins.always_open_pdf_externally": True,
-    "download.prompt_for_download": False,
-}
-options.add_experimental_option("prefs", prefs)
-options.add_experimental_option("excludeSwitches", ["enable-automation"])
-options.add_experimental_option('useAutomationExtension', False)
+def get_business_token():
+    # 1) token "personal"
+    body = {"appSecret": APP_SEC, "email": IDENT, "password": sha256_lower(PWD)}
+    res  = post(f"/v1.0/account/token?appId={APP_ID}", body)
+    personal = res.get("accessToken")
+    if not personal:
+        raise SystemExit("Falha ao obter token inicial (personal).")
 
-driver = webdriver.Chrome(options=options)
+    # 2) descobrir companyId (Business Member)
+    info = post("/v1.0/account/info", {}, headers={"Authorization": f"bearer {personal}"})
+    orgs = info.get("orgInfoList") or []
+    if not orgs:
+        # conta pessoal sem organização — alguns endpoints podem falhar
+        return personal
 
-# Desativa navigator.webdriver
-driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
-    "source": """
-    Object.defineProperty(navigator, 'webdriver', {
-        get: () => undefined
-    })
-    """
-})
+    company_id = str(orgs[0]["companyId"])
 
-try:
-    print("🌐 Acessando página de login...")
-    driver.get(URL_LOGIN)
-    time.sleep(5)
+    # 3) token "business" (inclui companyId)
+    body_biz = {"appSecret": APP_SEC, "email": IDENT, "password": sha256_lower(PWD), "companyId": company_id}
+    res_biz  = post(f"/v1.0/account/token?appId={APP_ID}", body_biz)
+    business = res_biz.get("accessToken")
+    if not business:
+        raise SystemExit("Falha ao obter token business.")
+    return business
 
-    print("✍️ Preenchendo CPF/CNPJ e senha...")
-    driver.find_element(By.CSS_SELECTOR, "input[placeholder='CPF/CNPJ']").send_keys(CPF_CNPJ)
-    driver.find_element(By.CSS_SELECTOR, "input[placeholder='Senha']").send_keys(SENHA)
+def station_list(token, page=1, size=10):
+    return post("/v1.0/station/list",
+                {"page": page, "size": size},
+                headers={"Authorization": f"bearer {token}", "Accept":"application/json"})
 
-    print("🎯 Enviando CAPTCHA para 2Captcha...")
-    resp = requests.get(f"http://2captcha.com/in.php?key={API_2CAPTCHA}&method=userrecaptcha&googlekey={SITEKEY}&pageurl={URL_LOGIN}")
-    if not resp.text.startswith("OK|"):
-        raise Exception(f"Erro ao enviar CAPTCHA: {resp.text}")
-    request_id = resp.text.split('|')[1]
-
-    print("⏳ Aguardando solução do CAPTCHA...")
-    token = ""
-    for _ in range(30):
-        time.sleep(5)
-        check = requests.get(f"http://2captcha.com/res.php?key={API_2CAPTCHA}&action=get&id={request_id}")
-        if check.text.startswith("OK|"):
-            token = check.text.split('|')[1]
-            break
-
-    if not token:
-        raise Exception("❌ Falha ao resolver CAPTCHA")
-
-    print("✅ CAPTCHA resolvido!")
-    driver.execute_script("document.getElementById('g-recaptcha-response').style.display = 'block';")
-    driver.execute_script(f"document.getElementById('g-recaptcha-response').innerHTML = '{token}';")
-    driver.execute_script("if (typeof recaptchaCallback === 'function') recaptchaCallback();")
-    time.sleep(3)
-
-    print("🚀 Clicando no botão Entrar...")
-    driver.find_element(By.CSS_SELECTOR, "button[type='submit']").click()
-
-    print("⏳ Aguardando redirecionamento...")
-    WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.CSS_SELECTOR, "a.btn")))
-
-    print(f"🔽 Procurando botão da unidade com código: {CODIGO_UNIDADE}")
-    botoes = driver.find_elements(By.CSS_SELECTOR, "a.btn")
-    for botao in botoes:
-        texto = botao.text.strip().replace("-", "").replace(".", "")
-        if CODIGO_UNIDADE in texto:
-            print(f"✅ Unidade encontrada: {botao.text.strip()}")
-            driver.execute_script("arguments[0].click();", botao)
-            break
-    else:
-        raise Exception("❌ Unidade consumidora não encontrada.")
-
-    print("🕵️ Aguardando botão 'Histórico de Consumo' aparecer...")
-    historico_btn = WebDriverWait(driver, 20).until(
-        EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, 'HistoricoConsumo')]"))
-    )
-    print("✅ Clicando em 'Histórico de Consumo'...")
-    historico_btn.click()
-
-    print(f"🔍 Procurando fatura do mês: {MES_REFERENCIA}...")
-    linhas_faturas = WebDriverWait(driver, 30).until(
-        EC.presence_of_all_elements_located((By.CSS_SELECTOR, "tr"))
-    )
-
-    for linha in linhas_faturas:
-        if MES_REFERENCIA in linha.text:
-            print(f"✅ Fatura encontrada: {linha.text.strip()}")
-
-            try:
-                WebDriverWait(driver, 20).until(
-                    EC.invisibility_of_element_located((By.CSS_SELECTOR, "div.loader"))
-                )
-            except:
-                print("⚠️ Loader ainda visível, continuando mesmo assim.")
-
-            driver.execute_script("arguments[0].scrollIntoView();", linha)
-            time.sleep(1)
-            driver.execute_script("arguments[0].click();", linha)
-            time.sleep(2)
-
-            link_element = linha.find_element(By.XPATH, ".//a[contains(@href, 'SegundaVia')]")
-            link = link_element.get_attribute("href")
-            print(f"📥 Acessando link da fatura: {link}")
-
-            driver.get(link)
-            time.sleep(5)
-
-            nome_arquivo = f"fatura_{MES_REFERENCIA.replace('/', '_')}.pdf"
-            print(f"✅ PDF deve estar salvo na pasta: {PASTA_DOWNLOAD}\\{nome_arquivo}")
-            break
-    else:
-        print("❌ Fatura do mês desejado não encontrada.")
-
-except Exception as e:
-    print("❌ Erro:", e)
-    driver.save_screenshot("erro_final.png")
-    with open("pagina_erro.html", "w", encoding="utf-8") as f:
-        f.write(driver.page_source)
-
-input("🟢 Pressione Enter para sair...")
-driver.quit()
+if __name__ == "__main__":
+    token = get_business_token()
+    est   = station_list(token, page=1, size=10)
+    print("\nstation/list:", json.dumps(est, indent=2, ensure_ascii=False))

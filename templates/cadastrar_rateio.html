@@ -55,12 +55,12 @@ function carregarClientes() {
     const clienteSelect = document.getElementById("cliente_id");
     clienteSelect.innerHTML = '<option value="">Carregando...</option>';
 
-    fetch(`/clientes_da_usina/${usinaId}`)
+    fetch(`/cadastrar_rateio?ajax=1&usina_id=${encodeURIComponent(usinaId)}`)
         .then(response => response.json())
         .then(data => {
             clienteSelect.innerHTML = "";
-            if (data.length === 0) {
-                clienteSelect.innerHTML = '<option value="">Nenhum cliente encontrado</option>';
+            if (!data || data.length === 0) {
+                clienteSelect.innerHTML = '<option value="">Nenhum cliente disponível</option>';
                 return;
             }
 
@@ -82,4 +82,5 @@ function carregarClientes() {
         });
 }
 </script>
+
 {% endblock %}
