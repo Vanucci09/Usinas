@@ -828,11 +828,7 @@ def listar_clientes():
 
 @app.route('/cadastrar_rateio', methods=['GET', 'POST'])
 @login_required
-def cadastrar_rateio():
-    # -----------------------------
-    # GET Ajax: retorna clientes sem rateio na usina
-    # /cadastrar_rateio?ajax=1&usina_id=123
-    # -----------------------------
+def cadastrar_rateio():    
     if request.method == 'GET' and request.args.get('ajax') == '1':
         usina_id = request.args.get('usina_id', type=int)
         if not usina_id:
@@ -854,16 +850,14 @@ def cadastrar_rateio():
 
         return jsonify([{"id": c.id, "nome": c.nome} for c in clientes])
 
-    # -----------------------------
-    # POST: cadastra rateio (com proteção contra duplicidade)
-    # -----------------------------
+    # POST: cadastra rateio com proteção contra duplicidade
     if request.method == 'POST':
         usina_id = int(request.form['usina_id'])
         cliente_id = int(request.form['cliente_id'])
         percentual = float(request.form['percentual'])
         tarifa_kwh = float(request.form['tarifa_kwh'])
 
-        # (opcional mas recomendado) impede duplicidade por segurança
+        # Impede duplicidade por segurança
         existe = (
             db.session.query(Rateio.id)
             .filter(Rateio.usina_id == usina_id,
@@ -894,9 +888,7 @@ def cadastrar_rateio():
         flash('Rateio cadastrado com sucesso!', 'success')
         return redirect(url_for('cadastrar_rateio'))
 
-    # -----------------------------
-    # GET normal: renderiza página
-    # -----------------------------
+    # GET normal: renderiza página    
     usinas = Usina.query.order_by(Usina.nome).all()
     return render_template('cadastrar_rateio.html', usinas=usinas)
 
@@ -1505,16 +1497,27 @@ def excluir_fatura(id):
 @app.route('/cliente_por_codigo/<codigo>', methods=['GET'])
 @login_required
 def cliente_por_codigo(codigo):
-    
-    cod_limpo = re.sub(r'\D', '', codigo or '')
+    # Normaliza a entrada para: somente [0-9A-Z], em maiúsculas
+    cod_alnum = re.sub(r'[^0-9A-Za-z]', '', codigo or '').upper()
 
-    if not cod_limpo:
+    if not cod_alnum:
         return jsonify({'encontrado': False, 'erro': 'codigo vazio'}), 400
 
-    # compara Cliente.codigo_unidade ignorando pontos e hífen
-    cliente = (db.session.query(Cliente)
-               .filter(func.regexp_replace(Cliente.codigo_unidade, '[^0-9]', '', 'g') == cod_limpo)
-               .first())
+    # Monta chaves candidatas:
+    # 1) exatamente como veio (normalizado)
+    # 2) se vier só números, tenta também com 'X' no final (ex.: 3062150 -> 3062150X)
+    chaves = {cod_alnum}
+    if cod_alnum.isdigit():
+        chaves.add(cod_alnum + 'X')
+
+    # Normaliza o lado do banco para [0-9A-Z] maiúsculo também
+    norm_db = func.upper(func.regexp_replace(Cliente.codigo_unidade, '[^0-9A-Za-z]', '', 'g'))
+
+    cliente = (
+        db.session.query(Cliente)
+        .filter(norm_db.in_(list(chaves)))
+        .first()
+    )
 
     if not cliente:
         return jsonify({'encontrado': False}), 404
@@ -1630,26 +1633,36 @@ def extrair_dados_fatura():
         return None
     
     def buscar_codigo_cliente():
-
         # Normaliza acentos p/ achar o rótulo mesmo se vier "CÓDIGO" ou "CODIGO"
         def norm(s: str) -> str:
             s = unicodedata.normalize('NFKD', s)
             s = ''.join(ch for ch in s if not unicodedata.category(ch).startswith('M'))
             return s.upper()
 
-        # Padrões estritos (NÃO permitem espaço/quebra de linha entre os grupos)
-        patt_dotted = re.compile(r'\b\d{1,3}\.\d{3}(?:\.\d{3})?[-–]\d\b')
-        patt_plain  = re.compile(r'\b\d{6,7}[-–]\d\b')
+        # Aceita DV numérico OU letra (ex.: X). Mantém padrão estrito (sem espaços no meio).
+        patt_dotted = re.compile(r'\b\d{1,3}(?:\.\d{3}){1,2}[-–][0-9A-Z]?\b', re.IGNORECASE)
+        patt_plain  = re.compile(r'\b\d{6,7}[-–][0-9A-Z]?\b',                  re.IGNORECASE)
 
         def pick_one(text: str):
             # tenta pontuado primeiro, depois “seco”
             m = patt_dotted.search(text)
             if m:
-                return m.group(0)
+                return m.group(0).upper()
             m = patt_plain.search(text)
             if m:
-                return m.group(0)
+                return m.group(0).upper()
             return None
+
+        def garantir_dv(code: str) -> str | None:
+            """
+            Se terminar em hífen (sem DV), acrescenta 'X'.
+            Retorna o código (possivelmente ajustado) ou None.
+            """
+            if not code:
+                return None
+            if code.endswith('-') or code.endswith('–'):
+                return code + 'X'
+            return code
 
         # 1) Prioriza achar perto do rótulo (mesma linha e próximas 4)
         for i, linha in enumerate(linhas):
@@ -1658,19 +1671,20 @@ def extrair_dados_fatura():
                 for k in range(0, 5):
                     if i + k < len(linhas):
                         trecho = linhas[i + k]
-                        code = pick_one(trecho)
+                        code = garantir_dv(pick_one(trecho))
                         if code:
                             print(f"[DEBUG] codigo_cliente (perto do rotulo): {code}")
                             return code
+
                 # junta algumas linhas (sem quebras) caso quebre no PDF
                 joined = " ".join(linhas[i:i+5])
-                code = pick_one(joined)
+                code = garantir_dv(pick_one(joined))
                 if code:
                     print(f"[DEBUG] codigo_cliente (linhas concatenadas): {code}")
                     return code
 
-        # 2) Fallback no texto inteiro, mas removendo quebras de linha antes de procurar
-        code = pick_one(texto.replace("\n", " "))
+        # 2) Fallback no texto inteiro, removendo quebras de linha
+        code = garantir_dv(pick_one(texto.replace("\n", " ")))
         if code:
             print(f"[DEBUG] codigo_cliente (fallback): {code}")
             return code
