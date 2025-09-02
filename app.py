@@ -3387,7 +3387,9 @@ def relatorio_cliente():
 
     cons_por_cliente = defaultdict(list)
     for rm in rows_media:
-        cons_por_cliente[rm.cliente_id].append(float(rm.consumo_mes or 0.0))
+        v = float(rm.consumo_mes or 0.0)
+        if v > 0:                       # <-- descarta meses com 0
+            cons_por_cliente[rm.cliente_id].append(v)
 
     media6_por_cliente = {
         cid: (sum(vals) / len(vals)) if vals else 0.0
