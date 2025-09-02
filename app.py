@@ -31,7 +31,7 @@ from pathlib import Path
 from markupsafe import Markup
 from shutil import copyfile
 from collections import defaultdict
-from sqlalchemy import extract
+from sqlalchemy import extract, tuple_
 from threading import Lock
 import undetected_chromedriver as uc
 from sqlalchemy.exc import IntegrityError
@@ -3351,7 +3351,49 @@ def relatorio_cliente():
     )
 
     base_rows = query.all()
+    
+    # ---------- Média de consumo (últimos 6 meses, incluindo o mês filtrado) ----------
+    # Gera a lista [(ano, mes)] para a janela de 6 meses
+    base_ref = date(ano, mes, 1)
+    janela_6m = []
+    for i in range(5, -1, -1):  # 5 meses atrás até o mês atual
+        dt = base_ref - relativedelta(months=i)
+        janela_6m.append((dt.year, dt.month))
 
+    # Soma mensal por cliente dentro da janela e depois média das somas
+    q_media = (
+        db.session.query(
+            FaturaMensal.cliente_id.label('cliente_id'),
+            FaturaMensal.ano_referencia.label('ano'),
+            FaturaMensal.mes_referencia.label('mes'),
+            func.sum(FaturaMensal.consumo_usina).label('consumo_mes')
+        )
+        .join(Cliente, Cliente.id == FaturaMensal.cliente_id)
+        .filter(tuple_(FaturaMensal.ano_referencia, FaturaMensal.mes_referencia).in_(janela_6m))
+    )
+
+    if usina_id:
+        q_media = q_media.filter(Cliente.usina_id == usina_id)
+    if cliente_id:
+        q_media = q_media.filter(FaturaMensal.cliente_id == cliente_id)
+
+    q_media = q_media.group_by(
+        FaturaMensal.cliente_id,
+        FaturaMensal.ano_referencia,
+        FaturaMensal.mes_referencia
+    )
+
+    rows_media = q_media.all()
+
+    cons_por_cliente = defaultdict(list)
+    for rm in rows_media:
+        cons_por_cliente[rm.cliente_id].append(float(rm.consumo_mes or 0.0))
+
+    media6_por_cliente = {
+        cid: (sum(vals) / len(vals)) if vals else 0.0
+        for cid, vals in cons_por_cliente.items()
+    }
+    
     # ---------- Montagem das linhas ----------
     linhas = []
     for r in base_rows:
@@ -3444,7 +3486,8 @@ def relatorio_cliente():
             "percentual_diferenca": percentual_dif,# None se contratado == 0
             "saldo_unidade": float(r.saldo_unidade or 0),
             "economia": float(economia_mes),
-            "economia_acumulada": float(economia_acumulada)
+            "economia_acumulada": float(economia_acumulada),
+            "media_consumo_6m": media6_por_cliente.get(cid, 0.0)
         })
 
     # Totais
