@@ -1,0 +1,391 @@
+{% extends 'base.html' %}
+
+{% block title %}Análise Diária – {{ usina.nome }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+
+  <!-- Título + ações -->
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0 text-primary">Análise Diária – {{ usina.nome }}</h2>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary" href="{{ url_for('monitoramento_index') }}">← Voltar ao Monitoramento</a>
+      <a class="btn btn-outline-success" href="{{ url_for('cadastrar_inversor_usina', usina_id=usina.id) }}">Cadastrar Inversor</a>
+    </div>
+  </div>
+
+  <!-- Filtro de data -->
+  <div class="card shadow-sm mb-3">
+    <div class="card-body py-3">
+      <form method="get" class="row g-2 align-items-end"
+            action="{{ url_for('analise_diaria', usina_id=usina.id) }}">
+        <div class="col-auto">
+          <label class="form-label mb-1">Data</label>
+          <input type="date" name="data" class="form-control" value="{{ data_ref.strftime('%Y-%m-%d') }}">
+        </div>
+        <div class="col-auto">
+          <button class="btn btn-outline-primary">Aplicar</button>
+        </div>
+        <div class="col-auto">
+          <a class="btn btn-outline-secondary"
+             href="{{ url_for('analise_diaria', usina_id=usina.id) }}">Hoje</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Lançar Status (múltiplas vezes ao dia) -->
+  <div class="card shadow-sm mb-3">
+    <div class="card-header">Lançar status do inversor</div>
+    <div class="card-body">
+      <form method="post" class="row g-3">
+        <!-- mantém a data escolhida -->
+        <input type="hidden" name="data" value="{{ data_ref.strftime('%Y-%m-%d') }}">
+
+        <div class="col-md-4">
+          <label class="form-label">Inversor *</label>
+          <select name="inverter_sn" class="form-select" required>
+            <option value="">Selecione...</option>
+            {% for inv in inversores %}
+              <option value="{{ inv.inverter_sn }}">{{ inv.inverter_sn }}{% if inv.nome %} – {{ inv.nome }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-md-2">
+          <label class="form-label">Hora</label>
+          <input type="time" name="hora" id="hora_now" class="form-control" value="">
+        </div>
+
+        <div class="col-md-2">
+          <label class="form-label d-block">Online</label>
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" name="online" id="online_switch">
+            <label class="form-check-label" for="online_switch">Sim</label>
+          </div>
+        </div>
+
+        <div class="col-md-2">
+          <label class="form-label d-block">Gerando</label>
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" name="comunicando" id="comunicando_switch">
+            <label class="form-check-label" for="comunicando_switch">Sim</label>
+          </div>
+        </div>
+
+        <div class="col-md-2">
+          <label class="form-label">Último ping</label>
+          <input type="datetime-local" name="ultimo_ping_dt" class="form-control">
+        </div>
+
+        <div class="col-12">
+          <label class="form-label">Mensagem de erro (opcional)</label>
+          <input type="text" name="mensagem_erro" class="form-control" placeholder="Descreva o problema se houver...">
+        </div>
+
+        <div class="col-12 d-flex justify-content-end">
+          <button class="btn btn-primary">Salvar status</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {# ---------- Cartões resumo ---------- #}
+  {% set ns = namespace(cadastrados = inversores|length, registrados=0, online=0, com=0, gerando=0, semreg=0, soma=0.0) %}
+  {% set threshold = 0.01 %}
+  {% for inv in inversores %}
+    {% set r = (reg_por_sn.get(inv.inverter_sn) if reg_por_sn is defined else None) %}
+    {% if r %}
+      {% set ns.registrados = ns.registrados + 1 %}
+      {% set ns.soma = ns.soma + (r.etoday or 0.0) %}
+      {% if r.online %}{% set ns.online = ns.online + 1 %}{% endif %}
+      {% if r.comunicando %}{% set ns.com = ns.com + 1 %}{% endif %}
+      {% if r.etoday and r.etoday > threshold %}{% set ns.gerando = ns.gerando + 1 %}{% endif %}
+    {% else %}
+      {% set ns.semreg = ns.semreg + 1 %}
+    {% endif %}
+  {% endfor %}
+
+  <div class="row g-3 mb-3">
+    <div class="col-sm-6 col-lg-3">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <div class="text-muted small">Inversores cadastrados</div>
+          <div class="h4 mb-0">{{ ns.cadastrados }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <div class="text-muted small">Com registro no dia</div>
+          <div class="h4 mb-0">{{ ns.registrados }}</div>
+          <div class="small text-muted">Sem registro: {{ ns.semreg }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <div class="text-muted small">Online / Comunicação</div>
+          <div class="h4 mb-0">{{ ns.online }} / {{ ns.com }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <div class="text-muted small">Gerando (eToday &gt; 0,01)</div>
+          <div class="h4 mb-0">{{ ns.gerando }}</div>
+          <div class="small text-muted">Soma eToday: {{ '%.3f'|format(ns.soma)|replace('.', ',') }} kWh</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filtros rápidos e busca -->
+  <div class="card shadow-sm mb-3">
+    <div class="card-body py-3">
+      <div class="row g-2 align-items-center">
+        <div class="col-md-6 d-flex flex-wrap gap-3">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="f_offline">
+            <label class="form-check-label" for="f_offline">Somente offline</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="f_semcom">
+            <label class="form-check-label" for="f_semcom">Sem comunicação</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="f_semger">
+            <label class="form-check-label" for="f_semger">Sem geração</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="f_semreg">
+            <label class="form-check-label" for="f_semreg">Sem registro</label>
+          </div>
+        </div>
+        <div class="col-md-6 d-flex gap-2 justify-content-md-end">
+          <input type="text" id="busca" class="form-control" placeholder="Buscar por SN ou nome...">
+          <button class="btn btn-outline-secondary" id="limparFiltros">Limpar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabela principal -->
+  <div class="card shadow-sm">
+    <div class="card-header">
+      <strong>Inversores – {{ data_ref.strftime('%d/%m/%Y') }}</strong>
+      <span class="small text-muted ms-2">Critério de geração: eToday &gt; {{ '%.2f'|format(threshold)|replace('.', ',') }} kWh</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0" id="tabela">
+          <thead class="table-light">
+            <tr>
+              <th style="min-width:220px">Inversor</th>
+              <th>Potência (kW)</th>
+              <th>eToday (kWh)</th>
+              <th>Online</th>
+              <th>Comunicação</th>
+              <th>Último ping</th>
+              <th>Coletado em</th>
+              <th>Situação</th>
+              <th>Mensagem</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for inv in inversores %}
+              {% set r = (reg_por_sn.get(inv.inverter_sn) if reg_por_sn is defined else None) %}
+              {% set tem_registro = 1 if r else 0 %}
+              {% set online = (1 if r and r.online else 0) if r is not none else -1 %}
+              {% set comunicando = (1 if r and r.comunicando else 0) if r is not none else -1 %}
+              {% set gerando = (1 if r and r.etoday and r.etoday > threshold else 0) if r is not none else -1 %}
+              <tr
+                data-online="{{ online }}"
+                data-com="{{ comunicando }}"
+                data-gerando="{{ gerando }}"
+                data-reg="{{ tem_registro }}"
+                data-text="{{ (inv.inverter_sn ~ ' ' ~ (inv.nome or '')) | lower }}"
+              >
+                <td class="fw-semibold">
+                  {{ inv.inverter_sn }}{% if inv.nome %} – {{ inv.nome }}{% endif %}
+                </td>
+                <td>
+                  {% if inv.potencia_kw is not none %}
+                    {{ '%.1f'|format(inv.potencia_kw)|replace('.', ',') }}
+                  {% elif r and r.potencia_kw is not none %}
+                    {{ '%.1f'|format(r.potencia_kw)|replace('.', ',') }}
+                  {% else %}-{% endif %}
+                </td>
+                <td>
+                  {% if r and r.etoday is not none %}
+                    {{ '%.3f'|format(r.etoday)|replace('.', ',') }}
+                  {% else %}-{% endif %}
+                </td>
+                <td>
+                  {% if r is none %}
+                    <span class="badge bg-secondary">sem dado</span>
+                  {% elif r.online %}
+                    <span class="badge bg-success">online</span>
+                  {% else %}
+                    <span class="badge bg-danger">offline</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if r is none %}
+                    <span class="badge bg-secondary">sem dado</span>
+                  {% elif r.comunicando %}
+                    <span class="badge bg-success">ok</span>
+                  {% else %}
+                    <span class="badge bg-danger">sem comunicação</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if r and r.ultimo_ping %}
+                    {{ r.ultimo_ping.strftime('%d/%m/%Y %H:%M') }}
+                  {% else %}-{% endif %}
+                </td>
+                <td>
+                  {% if r and r.coletado_em %}
+                    {{ r.coletado_em.strftime('%d/%m/%Y %H:%M') }}
+                  {% else %}-{% endif %}
+                </td>
+                <td>
+                  {% if r is none %}
+                    <span class="badge bg-secondary">sem registro</span>
+                  {% elif r.etoday and r.etoday > threshold %}
+                    <span class="badge bg-primary">gerando</span>
+                  {% else %}
+                    <span class="badge bg-warning text-dark">parado</span>
+                  {% endif %}
+                </td>
+                <td class="text-truncate" style="max-width: 280px;">
+                  {{ (r.mensagem_erro if r and r.mensagem_erro else '-') }}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card-footer small text-muted">
+      • “Gerando” considera eToday &gt; {{ '%.2f'|format(threshold)|replace('.', ',') }} kWh.  
+      • “Sem registro” = não há linha em <code>Monitoramento</code> mais recente para o dia {{ data_ref.strftime('%d/%m/%Y') }}.
+    </div>
+  </div>
+
+  <!-- Histórico do dia (accordion) -->
+  {% if historico_por_sn is defined %}
+  <div class="accordion my-3" id="histDia">
+    {% for inv in inversores %}
+      {% set lista = historico_por_sn.get(inv.inverter_sn) %}
+      {% if lista %}
+        {% set item_id = 'acc_' ~ loop.index %}
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="{{ item_id }}_h">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#{{ item_id }}_c" aria-expanded="false" aria-controls="{{ item_id }}_c">
+              Histórico – {{ inv.inverter_sn }}{% if inv.nome %} – {{ inv.nome }}{% endif %}
+            </button>
+          </h2>
+          <div id="{{ item_id }}_c" class="accordion-collapse collapse" aria-labelledby="{{ item_id }}_h"
+               data-bs-parent="#histDia">
+            <div class="accordion-body p-0">
+              <div class="table-responsive">
+                <table class="table table-sm table-striped mb-0">
+                  <thead class="table-light">
+                    <tr>
+                      <th style="width:140px">Coletado em</th>
+                      <th style="width:140px">Último ping</th>
+                      <th>Online</th>
+                      <th>Comunicando</th>
+                      <th>Mensagem</th>
+                      <th>eToday</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for r in lista %}
+                      <tr>
+                        <td>{{ r.coletado_em.strftime('%d/%m/%Y %H:%M') if r.coletado_em else '-' }}</td>
+                        <td>{{ r.ultimo_ping.strftime('%d/%m/%Y %H:%M') if r.ultimo_ping else '-' }}</td>
+                        <td>{% if r.online %}<span class="badge bg-success">online</span>{% else %}<span class="badge bg-danger">offline</span>{% endif %}</td>
+                        <td>{% if r.comunicando %}<span class="badge bg-success">ok</span>{% else %}<span class="badge bg-danger">sem comunicação</span>{% endif %}</td>
+                        <td class="text-truncate" style="max-width:300px">{{ r.mensagem_erro or '-' }}</td>
+                        <td>{{ ('%.3f'|format(r.etoday)|replace('.', ',')) if r.etoday is not none else '-' }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+
+</div>
+
+<!-- Scripts: filtros cliente-side + hora atual no formulário -->
+<script>
+(function () {
+  // Preenche a hora atual na carga da página (se vazio)
+  const horaNow = document.getElementById('hora_now');
+  if (horaNow && !horaNow.value) {
+    const d = new Date();
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    horaNow.value = `${hh}:${mm}`;
+  }
+
+  const offline = document.getElementById('f_offline');
+  const semcom  = document.getElementById('f_semcom');
+  const semger  = document.getElementById('f_semger');
+  const semreg  = document.getElementById('f_semreg');
+  const busca   = document.getElementById('busca');
+  const limpar  = document.getElementById('limparFiltros');
+  const rows    = () => Array.from(document.querySelectorAll('#tabela tbody tr'));
+
+  function applyFilters() {
+    const q = (busca.value || '').trim().toLowerCase();
+
+    rows().forEach(tr => {
+      const isOnline  = parseInt(tr.dataset.online, 10);  // 1,0,-1
+      const hasCom    = parseInt(tr.dataset.com, 10);
+      const gen       = parseInt(tr.dataset.gerando, 10);
+      const hasReg    = parseInt(tr.dataset.reg, 10);     // 1 ou 0
+      const text      = tr.dataset.text || '';
+
+      let show = true;
+
+      if (offline && offline.checked)  show = show && (isOnline === 0);
+      if (semcom && semcom.checked)    show = show && (hasCom   === 0);
+      if (semger && semger.checked)    show = show && (gen      === 0);
+      if (semreg && semreg.checked)    show = show && (hasReg   === 0);
+      if (q)                            show = show && text.includes(q);
+
+      tr.style.display = show ? '' : 'none';
+    });
+  }
+
+  [offline, semcom, semger, semreg].forEach(el => el && el.addEventListener('change', applyFilters));
+  if (busca) busca.addEventListener('input', applyFilters);
+  document.addEventListener('DOMContentLoaded', applyFilters);
+  if (limpar) {
+    limpar.addEventListener('click', function (e) {
+      e.preventDefault();
+      if (offline) offline.checked = false;
+      if (semcom)  semcom.checked  = false;
+      if (semger)  semger.checked  = false;
+      if (semreg)  semreg.checked  = false;
+      if (busca)   busca.value     = '';
+      applyFilters();
+    });
+  }
+})();
+</script>
+{% endblock %}

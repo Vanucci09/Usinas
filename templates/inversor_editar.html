@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}Editar Inversor – {{ usina.nome }}{% endblock %}
+{% block content %}
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0 text-primary">Editar Inversor – {{ usina.nome }}</h2>
+    <a class="btn btn-outline-secondary"
+       href="{{ url_for('cadastrar_inversor_usina', usina_id=usina.id) }}">← Voltar</a>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <form method="post" novalidate>
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">Serial (inverter_sn)</label>
+            <input type="text" class="form-control" value="{{ inv.inverter_sn }}" readonly>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Nome</label>
+            <input type="text" name="nome" class="form-control"
+                   value="{{ form_data.get('nome','') }}" placeholder="Ex.: Inversor 01">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Potência (kW)</label>
+            <input type="text" name="potencia_kw" class="form-control"
+                   value="{{ form_data.get('potencia_kw','') }}" placeholder="Ex.: 5,000">
+          </div>
+        </div>
+        <div class="mt-4 d-flex gap-2">
+          <button class="btn btn-primary">Salvar alterações</button>
+          <a class="btn btn-outline-secondary"
+             href="{{ url_for('cadastrar_inversor_usina', usina_id=usina.id) }}">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

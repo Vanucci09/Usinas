@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block title %}Estações Deye{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2 class="mb-4 text-primary">Estações Deye</h2>
+
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>Nome</th>
+        <th class="text-end">Potência (kW)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in estacoes %}
+      <tr>
+        <td>{{ e.name }}</td>
+        <td class="text-end">
+          {% if e.generationPower %}
+            {{ (e.generationPower / 1000) | round(1) }} kW
+          {% else %}
+            —
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

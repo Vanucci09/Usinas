@@ -73,6 +73,44 @@
             </div>
         </div>
 
+        <!-- Monitoramento -->
+        <div class="accordion-item">
+        <h2 class="accordion-header" id="headingMonitoramento">
+            <button
+            class="accordion-button {% if request.args.get('aba') == 'monitoramento' %}{% else %}collapsed{% endif %}"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#collapseMonitoramento"
+            aria-expanded="{% if request.args.get('aba') == 'monitoramento' %}true{% else %}false{% endif %}"
+            aria-controls="collapseMonitoramento">
+            🛰️ Monitoramento
+            </button>
+        </h2>
+
+        <div id="collapseMonitoramento"
+            class="accordion-collapse collapse {% if request.args.get('aba') == 'monitoramento' %}show{% endif %}"
+            aria-labelledby="headingMonitoramento"
+            data-bs-parent="#accordionGrupos">
+            <div class="accordion-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                <a href="{{ url_for('monitoramento_index') }}"
+                    class="btn btn-outline-primary w-100">
+                    Monitorar Usinas
+                </a>
+                </div>
+                <div class="col-md-4">
+                <a href="{{ url_for('monitoramento_index') }}"
+                    class="btn btn-outline-secondary w-100">
+                    Inserir Geração / Análise Diária
+                </a>
+                </div>
+            </div>
+            
+            </div>
+        </div>
+        </div>
+
         <!-- Consórcios -->
         <div class="accordion-item">
             <h2 class="accordion-header" id="headingConsorcios">
