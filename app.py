@@ -3267,9 +3267,6 @@ def relatorio_categoria():
 @app.route('/relatorio_cliente', methods=['GET'])
 @login_required
 def relatorio_cliente():
-    if not current_user.pode_acessar_financeiro:
-        return "Acesso negado", 403
-
     mes = request.args.get('mes', default=date.today().month, type=int)
     ano = request.args.get('ano', default=date.today().year, type=int)
     usina_id = request.args.get('usina_id', type=int)

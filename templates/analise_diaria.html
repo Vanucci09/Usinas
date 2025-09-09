@@ -343,30 +343,30 @@
   }
 
   const offline = document.getElementById('f_offline');
-  const semcom  = document.getElementById('f_semcom');
-  const semger  = document.getElementById('f_semger');
-  const semreg  = document.getElementById('f_semreg');
-  const busca   = document.getElementById('busca');
-  const limpar  = document.getElementById('limparFiltros');
-  const rows    = () => Array.from(document.querySelectorAll('#tabela tbody tr'));
+  const semcom = document.getElementById('f_semcom');
+  const semger = document.getElementById('f_semger');
+  const semreg = document.getElementById('f_semreg');
+  const busca = document.getElementById('busca');
+  const limpar = document.getElementById('limparFiltros');
+  const rows = () => Array.from(document.querySelectorAll('#tabela tbody tr'));
 
   function applyFilters() {
     const q = (busca.value || '').trim().toLowerCase();
 
     rows().forEach(tr => {
-      const isOnline  = parseInt(tr.dataset.online, 10);  // 1,0,-1
-      const hasCom    = parseInt(tr.dataset.com, 10);
-      const gen       = parseInt(tr.dataset.gerando, 10);
-      const hasReg    = parseInt(tr.dataset.reg, 10);     // 1 ou 0
-      const text      = tr.dataset.text || '';
+      const isOnline = parseInt(tr.dataset.online, 10);  // 1,0,-1
+      const hasCom = parseInt(tr.dataset.com, 10);
+      const gen = parseInt(tr.dataset.gerando, 10);
+      const hasReg = parseInt(tr.dataset.reg, 10);     // 1 ou 0
+      const text = tr.dataset.text || '';
 
       let show = true;
 
-      if (offline && offline.checked)  show = show && (isOnline === 0);
-      if (semcom && semcom.checked)    show = show && (hasCom   === 0);
-      if (semger && semger.checked)    show = show && (gen      === 0);
-      if (semreg && semreg.checked)    show = show && (hasReg   === 0);
-      if (q)                            show = show && text.includes(q);
+      if (offline && offline.checked) show = show && (isOnline === 0);
+      if (semcom && semcom.checked) show = show && (hasCom === 0);
+      if (semger && semger.checked) show = show && (gen === 0);
+      if (semreg && semreg.checked) show = show && (hasReg === 0);
+      if (q) show = show && text.includes(q);
 
       tr.style.display = show ? '' : 'none';
     });
@@ -379,10 +379,10 @@
     limpar.addEventListener('click', function (e) {
       e.preventDefault();
       if (offline) offline.checked = false;
-      if (semcom)  semcom.checked  = false;
-      if (semger)  semger.checked  = false;
-      if (semreg)  semreg.checked  = false;
-      if (busca)   busca.value     = '';
+      if (semcom) semcom.checked = false;
+      if (semger) semger.checked = false;
+      if (semreg) semreg.checked = false;
+      if (busca) busca.value = '';
       applyFilters();
     });
   }
