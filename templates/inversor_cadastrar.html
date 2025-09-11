@@ -8,11 +8,19 @@
   <!-- Cabeçalho + Voltar -->
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h2 class="mb-0 text-primary">Cadastrar Inversor – {{ usina.nome }}</h2>
-    <a class="btn btn-outline-secondary"
-       href="{{ url_for('monitoramento_index') }}">
-      ← Voltar
-    </a>
+    <a class="btn btn-outline-secondary" href="{{ url_for('monitoramento_index') }}">← Voltar</a>
   </div>
+
+  <!-- Mensagens flash -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="mb-3">
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} mb-2">{{ message|safe }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
 
   <!-- Formulário de cadastro -->
   <div class="card shadow-sm mb-4">
@@ -21,36 +29,38 @@
         <div class="row g-3">
           <div class="col-md-4">
             <label class="form-label">Serial (inverter_sn) *</label>
-            <input type="text"
-                   name="inverter_sn"
-                   value="{{ form_data.get('inverter_sn','') }}"
-                   class="form-control"
-                   required
-                   placeholder="Ex.: SA1234XYZ5678">
+            <input
+              type="text"
+              name="inverter_sn"
+              value="{{ form_data.get('inverter_sn','') }}"
+              class="form-control"
+              required
+              placeholder="Ex.: SA1234XYZ5678">
           </div>
           <div class="col-md-4">
             <label class="form-label">Nome (opcional)</label>
-            <input type="text"
-                   name="nome"
-                   value="{{ form_data.get('nome','') }}"
-                   class="form-control"
-                   placeholder="Ex.: Inversor 01 - Telhado A">
+            <input
+              type="text"
+              name="nome"
+              value="{{ form_data.get('nome','') }}"
+              class="form-control"
+              placeholder="Ex.: Inversor 01 - Telhado A">
           </div>
           <div class="col-md-4">
             <label class="form-label">Potência (kW) (opcional)</label>
-            <input type="number"
-                   step="0.001"
-                   name="potencia_kw"
-                   value="{{ form_data.get('potencia_kw','') }}"
-                   class="form-control"
-                   placeholder="Ex.: 5.000">
+            <input
+              type="number"
+              step="0.001"
+              name="potencia_kw"
+              value="{{ form_data.get('potencia_kw','') }}"
+              class="form-control"
+              placeholder="Ex.: 5.000">
           </div>
         </div>
 
         <div class="mt-4 d-flex gap-2">
           <button class="btn btn-success">Salvar</button>
-          <a class="btn btn-outline-secondary"
-             href="{{ url_for('monitoramento_usina', usina_id=usina.id) }}">
+          <a class="btn btn-outline-secondary" href="{{ url_for('monitoramento_usina', usina_id=usina.id) }}">
             Voltar para Monitoramento
           </a>
         </div>
@@ -58,70 +68,126 @@
     </div>
   </div>
 
+  <!-- Ação global: Auto-vincular todos por SN -->
+  <div class="d-flex justify-content-end mb-2">
+    <form method="post" action="{{ url_for('auto_vincular_por_sn', usina_id=usina.id) }}" class="m-0">
+      <button class="btn btn-sm btn-outline-success">
+        Auto-vincular por SN
+      </button>
+    </form>
+  </div>
+
   <!-- Lista de inversores já cadastrados -->
-    <div class="card shadow-sm">
+  <div class="card shadow-sm">
     <div class="card-header">Inversores cadastrados</div>
     <div class="card-body p-0">
-        {% if inversores %}
-        <div class="table-responsive">
+      {% if inversores %}
+      <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
-            <thead class="table-light">
+          <thead class="table-light">
             <tr>
-                <th>Serial</th>
-                <th>Nome</th>
-                <th>Potência (kW)</th>
-                <th>Status</th>
-                <th class="text-end">Ações</th>
+              <th>Serial</th>
+              <th>Nome</th>
+              <th>Potência (kW)</th>
+              <th>Status</th>
+              <th class="text-center">Gerações sem vínculo (mesmo SN)</th>
+              <th class="text-end">Ações</th>
             </tr>
-            </thead>
-            <tbody>
+          </thead>
+          <tbody>
             {% for inv in inversores %}
-            <tr>
+              {% set qtd_sem = contagem_sem_vinculo.get(inv.inverter_sn, 0) %}
+              <tr>
                 <td class="fw-semibold">{{ inv.inverter_sn }}</td>
                 <td>{{ inv.nome or '-' }}</td>
                 <td>
-                {% if inv.potencia_kw is not none %}
+                  {% if inv.potencia_kw is not none %}
                     {{ '%.1f'|format(inv.potencia_kw)|replace('.', ',') }}
-                {% else %}-{% endif %}
+                  {% else %}-{% endif %}
                 </td>
                 <td>
-                {% if inv.ativo %}
+                  {% if inv.ativo %}
                     <span class="badge bg-success">Ativo</span>
-                {% else %}
+                  {% else %}
                     <span class="badge bg-secondary">Inativo</span>
-                {% endif %}
+                  {% endif %}
+                </td>
+                <td class="text-center">
+                  {% if qtd_sem > 0 %}
+                    <span class="badge bg-warning text-dark">{{ qtd_sem }}</span>
+                  {% else %}
+                    <span class="text-muted">0</span>
+                  {% endif %}
                 </td>
                 <td class="text-end">
-                <a class="btn btn-sm btn-outline-primary"
-                    href="{{ url_for('editar_inversor_usina', usina_id=usina.id, inv_id=inv.id) }}">
+                  <a class="btn btn-sm btn-outline-primary"
+                     href="{{ url_for('editar_inversor_usina', usina_id=usina.id, inv_id=inv.id) }}">
                     Editar
-                </a>
+                  </a>
 
-                <form method="post"
+                  <!-- Vincular por SN -->
+                  <form method="post"
+                        action="{{ url_for('vincular_geracoes_por_sn', usina_id=usina.id, inv_id=inv.id) }}"
+                        class="d-inline">
+                    <button class="btn btn-sm btn-success"
+                            {% if qtd_sem == 0 %}disabled{% endif %}
+                            title="Vincular todas as gerações com este SN">
+                      Vincular por SN
+                    </button>
+                  </form>
+
+                  <!-- Desvincular por SN -->
+                  <form method="post"
+                        action="{{ url_for('desvincular_geracoes_por_sn', usina_id=usina.id, inv_id=inv.id) }}"
+                        class="d-inline">
+                    <button class="btn btn-sm btn-outline-warning"
+                            title="Remover vínculo de gerações deste SN com este inversor">
+                      Desvincular
+                    </button>
+                  </form>
+
+                  <!-- Ativar/Inativar -->
+                  <form method="post"
                         action="{{ url_for('alterar_status_inversor_usina', usina_id=usina.id, inv_id=inv.id) }}"
                         class="d-inline">
                     <button class="btn btn-sm {{ 'btn-warning' if inv.ativo else 'btn-success' }}">
-                    {{ 'Inativar' if inv.ativo else 'Ativar' }}
+                      {{ 'Inativar' if inv.ativo else 'Ativar' }}
                     </button>
-                </form>
+                  </form>
 
-                <form method="post"
+                  <!-- Excluir -->
+                  <form method="post"
                         action="{{ url_for('excluir_inversor_usina', usina_id=usina.id, inv_id=inv.id) }}"
                         class="d-inline"
                         onsubmit="return confirm('Excluir o inversor {{ inv.inverter_sn }}? Os monitoramentos existentes não serão alterados.');">
                     <button class="btn btn-sm btn-outline-danger">Excluir</button>
-                </form>
+                  </form>
                 </td>
-            </tr>
+              </tr>
             {% endfor %}
-            </tbody>
+          </tbody>
         </table>
-        </div>
-        {% else %}
+      </div>
+      {% else %}
         <div class="p-3 text-muted">Nenhum inversor cadastrado para esta usina.</div>
-        {% endif %}
+      {% endif %}
     </div>
+  </div>
+
+  <!-- Seriais com gerações sem vínculo -->
+  {% if sn_sem_vinculo %}
+  <div class="alert alert-info mt-3">
+    <div class="fw-semibold mb-1">Seriais com gerações sem vínculo:</div>
+    <div class="d-flex flex-wrap gap-2">
+      {% for sn in sn_sem_vinculo %}
+        <span class="badge bg-light text-dark border">{{ sn }} ({{ contagem_sem_vinculo[sn] }})</span>
+      {% endfor %}
     </div>
+    <div class="small mt-2 text-muted">
+      Cadastre o inversor correspondente (mesmo SN) e clique em <em>“Vincular por SN”</em>, ou use <em>“Auto-vincular por SN”</em>.
+    </div>
+  </div>
+  {% endif %}
 
 </div>
 {% endblock %}
