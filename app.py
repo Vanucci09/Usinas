@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify, make_response, send_file, flash, send_from_directory, abort
+from flask import Flask, render_template, request, redirect, url_for, jsonify, make_response, send_file, flash, send_from_directory, abort, current_app
 from datetime import date, datetime, timedelta
 from calendar import monthrange
 import os, uuid, calendar, subprocess, threading
@@ -6,7 +6,7 @@ import pandas as pd
 from werkzeug.utils import secure_filename
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-from sqlalchemy import Numeric, text, func, case, cast, or_, and_
+from sqlalchemy import Numeric, text, func, case, cast, or_, and_, literal
 from decimal import Decimal, ROUND_HALF_UP
 import fitz, tempfile, glob, platform
 from PIL import Image
@@ -349,15 +349,15 @@ class Monitoramento(db.Model):
 
     usina_id = db.Column(db.Integer, db.ForeignKey('usinas.id'), nullable=False, index=True)
     usina = db.relationship('Usina', backref=db.backref('monitoramentos', lazy='dynamic', cascade="all, delete-orphan"))
-    inverter_sn = db.Column(db.String(100), nullable=False, index=True)  # ex.: serial
+    inverter_sn = db.Column(db.String(100), nullable=False, index=True)
 
     # Recorte temporal
     data = db.Column(db.Date, nullable=False, default=date.today, index=True)
     coletado_em = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
 
-    # Métricas (diárias / snapshot)
-    etoday = db.Column(db.Float, nullable=True)      # kWh no dia
-    potencia_kw = db.Column(db.Float, nullable=True) # potência nominal do inversor (kW)
+    # Métricas
+    etoday = db.Column(db.Float, nullable=True)
+    potencia_kw = db.Column(db.Float, nullable=True)
 
     # Status
     online = db.Column(db.Boolean, default=False, nullable=False)
@@ -365,17 +365,17 @@ class Monitoramento(db.Model):
     ultimo_ping = db.Column(db.DateTime, nullable=True)
     mensagem_erro = db.Column(db.String(255), nullable=True)
 
-    # Armazenar payload cru (útil para auditoria/debug)
     payload_bruto = db.Column(JSONB, nullable=True)
 
     criado_em = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     atualizado_em = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     __table_args__ = (
-        UniqueConstraint('usina_id', 'inverter_sn', 'data', name='uniq_usina_inversor_data'),
         Index('idx_mon_usina_data', 'usina_id', 'data'),
         Index('idx_mon_usina_inversor', 'usina_id', 'inverter_sn'),
         Index('idx_mon_status_data', 'data', 'online', 'comunicando'),
+        # Índice composto para acelerar “último do dia por inversor”
+        Index('idx_mon_usina_sn_data_coletado', 'usina_id', 'inverter_sn', 'data', db.text('coletado_em DESC')),
     )
     
 class InversorCadastrado(db.Model):
@@ -6072,26 +6072,58 @@ def deye():
 @login_required
 def monitoramento_usina(usina_id):
     usina = Usina.query.get_or_404(usina_id)
+
+    # --------------------- Helpers ---------------------
+    def _parse_date(s, fallback=None):
+        if not s:
+            return fallback
+        try:
+            return datetime.strptime(s, '%Y-%m-%d').date()
+        except ValueError:
+            return fallback
+
+    def _to_float(v):
+        if v is None or str(v).strip() == '':
+            return None
+        try:
+            return float(str(v).replace(',', '.'))
+        except ValueError:
+            return None
+
+    def _norm_sn_py(sn: str) -> str:
+        # Upper + remove -, _ e espaço
+        s = (sn or '').strip().upper()
+        return s.replace('-', '').replace('_', '').replace(' ', '')
+
+    def _norm_sn_sql(col):
+        # Postgres: UPPER(regexp_replace(trim(col), '[-_ ]', '', 'g'))
+        return func.upper(func.regexp_replace(func.trim(col), '[-_ ]', '', 'g'))
+
+    # --------------------- Inversores ativos ---------------------
+    inversores = (InversorCadastrado.query
+                  .filter_by(usina_id=usina_id, ativo=True)
+                  .order_by(InversorCadastrado.nome.asc().nullslast(),
+                            InversorCadastrado.inverter_sn.asc())
+                  .all())
+
+    # --------------------- POST ---------------------
     if request.method == 'POST':
         action = request.form.get('action')
 
         # 1) Cadastro/atualização rápida do inversor
         if action == 'cad_inversor':
-            inverter_sn = (request.form.get('inverter_sn') or '').strip()
+            inverter_sn_raw = (request.form.get('inverter_sn') or '')
+            inverter_sn = _norm_sn_py(inverter_sn_raw)
             nome = (request.form.get('nome') or '').strip()
-
-            def to_float(v):
-                if v is None or str(v).strip() == '':
-                    return None
-                return float(str(v).replace(',', '.'))
-
-            potencia_kw = to_float(request.form.get('potencia_kw'))
+            potencia_kw = _to_float(request.form.get('potencia_kw'))
 
             if not inverter_sn:
                 flash('Informe o Serial (inverter_sn).', 'warning')
                 return redirect(url_for('monitoramento_usina', usina_id=usina_id))
 
-            inv = InversorCadastrado.query.filter_by(usina_id=usina_id, inverter_sn=inverter_sn).first()
+            inv = (InversorCadastrado.query
+                   .filter_by(usina_id=usina_id, inverter_sn=inverter_sn)
+                   .first())
             if not inv:
                 inv = InversorCadastrado(
                     usina_id=usina_id,
@@ -6103,45 +6135,54 @@ def monitoramento_usina(usina_id):
                 db.session.add(inv)
             else:
                 inv.nome = nome or inv.nome
-                inv.potencia_kw = potencia_kw if potencia_kw is not None else inv.potencia_kw
+                if potencia_kw is not None:
+                    inv.potencia_kw = potencia_kw
                 inv.ativo = True
 
+            # Vinculação retroativa por SN normalizado
+            norm_col = _norm_sn_sql(GeracaoInversor.inverter_sn)
+            norm_val = _norm_sn_py(inverter_sn)
+            (GeracaoInversor.query
+             .filter(
+                 GeracaoInversor.usina_id == usina_id,
+                 norm_col == _norm_sn_sql(func.literal(norm_val)),
+                 or_(GeracaoInversor.inversor_id.is_(None),
+                     GeracaoInversor.inversor_id != inv.id)
+             )
+             .update({'inversor_id': inv.id,
+                      'inverter_sn': inverter_sn}, synchronize_session=False))
+
             db.session.commit()
-            flash('Inversor cadastrado/atualizado com sucesso!', 'success')
+            flash('Inversor cadastrado/atualizado e gerações vinculadas por SN.', 'success')
             return redirect(url_for('monitoramento_usina', usina_id=usina_id))
 
-        # 2) Lançamento diário (snapshot de monitoramento)
+        # 2) Lançamento diário do monitoramento (um registro por dia por SN nesta tela)
         if action == 'salvar_monitoramento':
-            inverter_sn = (request.form.get('inverter_sn') or '').strip()
-            if not inverter_sn:
+            raw_sn = (request.form.get('inverter_sn') or '').strip()
+            if not raw_sn:
                 flash('Selecione um inversor cadastrado.', 'warning')
                 return redirect(url_for('monitoramento_usina', usina_id=usina_id))
 
-            data_str = request.form.get('data') or ''
-            try:
-                data_ref = datetime.strptime(data_str, '%Y-%m-%d').date() if data_str else date.today()
-            except ValueError:
-                data_ref = date.today()
+            inverter_sn = _norm_sn_py(raw_sn)
+            data_ref = _parse_date(request.form.get('data'), date.today())
 
-            def to_float(v):
-                if v is None or str(v).strip() == '':
-                    return None
-                return float(str(v).replace(',', '.'))
-
-            etoday = to_float(request.form.get('etoday'))
+            etoday = _to_float(request.form.get('etoday'))
             online = request.form.get('online') == 'on'
             comunicando = request.form.get('comunicando') == 'on'
-            mensagem_erro = (request.form.get('mensagem_erro') or '').strip()
+            mensagem_erro = (request.form.get('mensagem_erro') or '').strip() or None
 
             inv = (InversorCadastrado.query
                    .filter_by(usina_id=usina_id, inverter_sn=inverter_sn, ativo=True)
                    .first())
 
+            # UPSERT Monitoramento (1/dia por SN nesta tela)
             reg = (Monitoramento.query
                    .filter_by(usina_id=usina_id, inverter_sn=inverter_sn, data=data_ref)
                    .first())
             if not reg:
-                reg = Monitoramento(usina_id=usina_id, inverter_sn=inverter_sn, data=data_ref)
+                reg = Monitoramento(usina_id=usina_id,
+                                    inverter_sn=inverter_sn,
+                                    data=data_ref)
                 db.session.add(reg)
 
             reg.etoday = etoday
@@ -6151,33 +6192,126 @@ def monitoramento_usina(usina_id):
             if inv and inv.potencia_kw is not None:
                 reg.potencia_kw = inv.potencia_kw
 
+            # Vincular/espelhar em GeracaoInversor
+            gi = (GeracaoInversor.query
+                  .filter_by(usina_id=usina_id, inverter_sn=inverter_sn, data=data_ref)
+                  .first())
+            if gi is None:
+                gi = GeracaoInversor(
+                    usina_id=usina_id,
+                    inverter_sn=inverter_sn,
+                    data=data_ref,
+                    etoday=etoday
+                )
+                db.session.add(gi)
+            else:
+                if etoday is not None:
+                    gi.etoday = etoday
+
+            if inv:
+                gi.inversor_id = inv.id
+                norm_col = _norm_sn_sql(GeracaoInversor.inverter_sn)
+                norm_val = _norm_sn_py(inverter_sn)
+                (GeracaoInversor.query
+                 .filter(
+                     GeracaoInversor.usina_id == usina_id,
+                     norm_col == _norm_sn_sql(func.literal(norm_val)),
+                     or_(GeracaoInversor.inversor_id.is_(None),
+                         GeracaoInversor.inversor_id != inv.id)
+                 )
+                 .update({'inversor_id': inv.id,
+                          'inverter_sn': inverter_sn}, synchronize_session=False))
+
             db.session.commit()
-            flash('Monitoramento salvo com sucesso!', 'success')
+            flash('Monitoramento salvo e gerações vinculadas por SN.', 'success')
+
+            # preserva filtros principais no redirect
             return redirect(url_for('monitoramento_usina',
                                     usina_id=usina_id,
                                     view=request.args.get('view', 'ultimos'),
-                                    data=request.args.get('data', '')))
+                                    data=request.args.get('data', ''),
+                                    data_tab=request.args.get('data_tab', ''),
+                                    data_ini=request.args.get('data_ini', ''),
+                                    data_fim=request.args.get('data_fim', '')))
 
-    # ------------------------- LISTAGEM GET -------------------------
+    # --------------------- GET: filtros/visões ---------------------
     view = request.args.get('view', 'ultimos')  # 'ultimos' | 'diario'
+    data_ref = _parse_date(request.args.get('data'), date.today())
 
-    # Data de referência para a visão básica
-    data_param = request.args.get('data')
-    if data_param:
-        try:
-            data_ref = datetime.strptime(data_param, '%Y-%m-%d').date()
-        except ValueError:
-            data_ref = date.today()
-    else:
-        data_ref = date.today()
+    # TABELA do topo (filtro independente)
+    data_tab_ref = _parse_date(request.args.get('data_tab'), date.today())
 
-    # Inversores ativos para combos e métricas
-    inversores = (InversorCadastrado.query
-                  .filter_by(usina_id=usina_id, ativo=True)
-                  .order_by(InversorCadastrado.inverter_sn.asc())
-                  .all())
+    # Registros do topo (do dia específico)
+    registros_tab = (Monitoramento.query
+                     .filter(Monitoramento.usina_id == usina_id,
+                             Monitoramento.data == data_tab_ref)
+                     .order_by(Monitoramento.inverter_sn.asc(),
+                               Monitoramento.coletado_em.desc().nullslast(),
+                               Monitoramento.id.desc())
+                     .all())
 
-    # Visão básica (tabela que você já tinha)
+    # ========= BLOCO NOVO: pegar o ID do snapshot MAIS RECENTE por SN no dia =========
+    # 1) último timestamp coletado por SN
+    sub = (db.session.query(
+              Monitoramento.inverter_sn.label('sn'),
+              func.max(Monitoramento.coletado_em).label('max_coletado')
+          )
+          .filter(Monitoramento.usina_id == usina_id,
+                  Monitoramento.data == data_tab_ref)
+          .group_by(Monitoramento.inverter_sn)
+          .subquery())
+
+    latest_rows = (db.session.query(Monitoramento.id, Monitoramento.inverter_sn)
+                   .join(sub,
+                         and_(Monitoramento.inverter_sn == sub.c.sn,
+                              Monitoramento.coletado_em == sub.c.max_coletado))
+                   .filter(Monitoramento.usina_id == usina_id,
+                           Monitoramento.data == data_tab_ref)
+                   .all())
+
+    latest_ids = {row.id for row in latest_rows}
+
+    # Fallback (caso algum SN só tenha coletado_em NULL): usa maior ID do dia
+    sns_dia = {r.inverter_sn for r in registros_tab}
+    if len(latest_ids) < len(sns_dia):
+        sub_fallback = (db.session.query(
+                            Monitoramento.inverter_sn.label('sn'),
+                            func.max(Monitoramento.id).label('max_id')
+                        )
+                        .filter(Monitoramento.usina_id == usina_id,
+                                Monitoramento.data == data_tab_ref)
+                        .group_by(Monitoramento.inverter_sn)
+                        .subquery())
+        fb_rows = (db.session.query(Monitoramento.id)
+                   .join(sub_fallback,
+                         and_(Monitoramento.inverter_sn == sub_fallback.c.sn,
+                              Monitoramento.id == sub_fallback.c.max_id))
+                   .all())
+        latest_ids |= {r.id for r in fb_rows}
+    # ========= FIM DO BLOCO NOVO =========
+
+    # Ordena: primeiro quem tem etoday (desc), depois None (ordenação só para exibição)
+    registros_tab_sorted = sorted(
+        registros_tab,
+        key=lambda r: (r.etoday is None, -(r.etoday or 0.0))
+    )
+
+    # Índice da usina (0–100) calculado APENAS com os snapshots mais recentes por SN
+    latest_by_sn = [r for r in registros_tab if r.id in latest_ids]
+    peso_com = 0.40
+    peso_onl = 0.40
+    peso_prod = 0.20
+    score_sum = 0.0
+    n_rows = len(latest_by_sn)
+    for r in latest_by_sn:
+        s = 0.0
+        s += peso_com * (1.0 if bool(getattr(r, 'comunicando', False)) else 0.0)
+        s += peso_onl * (1.0 if bool(getattr(r, 'online', False)) else 0.0)
+        s += peso_prod * (1.0 if ((getattr(r, 'etoday', 0.0) or 0.0) > 0) else 0.0)
+        score_sum += s
+    indice_usina_pct = round(100.0 * (score_sum / n_rows), 1) if n_rows else 0.0
+
+    # Visão "diário" ou "últimos" (para cards + tabela principal)
     if view == 'diario':
         registros = (Monitoramento.query
                      .filter(Monitoramento.usina_id == usina_id,
@@ -6185,95 +6319,61 @@ def monitoramento_usina(usina_id):
                      .order_by(Monitoramento.inverter_sn.asc())
                      .all())
     else:
-        sub = (db.session.query(
-                    Monitoramento.inverter_sn,
-                    func.max(Monitoramento.data).label('max_data')
-               )
-               .filter(Monitoramento.usina_id == usina_id)
-               .group_by(Monitoramento.inverter_sn)
-               .subquery())
-
+        sub_ult = (db.session.query(
+                        Monitoramento.inverter_sn,
+                        func.max(Monitoramento.data).label('max_data')
+                   )
+                   .filter(Monitoramento.usina_id == usina_id)
+                   .group_by(Monitoramento.inverter_sn)
+                   .subquery())
         registros = (db.session.query(Monitoramento)
-                     .join(sub, and_(
-                         Monitoramento.inverter_sn == sub.c.inverter_sn,
-                         Monitoramento.data == sub.c.max_data
+                     .join(sub_ult, and_(
+                         Monitoramento.inverter_sn == sub_ult.c.inverter_sn,
+                         Monitoramento.data == sub_ult.c.max_data
                      ))
                      .filter(Monitoramento.usina_id == usina_id)
                      .order_by(Monitoramento.inverter_sn.asc())
                      .all())
 
     total = len(inversores)
-    online_cnt = sum(1 for r in registros if r.online)
-    comunicando_cnt = sum(1 for r in registros if r.comunicando)
+    online_cnt = sum(1 for r in registros if bool(getattr(r, 'online', False)))
+    comunicando_cnt = sum(1 for r in registros if bool(getattr(r, 'comunicando', False)))
 
-    # ------------------------- FILTROS EXTRAS p/ GRÁFICOS/COMPARAÇÃO -------------------------
-    data_ini_str = request.args.get('data_ini') or ''
-    data_fim_str = request.args.get('data_fim') or ''
-    inv_sns = request.args.getlist('inv')  # multiselect (vários SNs)
-
-    # Período (default: data_ref único)
-    if data_ini_str:
-        try:
-            data_ini = datetime.strptime(data_ini_str, '%Y-%m-%d').date()
-        except ValueError:
-            data_ini = None
-    else:
-        data_ini = data_ref
-
-    if data_fim_str:
-        try:
-            data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
-        except ValueError:
-            data_fim = None
-    else:
-        data_fim = data_ref
-
-    if data_ini and not data_fim:
-        data_fim = data_ini
-    if data_fim and not data_ini:
-        data_ini = data_fim
-    if data_ini and data_fim and data_ini > data_fim:
+    # --------------------- Gráficos / Comparação ---------------------
+    data_ini = _parse_date(request.args.get('data_ini'), data_ref)
+    data_fim = _parse_date(request.args.get('data_fim'), data_ref)
+    if data_ini > data_fim:
         data_ini, data_fim = data_fim, data_ini
-    if not data_ini or not data_fim:
-        data_ini = data_ref
-        data_fim = data_ref
 
-    # Multiselect default = todos os SNs ativos
-    todos_sns = [i.inverter_sn for i in inversores]
+    inv_sns = request.args.getlist('inv')
     if not inv_sns:
-        inv_sns = todos_sns[:]
+        inv_sns = [i.inverter_sn for i in inversores]
 
-    # Range de datas (labels)
     def daterange(d1, d2):
         cur = d1
         while cur <= d2:
             yield cur
-            cur = cur + timedelta(days=1)
+            cur += timedelta(days=1)
 
     labels_datas = [d for d in daterange(data_ini, data_fim)]
     labels_fmt = [d.strftime('%d/%m') for d in labels_datas]
 
-    # Query base do período para os SNs selecionados
-    mon_periodo = (Monitoramento.query
-                   .filter(Monitoramento.usina_id == usina_id,
-                           Monitoramento.data >= data_ini,
-                           Monitoramento.data <= data_fim,
-                           Monitoramento.inverter_sn.in_(inv_sns))
-                   .order_by(Monitoramento.inverter_sn.asc(), Monitoramento.data.asc())
-                   .all())
+    mon_periodo = []
+    if inv_sns:
+        mon_periodo = (Monitoramento.query
+                       .filter(Monitoramento.usina_id == usina_id,
+                               Monitoramento.data >= data_ini,
+                               Monitoramento.data <= data_fim,
+                               Monitoramento.inverter_sn.in_(inv_sns))
+                       .order_by(Monitoramento.inverter_sn.asc(), Monitoramento.data.asc())
+                       .all())
 
-    # Índices e métricas
-    mapa = defaultdict(dict)           # {sn: {date: etoday}}
+    mapa = defaultdict(dict)  # {sn: {date: etoday}}
     pot_por_sn = {i.inverter_sn: (i.potencia_kw or None) for i in inversores}
-
     for r in mon_periodo:
         mapa[r.inverter_sn][r.data] = float(r.etoday or 0.0)
 
-    chart_series = []                  # linhas (eToday por dia)
-    cumul_por_sn = {}                  # total no período
-    media_por_sn = {}                  # média diária
-    max_por_sn = {}                    # pico diário
-
+    chart_series, cumul_por_sn, media_por_sn, max_por_sn = [], {}, {}, {}
     for sn in inv_sns:
         valores = [mapa[sn].get(d, 0.0) for d in labels_datas]
         cumul = sum(valores)
@@ -6282,12 +6382,10 @@ def monitoramento_usina(usina_id):
         max_por_sn[sn] = max(valores) if valores else 0.0
         chart_series.append({"label": sn, "data": valores})
 
-    # Ranking (barras)
     top_ordenado = sorted(cumul_por_sn.items(), key=lambda x: x[1], reverse=True)
     top_labels = [sn for sn, _ in top_ordenado]
     top_data = [val for _, val in top_ordenado]
 
-    # Radar (média, pico, total)
     radar_labels = ['Média (kWh/dia)', 'Máximo diário (kWh)', 'Geração total (kWh)']
     radar_series = [{"label": sn,
                      "data": [media_por_sn.get(sn, 0.0),
@@ -6295,23 +6393,30 @@ def monitoramento_usina(usina_id):
                               cumul_por_sn.get(sn, 0.0)]}
                     for sn in inv_sns]
 
-    # Scatter (Potência kW × Média kWh/dia)
     scatter_points = []
     for sn in inv_sns:
         pot = pot_por_sn.get(sn)
         if pot is not None:
-            scatter_points.append({"x": float(pot), "y": float(media_por_sn.get(sn, 0.0)), "label": sn})
+            scatter_points.append({"x": float(pot),
+                                   "y": float(media_por_sn.get(sn, 0.0)),
+                                   "label": sn})
 
-    # KPIs do período
     kpi_periodo = {
         "dias": len(labels_datas),
-        "total_periodo_kwh": round(sum(top_data), 3),
+        "total_periodo_kwh": round(sum(top_data), 3) if top_data else 0.0,
         "melhor_sn": top_labels[0] if top_labels else None,
         "melhor_total_kwh": round(top_data[0], 3) if top_data else 0.0
     }
 
     return render_template('monitoramento_usina.html',
                            usina=usina,
+                           # tabela do topo
+                           registros_tab=registros_tab,
+                           registros_tab_sorted=registros_tab_sorted,
+                           data_tab_ref=data_tab_ref,
+                           latest_ids=latest_ids,          # <--- usado no HTML para mostrar eToday só no último
+                           indice_usina_pct=indice_usina_pct,
+                           # visão/cards
                            registros=registros,
                            inversores=inversores,
                            view=view,
@@ -6319,10 +6424,9 @@ def monitoramento_usina(usina_id):
                            total=total,
                            online_cnt=online_cnt,
                            comunicando_cnt=comunicando_cnt,
-                           # ▼ novos para gráficos/compare
+                           # gráficos/comparação
                            data_ini=data_ini, data_fim=data_fim,
                            inv_sns=inv_sns,
-                           todos_sns=todos_sns,
                            chart_labels=labels_fmt,
                            chart_series=chart_series,
                            top_labels=top_labels, top_data=top_data,
