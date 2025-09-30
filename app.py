@@ -93,6 +93,7 @@ class Usina(db.Model):
     saldo_kwh = db.Column(db.Float, default=0)
     kehua_station_id = db.Column(db.String, nullable=True, unique=True)
     tusd_fio_b = db.Column(db.Boolean, nullable=False, default=False)
+    boleto_proprio = db.Column(db.Boolean, nullable=False, default=False)
     
     rateios = db.relationship('Rateio', backref='usina', cascade="all, delete-orphan")
     geracoes = db.relationship('Geracao', backref='usina', cascade="all, delete-orphan")
@@ -438,24 +439,27 @@ def cadastrar_usina():
         logo = request.files.get('logo')
         cc = request.form['cc']
         nome = request.form['nome']
-        potencia = request.form['potencia']
+
+        # potencia do form é string; converta para float
+        potencia_str = request.form.get('potencia')
+        potencia = float(str(potencia_str).replace(',', '.')) if potencia_str else None
+
         data_ligacao_str = request.form.get('data_ligacao')
         valor_investido_str = request.form.get('valor_investido')
         ano_atual = date.today().year
-        saldo_kwh_str = request.form.get('saldo_kwh')
-        saldo_kwh = float(saldo_kwh_str.replace(',', '.')) if saldo_kwh_str else 0
-        
-        # TUSD Fio B (trata hidden + checkbox)
-        # Se existir hidden "0" e checkbox "1", getlist retorna ['0','1'] — pegamos o último.
-        tusd_vals = request.form.getlist('tusd_fio_b')
-        tusd_fio_b = False
-        if tusd_vals:
-            last_val = str(tusd_vals[-1]).strip().lower()
-            tusd_fio_b = last_val in ('1', 'true', 'on', 'sim')
 
-        # Conversão dos valores
+        saldo_kwh_str = request.form.get('saldo_kwh')
+        saldo_kwh = float(saldo_kwh_str.replace(',', '.')) if saldo_kwh_str else 0.0
+
         data_ligacao = datetime.strptime(data_ligacao_str, '%Y-%m-%d').date() if data_ligacao_str else None
         valor_investido = float(valor_investido_str.replace(',', '.')) if valor_investido_str else None
+
+        # checkboxes (funciona com hidden+checkbox)
+        tusd_vals = request.form.getlist('tusd_fio_b')
+        tusd_fio_b = bool(tusd_vals and str(tusd_vals[-1]).lower() in ('1', 'true', 'on', 'sim'))
+
+        boleto_vals = request.form.getlist('boleto_proprio')
+        boleto_proprio = bool(boleto_vals and str(boleto_vals[-1]).lower() in ('1', 'true', 'on', 'sim'))
 
         nova_usina = Usina(
             cc=cc,
@@ -464,36 +468,40 @@ def cadastrar_usina():
             data_ligacao=data_ligacao,
             valor_investido=valor_investido,
             saldo_kwh=saldo_kwh,
-            tusd_fio_b=tusd_fio_b
+            tusd_fio_b=tusd_fio_b,          
+            boleto_proprio=boleto_proprio   
         )
         db.session.add(nova_usina)
         db.session.commit()
 
-        # Salvar o logo se enviado
-        if logo and logo.filename != '':
+        # upload do logo (usando LOGOS_PATH)
+        if logo and logo.filename:
             filename = secure_filename(logo.filename)
-            caminho_base = os.getenv('LOGOS_PATH', os.path.join('static', 'logos'))
-            os.makedirs(caminho_base, exist_ok=True)
-            caminho_logo = os.path.join(caminho_base, filename)
-            logo.save(caminho_logo)
+            ext = os.path.splitext(filename)[1]
+            unique_filename = f"{uuid.uuid4().hex}{ext}"
 
-            nova_usina.logo_url = filename
+            caminho_base = os.path.abspath(os.getenv('LOGOS_PATH', os.path.join('static', 'logos')))
+            os.makedirs(caminho_base, exist_ok=True)
+            logo_path = os.path.join(caminho_base, unique_filename)
+
+            print(f"[LOGOS] Salvando logo em: {logo_path}")
+            logo.save(logo_path)
+
+            nova_usina.logo_url = unique_filename
             db.session.commit()
 
-        # Salvar previsões mensais
+        # previsões mensais
         for mes in range(1, 13):
             chave = f'previsoes[{mes}]'
             valor = request.form.get(chave)
             if valor:
                 previsao = PrevisaoMensal(
-                    usina_id=nova_usina.id,
-                    ano=ano_atual,
-                    mes=mes,
+                    usina_id=nova_usina.id, ano=ano_atual, mes=mes,
                     previsao_kwh=float(valor.replace(',', '.'))
                 )
                 db.session.add(previsao)
-
         db.session.commit()
+
         return redirect(url_for('cadastrar_usina'))
 
     return render_template('cadastrar_usina.html', env=os.getenv('FLASK_ENV'))
@@ -1453,7 +1461,12 @@ def relatorio_fatura(fatura_id):
 
     ficha_compensacao_data_uri = None
     if os.path.exists(pdf_path):
-        ficha_compensacao_img = extrair_ficha_compensacao(pdf_path, ficha_path)
+        ficha_compensacao_img = extrair_ficha_compensacao(
+        pdf_path,
+        ficha_path,
+        boleto_proprio=bool(getattr(usina, 'boleto_proprio', False)),
+        page_select='first' if getattr(usina, 'boleto_proprio', False) else 'last'
+    )
         if ficha_compensacao_img and os.path.exists(ficha_path):
             ficha_base64 = imagem_para_base64(ficha_path)
             ficha_compensacao_data_uri = f"data:image/png;base64,{ficha_base64}"
@@ -1465,9 +1478,27 @@ def relatorio_fatura(fatura_id):
     # Logo da usina
     logo_usina_data_uri = None
     if usina.logo_url:
-        logo_path = os.path.abspath(f"static/logos/{usina.logo_url}").replace('\\', '/')
-        if os.path.exists(logo_path):
-            logo_usina_data_uri = f"data:image/png;base64,{imagem_para_base64(logo_path)}"
+        nome_arquivo = (usina.logo_url or "").strip()
+
+        logos_base = os.path.abspath(os.getenv('LOGOS_PATH', os.path.join('static', 'logos')))
+        path_env   = os.path.join(logos_base, nome_arquivo)
+        path_stat  = os.path.abspath(os.path.join('static', 'logos', nome_arquivo))
+
+        chosen = None
+        if os.path.exists(path_env):
+            chosen = path_env
+            print(f"[LOGO] usando LOGOS_PATH: {chosen}")
+        elif os.path.exists(path_stat):
+            chosen = path_stat
+            print(f"[LOGO] usando static/logos: {chosen}")
+        else:
+            print(f"[LOGO] arquivo NÃO encontrado em: {path_env} nem {path_stat}")
+
+        if chosen:
+            # detecta extensão para o header do data URI (png/jpg)
+            ext = os.path.splitext(chosen)[1].lower()
+            mime = "png" if ext == ".png" else "jpeg"
+            logo_usina_data_uri = f"data:image/{mime};base64,{imagem_para_base64(chosen)}"
 
     # Bootstrap
     bootstrap_path = os.path.abspath("static/css/bootstrap.min.css").replace('\\', '/')
@@ -1493,19 +1524,69 @@ def relatorio_fatura(fatura_id):
         bootstrap_path=bootstrap_path
     )
     
-def extrair_ficha_compensacao(pdf_path, output_path='static/ficha_compensacao.png'):
-    doc = fitz.open(pdf_path)
-    page = doc.load_page(-1)  
-    pix = page.get_pixmap(dpi=300)
-    temp_img = "static/temp_page.png"
-    pix.save(temp_img)
+def extrair_ficha_compensacao(
+    pdf_path,
+    output_path='static/ficha_compensacao.png',
+    boleto_proprio=False,
+    page_select=None,                 # 'first' | 'last' | int | None
+    dpi_padrao=300,
+    dpi_boleto=300,
+    crop_padrao=(0.37, 0.75),         # topo/bottom (% da altura) - PDF “normal”
+    crop_boleto=(0.63, 0.99)          # topo/bottom para boleto próprio (ajuste se precisar)
+):
+    """
+    Recorta a ficha de compensação.
+    - Se boleto_proprio=True, usa recorte alternativo e, por padrão, pega a 1ª página.
+    - page_select: 'first' | 'last' | int (0-based) | None (usa heurística padrão).
+    """
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 
-    imagem = Image.open(temp_img)
-    largura, altura = imagem.size
-    top = int(altura * 0.37)  
-    bottom = int(altura * 0.75)
-    ficha = imagem.crop((0, top, largura, bottom))
+    # Resolve página
+    with fitz.open(pdf_path) as doc:
+        n = doc.page_count
+        # Se o chamador não especificar, usamos: boleto próprio -> primeira; senão -> última
+        if page_select is None:
+            page_select = 'first' if boleto_proprio else 'last'
+
+        if isinstance(page_select, int):
+            idx = page_select if page_select >= 0 else n + page_select
+        elif str(page_select).lower() == 'first':
+            idx = 0
+        else:
+            idx = n - 1  # 'last' default
+
+        idx = max(0, min(idx, n - 1))
+
+        # DPI e crop de acordo com o tipo de boleto
+        dpi = dpi_boleto if boleto_proprio else dpi_padrao
+        top_pct, bot_pct = crop_boleto if boleto_proprio else crop_padrao
+
+        # Renderiza página escolhida
+        page = doc.load_page(idx)
+        pix = page.get_pixmap(dpi=dpi)
+
+        tmp_path = os.path.join('static', f"temp_page_{uuid.uuid4().hex}.png")
+        pix.save(tmp_path)
+
+    # Recorte
+    img = Image.open(tmp_path)
+    w, h = img.size
+    top = int(h * float(top_pct))
+    bottom = int(h * float(bot_pct))
+    if bottom <= top:  # fallback seguro
+        top, bottom = int(h * 0.37), int(h * 0.75)
+
+    ficha = img.crop((0, top, w, bottom))
     ficha.save(output_path)
+
+    # Debug + limpeza
+    print(f"[FICHA] boleto_proprio={boleto_proprio} page={idx+1} dpi={dpi} "
+          f"img={w}x{h} crop=({top_pct*100:.1f}%..{bot_pct*100:.1f}%) out={output_path}")
+    try:
+        os.remove(tmp_path)
+    except Exception:
+        pass
+
     return output_path
 
 def extrair_comprovante_em_imagens(pdf_path, output_prefix):
@@ -1919,6 +2000,11 @@ def editar_previsoes(usina_id):
             if tusd_vals:
                 last_val = str(tusd_vals[-1]).strip().lower()
                 usina.tusd_fio_b = last_val in ('1', 'true', 'on', 'sim')
+                
+            boleto_vals = request.form.getlist('boleto_proprio')
+            if boleto_vals:
+                last_val = str(boleto_vals[-1]).strip().lower()
+                usina.boleto_proprio = last_val in ('1', 'true', 'on', 'sim')
 
             # Atualiza previsões mensais
             for mes in range(1, 13):

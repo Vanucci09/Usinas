@@ -53,16 +53,23 @@
             </div>
 
             <div class="col-md-12 mt-2">
-                <!-- hidden para garantir envio quando desmarcado -->
+                <!-- TUSD Fio B -->
                 <input type="hidden" name="tusd_fio_b" value="0">
-                <div class="form-check">
+                <div class="form-check form-check-inline">
                     <input class="form-check-input" type="checkbox" id="tusd_fio_b" name="tusd_fio_b" value="1"
                         {% if usina.tusd_fio_b %}checked{% endif %}>
-                    <label class="form-check-label" for="tusd_fio_b">
-                        TUSD Fio B
-                    </label>
+                    <label class="form-check-label" for="tusd_fio_b">TUSD Fio B</label>
+                </div>
+
+                <!-- Boleto próprio -->
+                <input type="hidden" name="boleto_proprio" value="0">
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" id="boleto_proprio" name="boleto_proprio" value="1"
+                        {% if usina.boleto_proprio %}checked{% endif %}>
+                    <label class="form-check-label" for="boleto_proprio">Boleto próprio?</label>
                 </div>
             </div>
+
             <!-- Logo atual -->
             {% if usina.logo_url %}
                 <div class="col-md-6">
