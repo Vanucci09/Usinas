@@ -230,6 +230,14 @@
     <div class="section-title text-center">Sua Fatura {{ usina.nome }}</div>
     <div class="economia">
         <div class="col">
+            <div class="icon text-primary">🎯</div>
+            <p><strong>% Desconto:</strong></p>
+            {% set perc_desc = (economia / sem_desconto * 100) if sem_desconto else 0 %}
+            <p class="valor">
+                {{ "%.2f"|format(perc_desc)|replace('.', ',') }}%
+            </p>
+        </div>
+        <div class="col">
             <div class="icon text-warning">💰</div>
             <p><strong>Sem Desconto:</strong></p>
             <p class="valor">{{ sem_desconto|formato_brasileiro }}</p>
@@ -249,16 +257,7 @@
             <p><strong>Economia Acumulada:</strong></p>
             <p class="valor">{{ economia_acumulada|formato_brasileiro }}</p>
         </div>
-
-        {# ✅ Nova coluna: % de Desconto #}
-        <div class="col">
-            <div class="icon text-primary">🎯</div>
-            <p><strong>% Desconto:</strong></p>
-            {% set perc_desc = (economia / sem_desconto * 100) if sem_desconto else 0 %}
-            <p class="valor">
-                {{ "%.2f"|format(perc_desc)|replace('.', ',') }}%
-            </p>
-        </div>
+        
     </div>
 
     <!-- Ficha de compensação -->

@@ -1380,7 +1380,7 @@ def relatorio_fatura(fatura_id):
 
     # usa valor_usina_liquido no "com_desconto"
     com_desconto = valor_conta + valor_usina_liquido
-    sem_desconto = (consumo_usina * tarifa_neoenergia_aplicada) + valor_conta
+    sem_desconto = (consumo_usina * tarifa_neoenergia_aplicada) + valor_conta - custo_tusd_atual
     economia = sem_desconto - com_desconto
 
     # Economia acumulada (aplica mesma regra por fatura/usina)
