@@ -19,14 +19,14 @@
              href="{{ url_for('cadastrar_inversor_usina', usina_id=u.id) }}">
             Cadastrar inversor
           </a>
-          <a class="btn btn-sm btn-outline-primary"
-             href="{{ url_for('inserir_geracao_inversor', usina_id=u.id) }}">
-            Inserir geração
-          </a>
           <a class="btn btn-sm btn-outline-secondary"
              href="{{ url_for('analise_diaria', usina_id=u.id) }}">
             Análise diária
           </a>
+          <a class="btn btn-sm btn-outline-primary"
+             href="{{ url_for('inserir_geracao_inversor', usina_id=u.id) }}">
+            Inserir geração
+          </a>          
           <a class="btn btn-sm btn-primary"
              href="{{ url_for('monitoramento_usina', usina_id=u.id) }}">
             Abrir monitoramento

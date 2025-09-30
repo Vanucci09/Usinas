@@ -127,7 +127,17 @@
             {% set ns = namespace(total=0) %}
             {% for fatura in faturas %}
                 {% set rateio = fatura.cliente.rateios[0] if fatura.cliente.rateios else None %}
-                {% set valor_boleto = (fatura.consumo_usina * rateio.tarifa_kwh) if rateio else 0 %}
+                {% set tusd_ativo = fatura.cliente.usina.tusd_fio_b if fatura.cliente and fatura.cliente.usina else False %}
+
+                {# Converte tudo para float #}
+                {% set custo_tusd = (fatura.custo_tusd_fio_b or 0) | float %}
+                {% set tarifa = (rateio.tarifa_kwh if rateio else 0) | float %}
+                {% set consumo_usina_f = (fatura.consumo_usina or 0) | float %}
+
+                {% set bruto = consumo_usina_f * tarifa %}
+                {% set valor_boleto = bruto - (custo_tusd if tusd_ativo else 0.0) %}
+                {% set valor_boleto = valor_boleto if valor_boleto > 0 else 0.0 %}
+
                 {% set ns.total = ns.total + valor_boleto %}
 
                 <tr>

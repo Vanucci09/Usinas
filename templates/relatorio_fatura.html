@@ -150,6 +150,17 @@
                 <td>kWh</td>
                 <td>{{ tarifa_cliente|formato_tarifa }}</td>
             </tr>
+
+            {# ✅ Linha extra: Custo TUSD Fio B (mostra apenas quando aplicável) #}
+            {% if usina.tusd_fio_b and (fatura.custo_tusd_fio_b or 0) != 0 %}
+            <tr>
+                <td>Custo TUSD Fio B</td>
+                <td>—</td>
+                <td>—</td>
+                <td>{{ (fatura.custo_tusd_fio_b or 0) | formato_brasileiro }}</td>
+            </tr>
+            {% endif %}
+
             {% if cliente.mostrar_saldo and fatura.saldo_unidade %}
             <tr>
                 <td>Saldo Acumulado</td>
@@ -237,6 +248,16 @@
             <div class="icon text-dark">📈</div>
             <p><strong>Economia Acumulada:</strong></p>
             <p class="valor">{{ economia_acumulada|formato_brasileiro }}</p>
+        </div>
+
+        {# ✅ Nova coluna: % de Desconto #}
+        <div class="col">
+            <div class="icon text-primary">🎯</div>
+            <p><strong>% Desconto:</strong></p>
+            {% set perc_desc = (economia / sem_desconto * 100) if sem_desconto else 0 %}
+            <p class="valor">
+                {{ "%.2f"|format(perc_desc)|replace('.', ',') }}%
+            </p>
         </div>
     </div>
 

@@ -92,6 +92,7 @@ class Usina(db.Model):
     valor_investido = db.Column(db.Numeric(precision=12, scale=2))
     saldo_kwh = db.Column(db.Float, default=0)
     kehua_station_id = db.Column(db.String, nullable=True, unique=True)
+    tusd_fio_b = db.Column(db.Boolean, nullable=False, default=False)
     
     rateios = db.relationship('Rateio', backref='usina', cascade="all, delete-orphan")
     geracoes = db.relationship('Geracao', backref='usina', cascade="all, delete-orphan")
@@ -181,6 +182,7 @@ class FaturaMensal(db.Model):
     identificador = db.Column(db.String, unique=True, nullable=False)
     email_enviado = db.Column(db.Boolean, default=False)
     energia_injetada_real = db.Column(db.Float, default=0.0)
+    custo_tusd_fio_b = db.Column(Numeric(12, 2), nullable=True, default=None)
     
     data_cadastro = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
@@ -442,6 +444,14 @@ def cadastrar_usina():
         ano_atual = date.today().year
         saldo_kwh_str = request.form.get('saldo_kwh')
         saldo_kwh = float(saldo_kwh_str.replace(',', '.')) if saldo_kwh_str else 0
+        
+        # TUSD Fio B (trata hidden + checkbox)
+        # Se existir hidden "0" e checkbox "1", getlist retorna ['0','1'] — pegamos o último.
+        tusd_vals = request.form.getlist('tusd_fio_b')
+        tusd_fio_b = False
+        if tusd_vals:
+            last_val = str(tusd_vals[-1]).strip().lower()
+            tusd_fio_b = last_val in ('1', 'true', 'on', 'sim')
 
         # Conversão dos valores
         data_ligacao = datetime.strptime(data_ligacao_str, '%Y-%m-%d').date() if data_ligacao_str else None
@@ -453,7 +463,8 @@ def cadastrar_usina():
             potencia_kw=potencia,
             data_ligacao=data_ligacao,
             valor_investido=valor_investido,
-            saldo_kwh=saldo_kwh
+            saldo_kwh=saldo_kwh,
+            tusd_fio_b=tusd_fio_b
         )
         db.session.add(nova_usina)
         db.session.commit()
@@ -1093,6 +1104,8 @@ def faturamento():
             cliente = Cliente.query.get(cliente_id)
             rateio = cliente.rateios[0] if cliente and cliente.rateios else None
             codigo_rateio = rateio.codigo_rateio if rateio else "SEM"
+            
+            usina = Usina.query.get(usina_id)
 
             inicio_leitura = datetime.strptime(request.form['inicio_leitura'], '%Y-%m-%d').date()
             fim_leitura = datetime.strptime(request.form['fim_leitura'], '%Y-%m-%d').date()
@@ -1106,6 +1119,13 @@ def faturamento():
             injetado = limpar_valor(request.form['injetado'])
             energia_injetada_real = limpar_valor(request.form.get('energia_injetada_real', '0'))
             consumo_instantaneo = 0.0
+            
+            # ✅ custo TUSD Fio B: pega do form se a usina usa TUSD Fio B; senão 0
+            custo_tusd_fio_b_form = request.form.get('custo_tusd_fio_b')  # string tipo "322,82" (preenchida via extração)
+            custo_tusd_fio_b = limpar_valor(custo_tusd_fio_b_form) if (usina and usina.tusd_fio_b) else 0.0
+            # print opcional:
+            # print(f"[DEBUG] usina.tusd_fio_b={getattr(usina,'tusd_fio_b',None)}; custo_tusd_fio_b={custo_tusd_fio_b}")
+
 
             if cliente and cliente.consumo_instantaneo:
                 consumo_instantaneo = db.session.query(func.sum(Geracao.energia_kwh)).filter(
@@ -1139,7 +1159,8 @@ def faturamento():
                     injetado=injetado,
                     valor_conta_neoenergia=valor_conta_neoenergia,
                     identificador=identificador,
-                    energia_injetada_real=energia_injetada_real
+                    energia_injetada_real=energia_injetada_real,
+                    custo_tusd_fio_b=custo_tusd_fio_b
                 )
                 db.session.add(fatura)
                 db.session.commit()
@@ -1152,11 +1173,34 @@ def faturamento():
                     referencia_mes_receita = proximo_mes.month
                     referencia_ano_receita = proximo_mes.year
 
-                    receita_valor = float(Decimal(consumo_usina * rateio.tarifa_kwh).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+                    # Base de consumo para receita (igual ao que você usa pra salvar na Fatura)
+                    consumo_base_receita = injetado_total if (cliente and cliente.consumo_instantaneo) else consumo_usina
+
+                    # --- RECEITA LÍQUIDA = RECEITA BRUTA - (TUSD Fio B se aplicável) ---
+                    # receita bruta: consumo * tarifa_kwh, com arredondamento de 2 casas
+                    receita_bruta = (Decimal(str(consumo_base_receita)) * Decimal(str(rateio.tarifa_kwh))) \
+                                        .quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+                    # TUSD Fio B (já vem limpinho do form; se não for TUSD Fio B, é 0.0)
+                    tusd_dec = Decimal(str(custo_tusd_fio_b)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+                    # se a usina NÃO é TUSD Fio B, garante 0
+                    if not (usina and usina.tusd_fio_b):
+                        tusd_dec = Decimal('0.00')
+
+                    receita_liquida = receita_bruta - tusd_dec
+                    if receita_liquida < Decimal('0.00'):
+                        receita_liquida = Decimal('0.00')
+
+                    receita_valor = float(receita_liquida)
+
+                    # (opcional) debug
+                    # print(f"[DEBUG] receita_bruta={receita_bruta}, tusd={tusd_dec}, receita_liquida={receita_liquida}")
+
                     receita = FinanceiroUsina(
                         usina_id=rateio.usina_id,
                         categoria_id=None,  # pode adicionar a categoria
-                        data=date(referencia_ano_receita, referencia_mes_receita, 1),  # data como 1º dia do mês subsequente
+                        data=date(referencia_ano_receita, referencia_mes_receita, 1),  # 1º dia do mês subsequente
                         tipo='receita',
                         descricao=f"Fatura {fatura.identificador} - {cliente.nome}",
                         valor=receita_valor,
@@ -1165,7 +1209,6 @@ def faturamento():
                     )
                     db.session.add(receita)
                     db.session.commit()
-
                 mensagem = 'Fatura cadastrada com sucesso.'
 
         except Exception as e:
@@ -1307,15 +1350,13 @@ def relatorio_fatura(fatura_id):
         tarifa_neoenergia_aplicada = tarifa_base * Decimal('1.1023232323')
 
     consumo_usina = Decimal(str(fatura.consumo_usina))
-    valor_conta = Decimal(str(fatura.valor_conta_neoenergia))
+    valor_conta   = Decimal(str(fatura.valor_conta_neoenergia))
 
     if fatura.data_cadastro:
         data_base = fatura.data_cadastro.date()
     else:
-        # Data fixa que você quer como base (vinda da fatura mais recente)
         data_base = date(2025, 8, 4)
 
-    # Busca o rateio mais recente até a data_base (inclusive)
     rateio = Rateio.query.filter(
         Rateio.cliente_id == cliente.id,
         Rateio.usina_id == usina.id,
@@ -1324,12 +1365,25 @@ def relatorio_fatura(fatura_id):
 
     tarifa_cliente = Decimal(str(rateio.tarifa_kwh)) if rateio else Decimal('0')
 
-    valor_usina = consumo_usina * tarifa_cliente
-    com_desconto = valor_conta + valor_usina
-    sem_desconto = consumo_usina * tarifa_neoenergia_aplicada + valor_conta
+    # --- Cálculos principais ---
+    valor_usina_bruto = consumo_usina * tarifa_cliente
+
+    # ✅ regra TUSD Fio B na fatura atual
+    tusd_ativo_atual = bool(getattr(usina, 'tusd_fio_b', False))
+    custo_tusd_atual = Decimal(str(getattr(fatura, 'custo_tusd_fio_b', 0) or 0))
+    if tusd_ativo_atual:
+        valor_usina_liquido = valor_usina_bruto - custo_tusd_atual
+        if valor_usina_liquido < Decimal('0'):
+            valor_usina_liquido = Decimal('0')
+    else:
+        valor_usina_liquido = valor_usina_bruto
+
+    # usa valor_usina_liquido no "com_desconto"
+    com_desconto = valor_conta + valor_usina_liquido
+    sem_desconto = (consumo_usina * tarifa_neoenergia_aplicada) + valor_conta
     economia = sem_desconto - com_desconto
 
-    # Economia acumulada
+    # Economia acumulada (aplica mesma regra por fatura/usina)
     faturas_anteriores = FaturaMensal.query.filter(
         FaturaMensal.cliente_id == cliente.id,
         FaturaMensal.id != fatura.id,
@@ -1350,14 +1404,29 @@ def relatorio_fatura(fatura_id):
                 tarifa_aplicada_ant = tarifa_base_ant * Decimal('1.1023232323')
 
             consumo_usina_ant = Decimal(str(f.consumo_usina))
-            valor_conta_ant = Decimal(str(f.valor_conta_neoenergia))
+            valor_conta_ant   = Decimal(str(f.valor_conta_neoenergia))
 
-            valor_usina_ant = consumo_usina_ant * tarifa_cliente
-            com_desconto_ant = valor_conta_ant + valor_usina_ant
-            sem_desconto_ant = consumo_usina_ant * tarifa_aplicada_ant + valor_conta_ant
+            # tarifa do cliente permanece a mesma (sua lógica original)
+            valor_usina_ant_bruto = consumo_usina_ant * tarifa_cliente
 
-            economia_total += sem_desconto_ant - com_desconto_ant
-        except:
+            # ✅ regra TUSD por fatura: usa a usina daquela fatura
+            usina_ant = getattr(f.cliente, 'usina', None)
+            tusd_ativo_ant = bool(getattr(usina_ant, 'tusd_fio_b', False)) if usina_ant else False
+            custo_tusd_ant = Decimal(str(getattr(f, 'custo_tusd_fio_b', 0) or 0))
+
+            if tusd_ativo_ant:
+                valor_usina_ant_liq = valor_usina_ant_bruto - custo_tusd_ant
+                if valor_usina_ant_liq < Decimal('0'):
+                    valor_usina_ant_liq = Decimal('0')
+            else:
+                valor_usina_ant_liq = valor_usina_ant_bruto
+
+            com_desconto_ant = valor_conta_ant + valor_usina_ant_liq
+            sem_desconto_ant = (consumo_usina_ant * tarifa_aplicada_ant) + valor_conta_ant
+
+            economia_total += (sem_desconto_ant - com_desconto_ant)
+
+        except Exception:
             continue
 
     economia_extra_total = db.session.query(
@@ -1411,7 +1480,8 @@ def relatorio_fatura(fatura_id):
         usina=usina,
         tarifa_neoenergia_aplicada=tarifa_neoenergia_aplicada,
         tarifa_cliente=tarifa_cliente,
-        valor_usina=valor_usina,
+        # ✅ expõe os valores já líquidos
+        valor_usina=valor_usina_liquido,
         com_desconto=com_desconto,
         sem_desconto=sem_desconto,
         economia=economia,
@@ -1747,9 +1817,36 @@ def extrair_dados_fatura():
 
         print("[DEBUG] codigo_cliente não encontrado")
         return None
+    
+    def buscar_custo_tusd_fio_b():
+        label_re  = re.compile(r'CUSTO\s+TUSD\s+FIO\s*B', re.IGNORECASE)
+        money_re  = re.compile(r'\b\d{1,3}(?:\.\d{3})*,\d{2}\b|\b\d+,\d{2}\b')
+        alpha_re  = re.compile(r'[A-Za-zÀ-ÿ]')  # detecta linhas com texto (novo item/rotulo)
+        scan_span = 12  # quantas linhas olhar à frente no máximo
+
+        for i, ln in enumerate(linhas):
+            if label_re.search(ln):
+                # Varre as próximas linhas até achar um valor monetário ou encontrar texto (novo rótulo)
+                for j, l2 in enumerate(linhas[i+1:i+1+scan_span], start=1):
+                    if alpha_re.search(l2):  # chegamos em outro item/rotulo -> parar
+                        break
+                    m = money_re.search(l2)
+                    if m:
+                        br  = m.group(0)
+                        dot = br.replace('.', '').replace(',', '.')
+                        print(f"[DEBUG][TUSD] label@{i}; valor escolhido linha {i+j}: {br} -> {dot}")
+                        return dot
+                print(f"[DEBUG][TUSD] label@{i}; nenhum valor encontrado até o próximo rótulo")
+                return None
+
+        print("[DEBUG][TUSD] label não encontrado")
+        return None
 
     # Buscar dados
     inicio_leitura, fim_leitura = buscar_datas()
+    
+    custo_tusd_fio_b_val = buscar_custo_tusd_fio_b()
+    print(f"[DEBUG] custo_tusd_fio_b extraído: {custo_tusd_fio_b_val}")
 
     dados = {
         'inicio_leitura': inicio_leitura,
@@ -1765,7 +1862,8 @@ def extrair_dados_fatura():
         'consumo_usina': encontrar_valor_com_rotulo("COMPENSADO") or "0",
         'saldo_unidade': encontrar_valor_com_rotulo("SALDO ATUAL") or "0",
         'energia_injetada_real': buscar_energia_injetada_real(),
-        'codigo_cliente': buscar_codigo_cliente()
+        'codigo_cliente': buscar_codigo_cliente(),
+        'custo_tusd_fio_b': buscar_custo_tusd_fio_b()
     }
     print(f"[DEBUG] codigo_cliente extraído: {dados['codigo_cliente']}")
 
@@ -1814,6 +1912,13 @@ def editar_previsoes(usina_id):
             saldo_kwh_str = request.form.get('saldo_kwh')
             if saldo_kwh_str:
                 usina.saldo_kwh = float(saldo_kwh_str.replace(',', '.'))
+                
+            # novo campo: TUSD Fio B
+            # Se usar hidden (0) + checkbox (1), getlist retornará ['0'] ou ['0','1'].
+            tusd_vals = request.form.getlist('tusd_fio_b')
+            if tusd_vals:
+                last_val = str(tusd_vals[-1]).strip().lower()
+                usina.tusd_fio_b = last_val in ('1', 'true', 'on', 'sim')
 
             # Atualiza previsões mensais
             for mes in range(1, 13):
@@ -6140,12 +6245,11 @@ def monitoramento_usina(usina_id):
                 inv.ativo = True
 
             # Vinculação retroativa por SN normalizado
-            norm_col = _norm_sn_sql(GeracaoInversor.inverter_sn)
             norm_val = _norm_sn_py(inverter_sn)
             (GeracaoInversor.query
              .filter(
                  GeracaoInversor.usina_id == usina_id,
-                 norm_col == _norm_sn_sql(func.literal(norm_val)),
+                 _norm_sn_sql(GeracaoInversor.inverter_sn) == _norm_sn_sql(literal(norm_val)),
                  or_(GeracaoInversor.inversor_id.is_(None),
                      GeracaoInversor.inversor_id != inv.id)
              )
@@ -6210,12 +6314,11 @@ def monitoramento_usina(usina_id):
 
             if inv:
                 gi.inversor_id = inv.id
-                norm_col = _norm_sn_sql(GeracaoInversor.inverter_sn)
                 norm_val = _norm_sn_py(inverter_sn)
                 (GeracaoInversor.query
                  .filter(
                      GeracaoInversor.usina_id == usina_id,
-                     norm_col == _norm_sn_sql(func.literal(norm_val)),
+                     _norm_sn_sql(GeracaoInversor.inverter_sn) == _norm_sn_sql(literal(norm_val)),
                      or_(GeracaoInversor.inversor_id.is_(None),
                          GeracaoInversor.inversor_id != inv.id)
                  )
@@ -6241,77 +6344,73 @@ def monitoramento_usina(usina_id):
     # TABELA do topo (filtro independente)
     data_tab_ref = _parse_date(request.args.get('data_tab'), date.today())
 
-    # Registros do topo (do dia específico)
+    # Registros do topo (do dia específico) - mais recente primeiro por SN
     registros_tab = (Monitoramento.query
+        .filter(Monitoramento.usina_id == usina_id,
+                Monitoramento.data == data_tab_ref)
+        .order_by(Monitoramento.inverter_sn.asc(),
+                  Monitoramento.id.desc())  # último inserido primeiro
+        .all())
+
+    # Histórico e mais recente por SN (em memória)
+    historico_por_sn = {}
+    latest_por_sn = {}
+    for r in registros_tab:
+        historico_por_sn.setdefault(r.inverter_sn, []).append(r)
+        if r.inverter_sn not in latest_por_sn:
+            latest_por_sn[r.inverter_sn] = r  # já é o mais recente nessa ordenação
+
+    # ========= MAIS RECENTE por SN NO DIA (via subselect max(id)) =========
+    sub_ult_por_id = (db.session.query(
+                        Monitoramento.inverter_sn.label('sn'),
+                        func.max(Monitoramento.id).label('max_id')
+                     )
                      .filter(Monitoramento.usina_id == usina_id,
                              Monitoramento.data == data_tab_ref)
-                     .order_by(Monitoramento.inverter_sn.asc(),
-                               Monitoramento.coletado_em.desc().nullslast(),
-                               Monitoramento.id.desc())
-                     .all())
-
-    # ========= BLOCO NOVO: pegar o ID do snapshot MAIS RECENTE por SN no dia =========
-    # 1) último timestamp coletado por SN
-    sub = (db.session.query(
-              Monitoramento.inverter_sn.label('sn'),
-              func.max(Monitoramento.coletado_em).label('max_coletado')
-          )
-          .filter(Monitoramento.usina_id == usina_id,
-                  Monitoramento.data == data_tab_ref)
-          .group_by(Monitoramento.inverter_sn)
-          .subquery())
+                     .group_by(Monitoramento.inverter_sn)
+                     .subquery())
 
     latest_rows = (db.session.query(Monitoramento.id, Monitoramento.inverter_sn)
-                   .join(sub,
-                         and_(Monitoramento.inverter_sn == sub.c.sn,
-                              Monitoramento.coletado_em == sub.c.max_coletado))
+                   .join(sub_ult_por_id,
+                         and_(Monitoramento.inverter_sn == sub_ult_por_id.c.sn,
+                              Monitoramento.id == sub_ult_por_id.c.max_id))
                    .filter(Monitoramento.usina_id == usina_id,
                            Monitoramento.data == data_tab_ref)
                    .all())
 
+    # IDs atuais (1 por SN)
     latest_ids = {row.id for row in latest_rows}
+    
+    # Pega, para cada SN, o primeiro etoday não-nulo do dia (ordem: mais recente -> mais antigo)
+    latest_etoday_por_sn = {}
+    for sn, lst in historico_por_sn.items():  # lst já está em ordem decrescente (id desc)
+        val = next((x.etoday for x in lst if x.etoday is not None), None)
+        latest_etoday_por_sn[sn] = val
 
-    # Fallback (caso algum SN só tenha coletado_em NULL): usa maior ID do dia
-    sns_dia = {r.inverter_sn for r in registros_tab}
-    if len(latest_ids) < len(sns_dia):
-        sub_fallback = (db.session.query(
-                            Monitoramento.inverter_sn.label('sn'),
-                            func.max(Monitoramento.id).label('max_id')
-                        )
-                        .filter(Monitoramento.usina_id == usina_id,
-                                Monitoramento.data == data_tab_ref)
-                        .group_by(Monitoramento.inverter_sn)
-                        .subquery())
-        fb_rows = (db.session.query(Monitoramento.id)
-                   .join(sub_fallback,
-                         and_(Monitoramento.inverter_sn == sub_fallback.c.sn,
-                              Monitoramento.id == sub_fallback.c.max_id))
-                   .all())
-        latest_ids |= {r.id for r in fb_rows}
-    # ========= FIM DO BLOCO NOVO =========
+    # --- ordenação: primeiro os "atuais", depois os "antigos" ---
+    atuais = [r for r in registros_tab if r.id in latest_ids]
+    antigos = [r for r in registros_tab if r.id not in latest_ids]
 
-    # Ordena: primeiro quem tem etoday (desc), depois None (ordenação só para exibição)
-    registros_tab_sorted = sorted(
-        registros_tab,
-        key=lambda r: (r.etoday is None, -(r.etoday or 0.0))
-    )
+    # dentro de cada grupo, ordena por eToday (desc), depois None
+    atuais_sorted = sorted(atuais, key=lambda r: (r.etoday is None, -(r.etoday or 0.0)))
+    antigos_sorted = sorted(antigos, key=lambda r: (r.etoday is None, -(r.etoday or 0.0)))
 
-    # Índice da usina (0–100) calculado APENAS com os snapshots mais recentes por SN
-    latest_by_sn = [r for r in registros_tab if r.id in latest_ids]
-    peso_com = 0.40
-    peso_onl = 0.40
-    peso_prod = 0.20
+    registros_tab_sorted = atuais_sorted + antigos_sorted
+
+    # --- índice da usina no dia (apenas snapshots atuais por SN) ---
+    peso_com, peso_onl, peso_prod = 0.40, 0.40, 0.20
+    atuais = [r for r in registros_tab if r.id in latest_ids]
+    n = len(atuais)
     score_sum = 0.0
-    n_rows = len(latest_by_sn)
-    for r in latest_by_sn:
-        s = 0.0
-        s += peso_com * (1.0 if bool(getattr(r, 'comunicando', False)) else 0.0)
-        s += peso_onl * (1.0 if bool(getattr(r, 'online', False)) else 0.0)
-        s += peso_prod * (1.0 if ((getattr(r, 'etoday', 0.0) or 0.0) > 0) else 0.0)
+    for r in atuais:
+        etoday_eff = latest_etoday_por_sn.get(r.inverter_sn)  # <- usa o valor efetivo do dia
+        s  = peso_com * (1.0 if bool(getattr(r, 'comunicando', False)) else 0.0)
+        s += peso_onl  * (1.0 if bool(getattr(r, 'online', False))       else 0.0)
+        s += peso_prod * (1.0 if ((etoday_eff or 0.0) > 0) else 0.0)
         score_sum += s
-    indice_usina_pct = round(100.0 * (score_sum / n_rows), 1) if n_rows else 0.0
+    indice_usina_pct = round(100.0 * (score_sum / n), 1) if n else 0.0
 
-    # Visão "diário" ou "últimos" (para cards + tabela principal)
+    # Visão "diário" ou "últimos" (cards + tabela principal)
     if view == 'diario':
         registros = (Monitoramento.query
                      .filter(Monitoramento.usina_id == usina_id,
@@ -6414,7 +6513,8 @@ def monitoramento_usina(usina_id):
                            registros_tab=registros_tab,
                            registros_tab_sorted=registros_tab_sorted,
                            data_tab_ref=data_tab_ref,
-                           latest_ids=latest_ids,          # <--- usado no HTML para mostrar eToday só no último
+                           latest_ids=latest_ids,              # usado no HTML (mostrar eToday só no mais recente)
+                           latest_etoday_por_sn=latest_etoday_por_sn,
                            indice_usina_pct=indice_usina_pct,
                            # visão/cards
                            registros=registros,

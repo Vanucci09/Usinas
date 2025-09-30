@@ -69,14 +69,6 @@
   </div>
 
   {# Tabela (ordenada por eToday desc para ranking) #}
-  {% set regs_com = registros_tab
-      | selectattr('etoday', 'ne', None)
-      | list
-      | sort(attribute='etoday', reverse=True) %}
-  {% set regs_sem = registros_tab
-      | selectattr('etoday', 'equalto', None)
-      | list %}
-  {% set registros_ordenados = regs_com + regs_sem %}
   <div class="table-responsive mb-4">
     <table class="table table-hover align-middle">
       <thead class="table-light">
@@ -92,11 +84,11 @@
         </tr>
       </thead>
       <tbody>
-        {% for r in registros_ordenados %}
+        {% for r in registros_tab_sorted %}
           {% set row_class =
               'table-success' if r.online and r.comunicando else
               ('table-warning' if r.comunicando and not r.online else
-               ('table-danger' if not r.comunicando else '')) %}
+              ('table-danger' if not r.comunicando else '')) %}
           <tr class="{{ row_class }}">
             <td class="fw-semibold">
               {{ loop.index }}
@@ -108,11 +100,14 @@
             <td>{{ fmt_kwh(r.potencia_kw, 3) if r.potencia_kw is not none else '-' }}</td>
             <td>{{ r.data.strftime('%d/%m/%Y') }}</td>
 
-            {# <<< chave do ajuste: eToday só no snapshot mais recente por SN >>> #}
+            {# eToday só no snapshot mais recente por SN #}
             <td>
-              {% if r.id in latest_ids and r.etoday is not none %}
-                {{ fmt_kwh(r.etoday, 3) }}
-              {% else %}-{% endif %}
+              {% if r.id in latest_ids %}
+                {% set e = latest_etoday_por_sn.get(r.inverter_sn) %}
+                {{ fmt_kwh(e, 3) if e is not none else '-' }}
+              {% else %}
+                -
+              {% endif %}
             </td>
 
             <td>
