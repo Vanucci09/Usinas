@@ -437,8 +437,8 @@ class FinanceiroEmpresa(db.Model):
     numero_documento = db.Column(db.String(50))  # NF/recibo
     data_liquidado = db.Column(db.Date)                          # data efetiva do pgto/recebimento
     juros = db.Column(db.Numeric(12, 2), default=0)     # juros ou multa aplicados
+    credor_id = db.Column(db.Integer, db.ForeignKey('credores.id'), nullable=True)
 
-    # Relacionamentos úteis (opcional, ajuda no .plano_financeiro / .centro_custo)
     plano_financeiro = db.relationship('PlanoFinanceiro', lazy='joined')
     centro_custo = db.relationship('CentroCusto', lazy='joined')
     conta = db.relationship('CaixaBanco', lazy='selectin')
@@ -7408,36 +7408,46 @@ def _getlist_either(req, base):
 @app.route('/empresa/financeiro/lancar', methods=['GET', 'POST'], endpoint='empresa_financeiro_lancar')
 @login_required
 def empresa_financeiro_lancar():
-    empresas    = Empresa.query.order_by(Empresa.nome.asc()).all()
-    contas_all  = CaixaBanco.query.order_by(CaixaBanco.nome.asc()).all()
+    empresas = Empresa.query.order_by(Empresa.nome.asc()).all()
+    contas_all = CaixaBanco.query.order_by(CaixaBanco.nome.asc()).all()
     centros_all = CentroCusto.query.order_by(CentroCusto.empresa_id.asc(), CentroCusto.codigo.asc()).all()
-    planos_all  = PlanoFinanceiro.query.filter_by(ativo=True).order_by(PlanoFinanceiro.nome.asc()).all()
+    planos_all = PlanoFinanceiro.query.filter_by(ativo=True).order_by(PlanoFinanceiro.nome.asc()).all()
+    credores_all = Credor.query.order_by(Credor.nome.asc()).all()
 
     if request.method == 'POST':
-        form = request.form  # ✅ SEMPRE usar .form
-
-        # ----------------- Leitura dos campos básicos -----------------
+        form = request.form
+        # Leitura dos campos básicos
         empresa_id = form.get('empresa_id', type=int)
-        tipo       = (form.get('tipo') or '').lower()                   # 'receita' | 'despesa'
-        descricao  = (form.get('descricao') or '').strip()
-        data_tit   = _parse_date(form.get('data'))                      # emissão
-        valor_tot  = _parse_decimal_br(form.get('valor'))
-        status     = (form.get('status') or 'pendente').lower()         # 'pendente'|'pago'|'recebido'
-        data_venc_base = _parse_date(form.get('data_vencimento'))       # venc. da 1ª parcela (se vazio, vira data_tit)
-        conta_id   = form.get('conta_id', type=int)
+        tipo = (form.get('tipo') or '').lower()                   # 'receita' | 'despesa'
+        descricao = (form.get('descricao') or '').strip()
+        data_tit = _parse_date(form.get('data'))                      # emissão
+        valor_tot = _parse_decimal_br(form.get('valor'))
+        status = (form.get('status') or 'pendente').lower()         # 'pendente'|'pago'|'recebido'
+        data_venc_base = _parse_date(form.get('data_vencimento'))       # venc. 1ª parcela
+        conta_id = form.get('conta_id', type=int)
         numero_documento = (form.get('numero_documento') or '').strip() or None
 
-        # ----------------- Multiseleção + parcelas --------------------
-        planos_ids_raw  = _getlist_either(form, 'planos_financeiros_ids')
+        # credor só é obrigatório para DESPESA
+        credor_id = form.get('credor_id', type=int)
+        if tipo == 'despesa':
+            credor = db.session.get(Credor, credor_id) if credor_id else None
+            if not credor:
+                flash('Selecione um credor válido para despesas.', 'danger')
+                return redirect(url_for('empresa_financeiro_lancar'))
+        else:
+            credor = None
+
+        # Multiseleção + parcelas
+        planos_ids_raw = _getlist_either(form, 'planos_financeiros_ids')
         centros_ids_raw = _getlist_either(form, 'centros_custos_ids')
-        planos_ids      = _to_int_ids(planos_ids_raw)
-        centros_ids     = _to_int_ids(centros_ids_raw)
+        planos_ids = _to_int_ids(planos_ids_raw)
+        centros_ids = _to_int_ids(centros_ids_raw)
 
         parcelas_qtd = form.get('parcelas_qtd', type=int) or 1
         if parcelas_qtd < 1:
             parcelas_qtd = 1
 
-        # ----------------- Validações básicas -------------------------
+        # Validações básicas
         emp = db.session.get(Empresa, empresa_id) if empresa_id else None
         if not emp:
             flash('Selecione uma empresa válida.', 'danger'); return redirect(url_for('empresa_financeiro_lancar'))
@@ -7452,20 +7462,15 @@ def empresa_financeiro_lancar():
         if status not in ('pendente','pago','recebido'):
             flash('Status inválido.', 'danger'); return redirect(url_for('empresa_financeiro_lancar'))
 
-        # Exigir pelo menos 1 plano e 1 centro
         if not planos_ids:
-            flash('Selecione ao menos um Plano Financeiro.', 'warning')
-            return redirect(url_for('empresa_financeiro_lancar'))
+            flash('Selecione ao menos um Plano Financeiro.', 'warning'); return redirect(url_for('empresa_financeiro_lancar'))
         if not centros_ids:
-            flash('Selecione ao menos um Centro de Custo.', 'warning')
-            return redirect(url_for('empresa_financeiro_lancar'))
+            flash('Selecione ao menos um Centro de Custo.', 'warning'); return redirect(url_for('empresa_financeiro_lancar'))
 
-        # Conta precisa pertencer à empresa (se informada)
         conta = db.session.get(CaixaBanco, conta_id) if conta_id else None
         if conta and conta.empresa_id != empresa_id:
             flash('A conta selecionada não pertence à empresa.', 'danger'); return redirect(url_for('empresa_financeiro_lancar'))
 
-        # Centros pertencem à empresa
         ok_centros = {c.id for c in CentroCusto.query.filter(
             CentroCusto.id.in_(centros_ids),
             CentroCusto.empresa_id == empresa_id
@@ -7474,7 +7479,6 @@ def empresa_financeiro_lancar():
             flash('Há centro(s) de custo que não pertencem à empresa selecionada.', 'danger')
             return redirect(url_for('empresa_financeiro_lancar'))
 
-        # Planos ativos
         ativos_ids = {p.id for p in PlanoFinanceiro.query.filter(
             PlanoFinanceiro.id.in_(planos_ids),
             PlanoFinanceiro.ativo.is_(True)
@@ -7483,11 +7487,10 @@ def empresa_financeiro_lancar():
             flash('Há plano(s) financeiros inválidos ou inativos.', 'danger')
             return redirect(url_for('empresa_financeiro_lancar'))
 
-        # Data de vencimento base
         if not data_venc_base:
             data_venc_base = data_tit
 
-        # ----------------- Upload (opcional) --------------------------
+        # Upload
         comprovante_file = request.files.get('comprovante')
         filename_salvo, abs_salvo = None, None
         if comprovante_file and comprovante_file.filename:
@@ -7504,8 +7507,7 @@ def empresa_financeiro_lancar():
                 flash('Falha ao salvar o comprovante.', 'danger')
                 return redirect(url_for('empresa_financeiro_lancar'))
 
-        # ----------------- Valores por plano --------------------------
-        # Espera inputs name="valor_plano[<id>]"
+        # Valores por plano
         valores_por_plano = {}
         soma_planos = Decimal('0.00')
         for pid in planos_ids:
@@ -7518,30 +7520,22 @@ def empresa_financeiro_lancar():
             valores_por_plano[pid] = dec
             soma_planos += dec
 
-        # Validar soma == valor total
         if _q2(soma_planos) != _q2(Decimal(valor_tot)):
             flash('A soma dos valores por plano deve ser igual ao Valor (R$) total.', 'danger')
             return redirect(url_for('empresa_financeiro_lancar'))
 
-        # ----------------- Função de rateio com soma exata ------------
         def ratear(total_dec: Decimal, partes: int):
-            """Divide total em 'partes' com 2 casas, garantindo soma exata."""
-            if partes <= 0:
-                return []
+            if partes <= 0: return []
             base = _q2(total_dec / Decimal(partes))
-            lst  = [base] * partes
+            lst = [base] * partes
             diff = total_dec - sum(lst)
             if diff != Decimal('0.00'):
                 lst[-1] = _q2(lst[-1] + diff)
             return lst
 
-        # ----------------- Criação dos títulos ------------------------
+        # Criação dos títulos
         try:
             criados = 0
-
-            # Para cada plano, o valor daquele plano será dividido igualmente
-            # entre (centros × parcelas). Assim cada (centro, parcela) recebe
-            # a fração correta do plano.
             partes_por_plano = len(centros_ids) * parcelas_qtd
 
             for pid in planos_ids:
@@ -7554,23 +7548,21 @@ def empresa_financeiro_lancar():
 
                 for cid in centros_ids:
                     for parc in range(parcelas_qtd):
-                        valor_parte = valores_partes[idx_val]
-                        idx_val += 1
-
+                        valor_parte = valores_partes[idx_val]; idx_val += 1
                         data_venc_parc = data_venc_base + relativedelta(months=parc)
 
                         titulo = FinanceiroEmpresa(
                             empresa_id=empresa_id,
-                            data=data_tit,                         # emissão
+                            data=data_tit,
                             tipo=tipo,
-                            descricao=(descricao if parcelas_qtd == 1
-                                       else f"{descricao} ({parc+1}/{parcelas_qtd})"),
+                            descricao=(descricao if parcelas_qtd == 1 else f"{descricao} ({parc+1}/{parcelas_qtd})"),
                             valor=valor_parte,
                             status=status,
                             data_vencimento=data_venc_parc,
                             conta_id=conta.id if conta else None,
                             plano_financeiro_id=pid,
                             centro_custo_id=cid,
+                            credor_id=(credor.id if credor else None),
                             aprovado=False,
                             numero_documento=numero_documento,
                             comprovante_arquivo=filename_salvo
@@ -7578,9 +7570,8 @@ def empresa_financeiro_lancar():
                         db.session.add(titulo)
                         db.session.flush()
 
-                        # Movimento de caixa imediato se já quitado
                         if conta and status in ('pago','recebido'):
-                            mov = MovimentoCaixaBanco(
+                            db.session.add(MovimentoCaixaBanco(
                                 conta_id=conta.id,
                                 data=data_venc_parc,
                                 tipo='saida' if tipo == 'despesa' else 'entrada',
@@ -7588,9 +7579,7 @@ def empresa_financeiro_lancar():
                                 valor=valor_parte,
                                 origem='financeiro_empresa',
                                 referencia_id=titulo.id
-                            )
-                            db.session.add(mov)
-
+                            ))
                         criados += 1
 
             db.session.commit()
@@ -7600,22 +7589,20 @@ def empresa_financeiro_lancar():
         except Exception as e:
             db.session.rollback()
             print('Erro lançamento financeiro empresa:', e)
-            # rollback do arquivo salvo, se foi gravado
             if abs_salvo and os.path.isfile(abs_salvo):
-                try:
-                    os.remove(abs_salvo)
-                except Exception:
-                    pass
+                try: os.remove(abs_salvo)
+                except Exception: pass
             flash('Erro ao salvar lançamento.', 'danger')
             return redirect(url_for('empresa_financeiro_lancar'))
 
-    # ----------------- GET -----------------
+    # GET
     return render_template(
         'empresa_financeiro_lancar.html',
         empresas=empresas,
         contas_all=contas_all,
         centros_all=centros_all,
-        planos_all=planos_all
+        planos_all=planos_all,
+        credores_all=credores_all,
     )
     
 @app.route('/empresa/financeiro/<int:lanc_id>/editar', methods=['GET', 'POST'], endpoint='empresa_financeiro_editar')
@@ -7626,16 +7613,17 @@ def empresa_financeiro_editar(lanc_id):
         flash('Lançamento não encontrado.', 'warning')
         return redirect(url_for('empresa_financeiro_listar'))
 
-    # Não permite editar se já aprovado
+    # Se já aprovado, não deixa salvar alterações
     if request.method == 'POST' and titulo.aprovado:
         flash('Este lançamento já foi aprovado e não pode mais ser editado.', 'warning')
         return redirect(url_for('empresa_financeiro_editar', lanc_id=lanc_id, next=request.form.get('next','')))
 
     # coleções para selects
-    empresas    = Empresa.query.order_by(Empresa.nome.asc()).all()
-    contas_all  = CaixaBanco.query.order_by(CaixaBanco.nome.asc()).all()
+    empresas = Empresa.query.order_by(Empresa.nome.asc()).all()
+    contas_all = CaixaBanco.query.order_by(CaixaBanco.nome.asc()).all()
     centros_all = CentroCusto.query.order_by(CentroCusto.empresa_id.asc(), CentroCusto.codigo.asc()).all()
-    planos_all  = PlanoFinanceiro.query.filter_by(ativo=True).order_by(PlanoFinanceiro.nome.asc()).all()
+    planos_all = PlanoFinanceiro.query.filter_by(ativo=True).order_by(PlanoFinanceiro.nome.asc()).all()
+    credoresent = Credor.query.order_by(Credor.nome.asc()).all()
 
     if request.method == 'GET':
         return render_template(
@@ -7644,26 +7632,39 @@ def empresa_financeiro_editar(lanc_id):
             empresas=empresas,
             contas_all=contas_all,
             centros_all=centros_all,
-            planos_all=planos_all
+            planos_all=planos_all,
+            credoresent=credoresent,
         )
 
-    # --------- POST (salvar alterações) ----------
+    # POST (salvar alterações)
     form = request.form
 
     empresa_id = form.get('empresa_id', type=int)
-    tipo       = (form.get('tipo') or '').lower()                 # 'receita' | 'despesa'
-    descricao  = (form.get('descricao') or '').strip()
-    data_tit   = _parse_date(form.get('data'))                    # emissão
-    valor      = _parse_decimal_br(form.get('valor'))
-    status     = (form.get('status') or 'pendente').lower()       # 'pendente' | 'pago' | 'recebido'
+    tipo = (form.get('tipo') or '').lower()                 # 'receita' | 'despesa'
+    descricao = (form.get('descricao') or '').strip()
+    data_tit = _parse_date(form.get('data'))                    # emissão
+    valor = _parse_decimal_br(form.get('valor'))
+    status = (form.get('status') or 'pendente').lower()       # 'pendente' | 'pago' | 'recebido'
 
     # Compat: aceita 'data_vencimento' (novo) e 'data_pagamento' (antigo)
-    data_venc  = _parse_date(form.get('data_vencimento')) or _parse_date(form.get('data_pagamento'))
-    conta_id   = form.get('conta_id', type=int)
+    data_venc = _parse_date(form.get('data_vencimento')) or _parse_date(form.get('data_pagamento'))
+    conta_id = form.get('conta_id', type=int)
     numero_documento = (form.get('numero_documento') or '').strip() or None
 
     plano_financeiro_id = form.get('plano_financeiro_id', type=int)
-    centro_custo_id     = form.get('centro_custo_id', type=int)
+    centro_custo_id = form.get('centro_custo_id', type=int)
+
+    # >>> novo: credor (obrigatório para despesa)
+    credor_id = form.get('credor_id', type=int) if tipo == 'despesa' else None
+    credor = None
+    if tipo == 'despesa':
+        if not credor_id:
+            flash('Selecione um credor para despesas.', 'warning')
+            return redirect(url_for('empresa_financeiro_editar', lanc_id=lanc_id, next=form.get('next','')))
+        credor = db.session.get(Credor, credor_id)
+        if not credor:
+            flash('Credor inválido.', 'danger')
+            return redirect(url_for('empresa_financeiro_editar', lanc_id=lanc_id, next=form.get('next','')))
 
     # --- Validações
     emp = db.session.get(Empresa, empresa_id) if empresa_id else None
@@ -7737,51 +7738,45 @@ def empresa_financeiro_editar(lanc_id):
     ).first()
 
     try:
-        # [Regra opcional] só permitir alterar a data do título se status estiver pendente
-        # (Se quiser “travar” isso, descomente o bloco abaixo)
-        # if titulo.status != 'pendente' and data_tit != titulo.data:
-        #     flash('Só é permitido alterar a data de emissão quando o status está pendente.', 'warning')
-        #     return redirect(url_for('empresa_financeiro_editar', lanc_id=lanc_id, next=form.get('next','')))
-
-        # atualizar campos do título
+        # Atualiza campos do título
         titulo.empresa_id = empresa_id
         titulo.tipo = tipo
         titulo.descricao = descricao
         titulo.data = data_tit
         titulo.valor = valor
         titulo.status = status
-        titulo.data_vencimento = data_venc        # 🔁 agora usa data_vencimento
+        titulo.data_vencimento = data_venc
         titulo.conta_id = conta.id if conta else None
         titulo.plano_financeiro_id = plano_financeiro_id
         titulo.centro_custo_id = centro_custo_id
         titulo.numero_documento = numero_documento
+        titulo.credor_id = credor_id if tipo == 'despesa' else None
 
         if novo_filename:
             titulo.comprovante_arquivo = novo_filename
 
         # sincronizar movimento de caixa
         if status in ('pago','recebido') and conta:
+            # se já houver juros registrados no título, refletir no movimento
+            valor_mov = (valor or Decimal('0')) + (titulo.juros or Decimal('0'))
             if mov_exist:
-                # atualiza
                 mov_exist.conta_id = conta.id
                 mov_exist.data = data_venc or data_tit
                 mov_exist.tipo = 'saida' if tipo == 'despesa' else 'entrada'
                 mov_exist.descricao = f'{tipo.capitalize()} - {descricao}'
-                mov_exist.valor = valor
+                mov_exist.valor = valor_mov
             else:
-                # cria
                 mov_novo = MovimentoCaixaBanco(
                     conta_id=conta.id,
                     data=data_venc or data_tit,
                     tipo='saida' if tipo == 'despesa' else 'entrada',
                     descricao=f'{tipo.capitalize()} - {descricao}',
-                    valor=valor,
+                    valor=valor_mov,
                     origem='financeiro_empresa',
                     referencia_id=titulo.id
                 )
                 db.session.add(mov_novo)
         else:
-            # se não é pago/recebido ou sem conta -> remove movimento, se existir
             if mov_exist:
                 db.session.delete(mov_exist)
 
@@ -7810,7 +7805,7 @@ def empresa_financeiro_editar(lanc_id):
                 pass
 
         flash('Erro ao salvar alterações.', 'danger')
-        return redirect(url_for('empresa_financeiro_editar', lanc_id=lanc_id, next=form.get('next','')))    
+        return redirect(url_for('empresa_financeiro_editar', lanc_id=lanc_id, next=form.get('next','')))
     
 @app.route('/uploads/comprovantes/<path:filename>', methods=['GET'], endpoint='download_comprovante')
 @login_required
@@ -8545,7 +8540,6 @@ def empresa_contas_listar():
         empresa_id=empresa_id,
         q=q
     )
-
 
 # EDITAR CONTA BANCÁRIA
 @app.route('/empresa/conta_bancaria/<int:conta_id>/editar', methods=['GET', 'POST'], endpoint='empresa_conta_bancaria_editar')

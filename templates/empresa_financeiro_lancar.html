@@ -56,6 +56,18 @@
         </select>
       </div>
 
+      <!-- Credor (apenas para Despesa) -->
+      <div class="col-md-6 col-lg-4" id="wrap_credor" style="display:none;">
+        <label for="credor_id" class="form-label">Credor *</label>
+        <select name="credor_id" id="credor_id" class="form-select" disabled>
+          <option value="">Selecione o credor...</option>
+          {% for cr in credores_all %}
+            <option value="{{ cr.id }}">{{ cr.nome }}</option>
+          {% endfor %}
+        </select>
+        <small class="text-muted">Obrigatório quando o tipo for “Despesa”.</small>
+      </div>
+
       <!-- Data (emissão) -->
       <div class="col-md-6 col-lg-4">
         <label for="data" class="form-label">Data *</label>
@@ -224,8 +236,24 @@
     try{
       return n.toLocaleString('pt-BR',{style:'currency', currency:'BRL'});
     }catch(e){
-      // fallback simples
       return 'R$ ' + (Math.round(n*100)/100).toFixed(2).replace('.',',');
+    }
+  }
+
+  // -------- Credor por tipo
+  function toggleCredorPorTipo() {
+    const tipo = (document.getElementById('tipo').value || '').toLowerCase();
+    const wrap = document.getElementById('wrap_credor');
+    const sel  = document.getElementById('credor_id');
+    if (tipo === 'despesa') {
+      wrap.style.display = '';
+      sel.disabled = false;
+      sel.setAttribute('required', 'required');
+    } else {
+      wrap.style.display = 'none';
+      sel.disabled = true;
+      sel.removeAttribute('required');
+      sel.value = '';
     }
   }
 
@@ -361,7 +389,6 @@
       }
     });
     document.getElementById('soma_planos').textContent = fmtBR(soma);
-    // Validação visual com total
     var total = parseBR(document.getElementById('valor').value);
     var aviso = document.getElementById('aviso_soma');
     if(total > 0 && Math.abs(soma - total) > 0.005){
@@ -377,24 +404,33 @@
     var ativos = Array.from(document.querySelectorAll('.plano-item'))
       .filter(function(row){ return row.querySelector('.ck-plano')?.checked; });
     if(ativos.length === 0) return;
-
-    var parte = Math.floor((total/ativos.length)*100)/100; // duas casas
+    var parte = Math.floor((total/ativos.length)*100)/100;
     var somaParcial = parte * ativos.length;
     var resto = Math.round((total - somaParcial)*100)/100;
-
     ativos.forEach(function(row, idx){
       var inp = row.querySelector('.valor-plano');
       var val = parte + (idx === ativos.length-1 ? resto : 0);
-      // formata estilo BR
       inp.value = (val.toFixed(2)).replace('.',',');
     });
     recalcSomaPlanos();
   }
 
-  // -------- submit guard: soma deve bater
+  // -------- submit guard
   function bindSubmitGuard(){
     var form = document.getElementById('form-fin');
     form.addEventListener('submit', function(e){
+      // credor obrigatório se despesa
+      var tipoSel = (document.getElementById('tipo').value || '').toLowerCase();
+      if (tipoSel === 'despesa') {
+        var credorSel = document.getElementById('credor_id').value;
+        if (!credorSel) {
+          e.preventDefault();
+          alert('Selecione um credor para despesas.');
+          return;
+        }
+      }
+
+      // soma dos planos deve bater com o total
       var total = parseBR(document.getElementById('valor').value);
       var soma = 0;
       var planosMarcados = 0;
@@ -438,6 +474,10 @@
       filterContasByEmpresa();
       applyCentros();
     }
+
+    // tipo -> mostra/oculta credor
+    document.getElementById('tipo').addEventListener('change', toggleCredorPorTipo);
+    toggleCredorPorTipo();
 
     // status -> sugere data
     document.getElementById('status').addEventListener('change', sugereDataPgtoSeQuitado);

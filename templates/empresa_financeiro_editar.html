@@ -87,6 +87,18 @@
                placeholder="Ex.: 12345, R-2025/007, NFe 55-000123" {{ 'readonly disabled' if titulo.aprovado }}>
       </div>
 
+      <!-- Credor (apenas para DESPESA) -->
+      <div class="col-md-6" id="grupo-credor">
+        <label for="credor_id" class="form-label">Credor *</label>
+        <select name="credor_id" id="credor_id" class="form-select" {{ 'disabled' if titulo.aprovado }}>
+          <option value="">Selecione um credor...</option>
+          {% for cr in credoresent %}
+            <option value="{{ cr.id }}" {% if titulo.credor_id == cr.id %}selected{% endif %}>{{ cr.nome }}</option>
+          {% endfor %}
+        </select>
+        <small class="text-muted">Obrigatório para despesas.</small>
+      </div>
+
       <!-- Plano Financeiro -->
       <div class="col-md-6">
         <label for="plano_financeiro_id" class="form-label">Plano Financeiro</label>
@@ -98,7 +110,7 @@
         </select>
       </div>
 
-      <!-- Centro de Custo (filtra por empresa escolhida) -->
+      <!-- Centro de Custo -->
       <div class="col-md-6">
         <label for="centro_custo_id" class="form-label">Centro de Custo</label>
         <select name="centro_custo_id" id="centro_custo_id" class="form-select" {{ 'disabled' if titulo.aprovado }}>
@@ -124,7 +136,7 @@
         </select>
       </div>
 
-      <!-- Data de vencimento/pagamento/recebimento -->
+      <!-- Data vencimento/pagamento/recebimento -->
       <div class="col-md-4">
         <label for="data_vencimento" class="form-label">Data de vencimento / pgto / recebimento</label>
         <input type="date" name="data_vencimento" id="data_vencimento" class="form-control"
@@ -132,7 +144,7 @@
         <small id="helpVenc" class="text-muted d-block">Editável apenas quando o status estiver em “Pendente”.</small>
       </div>
 
-      <!-- Conta (Caixa/Banco) -->
+      <!-- Conta -->
       <div class="col-md-4">
         <label for="conta_id" class="form-label">Conta (Caixa/Banco)</label>
         <select name="conta_id" id="conta_id" class="form-select" {{ 'disabled' if titulo.aprovado }}>
@@ -192,13 +204,15 @@
   const contaSel    = document.getElementById('conta_id');
   const centroSel   = document.getElementById('centro_custo_id');
   const statusSel   = document.getElementById('status');
+  const tipoSel     = document.getElementById('tipo');
   const dtVenc      = document.getElementById('data_vencimento');
   const helpVenc    = document.getElementById('helpVenc');
+  const grupoCredor = document.getElementById('grupo-credor');
+  const credorSel   = document.getElementById('credor_id');
 
   function filtrarPorEmpresa(selectEl) {
     if (!empresaSel || !selectEl) return;
     const emp = (empresaSel.value || '').toString();
-
     for (const opt of selectEl.options) {
       if (!opt.value) { opt.hidden = false; opt.disabled = false; continue; }
       const eId = (opt.getAttribute('data-empresa') || '').toString();
@@ -206,7 +220,6 @@
       opt.hidden = deveOcultar;
       opt.disabled = deveOcultar;
     }
-
     const cur = selectEl.options[selectEl.selectedIndex];
     if (cur && (cur.hidden || cur.disabled)) {
       let escolhido = '';
@@ -218,6 +231,19 @@
   }
   function filtrarContas()  { filtrarPorEmpresa(contaSel); }
   function filtrarCentros() { filtrarPorEmpresa(centroSel); }
+
+  // Mostra/oculta e exige credor quando tipo=despesa
+  function toggleCredor() {
+    const isDespesa = (tipoSel ? tipoSel.value : '{{ titulo.tipo }}') === 'despesa';
+    if (grupoCredor) {
+      grupoCredor.style.display = isDespesa ? '' : 'none';
+    }
+    if (credorSel) {
+      credorSel.required = isDespesa && {{ 'false' if titulo.aprovado else 'true' }};
+      credorSel.disabled = {{ 'true' if titulo.aprovado else 'false' }};
+      if (!isDespesa) credorSel.value = '';
+    }
+  }
 
   // Habilita edição do vencimento somente quando status = pendente e não aprovado
   function toggleVencimentoEdit() {
@@ -243,6 +269,10 @@
 
     statusSel && statusSel.addEventListener('change', toggleVencimentoEdit);
     toggleVencimentoEdit();
+
+    // Tipo -> mostra/oculta credor
+    tipoSel && tipoSel.addEventListener('change', toggleCredor);
+    toggleCredor();
   });
 </script>
 {% endblock %}
