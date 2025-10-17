@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+{% block title %}Editar Conta Bancária – {{ conta.nome }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2 class="text-primary mb-4">Editar Conta – {{ conta.nome }}</h2>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="mb-3">
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <form method="POST" action="{{ url_for('empresa_conta_bancaria_editar', conta_id=conta.id) }}">
+    <div class="row g-3">
+
+      <div class="col-md-4">
+        <label class="form-label">Empresa *</label>
+        <select name="empresa_id" class="form-select" required>
+          {% for emp in empresas %}
+            <option value="{{ emp.id }}" {% if emp.id == conta.empresa_id %}selected{% endif %}>{{ emp.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Nome da Conta *</label>
+        <input type="text" name="nome" class="form-control" value="{{ conta.nome }}" required>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Tipo *</label>
+        <select name="tipo" class="form-select" required>
+          {% set tipos = ['Caixa','Banco','Conta Digital'] %}
+          {% for t in tipos %}
+            <option value="{{ t }}" {% if conta.tipo == t %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Banco</label>
+        <input type="text" name="banco" class="form-control" value="{{ conta.banco or '' }}" placeholder="Ex.: Banco do Brasil, Nubank">
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Agência</label>
+        <input type="text" name="agencia" class="form-control" value="{{ conta.agencia or '' }}" placeholder="Ex.: 1234-5">
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Conta</label>
+        <input type="text" name="conta" class="form-control" value="{{ conta.conta or '' }}" placeholder="Ex.: 000123-4">
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Saldo Inicial (R$)</label>
+        <input type="text" name="saldo_inicial" class="form-control"
+               value="{{ '{:,.2f}'.format(conta.saldo_inicial or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}">
+        <small class="text-muted">Altera o valor cadastral; não ajusta movimentos históricos.</small>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Saldo Atual (R$)</label>
+        <input type="text" name="saldo_atual" class="form-control"
+               value="{{ '{:,.2f}'.format(conta.saldo_atual or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}">
+        <small class="text-muted">Ajuste manual se necessário.</small>
+      </div>
+
+    </div>
+
+    <div class="d-flex flex-column flex-md-row justify-content-end align-items-stretch gap-2 mt-4">
+      <a href="{{ url_for('empresa_contas_listar', empresa_id=conta.empresa_id) }}" class="btn btn-outline-secondary w-100 w-md-auto">
+        <i class="bi bi-arrow-left me-2"></i> Voltar
+      </a>
+      <button type="submit" class="btn btn-success w-100 w-md-auto">
+        <i class="bi bi-check2-circle me-2"></i> Salvar
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

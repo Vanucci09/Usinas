@@ -144,7 +144,84 @@
             </div>
         </div>
 
-        <!-- Financeiro -->
+        <!-- Financeiro da Empresa -->
+        <div class="accordion-item">
+            <h2 class="accordion-header" id="headingFinanceiroEmpresa">
+                <button
+                class="accordion-button {% if request.args.get('aba') == 'financeiro_empresa' %}{% else %}collapsed{% endif %}"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#collapseFinanceiroEmpresa"
+                aria-expanded="{% if request.args.get('aba') == 'financeiro_empresa' %}true{% else %}false{% endif %}"
+                aria-controls="collapseFinanceiroEmpresa">
+                💼 Financeiro da Empresa
+                </button>
+            </h2>
+
+            <div id="collapseFinanceiroEmpresa"
+                class="accordion-collapse collapse {% if request.args.get('aba') == 'financeiro_empresa' %}show{% endif %}"
+                aria-labelledby="headingFinanceiroEmpresa"
+                data-bs-parent="#accordionGrupos">
+                <div class="accordion-body">
+                    <div class="row g-3">
+
+                        <!-- Atalhos principais -->
+                        <div class="col-md-4">
+                            <a href="{{ url_for('listar_empresas_operacional') }}" class="btn btn-outline-primary w-100">
+                                Grupo
+                            </a>
+                        </div>
+
+                        <div class="col-md-4">
+                            <a href="{{ url_for('listar_clientes_operacionais') }}"
+                                class="btn btn-outline-primary w-100">
+                                Clientes Empresa
+                            </a>
+                        </div>
+
+                        <!-- Financeiro Empresa -->
+                        <div class="col-md-4">
+                            <a href="{{ url_for('empresa_financeiro_listar') }}"
+                                class="btn btn-outline-primary w-100">
+                                Títulos
+                            </a>
+                        </div>
+
+                        <!-- Rotas sugeridas (crie quando quiser) -->
+                        <div class="col-md-4">
+                            <a href="{{ url_for('listar_centros_custos') }}"
+                                class="btn btn-outline-secondary w-100">
+                                Centro de Custo
+                            </a>
+                        </div>
+
+                        <div class="col-md-4">
+                            <a href="{{ url_for('listar_planos_financeiros') }}"
+                                class="btn btn-outline-secondary w-100">
+                                Plano Financeiro
+                            </a>
+                        </div>
+
+                        <div class="col-md-4">
+                            <a href="{{ url_for('empresa_contas_listar') }}"
+                                class="btn btn-outline-secondary w-100">
+                                Bancos
+                            </a>
+                        </div>
+
+                        <div class="col-md-4">
+                            <a href="{{ url_for('listar_empresas_operacional') }}"
+                                class="btn btn-outline-secondary w-100">
+                                Fluxo de Caixa (Empresa)
+                            </a>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Financeiro Usinas -->
         <div class="accordion-item">
             <h2 class="accordion-header" id="headingFinanceiro">
                 <button class="accordion-button {% if request.args.get('aba') == 'financeiro' %} {% else %}collapsed{% endif %}" 
@@ -153,7 +230,7 @@
                         data-bs-target="#collapseFinanceiro" 
                         aria-expanded="{% if request.args.get('aba') == 'financeiro' %}true{% else %}false{% endif %}" 
                         aria-controls="collapseFinanceiro">
-                    💰 Financeiro
+                    💰 Financeiro Usinas
                 </button>
             </h2>
             <div id="collapseFinanceiro" 

@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+{% block title %}Editar Centro de Custo{% endblock %}
+{% block content %}
+<div class="container mt-4">
+  <h2 class="text-primary mb-3">Editar Centro de Custo</h2>
+
+  <form method="POST">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Empresa</label>
+        <select name="empresa_id" id="empresa_id" class="form-select" required>
+          {% for e in empresas %}
+            <option value="{{ e.id }}" {% if e.id == cc.empresa_id %}selected{% endif %}>{{ e.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Cliente Operacional</label>
+        <select name="cliente_id" id="cliente_id" class="form-select" required disabled>
+          <option value="">Carregando clientes...</option>
+        </select>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Código</label>
+        <input type="text" name="codigo" class="form-control" value="{{ cc.codigo }}" required>
+      </div>
+
+      <div class="col-md-8">
+        <label class="form-label">Nome do Centro de Custo</label>
+        <input type="text" name="nome" class="form-control" value="{{ cc.nome }}" required>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">CPF/CNPJ</label>
+        <input type="text" name="cpf_cnpj" class="form-control" value="{{ cc.cpf_cnpj or '' }}">
+      </div>
+
+      <div class="col-md-8">
+        <label class="form-label">Endereço</label>
+        <input type="text" name="endereco" class="form-control" value="{{ cc.endereco or '' }}">
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Telefone</label>
+        <input type="text" name="telefone" class="form-control" value="{{ cc.telefone or '' }}">
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Email</label>
+        <input type="email" name="email" class="form-control" value="{{ cc.email or '' }}">
+      </div>
+
+      <div class="col-12 form-check mt-2">
+        <input class="form-check-input" type="checkbox" id="ativo" name="ativo" {% if cc.ativo %}checked{% endif %}>
+        <label class="form-check-label" for="ativo">Ativo</label>
+      </div>
+    </div>
+
+    <div class="mt-4 d-flex gap-2">
+      <button type="submit" class="btn btn-success">Salvar Alterações</button>
+      <a href="{{ url_for('listar_centros_custos') }}" class="btn btn-secondary">Cancelar</a>
+    </div>
+  </form>
+</div>
+
+<!-- Script correto -->
+<script>
+(async function () {
+  const empresaSel = document.getElementById('empresa_id');
+  const clienteSel = document.getElementById('cliente_id');
+  const clienteAtual = "{{ cc.cliente_id }}";
+
+  async function carregaClientes(empresaId, selecionado = null) {
+    clienteSel.innerHTML = '<option value="">Carregando...</option>';
+    clienteSel.disabled = true;
+
+    if (!empresaId) {
+      clienteSel.innerHTML = '<option value="">Selecione a empresa primeiro...</option>';
+      return;
+    }
+
+    try {
+      const resp = await fetch(`/api/empresas/${empresaId}/clientes`);
+      const data = await resp.json();
+
+      if (!Array.isArray(data) || data.length === 0) {
+        clienteSel.innerHTML = '<option value="">Nenhum cliente para esta empresa</option>';
+        return;
+      }
+
+      let html = '<option value="">Selecione...</option>';
+      for (const c of data) {
+        const sel = (selecionado && String(c.id) === String(selecionado)) ? ' selected' : '';
+        html += `<option value="${c.id}"${sel}>${c.nome}</option>`;
+      }
+      clienteSel.innerHTML = html;
+      clienteSel.disabled = false;
+    } catch (e) {
+      clienteSel.innerHTML = '<option value="">Erro ao carregar</option>';
+    }
+  }
+
+  // carrega no onload com a empresa atual e seleciona o cliente atual
+  await carregaClientes(empresaSel.value, clienteAtual);
+
+  // recarrega ao trocar empresa
+  empresaSel.addEventListener('change', () => carregaClientes(empresaSel.value));
+})();
+</script>
+{% endblock %}

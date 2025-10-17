@@ -1,76 +1,114 @@
 {% extends 'base.html' %}
+{% block title %}Usuários Cadastrados{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
-    <h2 class="mb-4 text-center text-primary">👥 Usuários Cadastrados</h2>
+  <h2 class="mb-4 text-center text-primary">👥 Usuários Cadastrados</h2>
 
-    <div class="d-flex justify-content-between mb-3">
-        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
-            <i class="bi bi-arrow-left"></i> Início
-        </a>
-        <a href="{{ url_for('cadastrar_usuario') }}" class="btn btn-success">
-            <i class="bi bi-person-plus-fill"></i> Novo Usuário
-        </a>
-    </div>
+  <div class="d-flex justify-content-between mb-3">
+    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left"></i> Início
+    </a>
+    <a href="{{ url_for('cadastrar_usuario') }}" class="btn btn-success">
+      <i class="bi bi-person-plus-fill"></i> Novo Usuário
+    </a>
+  </div>
 
-    <table class="table table-striped table-hover align-middle">
-        <thead class="table-primary">
-            <tr>
-                <th>Nome</th>
-                <th>Email</th>
-                <th>Geração</th>
-                <th>Clientes</th>
-                <th>Faturas</th>
-                <th>Financeiro</th>
-                <th class="text-center">Ações</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for usuario in usuarios %}
-            <tr>
-                <td>{{ usuario.nome }}</td>
-                <td>{{ usuario.email }}</td>
-                <td class="text-center">
-                    {% if usuario.pode_cadastrar_geracao %}
-                        <i class="bi bi-check-circle-fill text-success"></i>
-                    {% else %}
-                        <i class="bi bi-x-circle-fill text-danger"></i>
-                    {% endif %}
-                </td>
-                <td class="text-center">
-                    {% if usuario.pode_cadastrar_cliente %}
-                        <i class="bi bi-check-circle-fill text-success"></i>
-                    {% else %}
-                        <i class="bi bi-x-circle-fill text-danger"></i>
-                    {% endif %}
-                </td>
-                <td class="text-center">
-                    {% if usuario.pode_cadastrar_fatura %}
-                        <i class="bi bi-check-circle-fill text-success"></i>
-                    {% else %}
-                        <i class="bi bi-x-circle-fill text-danger"></i>
-                    {% endif %}
-                </td>
-                <td class="text-center">
-                    {% if usuario.pode_acessar_financeiro %}
-                        <i class="bi bi-check-circle-fill text-success"></i>
-                    {% else %}
-                        <i class="bi bi-x-circle-fill text-danger"></i>
-                    {% endif %}
-                </td>
-                <td class="text-center">
-                    <a href="{{ url_for('editar_usuario', id=usuario.id) }}" class="btn btn-sm btn-outline-primary me-1">
-                        <i class="bi bi-pencil"></i>
-                    </a>
-                    <form method="POST" action="{{ url_for('excluir_usuario', id=usuario.id) }}" class="d-inline">
-                        <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Tem certeza que deseja excluir este usuário?')">
-                            <i class="bi bi-trash"></i>
-                        </button>
-                    </form>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="mb-3">
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} mb-2">{{ message|safe }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <table class="table table-striped table-hover align-middle">
+    <thead class="table-primary">
+      <tr>
+        <th>Nome</th>
+        <th>Email</th>
+        <th>Geração</th>
+        <th>Clientes</th>
+        <th>Faturas</th>
+        <th>Financeiro</th>
+        <th>Aprovador</th>
+        <th class="text-center">Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for usuario in usuarios %}
+      <tr {% if usuario.pode_aprovar_financeiro %}class="table-info"{% endif %}>
+        <td>{{ usuario.nome }}</td>
+        <td>{{ usuario.email }}</td>
+
+        <td class="text-center">
+          {% if usuario.pode_cadastrar_geracao %}
+            <i class="bi bi-check-circle-fill text-success"></i>
+          {% else %}
+            <i class="bi bi-x-circle-fill text-danger"></i>
+          {% endif %}
+        </td>
+
+        <td class="text-center">
+          {% if usuario.pode_cadastrar_cliente %}
+            <i class="bi bi-check-circle-fill text-success"></i>
+          {% else %}
+            <i class="bi bi-x-circle-fill text-danger"></i>
+          {% endif %}
+        </td>
+
+        <td class="text-center">
+          {% if usuario.pode_cadastrar_fatura %}
+            <i class="bi bi-check-circle-fill text-success"></i>
+          {% else %}
+            <i class="bi bi-x-circle-fill text-danger"></i>
+          {% endif %}
+        </td>
+
+        <td class="text-center">
+          {% if usuario.pode_acessar_financeiro %}
+            <i class="bi bi-check-circle-fill text-success"></i>
+          {% else %}
+            <i class="bi bi-x-circle-fill text-danger"></i>
+          {% endif %}
+        </td>
+
+        <td class="text-center">
+          {% if usuario.pode_aprovar_financeiro %}
+            <span class="badge bg-primary">
+              <i class="bi bi-star-fill me-1"></i> Aprovador
+            </span>
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
+        </td>
+
+        <td class="text-center">
+          <div class="btn-group">
+            <a href="{{ url_for('editar_usuario', id=usuario.id) }}" class="btn btn-sm btn-outline-primary" title="Editar">
+              <i class="bi bi-pencil"></i>
+            </a>
+            <form method="POST" action="{{ url_for('excluir_usuario', id=usuario.id) }}" class="d-inline">
+              {% if csrf_token %} {{ csrf_token() }} {% endif %}
+              <button type="submit" class="btn btn-sm btn-outline-danger"
+                      onclick="return confirm('Tem certeza que deseja excluir este usuário?')"
+                      title="Excluir">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="small text-muted">
+    <i class="bi bi-info-circle me-1"></i>
+    O usuário com a <strong>badge “Aprovador”</strong> é quem tem <code>pode_aprovar_financeiro = TRUE</code>.
+    Para alterar, edite o usuário em <em>Editar Usuário</em> e marque/desmarque “Pode aprovar financeiro”.
+  </div>
 </div>
 {% endblock %}

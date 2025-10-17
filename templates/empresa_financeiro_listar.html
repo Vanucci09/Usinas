@@ -1,0 +1,459 @@
+{% extends 'base.html' %}
+{% block title %}Financeiro – Lançamentos{% endblock %}
+
+{% block content %}
+<style>
+  /* Compactar a tabela */
+  .table-financeiro.table-sm> :not(caption)>*>*{padding:.35rem .5rem}
+  .table-financeiro th, .table-financeiro td { vertical-align: middle; }
+
+  /* Cabeçalho fixo ao rolar horizontal/vertical */
+  .table-wrap { position: relative; max-width: 100%; overflow: auto; }
+  .table-financeiro thead th {
+    position: sticky; top: 0; z-index: 2;
+    background: var(--bs-body-bg);
+  }
+
+  /* Colunas com largura controlada */
+  .col-data   { white-space: nowrap; width: 110px; }
+  .col-empresa{ min-width: 180px; }
+  .col-desc   { max-width: 320px; white-space: normal; }
+  .col-nf     { max-width: 120px; white-space: nowrap; }
+  .col-plano  { max-width: 220px; white-space: normal; }
+  .col-cc     { max-width: 220px; white-space: normal; }
+  .col-status { min-width: 220px; }
+  .col-aprov  { width: 70px; text-align:center; }
+  .col-valor  { white-space: nowrap; width: 120px; }
+  .col-acoes  { min-width: 160px; white-space: nowrap; }
+
+  /* Truncar quando necessário mantendo quebra para textos longos */
+  .text-truncate-2 {
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* Indicador de atraso */
+  .badge-atraso{ font-weight: 500; }
+
+  /* Ícones de comprovantes na mesma célula */
+  .comp-icons .btn-link { padding: 0 .25rem; }
+  .comp-icons i { font-size: 1rem; vertical-align: -2px; }
+
+  /* Responsividade: esconder colunas menos críticas em telas menores */
+  @media (max-width: 1400px){
+    .col-nf, .col-aprov { display: none; }
+  }
+  @media (max-width: 1200px){
+    .col-cc { display: none; }
+  }
+  @media (max-width: 992px){
+    .col-plano { display:none; }
+    .col-acoes { min-width: 120px; }
+  }
+</style>
+
+<div class="container mt-4">
+
+  <!-- Cabeçalho -->
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <h2 class="text-primary mb-0">Financeiro – Lançamentos</h2>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-primary" href="{{ url_for('empresa_financeiro_lancar') }}">
+        <i class="bi bi-plus-lg me-1"></i> Novo lançamento
+      </a>
+    </div>
+  </div>
+
+  <!-- Flash -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="mb-3">
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} mb-2">{{ message|safe }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <!-- Filtros + Ordenação (compactos) -->
+  <form method="get" class="card shadow-sm mb-3" id="filtros-form">
+    <div class="card-body row g-2">
+      <div class="col-lg-3 col-md-4">
+        <label class="form-label">Empresa</label>
+        <select class="form-select form-select-sm" name="empresa_id">
+          <option value="">Todas</option>
+          {% for e in empresas %}
+            <option value="{{ e.id }}" {% if empresa_id == e.id %}selected{% endif %}>{{ e.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-2 col-6">
+        <label class="form-label">Tipo</label>
+        <select class="form-select form-select-sm" name="tipo">
+          <option value="">Todos</option>
+          <option value="receita" {% if tipo=='receita' %}selected{% endif %}>Receita</option>
+          <option value="despesa" {% if tipo=='despesa' %}selected{% endif %}>Despesa</option>
+        </select>
+      </div>
+
+      <div class="col-md-2 col-6">
+        <label class="form-label">Status</label>
+        <select class="form-select form-select-sm" name="status">
+          <option value="">Todos</option>
+          <option value="pendente" {% if status=='pendente' %}selected{% endif %}>Pendente</option>
+          <option value="pago" {% if status=='pago' %}selected{% endif %}>Pago</option>
+          <option value="recebido" {% if status=='recebido' %}selected{% endif %}>Recebido</option>
+        </select>
+      </div>
+
+      <div class="col-md-2 col-6">
+        <label class="form-label">Aprovado</label>
+        <select class="form-select form-select-sm" name="aprovado">
+          <option value="">Todos</option>
+          <option value="sim" {% if aprovado=='sim' %}selected{% endif %}>Sim</option>
+          <option value="nao" {% if aprovado=='nao' %}selected{% endif %}>Não</option>
+        </select>
+      </div>
+
+      <div class="col-lg-3 col-md-4">
+        <label class="form-label">Plano</label>
+        <select class="form-select form-select-sm" name="plano_id">
+          <option value="">Todos</option>
+          {% for p in planos_all %}
+            <option value="{{ p.id }}" {% if plano_id == p.id %}selected{% endif %}>{{ p.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-lg-3 col-md-4">
+        <label class="form-label">Centro de Custo</label>
+        <select class="form-select form-select-sm" name="centro_id">
+          <option value="">Todos</option>
+          {% for cc in centros_all %}
+            <option value="{{ cc.id }}" {% if centro_id == cc.id %}selected{% endif %}>
+              {{ cc.codigo }} — {{ cc.nome }} (Emp. #{{ cc.empresa_id }})
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-2 col-6">
+        <label class="form-label">Data Início</label>
+        <input type="date" name="data_ini" class="form-control form-control-sm" value="{{ data_ini if data_ini else '' }}">
+      </div>
+
+      <div class="col-md-2 col-6">
+        <label class="form-label">Data Fim</label>
+        <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ data_fim if data_fim else '' }}">
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Buscar</label>
+        <input class="form-control form-control-sm" name="q" value="{{ q or '' }}" placeholder="Descrição ou nº NF/recibo">
+      </div>
+
+      <!-- Ordenação -->
+      <div class="col-md-2 col-6">
+        <label class="form-label">Ordenar por</label>
+        <select class="form-select form-select-sm" name="sort" id="sort">
+          <option value="">Padrão</option>
+          <option value="data_vencimento" {% if sort=='data_vencimento' %}selected{% endif %}>Data Pgto/Rec.</option>
+          <option value="valor" {% if sort=='valor' %}selected{% endif %}>Valor</option>
+          <option value="status" {% if sort=='status' %}selected{% endif %}>Status</option>
+          <option value="aprovado" {% if sort=='aprovado' %}selected{% endif %}>Aprovado</option>
+        </select>
+      </div>
+      <div class="col-md-2 col-6">
+        <label class="form-label">Direção</label>
+        <select class="form-select form-select-sm" name="dir" id="dir">
+          <option value="desc" {% if dir=='desc' %}selected{% endif %}>Descendente</option>
+          <option value="asc"  {% if dir=='asc'  %}selected{% endif %}>Ascendente</option>
+        </select>
+      </div>
+
+      <div class="col-md-2 d-flex align-items-end">
+        <button class="btn btn-outline-secondary w-100">
+          <i class="bi bi-search me-1"></i> Filtrar
+        </button>
+      </div>
+    </div>
+  </form>
+
+  <!-- Totais -->
+  <div class="row g-3 mb-3">
+    <div class="col-md-4">
+      <div class="card shadow-sm"><div class="card-body">
+        <div class="text-muted small">Total de Receitas</div>
+        <div class="fs-5 fw-semibold">
+          R$ {{ '{:,.2f}'.format(total_receitas or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+        </div>
+      </div></div>
+    </div>
+    <div class="col-md-4">
+      <div class="card shadow-sm"><div class="card-body">
+        <div class="text-muted small">Total de Despesas</div>
+        <div class="fs-5 fw-semibold">
+          R$ {{ '{:,.2f}'.format(total_despesas or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+        </div>
+      </div></div>
+    </div>
+    <div class="col-md-4">
+      <div class="card shadow-sm"><div class="card-body">
+        <div class="text-muted small">Saldo (Receitas - Despesas)</div>
+        <div class="fs-5 fw-semibold {{ 'text-success' if (saldo or 0) >= 0 else 'text-danger' }}">
+          R$ {{ '{:,.2f}'.format(saldo or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- Tabela -->
+  <div class="table-wrap">
+    <table class="table table-striped table-sm align-middle table-financeiro" id="tabela-financeiro">
+      <thead>
+        <tr>
+          <th class="col-data">Pgto/Rec.</th>
+          <th class="col-empresa">Empresa</th>
+          <th>Tipo</th>
+          <th class="col-desc">Descrição</th>
+          <th class="col-nf">NF/Recibo</th>
+          <th class="col-comprovante">Comp.</th>
+          <th class="col-plano">Plano</th>
+          <th class="col-cc">Centro de Custo</th>
+          <th class="col-status">Status</th>
+          <th class="col-aprov">Aprov.</th>
+          <th class="col-valor text-end">Valor</th>
+          <th class="col-acoes text-end">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if itens %}
+          {% for it in itens %}
+          <tr
+            data-status="{{ (it.status or '').lower() }}"
+            data-pagamento="{{ it.data_vencimento.isoformat() if it.data_vencimento else '' }}"
+          >
+            <!-- Data Pgto/Rec. -->
+            <td class="col-data">
+              {% if it.data_vencimento %}
+                <span class="dt-pagto" data-iso="{{ it.data_vencimento.isoformat() }}">
+                  {{ it.data_vencimento.strftime('%d/%m/%Y') }}
+                </span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+
+            <td class="col-empresa">
+              <span class="text-truncate d-inline-block" style="max-width:220px">{{ it.empresa.nome }}</span>
+            </td>
+
+            <td>
+              <span class="badge {% if it.tipo=='receita' %}bg-success{% else %}bg-danger{% endif %}">
+                {{ it.tipo|capitalize }}
+              </span>
+            </td>
+
+            <td class="col-desc">
+              <div class="text-truncate-2" title="{{ it.descricao }}">{{ it.descricao }}</div>
+            </td>
+
+            <td class="col-nf">{{ it.numero_documento or '-' }}</td>
+
+            <!-- Comprovantes: NF/recibo e BAIXA -->
+            <td class="col-comprovante text-center comp-icons">
+              {% if it.comprovante_arquivo %}
+                <a class="btn btn-link text-decoration-none"
+                   href="{{ url_for('download_comprovante', filename=it.comprovante_arquivo) }}"
+                   title="Abrir NF/Recibo" target="_blank" rel="noopener">
+                  <i class="bi bi-paperclip"></i>
+                </a>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+              {% if it.comprovante_baixa_arquivo %}
+                <a class="btn btn-link text-decoration-none ms-1"
+                   href="{{ url_for('download_comprovante', filename=it.comprovante_baixa_arquivo) }}"
+                   title="Abrir comprovante de baixa/pagamento" target="_blank" rel="noopener">
+                  <i class="bi bi-wallet2"></i>
+                </a>
+              {% endif %}
+            </td>
+
+            <td class="col-plano">
+              <div class="text-truncate-2" title="{{ it.plano_financeiro.nome if it.plano_financeiro else '' }}">
+                {{ it.plano_financeiro.nome if it.plano_financeiro else '-' }}
+              </div>
+            </td>
+
+            <td class="col-cc">
+              {% if it.centro_custo %}
+                <div class="text-truncate" style="max-width:220px"
+                     title="{{ it.centro_custo.codigo }} — {{ it.centro_custo.nome }}">
+                  {{ it.centro_custo.codigo }} — {{ it.centro_custo.nome }}
+                </div>
+              {% else %}-{% endif %}
+            </td>
+
+            <!-- STATUS / ATUALIZAR -->
+            <td class="col-status status-cell">
+              {% set st = (it.status or '').lower() %}
+
+              {% if st in ['pago', 'recebido'] %}
+                <span class="badge bg-success">{{ it.status|capitalize }}</span>
+                {% if it.data_liquidado %}
+                  <small class="text-muted ms-2">{{ it.data_liquidado.strftime('%d/%m/%Y') }}</small>
+                {% endif %}
+                {% if it.juros %}
+                  <small class="text-muted ms-2">+ R$ {{ '{:,.2f}'.format(it.juros).replace(',', 'X').replace('.', ',').replace('X', '.') }}</small>
+                {% endif %}
+
+              {% elif it.aprovado and st == 'pendente' %}
+                <form method="POST"
+                      action="{{ url_for('empresa_financeiro_atualizar_status_data', lanc_id=it.id) }}"
+                      enctype="multipart/form-data"
+                      class="d-flex flex-wrap gap-1 align-items-center">
+                  <input type="hidden" name="next" value="{{ request.full_path }}"/>
+
+                  <select name="status" class="form-select form-select-sm" style="max-width: 150px;">
+                    <option value="pendente" selected>Pendente</option>
+                    <option value="pago">Pago (despesa)</option>
+                    <option value="recebido">Recebido (receita)</option>
+                  </select>
+
+                  <input type="date" name="data_liquidado"
+                         class="form-control form-control-sm" style="max-width: 140px;"
+                         value="{{ it.data_liquidado.isoformat() if it.data_liquidado else '' }}"
+                         title="Data liquidado">
+
+                  <input type="text" name="juros"
+                         class="form-control form-control-sm" style="max-width: 110px;"
+                         value="{{ '{:,.2f}'.format(it.juros or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}"
+                         placeholder="Juros" title="Juros (R$)">
+
+                  <!-- Comprovante do pagamento (baixa) -->
+                  <input type="file" name="comprovante_pgto"
+                         class="form-control form-control-sm" style="max-width: 220px;"
+                         accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif"
+                         title="Comprovante de baixa/pagamento (opcional)">
+
+                  <button class="btn btn-sm btn-success d-flex align-items-center px-2">
+                    <i class="bi bi-save me-1"></i> Salvar
+                  </button>
+                </form>
+
+              {% else %}
+                <span class="badge bg-warning text-dark">Pendente</span>
+              {% endif %}
+            </td>
+
+            <td class="col-aprov text-center" title="{{ 'Aprovado' if it.aprovado else 'Não aprovado' }}">
+              {% if it.aprovado %}
+                <i class="bi bi-check-circle-fill text-primary"></i>
+              {% else %}
+                <i class="bi bi-dash-circle text-secondary"></i>
+              {% endif %}
+            </td>
+
+            <td class="col-valor text-end">
+              R$ {{ '{:,.2f}'.format((it.valor or 0) + (it.juros or 0)).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+            </td>
+
+            <!-- Ações: botão + dropdown em telas menores -->
+            <td class="col-acoes text-end">
+              <div class="btn-group">
+                {% if not it.aprovado %}
+                  <a class="btn btn-sm btn-outline-warning d-none d-lg-inline-block"
+                     href="{{ url_for('empresa_financeiro_editar', lanc_id=it.id, next=request.full_path) }}"
+                     title="Editar">
+                    <i class="bi bi-pencil-square"></i> Editar
+                  </a>
+                {% endif %}
+
+                <div class="dropstart d-inline-block d-lg-none">
+                  <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                    Ações
+                  </button>
+                  <ul class="dropdown-menu dropdown-menu-end">
+                    {% if not it.aprovado %}
+                    <li>
+                      <a class="dropdown-item"
+                         href="{{ url_for('empresa_financeiro_editar', lanc_id=it.id, next=request.full_path) }}">
+                        <i class="bi bi-pencil-square me-1"></i> Editar
+                      </a>
+                    </li>
+                    {% endif %}
+                    {% if current_user.pode_aprovar_financeiro %}
+                      <li>
+                        <form method="POST" action="{{ url_for('empresa_financeiro_toggle_aprovado', lanc_id=it.id) }}" class="px-3 py-1">
+                          <input type="hidden" name="next" value="{{ request.full_path }}">
+                          {% if it.aprovado %}
+                            <button class="btn btn-sm btn-outline-secondary w-100"><i class="bi bi-x-circle me-1"></i> Reprovar</button>
+                          {% else %}
+                            <button class="btn btn-sm btn-outline-primary w-100"><i class="bi bi-check2-circle me-1"></i> Aprovar</button>
+                          {% endif %}
+                        </form>
+                      </li>
+                    {% endif %}
+                  </ul>
+                </div>
+
+                {% if current_user.pode_aprovar_financeiro %}
+                  <form method="POST" action="{{ url_for('empresa_financeiro_toggle_aprovado', lanc_id=it.id) }}" class="d-none d-lg-inline">
+                    <input type="hidden" name="next" value="{{ request.full_path }}">
+                    {% if it.aprovado %}
+                      <button class="btn btn-sm btn-outline-secondary" title="Reprovar">
+                        <i class="bi bi-x-circle"></i>
+                      </button>
+                    {% else %}
+                      <button class="btn btn-sm btn-outline-primary" title="Aprovar">
+                        <i class="bi bi-check2-circle"></i>
+                      </button>
+                    {% endif %}
+                  </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="12" class="text-center text-muted py-4">Nenhum lançamento encontrado.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+  (function() {
+    const hoje  = new Date();
+    const base  = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+    const today = base.toISOString().slice(0,10);
+
+    // Marcar linhas em atraso (pendente e data passada)
+    document.querySelectorAll('#tabela-financeiro tbody tr').forEach(tr => {
+      const status = (tr.getAttribute('data-status') || '').toLowerCase();
+      const dataIso = tr.getAttribute('data-pagamento') || '';
+      if (status === 'pendente' && dataIso && dataIso < today) {
+        const stCell = tr.querySelector('.status-cell');
+        if (stCell && !stCell.querySelector('.badge-atraso')) {
+          const b = document.createElement('span');
+          b.className = 'badge badge-atraso ms-2 bg-danger';
+          b.textContent = 'Em atraso';
+          stCell.appendChild(b);
+        }
+        tr.style.backgroundColor = 'rgba(220, 53, 69, 0.06)';
+      }
+    });
+
+    // Auto-submit em mudanças de ordenação
+    const form = document.getElementById('filtros-form');
+    const sort = document.getElementById('sort');
+    const dir  = document.getElementById('dir');
+    if (sort) sort.addEventListener('change', () => form.submit());
+    if (dir)  dir.addEventListener('change',  () => form.submit());
+  })();
+</script>
+{% endblock %}

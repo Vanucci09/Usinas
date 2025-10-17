@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% block title %}Centros de Custo{% endblock %}
+{% block content %}
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="text-primary">Centros de Custo</h2>
+  </div>
+
+  {% if centros %}
+  <div class="table-responsive shadow-sm rounded">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Código</th>
+          <th>Nome</th>
+          <th>Cliente</th>
+          <th>Empresa</th>
+          <th>Email</th>
+          <th>Telefone</th>
+          <th class="text-end">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cc in centros %}
+        <tr>
+          <td>{{ cc.codigo }}</td>
+          <td>{{ cc.nome }}</td>
+          <td>{{ cc.cliente_operacional.nome }}</td>
+          <td>{{ cc.empresa.nome }}</td>
+          <td>{{ cc.email or '-' }}</td>
+          <td>{{ cc.telefone or '-' }}</td>
+          <td class="text-end">
+            <div class="btn-group btn-group-sm" role="group">
+              <a class="btn btn-outline-primary" title="Editar"
+                 href="{{ url_for('editar_centro_custo', cc_id=cc.id) }}">
+                <i class="bi bi-pencil"></i>
+              </a>
+
+              <button type="button" class="btn btn-outline-danger" title="Excluir"
+                      data-bs-toggle="modal" data-bs-target="#modalExcluir{{ cc.id }}">
+                <i class="bi bi-trash"></i>
+              </button>
+            </div>
+
+            <!-- Modal excluir -->
+            <div class="modal fade" id="modalExcluir{{ cc.id }}" tabindex="-1" aria-hidden="true">
+              <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title">Excluir Centro de Custo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                  </div>
+                  <div class="modal-body">
+                    Confirma excluir <strong>{{ cc.codigo }} - {{ cc.nome }}</strong>?
+                    Esta ação não pode ser desfeita.
+                  </div>
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <form action="{{ url_for('excluir_centro_custo', cc_id=cc.id) }}" method="POST" class="d-inline">
+                      {% if csrf_token %}{{ csrf_token() }}{% endif %}
+                      <button type="submit" class="btn btn-danger">Excluir</button>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- /Modal -->
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <div class="alert alert-info">Nenhum centro de custo cadastrado.</div>
+  {% endif %}
+
+  <div class="d-flex flex-column flex-md-row justify-content-end align-items-stretch gap-2 mt-4">
+    <a href="{{ url_for('index') }}?aba=financeiro_empresa"
+       class="btn btn-outline-secondary d-flex align-items-center w-100 w-md-auto">
+      <i class="bi bi-arrow-left me-2"></i> Voltar
+    </a>
+    <a href="{{ url_for('cadastrar_centro_custo') }}"
+       class="btn btn-success d-flex align-items-center w-100 w-md-auto">
+      <i class="bi bi-person-plus me-2"></i> Novo Centro de Custo
+    </a>
+  </div>
+</div>
+{% endblock %}

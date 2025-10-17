@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify, make_response, send_file, flash, send_from_directory, abort, current_app
 from datetime import date, datetime, timedelta
+import datetime as dt
 from calendar import monthrange
 import os, uuid, calendar, subprocess, threading
 import pandas as pd
@@ -7,7 +8,7 @@ from werkzeug.utils import secure_filename
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from sqlalchemy import Numeric, text, func, case, cast, or_, and_, literal
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 import fitz, tempfile, glob, platform
 from PIL import Image
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -398,6 +399,145 @@ class InversorCadastrado(db.Model):
         'inversores_cadastrados', lazy='dynamic', cascade="all, delete-orphan"
     ))
     
+class Empresa(db.Model):
+    __tablename__ = 'empresas'
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(255), nullable=False)
+    cnpj = db.Column(db.String(20), nullable=True, unique=True)
+    endereco = db.Column(db.String(255))
+    telefone = db.Column(db.String(30))
+    email = db.Column(db.String(120))
+    responsavel = db.Column(db.String(120))
+
+    # Relacionamentos
+    contas = db.relationship('FinanceiroEmpresa', backref='empresa', cascade="all, delete-orphan")
+    caixas = db.relationship('CaixaBanco', backref='empresa', cascade="all, delete-orphan")
+    clientes_operacionais = db.relationship('ClienteOperacional', backref='empresa', cascade="all, delete-orphan")
+    centros_custos = db.relationship('CentroCusto', backref='empresa', cascade="all, delete-orphan")
+
+class FinanceiroEmpresa(db.Model):
+    __tablename__ = 'financeiro_empresa'
+
+    id = db.Column(db.Integer, primary_key=True)
+    empresa_id = db.Column(db.Integer, db.ForeignKey('empresas.id'), nullable=False)
+    data = db.Column(db.Date, nullable=False)
+    tipo = db.Column(db.String(20), nullable=False)  # 'receita' ou 'despesa'
+    descricao = db.Column(db.String(255), nullable=False)
+    valor = db.Column(db.Numeric(12, 2), nullable=False)
+
+    status = db.Column(db.String(20), nullable=False, default='pendente')  # pendente, pago, recebido
+    data_vencimento = db.Column(db.Date)
+    conta_id = db.Column(db.Integer, db.ForeignKey('caixas_bancos.id'), nullable=True)
+    comprovante_arquivo = db.Column(db.String(255), nullable=True)
+    comprovante_baixa_arquivo = db.Column(db.String(255))
+    plano_financeiro_id = db.Column(db.Integer, db.ForeignKey('planos_financeiros.id'), nullable=True)
+    centro_custo_id = db.Column(db.Integer, db.ForeignKey('centros_custos.id'), nullable=True)
+    aprovado = db.Column(db.Boolean, nullable=False, default=False)
+    numero_documento = db.Column(db.String(50))  # NF/recibo
+    data_liquidado = db.Column(db.Date)                          # data efetiva do pgto/recebimento
+    juros = db.Column(db.Numeric(12, 2), default=0)     # juros ou multa aplicados
+
+    # Relacionamentos úteis (opcional, ajuda no .plano_financeiro / .centro_custo)
+    plano_financeiro = db.relationship('PlanoFinanceiro', lazy='joined')
+    centro_custo = db.relationship('CentroCusto', lazy='joined')
+    conta = db.relationship('CaixaBanco', lazy='selectin')
+    
+class CaixaBanco(db.Model):
+    __tablename__ = 'caixas_bancos'
+
+    id = db.Column(db.Integer, primary_key=True)
+    empresa_id = db.Column(db.Integer, db.ForeignKey('empresas.id'), nullable=False)
+    nome = db.Column(db.String(120), nullable=False)  # Ex: Caixa Geral, Banco do Brasil, Nubank PJ
+    tipo = db.Column(db.String(50), nullable=False)   # Ex: 'Caixa', 'Banco', 'Conta Digital'
+    saldo_inicial = db.Column(db.Numeric(12, 2), default=0)
+    saldo_atual = db.Column(db.Numeric(12, 2), default=0)
+    agencia = db.Column(db.String(20), nullable=True)
+    conta = db.Column(db.String(20), nullable=True)
+    banco = db.Column(db.String(100), nullable=True)
+
+    movimentacoes = db.relationship('MovimentoCaixaBanco', backref='conta', cascade="all, delete-orphan")
+
+class MovimentoCaixaBanco(db.Model):
+    __tablename__ = 'movimentos_caixa_banco'
+
+    id = db.Column(db.Integer, primary_key=True)
+    conta_id = db.Column(db.Integer, db.ForeignKey('caixas_bancos.id'), nullable=False)
+    data = db.Column(db.Date, nullable=False)
+    tipo = db.Column(db.String(10), nullable=False)  # 'entrada' ou 'saida'
+    descricao = db.Column(db.String(255), nullable=False)
+    valor = db.Column(db.Numeric(12, 2), nullable=False)
+    origem = db.Column(db.String(50), nullable=True)  # opcional: 'conta_pagar', 'conta_receber', etc.
+    referencia_id = db.Column(db.Integer, nullable=True)
+    
+class ClienteOperacional(db.Model):
+    __tablename__ = 'clientes_operacionais'
+
+    id = db.Column(db.Integer, primary_key=True)
+    empresa_id = db.Column(db.Integer, db.ForeignKey('empresas.id'), nullable=False)
+
+    nome = db.Column(db.String(255), nullable=False)
+    cpf_cnpj = db.Column(db.String(20), nullable=True)  # pode ser único por empresa, ver constraint abaixo
+    endereco = db.Column(db.String(255), nullable=True)
+    email = db.Column(db.String(120), nullable=True)
+    telefone = db.Column(db.String(30), nullable=True)
+
+    ativo = db.Column(db.Boolean, nullable=False, default=True)
+    criado_em = db.Column(db.DateTime(timezone=True), server_default=func.now())
+    atualizado_em = db.Column(db.DateTime(timezone=True), onupdate=func.now())
+
+    # Relacionamentos
+    centros_custos = db.relationship(
+        'CentroCusto',
+        backref='cliente_operacional',
+        cascade="all, delete-orphan",
+        lazy='selectin'
+    )
+
+    __table_args__ = (
+        # Evita duplicar o mesmo documento no mesmo grupo econômico
+        UniqueConstraint('empresa_id', 'cpf_cnpj', name='uq_cliente_operacional_doc_por_empresa'),
+        Index('ix_clientes_operacionais_empresa_nome', 'empresa_id', 'nome'),
+    )
+
+
+class CentroCusto(db.Model):
+    __tablename__ = 'centros_custos'
+
+    id = db.Column(db.Integer, primary_key=True)
+    empresa_id = db.Column(db.Integer, db.ForeignKey('empresas.id'), nullable=False)
+    cliente_id = db.Column(db.Integer, db.ForeignKey('clientes_operacionais.id'), nullable=False)
+
+    codigo = db.Column(db.String(50), nullable=False)   # Ex.: CC-001, 1001, etc.
+    nome = db.Column(db.String(255), nullable=False)
+
+    cpf_cnpj = db.Column(db.String(20), nullable=True)
+    endereco = db.Column(db.String(255), nullable=True)
+    telefone = db.Column(db.String(30), nullable=True)
+    email = db.Column(db.String(120), nullable=True)
+
+    ativo = db.Column(db.Boolean, nullable=False, default=True)
+    criado_em = db.Column(db.DateTime(timezone=True), server_default=func.now())
+    atualizado_em = db.Column(db.DateTime(timezone=True), onupdate=func.now())
+
+    __table_args__ = (
+        # Um mesmo código não se repete dentro da mesma empresa
+        UniqueConstraint('empresa_id', 'codigo', name='uq_centro_custo_codigo_por_empresa'),
+        Index('ix_centros_custos_empresa_codigo', 'empresa_id', 'codigo'),
+        Index('ix_centros_custos_empresa_cliente', 'empresa_id', 'cliente_id'),
+    )
+
+
+class PlanoFinanceiro(db.Model):
+    __tablename__ = 'planos_financeiros'
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(255), nullable=False, unique=True)  # único global
+    descricao = db.Column(db.Text)
+    ativo = db.Column(db.Boolean, nullable=False, default=True)
+    criado_em = db.Column(db.DateTime(timezone=True), server_default=func.now())
+    atualizado_em = db.Column(db.DateTime(timezone=True), onupdate=func.now())
+    
 class Usuario(db.Model, UserMixin):
     __tablename__ = 'usuarios'
     id = db.Column(db.Integer, primary_key=True)
@@ -408,6 +548,7 @@ class Usuario(db.Model, UserMixin):
     pode_cadastrar_cliente = db.Column(db.Boolean, default=False)
     pode_cadastrar_fatura = db.Column(db.Boolean, default=False)
     pode_acessar_financeiro = db.Column(db.Boolean, default=False)
+    pode_aprovar_financeiro = db.Column(db.Boolean, default=False)
 
     def set_senha(self, senha):
         self.senha_hash = generate_password_hash(senha)
@@ -2132,12 +2273,29 @@ def editar_usuario(id):
         usuario.pode_cadastrar_cliente = 'pode_cadastrar_cliente' in request.form
         usuario.pode_cadastrar_fatura = 'pode_cadastrar_fatura' in request.form
         usuario.pode_acessar_financeiro = 'pode_acessar_financeiro' in request.form
-        print(request.form)
+        quer_aprovador = 'pode_aprovar_financeiro' in request.form
 
-        if request.form.get('senha'):
-            usuario.set_senha(request.form['senha'])
+        try:
+            if quer_aprovador:
+                # zera todos os demais
+                Usuario.query.filter(Usuario.id != usuario.id).update(
+                    {Usuario.pode_aprovar_financeiro: False}
+                )
+                usuario.pode_aprovar_financeiro = True
+            else:
+                # permite ficar sem aprovador (se quiser obrigar 1 sempre, avise que adapto)
+                usuario.pode_aprovar_financeiro = False
 
-        db.session.commit()
+            if request.form.get('senha'):
+                usuario.set_senha(request.form['senha'])
+
+            db.session.commit()
+            flash('Usuário atualizado com sucesso.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            print('Erro ao editar usuário:', e)
+            flash('Erro ao salvar alterações.', 'danger')
+
         return redirect(url_for('listar_usuarios'))
 
     return render_template('editar_usuario.html', usuario=usuario)
@@ -2672,7 +2830,7 @@ def atualizar_geracao_agendada():
             print(f"❌ Erro na atualização agendada: {e}")
 
 scheduler = BackgroundScheduler()
-scheduler.add_job(func=atualizar_geracao_agendada, trigger="interval", minutes=15)
+scheduler.add_job(func=atualizar_geracao_agendada, trigger="interval", minutes=25)
 scheduler.start()
 
 # Garantir que pare quando o app for encerrado
@@ -7117,6 +7275,1363 @@ def analise_diaria(usina_id):
         historico_por_sn=historico_por_sn # usado para exibir o histórico do dia
     )
     
+@app.route('/empresa/cadastrar', methods=['GET','POST'], endpoint='cadastrar_empresa_operacional')
+@login_required
+def cadastrar_empresa_operacional():
+    if request.method == 'POST':
+        nome = request.form.get('nome')
+        cnpj = request.form.get('cnpj')
+        endereco = request.form.get('endereco')
+        telefone = request.form.get('telefone')
+        email = request.form.get('email')
+        responsavel = request.form.get('responsavel')
+
+        if not nome:
+            flash('O nome da empresa é obrigatório.', 'danger')
+            return redirect(url_for('cadastrar_empresa_operacional'))
+
+        if cnpj and Empresa.query.filter_by(cnpj=cnpj).first():
+            flash('Já existe uma empresa cadastrada com esse CNPJ.', 'warning')
+            return redirect(url_for('cadastrar_empresa_operacional'))
+
+        db.session.add(Empresa(
+            nome=nome, cnpj=cnpj, endereco=endereco,
+            telefone=telefone, email=email, responsavel=responsavel
+        ))
+        db.session.commit()
+        flash('Empresa cadastrada com sucesso!', 'success')
+        return redirect(url_for('listar_empresas_operacional'))
+
+    return render_template('empresas_cadastrar.html')
+
+@app.route('/empresa', methods=['GET'], endpoint='listar_empresas_operacional')
+@login_required
+def listar_empresas_operacional():  # EMPRESA OPERACIONAL
+    empresas = Empresa.query.order_by(Empresa.nome).all()
+    return render_template('empresas_listar.html', empresas=empresas)
+
+# EDITAR EMPRESA OPERACIONAL
+@app.route('/empresa/<int:empresa_id>/editar', methods=['GET', 'POST'], endpoint='editar_empresa_operacional')
+@login_required
+def editar_empresa_operacional(empresa_id):
+    e = db.session.get(Empresa, empresa_id)
+    if not e:
+        abort(404)
+
+    if request.method == 'POST':
+        nome = request.form.get('nome')
+        cnpj = request.form.get('cnpj') or None
+        endereco = request.form.get('endereco')
+        telefone = request.form.get('telefone')
+        email = request.form.get('email')
+        responsavel = request.form.get('responsavel')
+
+        if not nome:
+            flash('O nome da empresa é obrigatório.', 'danger')
+            return redirect(url_for('editar_empresa_operacional', empresa_id=e.id))
+
+        # Evita CNPJ duplicado (se alterado)
+        if cnpj and cnpj != e.cnpj and Empresa.query.filter_by(cnpj=cnpj).first():
+            flash('Já existe uma empresa com esse CNPJ.', 'warning')
+            return redirect(url_for('editar_empresa_operacional', empresa_id=e.id))
+
+        e.nome = nome
+        e.cnpj = cnpj
+        e.endereco = endereco
+        e.telefone = telefone
+        e.email = email
+        e.responsavel = responsavel
+
+        db.session.commit()
+        flash('Empresa atualizada com sucesso!', 'success')
+        return redirect(url_for('listar_empresas_operacional'))
+
+    return render_template('empresas_editar.html', e=e)
+
+
+# EXCLUIR EMPRESA OPERACIONAL
+@app.route('/empresa/<int:empresa_id>/excluir', methods=['POST'], endpoint='excluir_empresa_operacional')
+@login_required
+def excluir_empresa_operacional(empresa_id):
+    e = db.session.get(Empresa, empresa_id)
+    if not e:
+        abort(404)
+
+    db.session.delete(e)
+    db.session.commit()
+    flash('Empresa excluída com sucesso.', 'success')
+    return redirect(url_for('listar_empresas_operacional'))
+
+def _parse_decimal_br(s):
+    if not s: return None
+    try:
+        return Decimal(s.replace('.', '').replace(',', '.'))
+    except InvalidOperation:
+        return None
+
+def _parse_date(s):
+    try:
+        return date.fromisoformat(s) if s else None
+    except ValueError:
+        return None
+
+ALLOWED_EXTS = {'.pdf', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.heif'}
+
+def _allowed_file(filename: str) -> bool:
+    ext = os.path.splitext(filename.lower())[1]
+    return ext in ALLOWED_EXTS
+
+def _ensure_comprovantes_dir() -> str:
+    base_dir = os.environ.get('COMPROVANTES_PATH') or '/data/uploads'
+    os.makedirs(base_dir, exist_ok=True)
+    return base_dir
+
+def _unique_name(filename: str) -> str:
+    safe = secure_filename(filename)
+    ts = datetime.utcnow().strftime('%Y%m%d%H%M%S%f')
+    return f'{ts}_{safe}'
+
+def _q2(v: Decimal) -> Decimal:
+    return v.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+def _to_int_ids(values):
+    return [int(x) for x in values if str(x).isdigit()]
+# -----------------------------------------------------------------------------
+
+def _getlist_either(req, base):
+    """Lê getlist tanto com quanto sem '[]' no name."""
+    vals = req.getlist(base)
+    if not vals:
+        vals = req.getlist(base + '[]')
+    return vals
+
+@app.route('/empresa/financeiro/lancar', methods=['GET', 'POST'], endpoint='empresa_financeiro_lancar')
+@login_required
+def empresa_financeiro_lancar():
+    empresas    = Empresa.query.order_by(Empresa.nome.asc()).all()
+    contas_all  = CaixaBanco.query.order_by(CaixaBanco.nome.asc()).all()
+    centros_all = CentroCusto.query.order_by(CentroCusto.empresa_id.asc(), CentroCusto.codigo.asc()).all()
+    planos_all  = PlanoFinanceiro.query.filter_by(ativo=True).order_by(PlanoFinanceiro.nome.asc()).all()
+
+    if request.method == 'POST':
+        form = request.form  # ✅ SEMPRE usar .form
+
+        # ----------------- Leitura dos campos básicos -----------------
+        empresa_id = form.get('empresa_id', type=int)
+        tipo       = (form.get('tipo') or '').lower()                   # 'receita' | 'despesa'
+        descricao  = (form.get('descricao') or '').strip()
+        data_tit   = _parse_date(form.get('data'))                      # emissão
+        valor_tot  = _parse_decimal_br(form.get('valor'))
+        status     = (form.get('status') or 'pendente').lower()         # 'pendente'|'pago'|'recebido'
+        data_venc_base = _parse_date(form.get('data_vencimento'))       # venc. da 1ª parcela (se vazio, vira data_tit)
+        conta_id   = form.get('conta_id', type=int)
+        numero_documento = (form.get('numero_documento') or '').strip() or None
+
+        # ----------------- Multiseleção + parcelas --------------------
+        planos_ids_raw  = _getlist_either(form, 'planos_financeiros_ids')
+        centros_ids_raw = _getlist_either(form, 'centros_custos_ids')
+        planos_ids      = _to_int_ids(planos_ids_raw)
+        centros_ids     = _to_int_ids(centros_ids_raw)
+
+        parcelas_qtd = form.get('parcelas_qtd', type=int) or 1
+        if parcelas_qtd < 1:
+            parcelas_qtd = 1
+
+        # ----------------- Validações básicas -------------------------
+        emp = db.session.get(Empresa, empresa_id) if empresa_id else None
+        if not emp:
+            flash('Selecione uma empresa válida.', 'danger'); return redirect(url_for('empresa_financeiro_lancar'))
+        if tipo not in ('receita','despesa'):
+            flash('Tipo inválido.', 'danger'); return redirect(url_for('empresa_financeiro_lancar'))
+        if not descricao:
+            flash('Descrição é obrigatória.', 'danger'); return redirect(url_for('empresa_financeiro_lancar'))
+        if not data_tit:
+            flash('Data do título inválida.', 'danger'); return redirect(url_for('empresa_financeiro_lancar'))
+        if not valor_tot or valor_tot <= 0:
+            flash('Valor inválido.', 'danger'); return redirect(url_for('empresa_financeiro_lancar'))
+        if status not in ('pendente','pago','recebido'):
+            flash('Status inválido.', 'danger'); return redirect(url_for('empresa_financeiro_lancar'))
+
+        # Exigir pelo menos 1 plano e 1 centro
+        if not planos_ids:
+            flash('Selecione ao menos um Plano Financeiro.', 'warning')
+            return redirect(url_for('empresa_financeiro_lancar'))
+        if not centros_ids:
+            flash('Selecione ao menos um Centro de Custo.', 'warning')
+            return redirect(url_for('empresa_financeiro_lancar'))
+
+        # Conta precisa pertencer à empresa (se informada)
+        conta = db.session.get(CaixaBanco, conta_id) if conta_id else None
+        if conta and conta.empresa_id != empresa_id:
+            flash('A conta selecionada não pertence à empresa.', 'danger'); return redirect(url_for('empresa_financeiro_lancar'))
+
+        # Centros pertencem à empresa
+        ok_centros = {c.id for c in CentroCusto.query.filter(
+            CentroCusto.id.in_(centros_ids),
+            CentroCusto.empresa_id == empresa_id
+        ).all()}
+        if len(ok_centros) != len(centros_ids):
+            flash('Há centro(s) de custo que não pertencem à empresa selecionada.', 'danger')
+            return redirect(url_for('empresa_financeiro_lancar'))
+
+        # Planos ativos
+        ativos_ids = {p.id for p in PlanoFinanceiro.query.filter(
+            PlanoFinanceiro.id.in_(planos_ids),
+            PlanoFinanceiro.ativo.is_(True)
+        ).all()}
+        if len(ativos_ids) != len(planos_ids):
+            flash('Há plano(s) financeiros inválidos ou inativos.', 'danger')
+            return redirect(url_for('empresa_financeiro_lancar'))
+
+        # Data de vencimento base
+        if not data_venc_base:
+            data_venc_base = data_tit
+
+        # ----------------- Upload (opcional) --------------------------
+        comprovante_file = request.files.get('comprovante')
+        filename_salvo, abs_salvo = None, None
+        if comprovante_file and comprovante_file.filename:
+            if not _allowed_file(comprovante_file.filename):
+                flash('Tipo de arquivo não permitido. Envie PDF/JPG/PNG/GIF/WEBP/HEIC.', 'warning')
+                return redirect(url_for('empresa_financeiro_lancar'))
+            try:
+                base_dir = _ensure_comprovantes_dir()
+                filename_salvo = _unique_name(comprovante_file.filename)
+                abs_salvo = os.path.join(base_dir, filename_salvo)
+                comprovante_file.save(abs_salvo)
+            except Exception as e:
+                print('Erro ao salvar comprovante:', e)
+                flash('Falha ao salvar o comprovante.', 'danger')
+                return redirect(url_for('empresa_financeiro_lancar'))
+
+        # ----------------- Valores por plano --------------------------
+        # Espera inputs name="valor_plano[<id>]"
+        valores_por_plano = {}
+        soma_planos = Decimal('0.00')
+        for pid in planos_ids:
+            raw = form.get(f'valor_plano[{pid}]')
+            dec = _parse_decimal_br(raw) if raw is not None else None
+            if dec is None or dec < 0:
+                flash(f'Valor inválido para o plano #{pid}.', 'danger')
+                return redirect(url_for('empresa_financeiro_lancar'))
+            dec = _q2(dec)
+            valores_por_plano[pid] = dec
+            soma_planos += dec
+
+        # Validar soma == valor total
+        if _q2(soma_planos) != _q2(Decimal(valor_tot)):
+            flash('A soma dos valores por plano deve ser igual ao Valor (R$) total.', 'danger')
+            return redirect(url_for('empresa_financeiro_lancar'))
+
+        # ----------------- Função de rateio com soma exata ------------
+        def ratear(total_dec: Decimal, partes: int):
+            """Divide total em 'partes' com 2 casas, garantindo soma exata."""
+            if partes <= 0:
+                return []
+            base = _q2(total_dec / Decimal(partes))
+            lst  = [base] * partes
+            diff = total_dec - sum(lst)
+            if diff != Decimal('0.00'):
+                lst[-1] = _q2(lst[-1] + diff)
+            return lst
+
+        # ----------------- Criação dos títulos ------------------------
+        try:
+            criados = 0
+
+            # Para cada plano, o valor daquele plano será dividido igualmente
+            # entre (centros × parcelas). Assim cada (centro, parcela) recebe
+            # a fração correta do plano.
+            partes_por_plano = len(centros_ids) * parcelas_qtd
+
+            for pid in planos_ids:
+                total_plano = valores_por_plano[pid]
+                if partes_por_plano <= 0:
+                    continue
+
+                valores_partes = ratear(total_plano, partes_por_plano)
+                idx_val = 0
+
+                for cid in centros_ids:
+                    for parc in range(parcelas_qtd):
+                        valor_parte = valores_partes[idx_val]
+                        idx_val += 1
+
+                        data_venc_parc = data_venc_base + relativedelta(months=parc)
+
+                        titulo = FinanceiroEmpresa(
+                            empresa_id=empresa_id,
+                            data=data_tit,                         # emissão
+                            tipo=tipo,
+                            descricao=(descricao if parcelas_qtd == 1
+                                       else f"{descricao} ({parc+1}/{parcelas_qtd})"),
+                            valor=valor_parte,
+                            status=status,
+                            data_vencimento=data_venc_parc,
+                            conta_id=conta.id if conta else None,
+                            plano_financeiro_id=pid,
+                            centro_custo_id=cid,
+                            aprovado=False,
+                            numero_documento=numero_documento,
+                            comprovante_arquivo=filename_salvo
+                        )
+                        db.session.add(titulo)
+                        db.session.flush()
+
+                        # Movimento de caixa imediato se já quitado
+                        if conta and status in ('pago','recebido'):
+                            mov = MovimentoCaixaBanco(
+                                conta_id=conta.id,
+                                data=data_venc_parc,
+                                tipo='saida' if tipo == 'despesa' else 'entrada',
+                                descricao=f'{tipo.capitalize()} - {titulo.descricao}',
+                                valor=valor_parte,
+                                origem='financeiro_empresa',
+                                referencia_id=titulo.id
+                            )
+                            db.session.add(mov)
+
+                        criados += 1
+
+            db.session.commit()
+            flash(f'Lançamento(s) criado(s) com sucesso: {criados}.', 'success')
+            return redirect(url_for('empresa_financeiro_listar'))
+
+        except Exception as e:
+            db.session.rollback()
+            print('Erro lançamento financeiro empresa:', e)
+            # rollback do arquivo salvo, se foi gravado
+            if abs_salvo and os.path.isfile(abs_salvo):
+                try:
+                    os.remove(abs_salvo)
+                except Exception:
+                    pass
+            flash('Erro ao salvar lançamento.', 'danger')
+            return redirect(url_for('empresa_financeiro_lancar'))
+
+    # ----------------- GET -----------------
+    return render_template(
+        'empresa_financeiro_lancar.html',
+        empresas=empresas,
+        contas_all=contas_all,
+        centros_all=centros_all,
+        planos_all=planos_all
+    )
+    
+@app.route('/empresa/financeiro/<int:lanc_id>/editar', methods=['GET', 'POST'], endpoint='empresa_financeiro_editar')
+@login_required
+def empresa_financeiro_editar(lanc_id):
+    titulo = db.session.get(FinanceiroEmpresa, lanc_id)
+    if not titulo:
+        flash('Lançamento não encontrado.', 'warning')
+        return redirect(url_for('empresa_financeiro_listar'))
+
+    # Não permite editar se já aprovado
+    if request.method == 'POST' and titulo.aprovado:
+        flash('Este lançamento já foi aprovado e não pode mais ser editado.', 'warning')
+        return redirect(url_for('empresa_financeiro_editar', lanc_id=lanc_id, next=request.form.get('next','')))
+
+    # coleções para selects
+    empresas    = Empresa.query.order_by(Empresa.nome.asc()).all()
+    contas_all  = CaixaBanco.query.order_by(CaixaBanco.nome.asc()).all()
+    centros_all = CentroCusto.query.order_by(CentroCusto.empresa_id.asc(), CentroCusto.codigo.asc()).all()
+    planos_all  = PlanoFinanceiro.query.filter_by(ativo=True).order_by(PlanoFinanceiro.nome.asc()).all()
+
+    if request.method == 'GET':
+        return render_template(
+            'empresa_financeiro_editar.html',
+            titulo=titulo,
+            empresas=empresas,
+            contas_all=contas_all,
+            centros_all=centros_all,
+            planos_all=planos_all
+        )
+
+    # --------- POST (salvar alterações) ----------
+    form = request.form
+
+    empresa_id = form.get('empresa_id', type=int)
+    tipo       = (form.get('tipo') or '').lower()                 # 'receita' | 'despesa'
+    descricao  = (form.get('descricao') or '').strip()
+    data_tit   = _parse_date(form.get('data'))                    # emissão
+    valor      = _parse_decimal_br(form.get('valor'))
+    status     = (form.get('status') or 'pendente').lower()       # 'pendente' | 'pago' | 'recebido'
+
+    # Compat: aceita 'data_vencimento' (novo) e 'data_pagamento' (antigo)
+    data_venc  = _parse_date(form.get('data_vencimento')) or _parse_date(form.get('data_pagamento'))
+    conta_id   = form.get('conta_id', type=int)
+    numero_documento = (form.get('numero_documento') or '').strip() or None
+
+    plano_financeiro_id = form.get('plano_financeiro_id', type=int)
+    centro_custo_id     = form.get('centro_custo_id', type=int)
+
+    # --- Validações
+    emp = db.session.get(Empresa, empresa_id) if empresa_id else None
+    if not emp:
+        flash('Selecione uma empresa válida.', 'danger')
+        return redirect(url_for('empresa_financeiro_editar', lanc_id=lanc_id, next=form.get('next','')))
+
+    if tipo not in ('receita','despesa'):
+        flash('Tipo inválido.', 'danger')
+        return redirect(url_for('empresa_financeiro_editar', lanc_id=lanc_id, next=form.get('next','')))
+
+    if not descricao:
+        flash('Descrição é obrigatória.', 'danger')
+        return redirect(url_for('empresa_financeiro_editar', lanc_id=lanc_id, next=form.get('next','')))
+
+    if not data_tit:
+        flash('Data do título inválida.', 'danger')
+        return redirect(url_for('empresa_financeiro_editar', lanc_id=lanc_id, next=form.get('next','')))
+
+    if not valor or valor <= 0:
+        flash('Valor inválido.', 'danger')
+        return redirect(url_for('empresa_financeiro_editar', lanc_id=lanc_id, next=form.get('next','')))
+
+    if status not in ('pendente','pago','recebido'):
+        flash('Status inválido.', 'danger')
+        return redirect(url_for('empresa_financeiro_editar', lanc_id=lanc_id, next=form.get('next','')))
+
+    # Se marcado como pago/recebido e sem vencimento, usa a data do título
+    if status in ('pago','recebido') and not data_venc:
+        data_venc = data_tit
+
+    conta = db.session.get(CaixaBanco, conta_id) if conta_id else None
+    if conta and conta.empresa_id != empresa_id:
+        flash('A conta selecionada não pertence à empresa.', 'danger')
+        return redirect(url_for('empresa_financeiro_editar', lanc_id=lanc_id, next=form.get('next','')))
+
+    centro = db.session.get(CentroCusto, centro_custo_id) if centro_custo_id else None
+    if centro and centro.empresa_id != empresa_id:
+        flash('O centro de custo selecionado não pertence à empresa.', 'danger')
+        return redirect(url_for('empresa_financeiro_editar', lanc_id=lanc_id, next=form.get('next','')))
+
+    plano = db.session.get(PlanoFinanceiro, plano_financeiro_id) if plano_financeiro_id else None
+    if plano and (hasattr(plano, 'ativo') and not plano.ativo):
+        flash('O plano financeiro selecionado está inativo.', 'danger')
+        return redirect(url_for('empresa_financeiro_editar', lanc_id=lanc_id, next=form.get('next','')))
+
+    # upload do novo comprovante (opcional)
+    novo_file = request.files.get('comprovante')
+    novo_filename, abs_novo, abs_antigo = None, None, None
+
+    if novo_file and novo_file.filename:
+        if not _allowed_file(novo_file.filename):
+            flash('Tipo de arquivo não permitido. Envie PDF/JPG/PNG/GIF/WEBP/HEIC.', 'warning')
+            return redirect(url_for('empresa_financeiro_editar', lanc_id=lanc_id, next=form.get('next','')))
+        try:
+            base_dir = _ensure_comprovantes_dir()
+            novo_filename = _unique_name(novo_file.filename)
+            abs_novo = os.path.join(base_dir, novo_filename)
+            novo_file.save(abs_novo)
+
+            if titulo.comprovante_arquivo:
+                abs_antigo = os.path.join(base_dir, os.path.basename(titulo.comprovante_arquivo))
+        except Exception as e:
+            print('Erro ao salvar novo comprovante:', e)
+            flash('Falha ao salvar o novo comprovante.', 'danger')
+            return redirect(url_for('empresa_financeiro_editar', lanc_id=lanc_id, next=form.get('next','')))
+
+    # detectar movimento já existente
+    mov_exist = MovimentoCaixaBanco.query.filter_by(
+        origem='financeiro_empresa', referencia_id=titulo.id
+    ).first()
+
+    try:
+        # [Regra opcional] só permitir alterar a data do título se status estiver pendente
+        # (Se quiser “travar” isso, descomente o bloco abaixo)
+        # if titulo.status != 'pendente' and data_tit != titulo.data:
+        #     flash('Só é permitido alterar a data de emissão quando o status está pendente.', 'warning')
+        #     return redirect(url_for('empresa_financeiro_editar', lanc_id=lanc_id, next=form.get('next','')))
+
+        # atualizar campos do título
+        titulo.empresa_id = empresa_id
+        titulo.tipo = tipo
+        titulo.descricao = descricao
+        titulo.data = data_tit
+        titulo.valor = valor
+        titulo.status = status
+        titulo.data_vencimento = data_venc        # 🔁 agora usa data_vencimento
+        titulo.conta_id = conta.id if conta else None
+        titulo.plano_financeiro_id = plano_financeiro_id
+        titulo.centro_custo_id = centro_custo_id
+        titulo.numero_documento = numero_documento
+
+        if novo_filename:
+            titulo.comprovante_arquivo = novo_filename
+
+        # sincronizar movimento de caixa
+        if status in ('pago','recebido') and conta:
+            if mov_exist:
+                # atualiza
+                mov_exist.conta_id = conta.id
+                mov_exist.data = data_venc or data_tit
+                mov_exist.tipo = 'saida' if tipo == 'despesa' else 'entrada'
+                mov_exist.descricao = f'{tipo.capitalize()} - {descricao}'
+                mov_exist.valor = valor
+            else:
+                # cria
+                mov_novo = MovimentoCaixaBanco(
+                    conta_id=conta.id,
+                    data=data_venc or data_tit,
+                    tipo='saida' if tipo == 'despesa' else 'entrada',
+                    descricao=f'{tipo.capitalize()} - {descricao}',
+                    valor=valor,
+                    origem='financeiro_empresa',
+                    referencia_id=titulo.id
+                )
+                db.session.add(mov_novo)
+        else:
+            # se não é pago/recebido ou sem conta -> remove movimento, se existir
+            if mov_exist:
+                db.session.delete(mov_exist)
+
+        db.session.commit()
+
+        # remove comprovante antigo se foi substituído
+        if abs_antigo and os.path.isfile(abs_antigo):
+            try:
+                os.remove(abs_antigo)
+            except Exception:
+                pass
+
+        flash('Lançamento atualizado com sucesso!', 'success')
+        next_url = form.get('next') or url_for('empresa_financeiro_listar')
+        return redirect(next_url)
+
+    except Exception as e:
+        db.session.rollback()
+        print('Erro ao atualizar lançamento:', e)
+
+        # rollback de arquivo novo salvo
+        if abs_novo and os.path.isfile(abs_novo):
+            try:
+                os.remove(abs_novo)
+            except Exception:
+                pass
+
+        flash('Erro ao salvar alterações.', 'danger')
+        return redirect(url_for('empresa_financeiro_editar', lanc_id=lanc_id, next=form.get('next','')))    
+    
+@app.route('/uploads/comprovantes/<path:filename>', methods=['GET'], endpoint='download_comprovante')
+@login_required
+def download_comprovante(filename):
+    if not filename or '/' in filename or '..' in filename:
+        abort(400)
+    base = current_app.config.get('COMPROVANTES_DIR') or os.getenv('COMPROVANTES_PATH') or '/data/uploads'
+    fpath = os.path.join(base, os.path.basename(filename))
+    if not os.path.isfile(fpath):
+        abort(404)
+    return send_from_directory(base, os.path.basename(filename), as_attachment=False)
+    
+@app.route('/empresa/financeiro', methods=['GET'], endpoint='empresa_financeiro_listar')
+@login_required
+def empresa_financeiro_listar():
+    # -------- Filtros (querystring)
+    empresa_id = request.args.get('empresa_id', type=int)
+    tipo = (request.args.get('tipo') or '').lower()            # receita|despesa
+    status = (request.args.get('status') or '').lower()          # pendente|pago|recebido
+    aprovado = request.args.get('aprovado')                        # 'sim'|'nao'|None
+    plano_id = request.args.get('plano_id', type=int)
+    centro_id = request.args.get('centro_id', type=int)
+    data_ini = _parse_date(request.args.get('data_ini'))
+    data_fim = _parse_date(request.args.get('data_fim'))           # inclusive
+    q = (request.args.get('q') or '').strip()
+
+    # Ordenação
+    sort = (request.args.get('sort') or '').strip()
+    dir_ = (request.args.get('dir')  or 'desc').lower()
+    if dir_ not in ('asc', 'desc'):
+        dir_ = 'desc'
+
+    # -------- Listas auxiliares
+    empresas = Empresa.query.order_by(Empresa.nome.asc()).all()
+    planos_all = PlanoFinanceiro.query.filter_by(ativo=True).order_by(PlanoFinanceiro.nome.asc()).all()
+    centros_all = CentroCusto.query.order_by(CentroCusto.empresa_id.asc(), CentroCusto.codigo.asc()).all()
+
+    # -------- Query base com onclause explícito (evita AmbiguousForeignKeysError)
+    qry = (
+        db.session.query(FinanceiroEmpresa)
+        .join(Empresa, Empresa.id == FinanceiroEmpresa.empresa_id)
+        .outerjoin(PlanoFinanceiro, PlanoFinanceiro.id == FinanceiroEmpresa.plano_financeiro_id)
+        .outerjoin(CentroCusto, CentroCusto.id == FinanceiroEmpresa.centro_custo_id)
+        .outerjoin(CaixaBanco, CaixaBanco.id == FinanceiroEmpresa.conta_id)
+        .options(
+            joinedload(FinanceiroEmpresa.empresa),
+            joinedload(FinanceiroEmpresa.plano_financeiro),
+            joinedload(FinanceiroEmpresa.centro_custo),
+            joinedload(FinanceiroEmpresa.conta),
+        )
+    )
+
+    # -------- Aplicar filtros
+    if empresa_id:
+        qry = qry.filter(FinanceiroEmpresa.empresa_id == empresa_id)
+    if tipo in ('receita', 'despesa'):
+        qry = qry.filter(FinanceiroEmpresa.tipo == tipo)
+    if status in ('pendente', 'pago', 'recebido'):
+        qry = qry.filter(FinanceiroEmpresa.status == status)
+    if aprovado == 'sim':
+        qry = qry.filter(FinanceiroEmpresa.aprovado.is_(True))
+    elif aprovado == 'nao':
+        qry = qry.filter(FinanceiroEmpresa.aprovado.is_(False))
+    if plano_id:
+        qry = qry.filter(FinanceiroEmpresa.plano_financeiro_id == plano_id)
+    if centro_id:
+        qry = qry.filter(FinanceiroEmpresa.centro_custo_id == centro_id)
+    if data_ini:
+        qry = qry.filter(FinanceiroEmpresa.data >= data_ini)
+    if data_fim:
+        qry = qry.filter(FinanceiroEmpresa.data <= data_fim)
+    if q:
+        like = f'%{q}%'
+        qry = qry.filter(or_(
+            FinanceiroEmpresa.descricao.ilike(like),
+            FinanceiroEmpresa.numero_documento.ilike(like)
+        ))
+
+    # -------- Ordenação
+    # Whitelist de colunas
+    colmap = {
+        'data_vencimento': FinanceiroEmpresa.data_vencimento,
+        'valor': FinanceiroEmpresa.valor,
+        'status': FinanceiroEmpresa.status,
+        'aprovado': FinanceiroEmpresa.aprovado,
+    }
+    order_col = colmap.get(sort)
+
+    if order_col is None:
+        # padrão: por data_vencimento DESC (NULLS LAST), depois id DESC
+        qry = qry.order_by(
+            FinanceiroEmpresa.data_vencimento.desc().nullslast(),
+            FinanceiroEmpresa.id.desc()
+        )
+    else:
+        if dir_ == 'asc':
+            primary = order_col.asc()
+        else:
+            primary = order_col.desc()
+
+        # Para data_vencimento, manter NULLS LAST para leitura mais natural
+        if order_col.key == 'data_vencimento':
+            primary = primary.nullslast()
+
+        # amarra desempate por id desc/asc
+        secondary = FinanceiroEmpresa.id.asc() if dir_ == 'asc' else FinanceiroEmpresa.id.desc()
+
+        qry = qry.order_by(primary, secondary)
+
+    # -------- Execução
+    itens = qry.all()
+
+    # -------- TOTAIS (mesmos filtros)
+    base_receita = db.session.query(func.coalesce(func.sum(
+        case((FinanceiroEmpresa.tipo == 'receita', FinanceiroEmpresa.valor), else_=0)
+    ), 0))
+    base_despesa = db.session.query(func.coalesce(func.sum(
+        case((FinanceiroEmpresa.tipo == 'despesa', FinanceiroEmpresa.valor), else_=0)
+    ), 0))
+
+    def aplicar_filtros(base_q):
+        if empresa_id: base_q = base_q.filter(FinanceiroEmpresa.empresa_id == empresa_id)
+        if tipo in ('receita','despesa'): base_q = base_q.filter(FinanceiroEmpresa.tipo == tipo)
+        if status in ('pendente','pago','recebido'): base_q = base_q.filter(FinanceiroEmpresa.status == status)
+        if aprovado == 'sim': base_q = base_q.filter(FinanceiroEmpresa.aprovado.is_(True))
+        elif aprovado == 'nao': base_q = base_q.filter(FinanceiroEmpresa.aprovado.is_(False))
+        if plano_id: base_q = base_q.filter(FinanceiroEmpresa.plano_financeiro_id == plano_id)
+        if centro_id: base_q = base_q.filter(FinanceiroEmpresa.centro_custo_id == centro_id)
+        if data_ini: base_q = base_q.filter(FinanceiroEmpresa.data >= data_ini)
+        if data_fim: base_q = base_q.filter(FinanceiroEmpresa.data <= data_fim)
+        if q:
+            like = f'%{q}%'
+            base_q = base_q.filter(or_(
+                FinanceiroEmpresa.descricao.ilike(like),
+                FinanceiroEmpresa.numero_documento.ilike(like)
+            ))
+        return base_q
+
+    total_receitas = aplicar_filtros(base_receita).scalar()
+    total_despesas = aplicar_filtros(base_despesa).scalar()
+    saldo = (total_receitas or 0) - (total_despesas or 0)
+
+    return render_template(
+        'empresa_financeiro_listar.html',
+        itens=itens,
+        empresas=empresas,
+        planos_all=planos_all,
+        centros_all=centros_all,
+        empresa_id=empresa_id, tipo=tipo, status=status, aprovado=aprovado,
+        plano_id=plano_id, centro_id=centro_id,
+        data_ini=data_ini, data_fim=data_fim, q=q,
+        sort=sort, dir=dir_,
+
+        total_receitas=total_receitas, total_despesas=total_despesas, saldo=saldo
+    )
+    
+@app.route('/empresa/financeiro/<int:lanc_id>/atualizar-status-data', methods=['POST'], endpoint='empresa_financeiro_atualizar_status_data')
+@login_required
+def empresa_financeiro_atualizar_status_data(lanc_id):
+    titulo = db.session.get(FinanceiroEmpresa, lanc_id)
+    if not titulo:
+        flash('Lançamento não encontrado.', 'warning')
+        return redirect(url_for('empresa_financeiro_listar'))
+
+    if titulo.aprovado is None:
+        titulo.aprovado = False
+
+    pode_editar_campos = bool(titulo.aprovado) and ((titulo.status or '').lower() == 'pendente')
+
+    novo_status = (request.form.get('status') or '').lower().strip()
+    if novo_status not in ('pendente', 'pago', 'recebido'):
+        flash('Status inválido.', 'danger')
+        return redirect(request.form.get('next') or url_for('empresa_financeiro_listar'))
+
+    # NÃO alteramos data_vencimento aqui
+
+    req_data_liq = request.form.get('data_liquidado')
+    nova_data_liq = _parse_date(req_data_liq) if req_data_liq else None
+
+    req_juros = (request.form.get('juros') or '').strip()
+    novo_juros = _parse_decimal_br(req_juros) if req_juros else None
+    if novo_juros is None:
+        novo_juros = Decimal('0.00')
+
+    # -------- upload do comprovante de BAIXA ----------
+    comp_file = request.files.get('comprovante_pgto')  # <- name do input no form
+    novo_comp_filename, abs_novo_comp, abs_comp_antigo = None, None, None
+    if comp_file and comp_file.filename:
+        if not _allowed_file(comp_file.filename):
+            flash('Tipo de arquivo não permitido. Envie PDF/JPG/PNG/GIF/WEBP/HEIC.', 'warning')
+            return redirect(request.form.get('next') or url_for('empresa_financeiro_listar'))
+        try:
+            base_dir = _ensure_comprovantes_dir()
+            novo_comp_filename = _unique_name(comp_file.filename)
+            abs_novo_comp = os.path.join(base_dir, novo_comp_filename)
+            comp_file.save(abs_novo_comp)
+
+            # Se já havia comprovante de BAIXA, prepara remoção depois do commit
+            antigo = getattr(titulo, 'comprovante_baixa_arquivo', None)
+            if antigo:
+                abs_comp_antigo = os.path.join(base_dir, os.path.basename(antigo))
+        except Exception as e:
+            print('Erro ao salvar comprovante de pagamento:', e)
+            flash('Falha ao salvar o comprovante de pagamento.', 'danger')
+            return redirect(request.form.get('next') or url_for('empresa_financeiro_listar'))
+
+    # movimento já existente?
+    mov_exist = MovimentoCaixaBanco.query.filter_by(
+        origem='financeiro_empresa', referencia_id=titulo.id
+    ).first()
+
+    try:
+        if not pode_editar_campos and novo_status != 'pendente':
+            flash('Não é permitido atualizar este lançamento por aqui.', 'warning')
+            # rollback de arquivo novo salvo, se houve
+            if abs_novo_comp and os.path.isfile(abs_novo_comp):
+                try: os.remove(abs_novo_comp)
+                except Exception: pass
+            return redirect(request.form.get('next') or url_for('empresa_financeiro_listar'))
+
+        titulo.status = novo_status
+
+        if pode_editar_campos:
+            if novo_status in ('pago', 'recebido'):
+                titulo.data_liquidado = nova_data_liq or titulo.data
+            else:
+                titulo.data_liquidado = None
+            titulo.juros = novo_juros
+
+            # aplica o novo comprovante de BAIXA, se enviado
+            if novo_comp_filename:
+                titulo.comprovante_baixa_arquivo = novo_comp_filename
+
+        # sincroniza movimento de caixa pelo total (valor + juros)
+        if titulo.status in ('pago', 'recebido') and titulo.conta_id:
+            data_mov = titulo.data_liquidado or titulo.data
+            valor_total = (titulo.valor or Decimal('0')) + (titulo.juros or Decimal('0'))
+            if mov_exist:
+                mov_exist.conta_id  = titulo.conta_id
+                mov_exist.data      = data_mov
+                mov_exist.tipo      = 'saida' if titulo.tipo == 'despesa' else 'entrada'
+                mov_exist.descricao = f'{titulo.tipo.capitalize()} - {titulo.descricao}'
+                mov_exist.valor     = valor_total
+            else:
+                db.session.add(MovimentoCaixaBanco(
+                    conta_id=titulo.conta_id,
+                    data=data_mov,
+                    tipo='saida' if titulo.tipo == 'despesa' else 'entrada',
+                    descricao=f'{titulo.tipo.capitalize()} - {titulo.descricao}',
+                    valor=valor_total,
+                    origem='financeiro_empresa',
+                    referencia_id=titulo.id
+                ))
+        else:
+            if mov_exist:
+                db.session.delete(mov_exist)
+
+        db.session.commit()
+
+        # remove o comprovante antigo (se foi substituído)
+        if abs_comp_antigo and os.path.isfile(abs_comp_antigo):
+            try: os.remove(abs_comp_antigo)
+            except Exception: pass
+
+        flash('Status/liquidação/juros atualizados com sucesso.', 'success')
+
+    except Exception as e:
+        db.session.rollback()
+        print('Erro ao atualizar status/liquidação/juros:', e)
+
+        # se salvamos arquivo novo e deu erro, apaga-o
+        if abs_novo_comp and os.path.isfile(abs_novo_comp):
+            try: os.remove(abs_novo_comp)
+            except Exception: pass
+
+        flash('Erro ao atualizar status/liquidação.', 'danger')
+
+    return redirect(request.form.get('next') or url_for('empresa_financeiro_listar'))
+    
+@app.route('/empresa/financeiro/<int:lanc_id>/toggle-aprovado', methods=['POST'], endpoint='empresa_financeiro_toggle_aprovado')
+@login_required
+def empresa_financeiro_toggle_aprovado(lanc_id):
+    # só quem é aprovador pode usar
+    if not getattr(current_user, 'pode_aprovar_financeiro', False):
+        flash('Você não tem permissão para aprovar lançamentos.', 'warning')
+        next_url = request.form.get('next') or request.referrer or url_for('empresa_financeiro_listar')
+        return redirect(next_url)
+
+    lanc = db.session.get(FinanceiroEmpresa, lanc_id)
+    if not lanc:
+        flash('Lançamento não encontrado.', 'warning')
+        return redirect(url_for('empresa_financeiro_listar'))
+
+    try:
+        lanc.aprovado = not bool(lanc.aprovado)
+        db.session.commit()
+        flash('Lançamento aprovado.' if lanc.aprovado else 'Lançamento reprovado.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        print('Erro ao alternar aprovação:', e)
+        flash('Erro ao salvar aprovação.', 'danger')
+
+    next_url = request.form.get('next') or request.referrer or url_for('empresa_financeiro_listar')
+    return redirect(next_url)
+
+@app.route('/clientes_operacionais/novo', methods=['GET', 'POST'])
+@login_required
+def cadastrar_cliente_operacional():
+    empresas = Empresa.query.order_by(Empresa.nome).all()
+
+    if request.method == 'POST':
+        empresa_id = request.form.get('empresa_id')
+        nome = request.form.get('nome')
+        cpf_cnpj = request.form.get('cpf_cnpj')
+        endereco = request.form.get('endereco')
+        email = request.form.get('email')
+        telefone = request.form.get('telefone')
+
+        if not nome or not empresa_id:
+            flash('Nome e empresa são obrigatórios.', 'danger')
+            return redirect(url_for('cadastrar_cliente_operacional'))
+
+        try:
+            empresa_id = int(empresa_id)
+        except (TypeError, ValueError):
+            flash('Empresa inválida.', 'danger')
+            return redirect(url_for('cadastrar_cliente_operacional')) 
+
+        novo_cliente = ClienteOperacional(
+            empresa_id=empresa_id,
+            nome=nome.strip(),
+            cpf_cnpj=cpf_cnpj.strip() if cpf_cnpj else None,
+            endereco=endereco.strip() if endereco else None,
+            email=email.strip() if email else None,
+            telefone=telefone.strip() if telefone else None,
+            ativo=True,
+            criado_em=datetime.now()
+        )
+
+        try:
+            db.session.add(novo_cliente)
+            db.session.commit()
+            flash('Cliente cadastrado com sucesso!', 'success')
+            return redirect(url_for('listar_clientes_operacionais'))
+        except IntegrityError as ie:
+            db.session.rollback()
+            flash('Já existe um cliente com este CPF/CNPJ nesta empresa.', 'warning')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erro ao cadastrar cliente: {e}', 'danger')
+
+    return render_template('cadastrar_clientes_operacionais.html', empresas=empresas)
+
+@app.route('/clientes_operacionais')
+@login_required
+def listar_clientes_operacionais():
+    clientes = ClienteOperacional.query.order_by(ClienteOperacional.nome).all()
+    return render_template('listar_clientes_operacionais.html', clientes=clientes)
+
+@app.route('/clientes_operacionais/<int:cliente_id>/editar', methods=['GET', 'POST'])
+@login_required
+def editar_cliente_operacional(cliente_id):
+    cliente = ClienteOperacional.query.get_or_404(cliente_id)
+    empresas = Empresa.query.order_by(Empresa.nome).all()
+
+    if request.method == 'POST':
+        empresa_id = request.form.get('empresa_id')
+        nome = request.form.get('nome')
+        cpf_cnpj = request.form.get('cpf_cnpj')
+        endereco = request.form.get('endereco')
+        email = request.form.get('email')
+        telefone = request.form.get('telefone')
+        ativo = True if request.form.get('ativo') == 'on' else False
+
+        if not nome or not empresa_id:
+            flash('Nome e empresa são obrigatórios.', 'danger')
+            return redirect(url_for('editar_cliente_operacional', cliente_id=cliente.id))
+
+        try:
+            cliente.empresa_id = int(empresa_id)
+        except (TypeError, ValueError):
+            flash('Empresa inválida.', 'danger')
+            return redirect(url_for('editar_cliente_operacional', cliente_id=cliente.id))
+
+        cliente.nome = nome.strip()
+        cliente.cpf_cnpj = cpf_cnpj.strip() if cpf_cnpj else None
+        cliente.endereco = endereco.strip() if endereco else None
+        cliente.email = email.strip() if email else None
+        cliente.telefone = telefone.strip() if telefone else None
+        cliente.ativo = ativo
+        cliente.atualizado_em = datetime.now()
+
+        try:
+            db.session.commit()
+            flash('Cliente atualizado com sucesso!', 'success')
+            return redirect(url_for('listar_clientes_operacionais'))
+        except IntegrityError:
+            db.session.rollback()
+            flash('Já existe um cliente com este CPF/CNPJ nesta empresa.', 'warning')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erro ao salvar alterações: {e}', 'danger')
+
+    return render_template('editar_clientes_operacionais.html', cliente=cliente, empresas=empresas)
+
+@app.route('/clientes_operacionais/<int:cliente_id>/excluir', methods=['POST'])
+@login_required
+def excluir_cliente_operacional(cliente_id):
+    cliente = ClienteOperacional.query.get_or_404(cliente_id)
+
+    try:
+        db.session.delete(cliente)
+        db.session.commit()
+        flash('Cliente excluído com sucesso!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao excluir: {e}', 'danger')
+
+    return redirect(url_for('listar_clientes_operacionais'))
+
+@app.route('/centros_custos/novo', methods=['GET', 'POST'])
+@login_required
+def cadastrar_centro_custo():
+    empresas = Empresa.query.order_by(Empresa.nome).all()
+
+    if request.method == 'POST':
+        empresa_id = request.form.get('empresa_id')
+        cliente_id = request.form.get('cliente_id')
+        codigo = request.form.get('codigo')
+        nome = request.form.get('nome')
+        cpf_cnpj = request.form.get('cpf_cnpj')
+        endereco = request.form.get('endereco')
+        telefone = request.form.get('telefone')
+        email = request.form.get('email')
+
+        # validação básica
+        if not empresa_id or not cliente_id or not codigo or not nome:
+            flash('Empresa, Cliente, Código e Nome são obrigatórios.', 'danger')
+            return redirect(url_for('cadastrar_centro_custo'))
+
+        try:
+            empresa_id_int = int(empresa_id)
+            cliente_id_int = int(cliente_id)
+        except (TypeError, ValueError):
+            flash('Empresa ou Cliente inválidos.', 'danger')
+            return redirect(url_for('cadastrar_centro_custo'))
+
+        # garantir que o cliente pertence à empresa
+        cliente = ClienteOperacional.query.get(cliente_id_int)
+        if not cliente or cliente.empresa_id != empresa_id_int:
+            flash('Cliente não pertence à empresa selecionada.', 'danger')
+            return redirect(url_for('cadastrar_centro_custo'))
+
+        novo_centro = CentroCusto(
+            empresa_id=empresa_id_int,
+            cliente_id=cliente_id_int,
+            codigo=codigo.strip(),
+            nome=nome.strip(),
+            cpf_cnpj=cpf_cnpj.strip() if cpf_cnpj else None,
+            endereco=endereco.strip() if endereco else None,
+            telefone=telefone.strip() if telefone else None,
+            email=email.strip() if email else None,
+            ativo=True,
+            criado_em=datetime.now()
+        )
+
+        try:
+            db.session.add(novo_centro)
+            db.session.commit()
+            flash('Centro de Custo cadastrado com sucesso!', 'success')
+            return redirect(url_for('listar_centros_custos'))
+        except IntegrityError:
+            db.session.rollback()
+            flash('Já existe um Centro com este CÓDIGO nesta empresa.', 'warning')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erro ao cadastrar centro de custo: {e}', 'danger')
+
+    # GET: só renderiza o form
+    return render_template('cadastrar_centro_custo.html', empresas=empresas)
+
+@app.route('/centros_custos')
+@login_required
+def listar_centros_custos():
+    empresa_id = request.args.get('empresa_id', type=int)
+    empresas = Empresa.query.order_by(Empresa.nome).all()
+
+    query = (CentroCusto.query
+             .join(Empresa, CentroCusto.empresa_id == Empresa.id))
+    if empresa_id:
+        query = query.filter(CentroCusto.empresa_id == empresa_id)
+
+    centros = query.order_by(CentroCusto.nome).all()
+    return render_template('listar_centros_custos.html',
+                           centros=centros, empresas=empresas, empresa_id=empresa_id)
+
+@app.route('/centros_custos/<int:cc_id>/editar', methods=['GET', 'POST'])
+@login_required
+def editar_centro_custo(cc_id):
+    cc = CentroCusto.query.get_or_404(cc_id)
+    empresas = Empresa.query.order_by(Empresa.nome).all()
+    # filtrar clientes por empresa no HTML com JS
+    clientes = ClienteOperacional.query.order_by(ClienteOperacional.nome).all()
+
+    if request.method == 'POST':
+        empresa_id = request.form.get('empresa_id')
+        cliente_id = request.form.get('cliente_id')
+        codigo = request.form.get('codigo')
+        nome = request.form.get('nome')
+        cpf_cnpj = request.form.get('cpf_cnpj')
+        endereco = request.form.get('endereco')
+        telefone = request.form.get('telefone')
+        email = request.form.get('email')
+        ativo = True if request.form.get('ativo') == 'on' else False
+
+        if not empresa_id or not cliente_id or not codigo or not nome:
+            flash('Empresa, Cliente, Código e Nome são obrigatórios.', 'danger')
+            return redirect(url_for('editar_centro_custo', cc_id=cc.id))
+
+        try:
+            cc.empresa_id = int(empresa_id)
+            cc.cliente_id = int(cliente_id)
+        except (TypeError, ValueError):
+            flash('Empresa ou Cliente inválidos.', 'danger')
+            return redirect(url_for('editar_centro_custo', cc_id=cc.id))
+
+        cc.codigo = codigo.strip()
+        cc.nome = nome.strip()
+        cc.cpf_cnpj = cpf_cnpj.strip() if cpf_cnpj else None
+        cc.endereco = endereco.strip() if endereco else None
+        cc.telefone = telefone.strip() if telefone else None
+        cc.email = email.strip() if email else None
+        cc.ativo = ativo
+        cc.atualizado_em = datetime.now()
+
+        try:
+            db.session.commit()
+            flash('Centro de Custo atualizado!', 'success')
+            return redirect(url_for('listar_centros_custos'))
+        except IntegrityError:
+            db.session.rollback()
+            flash('Já existe este CÓDIGO nesta empresa.', 'warning')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erro ao salvar: {e}', 'danger')
+
+    return render_template('editar_centro_custo.html',
+                           cc=cc, empresas=empresas, clientes=clientes)
+
+@app.route('/centros_custos/<int:cc_id>/excluir', methods=['POST'])
+@login_required
+def excluir_centro_custo(cc_id):
+    cc = CentroCusto.query.get_or_404(cc_id)
+    try:
+        db.session.delete(cc)
+        db.session.commit()
+        flash('Centro de Custo excluído.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao excluir: {e}', 'danger')
+    return redirect(url_for('listar_centros_custos'))
+
+@app.route('/api/empresas/<int:empresa_id>/clientes', methods=['GET'])
+@login_required
+def api_clientes_por_empresa(empresa_id):
+    clientes = (ClienteOperacional.query
+                .filter_by(empresa_id=empresa_id, ativo=True)
+                .order_by(ClienteOperacional.nome)
+                .with_entities(ClienteOperacional.id, ClienteOperacional.nome)
+                .all())
+    return jsonify([{"id": c.id, "nome": c.nome} for c in clientes])
+
+@app.route('/planos_financeiros/novo', methods=['GET', 'POST'])
+@login_required
+def cadastrar_plano_financeiro():
+    if request.method == 'POST':
+        nome = request.form.get('nome')
+        descricao = request.form.get('descricao')
+        ativo = True if request.form.get('ativo') == 'on' else True
+
+        if not nome:
+            flash('O nome do plano é obrigatório.', 'danger')
+            return redirect(url_for('cadastrar_plano_financeiro'))
+
+        plano = PlanoFinanceiro(
+            nome=nome.strip(),
+            descricao=descricao.strip() if descricao else None,
+            ativo=ativo
+        )
+        try:
+            db.session.add(plano)
+            db.session.commit()
+            flash('Plano financeiro cadastrado com sucesso!', 'success')
+            return redirect(url_for('listar_planos_financeiros'))
+        except IntegrityError:
+            db.session.rollback()
+            flash('Já existe um plano financeiro com esse nome.', 'warning')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erro ao cadastrar plano: {e}', 'danger')
+
+    return render_template('cadastrar_plano_financeiro.html')
+
+@app.route('/planos_financeiros')
+@login_required
+def listar_planos_financeiros():
+    planos = PlanoFinanceiro.query.order_by(PlanoFinanceiro.nome).all()
+    return render_template('listar_planos_financeiros.html', planos=planos)
+    
+@app.route('/planos_financeiros/<int:plano_id>/editar', methods=['GET', 'POST'])
+@login_required
+def editar_plano_financeiro(plano_id):
+    plano = PlanoFinanceiro.query.get_or_404(plano_id)
+
+    if request.method == 'POST':
+        nome = request.form.get('nome')
+        descricao = request.form.get('descricao')
+        ativo = True if request.form.get('ativo') == 'on' else False
+
+        if not nome:
+            flash('O nome do plano é obrigatório.', 'danger')
+            return redirect(url_for('editar_plano_financeiro', plano_id=plano.id))
+
+        plano.nome = nome.strip()
+        plano.descricao = descricao.strip() if descricao else None
+        plano.ativo = ativo
+
+        try:
+            db.session.commit()
+            flash('Plano atualizado com sucesso!', 'success')
+            return redirect(url_for('listar_planos_financeiros'))
+        except IntegrityError:
+            db.session.rollback()
+            flash('Já existe um plano financeiro com esse nome.', 'warning')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erro ao salvar alterações: {e}', 'danger')
+
+    return render_template('editar_plano_financeiro.html', plano=plano)
+
+@app.route('/planos_financeiros/<int:plano_id>/excluir', methods=['POST'])
+@login_required
+def excluir_plano_financeiro(plano_id):
+    plano = PlanoFinanceiro.query.get_or_404(plano_id)
+    try:
+        db.session.delete(plano)
+        db.session.commit()
+        flash('Plano financeiro excluído.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao excluir: {e}', 'danger')
+    return redirect(url_for('listar_planos_financeiros'))
+
+@app.route('/empresa/conta_bancaria/cadastrar', methods=['GET', 'POST'], endpoint='empresa_conta_bancaria_cadastrar')
+@login_required
+def empresa_conta_bancaria_cadastrar():
+    empresas = Empresa.query.order_by(Empresa.nome.asc()).all()
+
+    if request.method == 'POST':
+        empresa_id = request.form.get('empresa_id', type=int)
+        nome = (request.form.get('nome') or '').strip()
+        tipo = (request.form.get('tipo') or '').strip()
+        saldo_inicial = _parse_decimal_br(request.form.get('saldo_inicial'))
+        agencia = (request.form.get('agencia') or '').strip() or None
+        conta = (request.form.get('conta') or '').strip() or None
+        banco = (request.form.get('banco') or '').strip() or None
+
+        # Validações básicas
+        emp = db.session.get(Empresa, empresa_id) if empresa_id else None
+        if not emp:
+            flash('Selecione uma empresa válida.', 'danger')
+            return redirect(url_for('empresa_conta_bancaria_cadastrar'))
+        if not nome:
+            flash('O nome da conta é obrigatório.', 'danger')
+            return redirect(url_for('empresa_conta_bancaria_cadastrar'))
+        if not tipo:
+            flash('Informe o tipo da conta.', 'danger')
+            return redirect(url_for('empresa_conta_bancaria_cadastrar'))
+
+        try:
+            conta_banco = CaixaBanco(
+                empresa_id=empresa_id,
+                nome=nome,
+                tipo=tipo,
+                saldo_inicial=saldo_inicial or 0,
+                saldo_atual=saldo_inicial or 0,
+                agencia=agencia,
+                conta=conta,
+                banco=banco
+            )
+            db.session.add(conta_banco)
+            db.session.commit()
+            flash('Conta bancária cadastrada com sucesso!', 'success')
+            return redirect(url_for('empresa_contas_listar'))
+        except Exception as e:
+            db.session.rollback()
+            print('Erro ao cadastrar conta bancária:', e)
+            flash('Erro ao salvar os dados bancários.', 'danger')
+            return redirect(url_for('empresa_conta_bancaria_cadastrar'))
+
+    return render_template('empresa_conta_bancaria_cadastrar.html', empresas=empresas)
+
+# LISTAR CONTAS BANCÁRIAS (com filtros)
+@app.route('/empresa/contas', methods=['GET'], endpoint='empresa_contas_listar')
+@login_required
+def empresa_contas_listar():
+    empresa_id = request.args.get('empresa_id', type=int)
+    q = (request.args.get('q') or '').strip()
+
+    empresas = Empresa.query.order_by(Empresa.nome.asc()).all()
+
+    qry = CaixaBanco.query
+    if empresa_id:
+        qry = qry.filter(CaixaBanco.empresa_id == empresa_id)
+    if q:
+        ilike = f'%{q}%'
+        qry = qry.filter(
+            db.or_(
+                CaixaBanco.nome.ilike(ilike),
+                CaixaBanco.banco.ilike(ilike),
+                CaixaBanco.agencia.ilike(ilike),
+                CaixaBanco.conta.ilike(ilike),
+            )
+        )
+
+    contas = qry.order_by(CaixaBanco.empresa_id.asc(), CaixaBanco.nome.asc()).all()
+
+    return render_template(
+        'empresa_contas_listar.html',
+        empresas=empresas,
+        contas=contas,
+        empresa_id=empresa_id,
+        q=q
+    )
+
+
+# EDITAR CONTA BANCÁRIA
+@app.route('/empresa/conta_bancaria/<int:conta_id>/editar', methods=['GET', 'POST'], endpoint='empresa_conta_bancaria_editar')
+@login_required
+def empresa_conta_bancaria_editar(conta_id):
+    conta = db.session.get(CaixaBanco, conta_id)
+    if not conta:
+        flash('Conta não encontrada.', 'warning')
+        return redirect(url_for('empresa_contas_listar'))
+
+    empresas = Empresa.query.order_by(Empresa.nome.asc()).all()
+
+    if request.method == 'POST':
+        empresa_id = request.form.get('empresa_id', type=int)
+        nome = (request.form.get('nome') or '').strip()
+        tipo = (request.form.get('tipo') or '').strip()
+        banco = (request.form.get('banco') or '').strip() or None
+        agencia = (request.form.get('agencia') or '').strip() or None
+        conta_num = (request.form.get('conta') or '').strip() or None
+        saldo_inicial = _parse_decimal_br(request.form.get('saldo_inicial'))
+        saldo_atual = _parse_decimal_br(request.form.get('saldo_atual'))
+
+        emp = db.session.get(Empresa, empresa_id) if empresa_id else None
+        if not emp:
+            flash('Selecione uma empresa válida.', 'danger')
+            return redirect(url_for('empresa_conta_bancaria_editar', conta_id=conta.id))
+        if not nome:
+            flash('O nome da conta é obrigatório.', 'danger')
+            return redirect(url_for('empresa_conta_bancaria_editar', conta_id=conta.id))
+        if not tipo:
+            flash('Informe o tipo da conta.', 'danger')
+            return redirect(url_for('empresa_conta_bancaria_editar', conta_id=conta.id))
+
+        try:
+            conta.empresa_id = empresa_id
+            conta.nome = nome
+            conta.tipo = tipo
+            conta.banco = banco
+            conta.agencia = agencia
+            conta.conta = conta_num
+            if saldo_inicial is not None:
+                conta.saldo_inicial = saldo_inicial
+            if saldo_atual is not None:
+                conta.saldo_atual = saldo_atual
+
+            db.session.commit()
+            flash('Conta atualizada com sucesso!', 'success')
+            return redirect(url_for('empresa_contas_listar', empresa_id=empresa_id))
+        except Exception as e:
+            db.session.rollback()
+            print('Erro ao editar conta bancária:', e)
+            flash('Erro ao salvar alterações.', 'danger')
+            return redirect(url_for('empresa_conta_bancaria_editar', conta_id=conta.id))
+
+    return render_template('empresa_conta_bancaria_editar.html', conta=conta, empresas=empresas)
+
+
+# EXCLUIR CONTA BANCÁRIA (impede exclusão se houver movimentos)
+@app.route('/empresa/conta_bancaria/<int:conta_id>/excluir', methods=['POST'], endpoint='empresa_conta_bancaria_excluir')
+@login_required
+def empresa_conta_bancaria_excluir(conta_id):
+    conta = db.session.get(CaixaBanco, conta_id)
+    if not conta:
+        flash('Conta não encontrada.', 'warning')
+        return redirect(url_for('empresa_contas_listar'))
+
+    # Verifica movimentos vinculados
+    tem_mov = db.session.query(
+        db.exists().where(MovimentoCaixaBanco.conta_id == conta.id)
+    ).scalar()
+
+    if tem_mov:
+        flash('Não é possível excluir: a conta possui movimentos registrados.', 'warning')
+        return redirect(url_for('empresa_contas_listar', empresa_id=conta.empresa_id))
+
+    try:
+        db.session.delete(conta)
+        db.session.commit()
+        flash('Conta excluída com sucesso!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        print('Erro ao excluir conta bancária:', e)
+        flash('Erro ao excluir a conta.', 'danger')
+
+    return redirect(url_for('empresa_contas_listar'))
+
 
 if __name__ == '__main__':
     with app.app_context():

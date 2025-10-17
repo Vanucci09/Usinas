@@ -1,53 +1,91 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-    <meta charset="UTF-8">
-    <title>Editar Usuário</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
+  <meta charset="UTF-8">
+  <title>Editar Usuário</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
 </head>
 <body class="bg-light">
-    <div class="container py-5">
-        <h2 class="mb-4 text-primary text-center">✏️ Editar Usuário</h2>
+  <div class="container py-5">
+    <h2 class="mb-4 text-primary text-center">✏️ Editar Usuário</h2>
 
-        <form method="POST">
-            <div class="mb-3">
-                <label for="nome" class="form-label">Nome</label>
-                <input type="text" class="form-control" id="nome" name="nome" value="{{ usuario.nome }}" required>
-            </div>
-            <div class="mb-3">
-                <label for="email" class="form-label">Email</label>
-                <input type="email" class="form-control" id="email" name="email" value="{{ usuario.email }}" required>
-            </div>
-            <div class="mb-3">
-                <label for="senha" class="form-label">Nova Senha (opcional)</label>
-                <input type="password" class="form-control" id="senha" name="senha" placeholder="Deixe em branco para manter a senha atual">
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Permissões</label>
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" name="pode_cadastrar_geracao" id="geracao" {% if usuario.pode_cadastrar_geracao %}checked{% endif %}>
-                    <label class="form-check-label" for="geracao">Cadastrar Geração</label>
-                </div>
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" name="pode_cadastrar_cliente" id="cliente" {% if usuario.pode_cadastrar_cliente %}checked{% endif %}>
-                    <label class="form-check-label" for="cliente">Cadastrar Cliente</label>
-                </div>
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" name="pode_cadastrar_fatura" id="fatura" {% if usuario.pode_cadastrar_fatura %}checked{% endif %}>
-                    <label class="form-check-label" for="fatura">Cadastrar Fatura</label>
-                </div>
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" name="pode_acessar_financeiro" id="financeiro" {% if usuario.pode_acessar_financeiro %}checked{% endif %}>
-                    <label class="form-check-label" for="financeiro">Acessar Financeiro</label>
-                </div>
-            </div>
-            <div class="d-flex justify-content-between">
-                <a href="{{ url_for('listar_usuarios') }}" class="btn btn-secondary">Voltar</a>
-                <button type="submit" class="btn btn-primary">Salvar Alterações</button>
-            </div>
-        </form>
+    <!-- Aviso sobre a exclusividade do aprovador -->
+    <div class="alert alert-info d-flex align-items-start gap-2">
+      <i class="bi bi-info-circle-fill fs-5"></i>
+      <div>
+        <strong>Aprovador financeiro:</strong> apenas <em>um</em> usuário pode ter essa permissão por vez.
+        Ao marcar essa opção aqui, os demais usuários perderão a permissão de aprovador.
+      </div>
     </div>
+
+    <form method="POST">
+      {# Se usar Flask-WTF/CSRF, descomente a linha abaixo #}
+      {# {{ csrf_token() }} #}
+
+      <div class="mb-3">
+        <label for="nome" class="form-label">Nome</label>
+        <input type="text" class="form-control" id="nome" name="nome" value="{{ usuario.nome }}" required>
+      </div>
+
+      <div class="mb-3">
+        <label for="email" class="form-label">Email</label>
+        <input type="email" class="form-control" id="email" name="email" value="{{ usuario.email }}" required>
+      </div>
+
+      <div class="mb-3">
+        <label for="senha" class="form-label">Nova Senha (opcional)</label>
+        <input type="password" class="form-control" id="senha" name="senha" placeholder="Deixe em branco para manter a senha atual">
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Permissões</label>
+
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="pode_cadastrar_geracao" id="geracao"
+                 {% if usuario.pode_cadastrar_geracao %}checked{% endif %}>
+          <label class="form-check-label" for="geracao">Cadastrar Geração</label>
+        </div>
+
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="pode_cadastrar_cliente" id="cliente"
+                 {% if usuario.pode_cadastrar_cliente %}checked{% endif %}>
+          <label class="form-check-label" for="cliente">Cadastrar Cliente</label>
+        </div>
+
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="pode_cadastrar_fatura" id="fatura"
+                 {% if usuario.pode_cadastrar_fatura %}checked{% endif %}>
+          <label class="form-check-label" for="fatura">Cadastrar Fatura</label>
+        </div>
+
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="pode_acessar_financeiro" id="financeiro"
+                 {% if usuario.pode_acessar_financeiro %}checked{% endif %}>
+          <label class="form-check-label" for="financeiro">Acessar Financeiro</label>
+        </div>
+
+        <!-- NOVO: Aprovador financeiro (exclusivo) -->
+        <div class="form-check mt-3">
+          <input class="form-check-input" type="checkbox" name="pode_aprovar_financeiro" id="aprovador"
+                 {% if usuario.pode_aprovar_financeiro %}checked{% endif %}>
+          <label class="form-check-label fw-semibold" for="aprovador">
+            Pode aprovar financeiro (exclusivo)
+          </label>
+          <div class="form-text">
+            Marcando esta opção, este usuário passa a ser o único aprovador financeiro do sistema.
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-between">
+        <a href="{{ url_for('listar_usuarios') }}" class="btn btn-secondary">Voltar</a>
+        <button type="submit" class="btn btn-primary">
+          <i class="bi bi-check2-circle me-1"></i> Salvar Alterações
+        </button>
+      </div>
+    </form>
+  </div>
 </body>
 </html>

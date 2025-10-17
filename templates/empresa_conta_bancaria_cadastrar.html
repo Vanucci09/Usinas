@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+{% block title %}Cadastrar Conta Bancária – Empresa{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2 class="text-primary mb-4">Cadastrar Conta Bancária – Empresa</h2>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="mb-3">
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <form method="POST" action="{{ url_for('empresa_conta_bancaria_cadastrar') }}">
+    <div class="row g-3">
+
+      <!-- Empresa -->
+      <div class="col-md-4">
+        <label for="empresa_id" class="form-label">Empresa *</label>
+        <select name="empresa_id" id="empresa_id" class="form-select" required>
+          <option value="">Selecione...</option>
+          {% for emp in empresas %}
+          <option value="{{ emp.id }}">{{ emp.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Nome -->
+      <div class="col-md-4">
+        <label for="nome" class="form-label">Nome da Conta *</label>
+        <input type="text" name="nome" id="nome" class="form-control" placeholder="Ex.: Caixa Geral, Banco do Brasil" required>
+      </div>
+
+      <!-- Tipo -->
+      <div class="col-md-4">
+        <label for="tipo" class="form-label">Tipo *</label>
+        <select name="tipo" id="tipo" class="form-select" required>
+          <option value="">Selecione...</option>
+          <option value="Caixa">Caixa</option>
+          <option value="Banco">Banco</option>
+          <option value="Conta Digital">Conta Digital</option>
+        </select>
+      </div>
+
+      <!-- Banco -->
+      <div class="col-md-4">
+        <label for="banco" class="form-label">Banco</label>
+        <input type="text" name="banco" id="banco" class="form-control" placeholder="Ex.: Banco do Brasil, Nubank, C6 Bank">
+      </div>
+
+      <!-- Agência -->
+      <div class="col-md-4">
+        <label for="agencia" class="form-label">Agência</label>
+        <input type="text" name="agencia" id="agencia" class="form-control" placeholder="Ex.: 1234-5">
+      </div>
+
+      <!-- Conta -->
+      <div class="col-md-4">
+        <label for="conta" class="form-label">Conta</label>
+        <input type="text" name="conta" id="conta" class="form-control" placeholder="Ex.: 000123-4">
+      </div>
+
+      <!-- Saldo Inicial -->
+      <div class="col-md-4">
+        <label for="saldo_inicial" class="form-label">Saldo Inicial (R$)</label>
+        <input type="text" name="saldo_inicial" id="saldo_inicial" class="form-control" placeholder="Ex.: 5.000,00">
+        <small class="text-muted">Será também o saldo atual inicial.</small>
+      </div>
+
+    </div>
+
+    <div class="d-flex flex-column flex-md-row justify-content-end align-items-stretch gap-2 mt-4">
+      <a href="{{ url_for('empresa_contas_listar') }}" class="btn btn-outline-secondary w-100 w-md-auto">
+        <i class="bi bi-arrow-left me-2"></i> Voltar
+      </a>
+      <button type="submit" class="btn btn-success w-100 w-md-auto">
+        <i class="bi bi-check2-circle me-2"></i> Salvar
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

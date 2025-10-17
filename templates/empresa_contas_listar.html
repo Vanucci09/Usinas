@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+{% block title %}Contas Bancárias – Empresas{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <h2 class="text-primary mb-0">Contas Bancárias</h2>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="mb-3">
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} mb-2">{{ message|safe }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <form method="get" class="card shadow-sm mb-3">
+    <div class="card-body row g-2">
+      <div class="col-md-4">
+        <label class="form-label">Empresa</label>
+        <select class="form-select" name="empresa_id" onchange="this.form.submit()">
+          <option value="">Todas</option>
+          {% for emp in empresas %}
+            <option value="{{ emp.id }}" {% if empresa_id == emp.id %}selected{% endif %}>{{ emp.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Buscar</label>
+        <input class="form-control" name="q" value="{{ q or '' }}" placeholder="Nome, banco, agência, conta...">
+      </div>
+      <div class="col-md-4 d-flex align-items-end">
+        <button class="btn btn-outline-secondary w-100"><i class="bi bi-search me-1"></i> Filtrar</button>
+      </div>
+    </div>
+  </form>
+
+  <div class="table-responsive">
+    <table class="table table-striped align-middle">
+      <thead>
+        <tr>
+          <th>Empresa</th>
+          <th>Nome</th>
+          <th>Tipo</th>
+          <th>Banco</th>
+          <th>Agência</th>
+          <th>Conta</th>
+          <th class="text-end">Saldo Inicial</th>
+          <th class="text-end">Saldo Atual</th>
+          <th style="width: 130px;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if contas %}
+          {% for c in contas %}
+          <tr>
+            <td>{{ c.empresa.nome }}</td>
+            <td>{{ c.nome }}</td>
+            <td>{{ c.tipo }}</td>
+            <td>{{ c.banco or '-' }}</td>
+            <td>{{ c.agencia or '-' }}</td>
+            <td>{{ c.conta or '-' }}</td>
+            <td class="text-end">{{ '{:,.2f}'.format(c.saldo_inicial or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+            <td class="text-end">{{ '{:,.2f}'.format(c.saldo_atual or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+            <td class="text-end">
+              <div class="btn-group">
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('empresa_conta_bancaria_editar', conta_id=c.id) }}">
+                  <i class="bi bi-pencil-square"></i>
+                </a>
+                <form method="POST" action="{{ url_for('empresa_conta_bancaria_excluir', conta_id=c.id) }}" onsubmit="return confirm('Confirma excluir esta conta?');">
+                  <button class="btn btn-sm btn-outline-danger">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="9" class="text-center text-muted py-4">Nenhuma conta encontrada.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<div class="d-flex flex-column flex-md-row justify-content-end align-items-stretch gap-2 mt-4">
+    <a href="{{ url_for('index') }}?aba=financeiro_empresa"
+       class="btn btn-outline-secondary d-flex align-items-center w-100 w-md-auto">
+      <i class="bi bi-arrow-left me-2"></i> Voltar
+    </a>
+    <a href="{{ url_for('empresa_conta_bancaria_cadastrar') }}"
+       class="btn btn-success d-flex align-items-center w-100 w-md-auto">
+      <i class="bi bi-person-plus me-2"></i> Nova Conta
+    </a>
+  </div>
+{% endblock %}

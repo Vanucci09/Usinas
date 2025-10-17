@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% block title %}Cadastrar Cliente{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <h2 class="text-primary mb-3">Cadastrar Cliente</h2>
+
+    <form method="POST">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label">Empresa</label>
+                <select name="empresa_id" class="form-select" required>
+                    <option value="">Selecione...</option>
+                    {% for e in empresas %}
+                        <option value="{{ e.id }}">{{ e.nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label">Nome</label>
+                <input type="text" name="nome" class="form-control" required>
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">CPF/CNPJ</label>
+                <input type="text" name="cpf_cnpj" class="form-control">
+            </div>
+
+            <div class="col-md-8">
+                <label class="form-label">Endereço</label>
+                <input type="text" name="endereco" class="form-control">
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label">Email</label>
+                <input type="email" name="email" class="form-control">
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label">Telefone</label>
+                <input type="text" name="telefone" class="form-control">
+            </div>
+        </div>
+
+        <div class="mt-4">
+            <button type="submit" class="btn btn-success">Salvar</button>
+            <a href="{{ url_for('listar_clientes_operacionais') }}" class="btn btn-secondary">Cancelar</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

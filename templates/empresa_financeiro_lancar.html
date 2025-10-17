@@ -1,0 +1,483 @@
+{% extends 'base.html' %}
+{% block title %}Novo Título{% endblock %}
+
+{% block content %}
+<style>
+  .is-hidden { display:none !important; }
+  .picker-toolbar { gap:.5rem }
+  .list-box {
+    border:1px solid var(--bs-border-color);
+    border-radius:.375rem;
+    padding:.5rem .75rem;
+    height: 180px;            /* altura fixa para não crescer */
+    overflow:auto;
+    background:#fff;
+  }
+  .item-label { user-select:none; }
+  .selected-badges .badge { margin:0 .25rem .25rem 0; }
+  .plan-row { display:flex; align-items:center; gap:.5rem; padding:.25rem 0; }
+  .plan-row input[type="text"].valor-plano { width: 140px; }
+  .sum-hint small { display:block; }
+</style>
+
+<div class="container mt-4">
+  <h2 class="text-primary mb-4">Novo Título</h2>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="mb-3">
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} mb-2">{{ message|safe }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <form method="POST" action="{{ url_for('empresa_financeiro_lancar') }}" enctype="multipart/form-data" id="form-fin">
+    <div class="row g-3">
+
+      <!-- Empresa -->
+      <div class="col-md-6 col-lg-4">
+        <label for="empresa_id" class="form-label">Empresa *</label>
+        <select name="empresa_id" id="empresa_id" class="form-select" required>
+          <option value="">Selecione...</option>
+          {% for emp in empresas %}
+            <option value="{{ emp.id }}">{{ emp.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Tipo -->
+      <div class="col-md-6 col-lg-4">
+        <label for="tipo" class="form-label">Tipo *</label>
+        <select name="tipo" id="tipo" class="form-select" required>
+          <option value="despesa">Despesa</option>
+          <option value="receita">Receita</option>
+        </select>
+      </div>
+
+      <!-- Data (emissão) -->
+      <div class="col-md-6 col-lg-4">
+        <label for="data" class="form-label">Data *</label>
+        <input type="date" name="data" id="data" class="form-control" required>
+      </div>
+
+      <!-- Descrição -->
+      <div class="col-md-8">
+        <label for="descricao" class="form-label">Descrição *</label>
+        <input type="text" name="descricao" id="descricao" class="form-control"
+               placeholder="Ex.: Energia, Honorários, Venda de créditos..." required>
+      </div>
+
+      <!-- Valor total -->
+      <div class="col-md-4">
+        <label for="valor" class="form-label">Valor total (R$) *</label>
+        <input type="text" name="valor" id="valor" class="form-control" placeholder="Ex.: 1.234,56" required>
+        <small class="text-muted">Use vírgula como separador decimal (ex.: 1.234,56).</small>
+      </div>
+
+      <!-- NF/Recibo -->
+      <div class="col-md-6 col-lg-4">
+        <label for="numero_documento" class="form-label">NF/Recibo (nº)</label>
+        <input type="text" name="numero_documento" id="numero_documento" class="form-control"
+               placeholder="Ex.: 12345, R-2025/007, NFe 55-000123">
+        <small class="text-muted">Opcional. Informe o número da nota/recibo, se houver.</small>
+      </div>
+
+      <!-- Comprovante -->
+      <div class="col-md-6 col-lg-4">
+        <label for="comprovante" class="form-label">Comprovante (PDF/JPG/PNG)</label>
+        <input type="file" name="comprovante" id="comprovante" class="form-control"
+               accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif">
+        <small class="text-muted">Opcional. Tamanho máximo ~10MB.</small>
+      </div>
+
+      <!-- Planos Financeiros (com valor por plano) -->
+      <div class="col-lg-6">
+        <div class="d-flex justify-content-between align-items-center">
+          <label class="form-label mb-0">Planos Financeiros</label>
+          <div class="sum-hint text-end">
+            <small class="text-muted">Soma dos planos: <strong id="soma_planos">R$ 0,00</strong></small>
+            <small id="aviso_soma" class="text-danger d-none">A soma dos planos precisa bater com o Valor total.</small>
+          </div>
+        </div>
+
+        <div class="d-flex align-items-center mb-2 picker-toolbar">
+          <input id="busca_planos" class="form-control form-control-sm" placeholder="Pesquisar plano...">
+          <button class="btn btn-sm btn-outline-primary" type="button" id="planos_sel_todos">Selecionar todos (visíveis)</button>
+          <button class="btn btn-sm btn-outline-secondary" type="button" id="planos_limpar">Limpar (visíveis)</button>
+          <button class="btn btn-sm btn-outline-success" type="button" id="planos_distribuir">Distribuir igualmente</button>
+        </div>
+
+        <div id="lista_planos" class="list-box">
+          {% for p in planos_all %}
+            <div class="plan-row plano-item" data-text="{{ p.nome|e }}">
+              <input class="form-check-input me-1 ck-plano" type="checkbox" name="planos_financeiros_ids[]" value="{{ p.id }}" id="plano_{{ p.id }}">
+              <label for="plano_{{ p.id }}" class="item-label flex-grow-1">{{ p.nome }}</label>
+              <!-- valor por plano (habilita quando marcado) -->
+              <input
+                type="text"
+                class="form-control form-control-sm valor-plano"
+                name="valor_plano[{{ p.id }}]"
+                placeholder="R$ 0,00"
+                data-plano-id="{{ p.id }}"
+                disabled
+              >
+            </div>
+          {% endfor %}
+        </div>
+
+        <div class="selected-badges mt-2" id="planos_escolhidos">
+          <span class="text-muted">Nenhum</span>
+        </div>
+      </div>
+
+      <!-- Centros de Custo -->
+      <div class="col-lg-6">
+        <label class="form-label">Centros de Custo</label>
+        <div class="d-flex align-items-center mb-2 picker-toolbar">
+          <input id="busca_centros" class="form-control form-control-sm" placeholder="Pesquisar centro...">
+          <button class="btn btn-sm btn-outline-primary" type="button" id="centros_sel_todos">Selecionar todos (visíveis)</button>
+          <button class="btn btn-sm btn-outline-secondary" type="button" id="centros_limpar">Limpar (visíveis)</button>
+        </div>
+        <div id="lista_centros" class="list-box">
+          {% for cc in centros_all %}
+            <label class="form-check centro-item d-flex align-items-center gap-2 py-1"
+                   data-empresa="{{ cc.empresa_id }}"
+                   data-text="{{ (cc.codigo ~ ' ' ~ cc.nome)|e }}">
+              <input class="form-check-input" type="checkbox" name="centros_custos_ids[]" value="{{ cc.id }}">
+              <span class="item-label">{{ cc.codigo }} — {{ cc.nome }} <small class="text-muted">(Emp. #{{ cc.empresa_id }})</small></span>
+            </label>
+          {% endfor %}
+        </div>
+        <div class="selected-badges mt-2" id="centros_escolhidos">
+          <span class="text-muted">Nenhum</span>
+        </div>
+        <small class="text-muted d-block mt-1">A lista acompanha a empresa selecionada.</small>
+      </div>
+
+      <!-- Parcelas -->
+      <div class="col-md-4 col-lg-3">
+        <label for="parcelas_qtd" class="form-label">Quantidade de parcelas</label>
+        <input type="number" min="1" step="1" value="1" id="parcelas_qtd" name="parcelas_qtd" class="form-control">
+        <small class="text-muted">Informe 1 para lançamento único.</small>
+      </div>
+
+      <!-- Status -->
+      <div class="col-md-4 col-lg-3">
+        <label for="status" class="form-label">Status *</label>
+        <select name="status" id="status" class="form-select" required>
+          <option value="pendente">Pendente</option>
+          <option value="pago">Pago (para despesa)</option>
+          <option value="recebido">Recebido (para receita)</option>
+        </select>
+      </div>
+
+      <!-- Vencimento da 1ª parcela -->
+      <div class="col-md-4 col-lg-3">
+        <label for="data_vencimento" class="form-label">Data do pagamento/recebimento</label>
+        <input type="date" name="data_vencimento" id="data_vencimento" class="form-control">
+        <small class="text-muted">Se status for “pago/recebido” e vazio, será sugerida a mesma data do título.</small>
+      </div>
+
+      <!-- Conta -->
+      <div class="col-md-12 col-lg-3">
+        <label for="conta_id" class="form-label">Conta (Caixa/Banco)</label>
+        <select name="conta_id" id="conta_id" class="form-select">
+          <option value="">(opcional) escolher conta</option>
+          {% for c in contas_all %}
+            <option value="{{ c.id }}" data-empresa="{{ c.empresa_id }}">
+              [{{ c.id }}] {{ c.nome }} — ({{ c.banco or 'Conta' }})
+            </option>
+          {% endfor %}
+        </select>
+        <small class="text-muted">Obrigatório apenas se marcar como pago/recebido.</small>
+      </div>
+
+    </div>
+
+    <div class="d-flex flex-column flex-md-row justify-content-end align-items-stretch gap-2 mt-4">
+      <a href="{{ url_for('empresa_financeiro_listar') }}"
+         class="btn btn-outline-secondary d-flex align-items-center w-100 w-md-auto">
+        <i class="bi bi-arrow-left me-2"></i> Voltar
+      </a>
+      <button type="submit" class="btn btn-success d-flex align-items-center w-100 w-md-auto" id="btn_salvar">
+        <i class="bi bi-check2-circle me-2"></i> Salvar
+      </button>
+    </div>
+  </form>
+</div>
+
+<script>
+  // -------- utilidades
+  function norm(s){
+    return (s||'').toString().toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  }
+  function parseBR(v){
+    if(!v) return 0;
+    v = v.replace(/\./g,'').replace(',','.');
+    var n = Number(v);
+    return isNaN(n) ? 0 : n;
+  }
+  function fmtBR(n){
+    try{
+      return n.toLocaleString('pt-BR',{style:'currency', currency:'BRL'});
+    }catch(e){
+      // fallback simples
+      return 'R$ ' + (Math.round(n*100)/100).toFixed(2).replace('.',',');
+    }
+  }
+
+  // -------- Badge de selecionados
+  function updateBadges(){
+    function build(containerSel, itemSel, outSel){
+      var box = document.querySelector(containerSel);
+      var out = document.querySelector(outSel);
+      if(!box || !out) return;
+      var names = [];
+      box.querySelectorAll(itemSel+' input[type="checkbox"]').forEach(function(ck){
+        if (ck.checked){
+          var lbl = ck.closest(itemSel);
+          var original =
+            lbl.querySelector('.item-label')?.textContent?.trim() ||
+            lbl.getAttribute('data-text') || '';
+          names.push(original);
+        }
+      });
+      out.innerHTML = names.length
+        ? names.map(function(n){ return '<span class="badge bg-primary-subtle text-primary border">'+n+'</span>'; }).join(' ')
+        : '<span class="text-muted">Nenhum</span>';
+    }
+    build('#lista_planos', '.plano-item', '#planos_escolhidos');
+    build('#lista_centros', '.centro-item', '#centros_escolhidos');
+  }
+
+  // -------- Filtros
+  function centerMatchesEmpresa(el){
+    var empresaSel = document.getElementById('empresa_id');
+    if(!empresaSel) return true;
+    var emp = (empresaSel.value||'');
+    if(!emp) return true;
+    return (el.getAttribute('data-empresa')||'') === emp;
+  }
+
+  function bindSearch({boxSel, itemSel, inputSel, extraFilter}){
+    var box = document.querySelector(boxSel);
+    var input = document.querySelector(inputSel);
+    if(!box || !input) return function(){};
+
+    box.querySelectorAll(itemSel).forEach(function(el){
+      var original =
+        el.querySelector('.item-label')?.textContent?.trim() ||
+        el.getAttribute('data-text') || '';
+      el.setAttribute('data-text-original', original);
+      el.setAttribute('data-text-norm', norm(original));
+    });
+
+    function apply(){
+      var q = norm(input.value);
+      box.querySelectorAll(itemSel).forEach(function(el){
+        var txt = el.getAttribute('data-text-norm') || '';
+        var matchesText = !q || txt.indexOf(q) !== -1;
+        var matchesExtra = extraFilter ? extraFilter(el) : true;
+        el.classList.toggle('is-hidden', !(matchesText && matchesExtra));
+      });
+      updateBadges();
+    }
+    input.addEventListener('input', apply);
+    input.addEventListener('keyup', apply);
+    apply();
+    return apply;
+  }
+
+  function bindBulk(boxSel, itemSel, btnAllId, btnClrId){
+    var box = document.querySelector(boxSel);
+    var btnAll = document.getElementById(btnAllId);
+    var btnClr = document.getElementById(btnClrId);
+    if(!box) return;
+    function isVisible(el){ return !el.classList.contains('is-hidden'); }
+    btnAll && btnAll.addEventListener('click', function(){
+      box.querySelectorAll(itemSel).forEach(function(el){
+        if(!isVisible(el)) return;
+        var ck = el.querySelector('input[type="checkbox"]');
+        if(ck) ck.checked = true;
+        if(el.classList.contains('plano-item')){
+          var inp = el.querySelector('.valor-plano');
+          if(inp){ inp.disabled = !ck.checked; }
+        }
+      });
+      updateBadges();
+      recalcSomaPlanos();
+    });
+    btnClr && btnClr.addEventListener('click', function(){
+      box.querySelectorAll(itemSel).forEach(function(el){
+        if(!isVisible(el)) return;
+        var ck = el.querySelector('input[type="checkbox"]');
+        if(ck) ck.checked = false;
+        if(el.classList.contains('plano-item')){
+          var inp = el.querySelector('.valor-plano');
+          if(inp){ inp.disabled = true; inp.value=''; }
+        }
+      });
+      updateBadges();
+      recalcSomaPlanos();
+    });
+  }
+
+  function filterContasByEmpresa(){
+    var empresaSel = document.getElementById('empresa_id');
+    var contaSel = document.getElementById('conta_id');
+    if(!empresaSel || !contaSel) return;
+    var emp = (empresaSel.value||'');
+    Array.from(contaSel.options).forEach(function(opt){
+      if(!opt.value){ opt.hidden=false; opt.disabled=false; return; }
+      var same = (opt.getAttribute('data-empresa')||'') === emp;
+      opt.hidden = !same; opt.disabled = !same;
+    });
+    var cur = contaSel.options[contaSel.selectedIndex];
+    if(cur && (cur.hidden || cur.disabled)) contaSel.value='';
+  }
+
+  function sugereDataPgtoSeQuitado(){
+    var statusSel = document.getElementById('status');
+    var dtTitulo = document.getElementById('data');
+    var dtVenc = document.getElementById('data_vencimento');
+    if(!statusSel || !dtTitulo || !dtVenc) return;
+    var s = statusSel.value;
+    if ((s === 'pago' || s === 'recebido') && dtTitulo.value && !dtVenc.value){
+      dtVenc.value = dtTitulo.value;
+    }
+  }
+
+  // -------- Valores por Plano (soma / distribuir)
+  function recalcSomaPlanos(){
+    var soma = 0;
+    document.querySelectorAll('.plano-item').forEach(function(row){
+      var ck = row.querySelector('.ck-plano');
+      var inp = row.querySelector('.valor-plano');
+      if(ck && ck.checked && inp && inp.value){
+        soma += parseBR(inp.value);
+      }
+    });
+    document.getElementById('soma_planos').textContent = fmtBR(soma);
+    // Validação visual com total
+    var total = parseBR(document.getElementById('valor').value);
+    var aviso = document.getElementById('aviso_soma');
+    if(total > 0 && Math.abs(soma - total) > 0.005){
+      aviso.classList.remove('d-none');
+    }else{
+      aviso.classList.add('d-none');
+    }
+  }
+
+  function distribuirIgualmente(){
+    var total = parseBR(document.getElementById('valor').value);
+    if(total <= 0) return;
+    var ativos = Array.from(document.querySelectorAll('.plano-item'))
+      .filter(function(row){ return row.querySelector('.ck-plano')?.checked; });
+    if(ativos.length === 0) return;
+
+    var parte = Math.floor((total/ativos.length)*100)/100; // duas casas
+    var somaParcial = parte * ativos.length;
+    var resto = Math.round((total - somaParcial)*100)/100;
+
+    ativos.forEach(function(row, idx){
+      var inp = row.querySelector('.valor-plano');
+      var val = parte + (idx === ativos.length-1 ? resto : 0);
+      // formata estilo BR
+      inp.value = (val.toFixed(2)).replace('.',',');
+    });
+    recalcSomaPlanos();
+  }
+
+  // -------- submit guard: soma deve bater
+  function bindSubmitGuard(){
+    var form = document.getElementById('form-fin');
+    form.addEventListener('submit', function(e){
+      var total = parseBR(document.getElementById('valor').value);
+      var soma = 0;
+      var planosMarcados = 0;
+      document.querySelectorAll('.plano-item').forEach(function(row){
+        var ck = row.querySelector('.ck-plano');
+        var inp = row.querySelector('.valor-plano');
+        if(ck && ck.checked){
+          planosMarcados++;
+          soma += parseBR(inp.value);
+        }
+      });
+      if(planosMarcados === 0){
+        e.preventDefault();
+        alert('Selecione ao menos um Plano Financeiro.');
+        return;
+      }
+      if(Math.abs(soma - total) > 0.005){
+        e.preventDefault();
+        alert('A soma dos valores por plano ('+fmtBR(soma)+') precisa ser igual ao Valor total ('+fmtBR(total)+').');
+        return;
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    // buscas
+    var applyPlanos  = bindSearch({ boxSel:'#lista_planos',  itemSel:'.plano-item', inputSel:'#busca_planos' });
+    var applyCentros = bindSearch({ boxSel:'#lista_centros', itemSel:'.centro-item', inputSel:'#busca_centros', extraFilter: centerMatchesEmpresa });
+
+    // selecionar/limpar
+    bindBulk('#lista_planos',  '.plano-item',  'planos_sel_todos',  'planos_limpar');
+    bindBulk('#lista_centros', '.centro-item', 'centros_sel_todos', 'centros_limpar');
+
+    // mudar empresa -> refiltra centros e contas
+    var empresaSel = document.getElementById('empresa_id');
+    if (empresaSel){
+      empresaSel.addEventListener('change', function(){
+        filterContasByEmpresa();
+        applyCentros();
+      });
+      filterContasByEmpresa();
+      applyCentros();
+    }
+
+    // status -> sugere data
+    document.getElementById('status').addEventListener('change', sugereDataPgtoSeQuitado);
+
+    // habilita/desabilita input do valor por plano conforme checkbox
+    document.getElementById('lista_planos').addEventListener('change', function(ev){
+      var target = ev.target;
+      if(target && target.classList.contains('ck-plano')){
+        var row = target.closest('.plano-item');
+        var inp = row.querySelector('.valor-plano');
+        if(inp){
+          inp.disabled = !target.checked;
+          if(!target.checked){ inp.value=''; }
+        }
+        updateBadges();
+        recalcSomaPlanos();
+      }
+    });
+
+    // evento digitação nos inputs de valor de plano
+    document.querySelectorAll('.valor-plano').forEach(function(inp){
+      ['input','keyup','change','blur'].forEach(function(ev){
+        inp.addEventListener(ev, recalcSomaPlanos);
+      });
+    });
+
+    // valor total também recalcula o aviso
+    ['input','keyup','change','blur'].forEach(function(ev){
+      document.getElementById('valor').addEventListener(ev, recalcSomaPlanos);
+    });
+
+    // distribuir igualmente
+    document.getElementById('planos_distribuir').addEventListener('click', distribuirIgualmente);
+
+    // badges iniciais e soma
+    updateBadges();
+    recalcSomaPlanos();
+
+    // validação no submit
+    bindSubmitGuard();
+  });
+</script>
+{% endblock %}

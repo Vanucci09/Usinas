@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+
+{% block title %}Empresas{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="text-primary">Empresas</h2>
+    <a href="{{ url_for('cadastrar_empresa_operacional') }}" class="btn btn-success">
+      <i class="bi bi-plus-circle me-2"></i> Nova Empresa
+    </a>
+  </div>
+
+  {% if empresas %}
+  <div class="table-responsive">
+    <table class="table table-striped align-middle">
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>CNPJ</th>
+          <th>Responsável</th>
+          <th>Telefone</th>
+          <th>Email</th>
+          <th class="text-end">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in empresas %}
+        <tr>
+          <td>{{ e.nome }}</td>
+          <td>{{ e.cnpj or '-' }}</td>
+          <td>{{ e.responsavel or '-' }}</td>
+          <td>{{ e.telefone or '-' }}</td>
+          <td>{{ e.email or '-' }}</td>
+          <td class="text-end">
+            <a href="{{ url_for('editar_empresa_operacional', empresa_id=e.id) }}"
+               class="btn btn-sm btn-outline-primary me-1">
+              <i class="bi bi-pencil-square"></i> Editar
+            </a>
+
+            <!-- Botão que abre o modal -->
+            <button type="button"
+                    class="btn btn-sm btn-outline-danger"
+                    data-bs-toggle="modal"
+                    data-bs-target="#modalExcluir{{ e.id }}">
+              <i class="bi bi-trash"></i> Excluir
+            </button>
+
+            <!-- Modal de confirmação -->
+            <div class="modal fade" id="modalExcluir{{ e.id }}" tabindex="-1" aria-hidden="true">
+              <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title text-danger">Confirmar exclusão</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                  </div>
+                  <div class="modal-body">
+                    Tem certeza que deseja excluir a empresa <strong>{{ e.nome }}</strong>?
+                    Esta ação não pode ser desfeita.
+                  </div>
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <form method="POST" action="{{ url_for('excluir_empresa_operacional', empresa_id=e.id) }}" class="d-inline">
+                      <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash"></i> Excluir
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- /Modal -->
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p class="text-muted">Nenhuma empresa cadastrada.</p>
+  {% endif %}
+
+  <div class="d-flex flex-column flex-md-row justify-content-end align-items-stretch gap-2 mt-3">
+    <a href="{{ url_for('index') }}?aba=financeiro_empresa"
+       class="btn btn-outline-secondary d-flex align-items-center w-100 w-md-auto">
+      <i class="bi bi-arrow-left me-2"></i> Voltar
+    </a>
+    <a href="{{ url_for('cadastrar_empresa_operacional') }}"
+       class="btn btn-outline-secondary d-flex align-items-center w-100 w-md-auto">
+      <i class="bi bi-plus-circle me-2"></i> Nova Empresa
+    </a>
+  </div>
+</div>
+{% endblock %}
