@@ -159,23 +159,69 @@
         <small class="text-muted">Obrigatório apenas se marcar como pago/recebido.</small>
       </div>
 
-      <!-- Comprovante -->
+            <!-- Comprovante (LEGADO: 1 arquivo) -->
       <div class="col-md-6">
-        <label class="form-label d-block">Comprovante</label>
+        <label class="form-label d-block">Comprovante (arquivo único – legado)</label>
+
         {% if titulo.comprovante_arquivo %}
-          <div class="mb-2">
+          <div class="mb-2 d-flex align-items-center gap-2">
             <a href="{{ url_for('download_comprovante', filename=titulo.comprovante_arquivo) }}"
                class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">
               <i class="bi bi-paperclip me-1"></i> Abrir atual
             </a>
+            <span class="text-muted small">{{ titulo.comprovante_arquivo }}</span>
           </div>
         {% else %}
-          <div class="text-muted mb-2">Nenhum comprovante anexado.</div>
+          <div class="text-muted mb-2">Nenhum comprovante (legado) anexado.</div>
         {% endif %}
 
         <input type="file" name="comprovante" id="comprovante" class="form-control"
                accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif" {{ 'disabled' if titulo.aprovado }}>
-        <small class="text-muted">Se enviar um arquivo aqui, o comprovante atual será substituído.</small>
+        <small class="text-muted">Se enviar um arquivo aqui, o comprovante único legado será substituído.</small>
+      </div>
+
+      <!-- Anexos (NOVO: N arquivos) -->
+      <div class="col-md-6">
+        <label class="form-label d-block">Anexos do Título (múltiplos)</label>
+
+        {% set anexos = titulo.anexos or [] %}
+        {% if anexos|length > 0 %}
+          <ul class="list-group mb-2">
+            {% for ax in anexos %}
+              <li class="list-group-item d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-2 text-truncate" style="max-width: 70%">
+                  <i class="bi bi-file-earmark"></i>
+                  <a href="{{ url_for('download_anexo', anexo_id=ax.id) }}"
+                     class="text-decoration-none text-break" target="_blank" rel="noopener"
+                     title="{{ ax.original_name or ax.filename }}">
+                    {{ ax.original_name or ax.filename }}
+                  </a>
+                </div>
+
+                {% if not titulo.aprovado %}
+                  <div class="form-check m-0">
+                    <input class="form-check-input" type="checkbox"
+                           name="remover_anexo_ids[]" value="{{ ax.id }}" id="rm-{{ ax.id }}">
+                    <label class="form-check-label small" for="rm-{{ ax.id }}">remover</label>
+                  </div>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div class="text-muted mb-2">Nenhum anexo múltiplo cadastrado.</div>
+        {% endif %}
+
+        {% if not titulo.aprovado %}
+          <input type="file" name="comprovantes[]" id="comprovantes" class="form-control"
+                 multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif">
+          <small class="text-muted">
+            Você pode selecionar vários arquivos de uma vez. Tipos permitidos: PDF/JPG/PNG/GIF/WEBP/HEIC.
+          </small>
+        {% else %}
+          <input type="file" class="form-control" disabled>
+          <small class="text-muted">Lançamento aprovado: inclusão/remoção de anexos está bloqueada.</small>
+        {% endif %}
       </div>
 
     </div>

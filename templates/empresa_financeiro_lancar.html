@@ -9,7 +9,7 @@
     border:1px solid var(--bs-border-color);
     border-radius:.375rem;
     padding:.5rem .75rem;
-    height: 180px;            /* altura fixa para não crescer */
+    height: 180px;
     overflow:auto;
     background:#fff;
   }
@@ -62,10 +62,24 @@
         <select name="credor_id" id="credor_id" class="form-select" disabled>
           <option value="">Selecione o credor...</option>
           {% for cr in credores_all %}
-            <option value="{{ cr.id }}">{{ cr.nome }}</option>
+            <option value="{{ cr.id }}"{% if cr.empresa_id %} data-empresa="{{ cr.empresa_id }}"{% endif %}>
+              {{ cr.nome }}
+            </option>
           {% endfor %}
         </select>
         <small class="text-muted">Obrigatório quando o tipo for “Despesa”.</small>
+      </div>
+
+      <!-- Cliente Operacional (apenas para Receita) -->
+      <div class="col-md-6 col-lg-4" id="wrap_cliente_oper" style="display:none;">
+        <label for="cliente_operacional_id" class="form-label">Cliente Operacional *</label>
+        <select name="cliente_operacional_id" id="cliente_operacional_id" class="form-select" disabled>
+          <option value="">Selecione o cliente...</option>
+          {% for cl in clientes_operacionais_all %}
+            <option value="{{ cl.id }}" data-empresa="{{ cl.empresa_id }}">{{ cl.nome }}</option>
+          {% endfor %}
+        </select>
+        <small class="text-muted">Obrigatório quando o tipo for “Receita”.</small>
       </div>
 
       <!-- Data (emissão) -->
@@ -96,12 +110,12 @@
         <small class="text-muted">Opcional. Informe o número da nota/recibo, se houver.</small>
       </div>
 
-      <!-- Comprovante -->
+      <!-- Comprovantes (MÚLTIPLOS) -->
       <div class="col-md-6 col-lg-4">
-        <label for="comprovante" class="form-label">Comprovante (PDF/JPG/PNG)</label>
-        <input type="file" name="comprovante" id="comprovante" class="form-control"
+        <label for="comprovantes" class="form-label">Comprovantes (PDF/JPG/PNG) – múltiplos</label>
+        <input type="file" name="comprovantes[]" id="comprovantes" class="form-control" multiple
                accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif">
-        <small class="text-muted">Opcional. Tamanho máximo ~10MB.</small>
+        <small class="text-muted">Opcional. Você pode selecionar vários arquivos (até ~10MB cada).</small>
       </div>
 
       <!-- Planos Financeiros (com valor por plano) -->
@@ -126,7 +140,6 @@
             <div class="plan-row plano-item" data-text="{{ p.nome|e }}">
               <input class="form-check-input me-1 ck-plano" type="checkbox" name="planos_financeiros_ids[]" value="{{ p.id }}" id="plano_{{ p.id }}">
               <label for="plano_{{ p.id }}" class="item-label flex-grow-1">{{ p.nome }}</label>
-              <!-- valor por plano (habilita quando marcado) -->
               <input
                 type="text"
                 class="form-control form-control-sm valor-plano"
@@ -240,21 +253,61 @@
     }
   }
 
-  // -------- Credor por tipo
-  function toggleCredorPorTipo() {
+  // -------- filtros por empresa
+  function filterSelectByEmpresa(selectEl){
+    var empresaSel = document.getElementById('empresa_id');
+    if(!empresaSel || !selectEl) return;
+    var emp = (empresaSel.value||'');
+    Array.from(selectEl.options).forEach(function(opt){
+      if(!opt.value){ opt.hidden=false; opt.disabled=false; return; }
+      var belongs = (opt.getAttribute('data-empresa')||'') === emp || !opt.hasAttribute('data-empresa');
+      opt.hidden = !belongs; opt.disabled = !belongs;
+    });
+    var cur = selectEl.options[selectEl.selectedIndex];
+    if(cur && (cur.hidden || cur.disabled)) selectEl.value='';
+  }
+
+  function filterContasByEmpresa(){
+    filterSelectByEmpresa(document.getElementById('conta_id'));
+  }
+  function filterCredoresByEmpresa(){
+    filterSelectByEmpresa(document.getElementById('credor_id'));
+  }
+  function filterClientesOperByEmpresa(){
+    filterSelectByEmpresa(document.getElementById('cliente_operacional_id'));
+  }
+
+  // -------- Credor/Cliente por tipo
+  function toggleTipoDependentes() {
     const tipo = (document.getElementById('tipo').value || '').toLowerCase();
-    const wrap = document.getElementById('wrap_credor');
-    const sel  = document.getElementById('credor_id');
+    const wrapCredor = document.getElementById('wrap_credor');
+    const selCredor  = document.getElementById('credor_id');
+    const wrapCli    = document.getElementById('wrap_cliente_oper');
+    const selCli     = document.getElementById('cliente_operacional_id');
+
     if (tipo === 'despesa') {
-      wrap.style.display = '';
-      sel.disabled = false;
-      sel.setAttribute('required', 'required');
-    } else {
-      wrap.style.display = 'none';
-      sel.disabled = true;
-      sel.removeAttribute('required');
-      sel.value = '';
+      wrapCredor.style.display = '';
+      selCredor.disabled = false;
+      selCredor.setAttribute('required', 'required');
+
+      wrapCli.style.display = 'none';
+      selCli.disabled = true;
+      selCli.removeAttribute('required');
+      selCli.value = '';
+    } else { // receita
+      wrapCredor.style.display = 'none';
+      selCredor.disabled = true;
+      selCredor.removeAttribute('required');
+      selCredor.value = '';
+
+      wrapCli.style.display = '';
+      selCli.disabled = false;
+      selCli.setAttribute('required', 'required');
     }
+
+    // Reaplica filtro por empresa quando mostramos selects
+    filterCredoresByEmpresa();
+    filterClientesOperByEmpresa();
   }
 
   // -------- Badge de selecionados
@@ -281,7 +334,7 @@
     build('#lista_centros', '.centro-item', '#centros_escolhidos');
   }
 
-  // -------- Filtros
+  // -------- Filtros (busca)
   function centerMatchesEmpresa(el){
     var empresaSel = document.getElementById('empresa_id');
     if(!empresaSel) return true;
@@ -419,13 +472,21 @@
   function bindSubmitGuard(){
     var form = document.getElementById('form-fin');
     form.addEventListener('submit', function(e){
-      // credor obrigatório se despesa
       var tipoSel = (document.getElementById('tipo').value || '').toLowerCase();
+
+      // obrigatoriedade condicional
       if (tipoSel === 'despesa') {
         var credorSel = document.getElementById('credor_id').value;
         if (!credorSel) {
           e.preventDefault();
           alert('Selecione um credor para despesas.');
+          return;
+        }
+      } else { // receita
+        var cliSel = document.getElementById('cliente_operacional_id').value;
+        if (!cliSel) {
+          e.preventDefault();
+          alert('Selecione um cliente operacional para receitas.');
           return;
         }
       }
@@ -464,20 +525,24 @@
     bindBulk('#lista_planos',  '.plano-item',  'planos_sel_todos',  'planos_limpar');
     bindBulk('#lista_centros', '.centro-item', 'centros_sel_todos', 'centros_limpar');
 
-    // mudar empresa -> refiltra centros e contas
+    // mudar empresa -> refiltra centros, contas, credores e clientes
     var empresaSel = document.getElementById('empresa_id');
     if (empresaSel){
       empresaSel.addEventListener('change', function(){
         filterContasByEmpresa();
+        filterCredoresByEmpresa();
+        filterClientesOperByEmpresa();
         applyCentros();
       });
       filterContasByEmpresa();
+      filterCredoresByEmpresa();
+      filterClientesOperByEmpresa();
       applyCentros();
     }
 
-    // tipo -> mostra/oculta credor
-    document.getElementById('tipo').addEventListener('change', toggleCredorPorTipo);
-    toggleCredorPorTipo();
+    // tipo -> mostra/oculta credor/cliente
+    document.getElementById('tipo').addEventListener('change', toggleTipoDependentes);
+    toggleTipoDependentes();
 
     // status -> sugere data
     document.getElementById('status').addEventListener('change', sugereDataPgtoSeQuitado);
