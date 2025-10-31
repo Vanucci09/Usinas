@@ -1698,7 +1698,7 @@ def extrair_ficha_compensacao(
     dpi_padrao=300,
     dpi_boleto=300,
     crop_padrao=(0.37, 0.75),         # topo/bottom (% da altura) - PDF “normal”
-    crop_boleto=(0.627, 0.99)          # topo/bottom para boleto próprio (ajuste se precisar)
+    crop_boleto=(0.608, 0.99)          # topo/bottom para boleto próprio (ajuste se precisar)
 ):
     """
     Recorta a ficha de compensação.
