@@ -1698,7 +1698,7 @@ def extrair_ficha_compensacao(
     dpi_padrao=300,
     dpi_boleto=300,
     crop_padrao=(0.37, 0.75),         # topo/bottom (% da altura) - PDF “normal”
-    crop_boleto=(0.63, 0.99)          # topo/bottom para boleto próprio (ajuste se precisar)
+    crop_boleto=(0.627, 0.99)          # topo/bottom para boleto próprio (ajuste se precisar)
 ):
     """
     Recorta a ficha de compensação.
@@ -7451,7 +7451,7 @@ def _save_multi_files(files):
         if not f or not getattr(f, 'filename', None):
             continue
         if not _allowed_file(f.filename):
-            # aqui você pode dar flash/abortar se preferir
+            # aqui pode dar flash/abortar se preferir
             continue
 
         unique_name = _unique_name(f.filename)
@@ -7464,39 +7464,39 @@ def _save_multi_files(files):
             })
         except Exception as e:
             print('Falha ao salvar arquivo múltiplo:', e)
-            # se quiser, remova os já salvos e aborte
+            # remova os já salvos e aborte
     return saved
 
 @app.route('/empresa/financeiro/lancar', methods=['GET', 'POST'], endpoint='empresa_financeiro_lancar')
 @login_required
 def empresa_financeiro_lancar():
-    # --- Listas auxiliares para o formulário (GET e também usados em caso de erro) ---
-    empresas      = Empresa.query.order_by(Empresa.nome.asc()).all()
-    contas_all    = CaixaBanco.query.order_by(CaixaBanco.nome.asc()).all()
-    centros_all   = CentroCusto.query.order_by(CentroCusto.empresa_id.asc(), CentroCusto.codigo.asc()).all()
-    planos_all    = PlanoFinanceiro.query.filter_by(ativo=True).order_by(PlanoFinanceiro.nome.asc()).all()
-    credores_all  = Credor.query.order_by(Credor.nome.asc()).all()
+    # Listas auxiliares para o formulário (GET e também usados em caso de erro)
+    empresas = Empresa.query.order_by(Empresa.nome.asc()).all()
+    contas_all = CaixaBanco.query.order_by(CaixaBanco.nome.asc()).all()
+    centros_all = CentroCusto.query.order_by(CentroCusto.empresa_id.asc(), CentroCusto.codigo.asc()).all()
+    planos_all = PlanoFinanceiro.query.filter_by(ativo=True).order_by(PlanoFinanceiro.nome.asc()).all()
+    credores_all = Credor.query.order_by(Credor.nome.asc()).all()
     clientes_op_all = ClienteOperacional.query.filter_by(ativo=True).order_by(ClienteOperacional.nome.asc()).all()
 
     if request.method == 'POST':
         form = request.form
 
         # Campos básicos
-        empresa_id        = form.get('empresa_id', type=int)
-        tipo              = (form.get('tipo') or '').lower().strip()                 # 'receita' | 'despesa'
-        descricao         = (form.get('descricao') or '').strip()
-        data_tit          = _parse_date(form.get('data'))                            # emissão
-        valor_tot         = _parse_decimal_br(form.get('valor'))
-        status            = (form.get('status') or 'pendente').lower().strip()       # 'pendente'|'pago'|'recebido'
-        data_venc_base    = _parse_date(form.get('data_vencimento'))                 # venc. 1ª parcela (ou data pgto/rec.)
-        conta_id          = form.get('conta_id', type=int)
-        numero_documento  = (form.get('numero_documento') or '').strip() or None
+        empresa_id = form.get('empresa_id', type=int)
+        tipo = (form.get('tipo') or '').lower().strip()                 # 'receita' | 'despesa'
+        descricao = (form.get('descricao') or '').strip()
+        data_tit = _parse_date(form.get('data'))                            # emissão
+        valor_tot = _parse_decimal_br(form.get('valor'))
+        status = (form.get('status') or 'pendente').lower().strip()       # 'pendente'|'pago'|'recebido'
+        data_venc_base = _parse_date(form.get('data_vencimento'))                 # venc. 1ª parcela (ou data pgto/rec.)
+        conta_id = form.get('conta_id', type=int)
+        numero_documento = (form.get('numero_documento') or '').strip() or None
 
         # Credor (obrigatório para DESPESA)
         credor_id = form.get('credor_id', type=int)
         credor    = db.session.get(Credor, credor_id) if (credor_id and tipo == 'despesa') else None
 
-        # Cliente operacional (só para RECEITA, opcional/obrigatório conforme sua regra)
+        # Cliente operacional
         cliente_operacional_id = form.get('cliente_operacional_id', type=int)
         cliente_operacional = None
         if tipo == 'receita' and cliente_operacional_id:
@@ -7506,10 +7506,10 @@ def empresa_financeiro_lancar():
                 return redirect(url_for('empresa_financeiro_lancar'))
 
         # Multiseleção + parcelas
-        planos_ids_raw  = _getlist_either(form, 'planos_financeiros_ids')
+        planos_ids_raw = _getlist_either(form, 'planos_financeiros_ids')
         centros_ids_raw = _getlist_either(form, 'centros_custos_ids')
-        planos_ids      = _to_int_ids(planos_ids_raw)
-        centros_ids     = _to_int_ids(centros_ids_raw)
+        planos_ids = _to_int_ids(planos_ids_raw)
+        centros_ids = _to_int_ids(centros_ids_raw)
 
         parcelas_qtd = form.get('parcelas_qtd', type=int) or 1
         if parcelas_qtd < 1:
@@ -7578,7 +7578,7 @@ def empresa_financeiro_lancar():
             data_venc_base = data_tit
 
         # Upload múltiplo (com compat para campo único)
-        files_up    = _getlist_files_either(request.files, 'comprovantes[]', 'comprovantes', 'comprovante')
+        files_up = _getlist_files_either(request.files, 'comprovantes[]', 'comprovantes', 'comprovante')
         saved_files = _save_multi_files(files_up)
         first_filename = saved_files[0]['filename'] if saved_files else None
 
@@ -7659,10 +7659,7 @@ def empresa_financeiro_lancar():
                                 tipo='titulo',
                                 filename=sf['filename'],
                                 original_name=sf.get('original_name')
-                            ))
-                        # Se preferir anexar APENAS ao primeiro título, use:
-                        # if titulo.id == first_titulo_id:
-                        #     for sf in saved_files: ...
+                            ))                        
 
                         # Movimento de caixa (se conta e já quitado)
                         if conta and status in ('pago', 'recebido'):
@@ -7685,7 +7682,7 @@ def empresa_financeiro_lancar():
         except Exception as e:
             db.session.rollback()
             print('Erro ao salvar lançamento(s) financeiro(s) da empresa:', e)
-            # (Opcional) remover arquivos recém-salvos se quiser reverter
+            # remover arquivos recém-salvos se quiser reverter
             flash('Erro ao salvar lançamento.', 'danger')
             return redirect(url_for('empresa_financeiro_lancar'))
 
@@ -7731,7 +7728,7 @@ def empresa_financeiro_editar(lanc_id):
             credoresent=credoresent,
         )
 
-    # -------------------- POST (salvar alterações) --------------------
+    # POST (salvar alterações)
     form = request.form
 
     empresa_id = form.get('empresa_id', type=int)
@@ -7756,7 +7753,7 @@ def empresa_financeiro_editar(lanc_id):
         flash('Credor inválido.', 'danger')
         return redirect(url_for('empresa_financeiro_editar', lanc_id=lanc_id, next=form.get('next','')))
 
-    # --- Validações básicas
+    # Validações básicas
     emp = db.session.get(Empresa, empresa_id) if empresa_id else None
     if not emp:
         flash('Selecione uma empresa válida.', 'danger')
@@ -7801,8 +7798,8 @@ def empresa_financeiro_editar(lanc_id):
         flash('O plano financeiro selecionado está inativo.', 'danger')
         return redirect(url_for('empresa_financeiro_editar', lanc_id=lanc_id, next=form.get('next','')))
 
-    # -------------------- ARQUIVOS --------------------
-    # 1) Campo "legado" opcional (substitui arquivo único antigo do título)
+    # ARQUIVOS
+    # 1) Campo "legado" (substitui arquivo único antigo do título)
     novo_file_legado = request.files.get('comprovante')  # <input name="comprovante">
     novo_legado_filename, abs_novo_legado, abs_antigo_legado = None, None, None
 
@@ -7820,7 +7817,7 @@ def empresa_financeiro_editar(lanc_id):
     try:
         base_dir = _ensure_comprovantes_dir()
 
-        # -- Trata arquivo "legado" (opcional)
+        # -- Trata arquivo "legado"
         if novo_file_legado and novo_file_legado.filename:
             if not _allowed_file(novo_file_legado.filename):
                 flash('Tipo de arquivo não permitido no comprovante único. Envie PDF/JPG/PNG/GIF/WEBP/HEIC.', 'warning')
@@ -7852,7 +7849,7 @@ def empresa_financeiro_editar(lanc_id):
             f.save(abs_path)
             anexos_salvos.append((abs_path, unique, f.filename))
 
-        # -------------------- Atualizações no banco --------------------
+        # Atualizações no banco
         # detectar movimento já existente
         mov_exist = MovimentoCaixaBanco.query.filter_by(
             origem='financeiro_empresa', referencia_id=titulo.id
@@ -7970,7 +7967,7 @@ def download_anexo(anexo_id):
     if not anexo:
         abort(404)
 
-    # (Opcional) ainda dá pra garantir que o título existe
+    # dá pra garantir que o título existe
     titulo = db.session.get(FinanceiroEmpresa, anexo.titulo_id)
     if not titulo:
         abort(404)
