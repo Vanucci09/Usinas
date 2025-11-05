@@ -6221,6 +6221,14 @@ def relatorio_financeiro_com_perda():
                     FaturaMensal.mes_referencia == mes,
                     FaturaMensal.ano_referencia == ano
                 ).scalar() or 0
+                
+            # Calcula mês e ano anteriores
+            if mes == 1:
+                mes_anterior = 12
+                ano_anterior = ano + 1
+            else:
+                mes_anterior = mes + 1
+                ano_anterior = ano
 
             # faturado R$
             faturado = db.session.query(
@@ -6228,8 +6236,8 @@ def relatorio_financeiro_com_perda():
             ).filter(
                 FinanceiroUsina.usina_id == usina.id,
                 FinanceiroUsina.tipo == 'receita',
-                FinanceiroUsina.referencia_mes == mes,
-                FinanceiroUsina.referencia_ano == ano
+                FinanceiroUsina.referencia_mes == mes_anterior,
+                FinanceiroUsina.referencia_ano == ano_anterior
             ).scalar() or 0
             faturado_acumulado += float(faturado)
             
