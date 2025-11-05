@@ -6235,7 +6235,7 @@ def relatorio_financeiro_com_perda():
 
             # faturado R$ do mês anterior (com base na referência)
             faturado = db.session.query(
-                func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0))
+                func.sum(FinanceiroUsina.valor)
             ).filter(
                 FinanceiroUsina.usina_id == usina.id,
                 FinanceiroUsina.tipo == 'receita',
