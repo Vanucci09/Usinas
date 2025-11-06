@@ -64,7 +64,7 @@
             <tbody>
                 {% for r in resultados %}
                 <tr>
-                    <td>{{ r.cliente }}</td>
+                    <td>{{ r.cliente }} {{ r.codigo_unidade or '-' }}</td>
                     <td>{{ r.usina }}</td>
                     <td class="text-end">{{ r.kwh_contratado | formato_kwh }}</td>
                     <td class="text-end">{{ r.consumo_total  | formato_kwh }}</td>

@@ -3745,6 +3745,7 @@ def relatorio_cliente():
         db.session.query(
             Cliente.id.label("cliente_id"),
             Cliente.nome.label("cliente"),
+            Cliente.codigo_unidade.label("codigo_unidade"),
             Usina.id.label("usina_id"),
             Usina.nome.label("usina"),
             FaturaMensal.mes_referencia,
@@ -3904,6 +3905,7 @@ def relatorio_cliente():
         linhas.append({
             "cliente_id": r.cliente_id,
             "cliente": r.cliente,
+            "codigo_unidade": r.codigo_unidade,
             "usina_id": r.usina_id,
             "usina": r.usina,
             "percentual": pct_mes,                 # % efetivo do mês
