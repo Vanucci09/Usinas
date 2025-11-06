@@ -64,11 +64,11 @@
             <tbody>
                 {% for r in resultados %}
                 <tr>
-                    <td>{{ r.cliente }} {{ r.codigo_unidade or '-' }}</td>
+                    <td>{{ r.cliente }} 'U:{{ r.codigo_unidade or '-' }}'</td>
                     <td>{{ r.usina }}</td>
                     <td class="text-end">{{ r.kwh_contratado | formato_kwh }}</td>
                     <td class="text-end">{{ r.consumo_total  | formato_kwh }}</td>
-                    <td class="text-end">{{ (r.media_consumo_6m or 0) | formato_kwh }}</td> {# NOVA CÉLULA #}
+                    <td class="text-end">{{ (r.media_consumo_6m or 0) | formato_kwh }}</td>
 
                     <td class="text-end {% if (r.diferenca_kwh or 0) > 0 %}text-success{% elif (r.diferenca_kwh or 0) < 0 %}text-danger{% endif %}">
                         {{ r.diferenca_kwh | formato_kwh }}
