@@ -22,7 +22,7 @@
             <select id="cliente_id" name="cliente_id" class="form-select">
                 <option value="">Todos</option>
                 {% for c in clientes %}
-                    <option value="{{ c.id }}" {% if c.id == cliente_id %}selected{% endif %}>{{ c.nome }}</option>
+                    <option value="{{ c.id }}" {% if c.id == cliente_id %}selected{% endif %}>{{ c.nome }} 'U{{ c.codigo_unidade }}'</option>
                 {% endfor %}
             </select>
         </div>
@@ -48,6 +48,7 @@
         <table class="table table-bordered table-striped align-middle">
             <thead class="table-light">
                 <tr>
+                    <th>Código da Unidade</th>
                     <th>Cliente</th>
                     <th>Usina</th>
                     <th class="text-end">kWh/mês Injetado</th>
@@ -64,7 +65,8 @@
             <tbody>
                 {% for r in resultados %}
                 <tr>
-                    <td>{{ r.cliente }} 'U:{{ r.codigo_unidade or '-' }}'</td>
+                    <td>{{ r.codigo_unidade or '-' }}</td>
+                    <td>{{ r.cliente }}</td>
                     <td>{{ r.usina }}</td>
                     <td class="text-end">{{ r.kwh_contratado | formato_kwh }}</td>
                     <td class="text-end">{{ r.consumo_total  | formato_kwh }}</td>
