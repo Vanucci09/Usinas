@@ -17,7 +17,7 @@ import time, hashlib, json, hmac, requests, base64, atexit, math
 from email.utils import formatdate
 from apscheduler.schedulers.background import BackgroundScheduler
 from flask_mail import Mail, Message
-from urllib.parse import quote, parse_qs, urlparse
+from urllib.parse import quote, parse_qs, urlparse, quote_plus
 import base64, shutil, logging
 from sqlalchemy.orm import joinedload
 from selenium import webdriver
@@ -185,6 +185,7 @@ class FaturaMensal(db.Model):
     email_enviado = db.Column(db.Boolean, default=False)
     energia_injetada_real = db.Column(db.Float, default=0.0)
     custo_tusd_fio_b = db.Column(Numeric(12, 2), nullable=True, default=None)
+    whatsapp_enviado = db.Column(db.Boolean, default=False)
     
     data_cadastro = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
@@ -3167,6 +3168,41 @@ def financeiro():
         total_receitas=total_receitas,
         total_despesas=total_despesas
     )
+    
+@app.route('/faturas/<int:fatura_id>/whatsapp', methods=['GET'])
+@login_required
+def enviar_whatsapp(fatura_id):
+    fatura = FaturaMensal.query.get_or_404(fatura_id)
+
+    if not fatura.cliente or not fatura.cliente.telefone:
+        flash('Cliente sem telefone cadastrado para WhatsApp.', 'warning')
+        return redirect(url_for('listar_faturas'))  # ajuste para o nome da sua rota de listagem
+
+    # Limpa o telefone (tira espaços e traços, se quiser também tirar parênteses)
+    telefone_clean = (
+        fatura.cliente.telefone
+        .replace(' ', '')
+        .replace('-', '')
+        .replace('(', '')
+        .replace(')', '')
+    )
+
+    # Link do relatório
+    link_relatorio = url_for('relatorio_fatura', fatura_id=fatura.id, _external=True)
+
+    mensagem = (
+        f"Olá, {fatura.cliente.nome}! "
+        f"Aqui está seu relatório de faturamento referente ao ID: {fatura.identificador}. "
+        f"Acesse: {link_relatorio}"
+    )
+
+    # Marca como enviado e salva
+    fatura.whatsapp_enviado = True
+    db.session.commit()
+
+    # Monta URL do WhatsApp
+    wa_url = f"https://wa.me/{telefone_clean}?text={quote_plus(mensagem)}"
+    return redirect(wa_url)
 
 @app.route('/enviar_email/<int:fatura_id>')
 def enviar_email(fatura_id):

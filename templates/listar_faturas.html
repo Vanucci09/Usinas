@@ -205,14 +205,13 @@
                             </a>
 
                             {% if fatura.cliente.telefone %}
-                                {% set telefone_clean = fatura.cliente.telefone.replace(' ','').replace('-','') %}
-                                {% set link_relatorio = url_for('relatorio_fatura', fatura_id=fatura.id, _external=True) %}
-                                {% set msg_whatsapp = (
-                                    "Olá, " ~ fatura.cliente.nome ~
-                                    "! Aqui está seu relatório de faturamento referente ao ID: " ~ fatura.identificador ~ ". Acesse: " ~ link_relatorio
-                                ) | urlencode %}
-                                <a href="https://wa.me/{{ telefone_clean }}?text={{ msg_whatsapp }}" target="_blank" class="btn btn-sm btn-outline-success" title="Enviar WhatsApp">
+                                <a href="{{ url_for('enviar_whatsapp', fatura_id=fatura.id) }}"
+                                class="btn btn-sm btn-outline-success"
+                                title="Enviar WhatsApp">
                                     <i class="bi bi-whatsapp"></i>
+                                    {% if fatura.whatsapp_enviado %}
+                                        <span class="text-success ms-1 fw-bold">&#10004;</span>
+                                    {% endif %}
                                 </a>
                             {% endif %}
 
