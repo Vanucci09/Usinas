@@ -3,6 +3,7 @@
 {% block title %}Relatório Financeiro com Perda{% endblock %}
 
 {% block content %}
+
 <!-- Logo visível apenas na impressão -->
 <div class="only-logo-print">
     <img src="{{ url_for('static', filename='img/LogoEmpresa.jpg') }}" alt="CGR Logo" height="60">
@@ -13,10 +14,10 @@
     #filtros-relatorio,
     #voltar-relatorio,
     #print-btn,
-    header,       /* se você tiver um header fixo */
-    .user-info,   /* classe de login / nome do usuário */
-    .logout-btn,  /* botão de logout */
-    nav,          /* menu lateral se houver */
+    header,
+    .user-info,
+    .logout-btn,
+    nav,
     footer {
         display: none !important;
     }
@@ -32,250 +33,323 @@
 .only-logo-print {
     display: none;
 }
-</style>
-<style>
-@media print {
-    .table {
-        font-size: 11px !important;
-    }
 
-    .table th, .table td {
-        padding: 4px !important;
-        white-space: nowrap;
-    }
-
-    .table-responsive {
-        overflow: visible !important;
-    }
-
-    body {
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-    }
-
-    .table th:nth-child(6), .table td:nth-child(6) {
-        white-space: nowrap;
-    }
-
-    /* Força a tabela a caber na largura da página */
-    .table-consolidada-print {
-        width: 100% !important;
-        table-layout: fixed;
-    }
-
-    .table-consolidada-print th,
-    .table-consolidada-print td {
-        word-wrap: break-word;
-        font-size: 10px;
-    }
+/* Pequeno ajuste visual nos cards de KPI */
+.kpi-card {
+    border-radius: 0.75rem;
+}
+.kpi-label {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.kpi-value {
+    font-size: 1.25rem;
+    font-weight: 600;
 }
 </style>
 
-
 <div class="container mt-4">
-    <h2 class="mb-4 text-primary text-center">
-    Prestação de Contas – 
-    {# seleciona o nome ou “Todas Usinas” #}
-    {{ (usinas 
-            | selectattr("id", "equalto", usina_id) 
-            | map(attribute="nome") 
-            | first) 
-        or "Todas Usinas" 
-    }} – 
-    {{ "%02d"|format(mes_inicio) }}/{{ ano_inicio }} até 
-    {{ "%02d"|format(mes_fim) }}/{{ ano_fim }}
-    </h2>
+
+    <!-- Título / Cabeçalho -->
+    <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between mb-3">
+        <div>
+            <h2 class="mb-1 text-primary fw-semibold">
+                Prestação de Contas – {{ usina_selecionada.nome if usina_selecionada else 'Usina' }}
+            </h2>
+            <p class="text-muted mb-0">
+                Competência do faturamento:
+                <strong>{{ "%02d"|format(mes) }}/{{ ano }}</strong>
+            </p>
+        </div>
+        <div id="print-btn" class="mt-3 mt-md-0">
+            <button class="btn btn-outline-secondary" onclick="window.print()">🖨️ Imprimir</button>
+        </div>
+    </div>
+
+    <!-- Cards de KPI (apenas se houver consolidação) -->
+    {% if consolidacao %}
+        {% set k = consolidacao[0] %}
+        <div class="row g-3 mb-4">
+            <!-- Líquido do Mês -->
+            <div class="col-md-3">
+                <div class="card shadow-sm kpi-card border-0 bg-light">
+                    <div class="card-body">
+                        <div class="kpi-label text-muted">Líquido do Mês</div>
+                        <div class="kpi-value text-success">
+                            {{ k.liquido_ultimo_mes | formato_brasileiro }}
+                        </div>
+                        <small class="text-muted">
+                            Resultado financeiro de {{ "%02d"|format(mes) }}/{{ ano }}
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- % Líquido / Investimento -->
+            <div class="col-md-3">
+                <div class="card shadow-sm kpi-card border-0 bg-light">
+                    <div class="card-body">
+                        <div class="kpi-label text-muted">Líquido / Investimento</div>
+                        <div class="kpi-value">
+                            {{ ('%.2f'|format(k.perc_liquido_sobre_inv)).replace('.', ',') }}%
+                        </div>
+                        <small class="text-muted">
+                            Percentual do líquido sobre o montante investido
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Variação vs Mês Anterior -->
+            <div class="col-md-3">
+                {% set var_class = 'text-muted' %}
+                {% if k.variacao_liquido_pct > 0 %}
+                    {% set var_class = 'text-success' %}
+                {% elif k.variacao_liquido_pct < 0 %}
+                    {% set var_class = 'text-danger' %}
+                {% endif %}
+                <div class="card shadow-sm kpi-card border-0 bg-light">
+                    <div class="card-body">
+                        <div class="kpi-label text-muted">Variação vs Mês Anterior</div>
+                        <div class="kpi-value {{ var_class }}">
+                            {% if k.liquido_mes_anterior == 0 %}
+                                -
+                            {% else %}
+                                {{ ('%.2f'|format(k.variacao_liquido_pct)).replace('.', ',') }}%
+                            {% endif %}
+                        </div>
+                        <small class="text-muted">
+                            Comparação com {{ "%02d"|format((mes - 1) if mes > 1 else 12) }}/{{ ano if mes > 1 else (ano - 1) }}
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Payback (%) -->
+            <div class="col-md-3">
+                <div class="card shadow-sm kpi-card border-0 bg-light">
+                    <div class="card-body">
+                        <div class="kpi-label text-muted">Payback (% acumulado)</div>
+                        <div class="kpi-value">
+                            {{ ('%.2f'|format(k.payback_percentual)).replace('.', ',') }}%
+                        </div>
+                        <small class="text-muted">
+                            Progresso de retorno sobre o investimento
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+
+    <!-- Info de referência -->
+    <div class="alert alert-info py-2 mb-4">
+        <small>
+            <strong>Referências:</strong>
+            Geração apurada em
+            <strong>
+                {{ "%02d"|format(mes_ref_geracao) }}/{{ ano_ref_geracao }}
+            </strong>
+            &nbsp;•&nbsp;
+            Injeção, consumo e faturamento referentes a
+            <strong>
+                {{ "%02d"|format(mes) }}/{{ ano }}
+            </strong>
+        </small>
+    </div>
 
     <!-- Filtros -->
-    <div id="filtros-relatorio">
-        <form method="get" class="row g-3 mb-4">
-            <div class="col-md-2">
-                <label for="mes_inicio" class="form-label">Mês Inicial</label>
-                <select name="mes_inicio" id="mes_inicio" class="form-select">
-                    {% for i in range(1, 13) %}
-                        <option value="{{ i }}" {% if i == mes_inicio %}selected{% endif %}>{{ "%02d"|format(i) }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-2">
-                <label for="ano_inicio" class="form-label">Ano Inicial</label>
-                <select name="ano_inicio" id="ano_inicio" class="form-select">
-                    {% for a in anos_disponiveis %}
-                        <option value="{{ a }}" {% if a == ano_inicio %}selected{% endif %}>{{ a }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="col-md-2">
-                <label for="mes_fim" class="form-label">Mês Final</label>
-                <select name="mes_fim" id="mes_fim" class="form-select">
-                    {% for i in range(1, 13) %}
-                        <option value="{{ i }}" {% if i == mes_fim %}selected{% endif %}>{{ "%02d"|format(i) }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-2">
-                <label for="ano_fim" class="form-label">Ano Final</label>
-                <select name="ano_fim" id="ano_fim" class="form-select">
-                    {% for a in anos_disponiveis %}
-                        <option value="{{ a }}" {% if a == ano_fim %}selected{% endif %}>{{ a }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="col-md-3">
-                <label for="usina_id" class="form-label">Usina</label>
-                <select name="usina_id" id="usina_id" class="form-select">
-                    <option value="">Todas</option>
-                    {% for usina in usinas %}
-                        <option value="{{ usina.id }}" {% if usina.id == usina_id %}selected{% endif %}>{{ usina.nome }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            
-            <div class="col-md-1 align-self-end">
-                <button type="submit" class="btn btn-primary w-100">Filtrar</button>
-            </div>
-        </form>
-    </div>
-    <div class="text-end mb-3" id="print-btn">
-        <button class="btn btn-outline-secondary" onclick="window.print()">🖨️ Imprimir</button>
+    <div id="filtros-relatorio" class="card shadow-sm mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label for="usina_id" class="form-label">Usina</label>
+                    <select name="usina_id" id="usina_id" class="form-select">
+                        {% for u in usinas %}
+                            <option value="{{ u.id }}" {% if u.id == usina_id %}selected{% endif %}>
+                                {{ u.nome }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="mes" class="form-label">Mês</label>
+                    <select name="mes" id="mes" class="form-select">
+                        {% for i in range(1, 13) %}
+                            <option value="{{ i }}" {% if i == mes %}selected{% endif %}>
+                                {{ "%02d"|format(i) }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="ano" class="form-label">Ano</label>
+                    <select name="ano" id="ano" class="form-select">
+                        {% for a in anos_disponiveis %}
+                            <option value="{{ a }}" {% if a == ano %}selected{% endif %}>{{ a }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-primary w-100">
+                        Atualizar Relatório
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 
     {% if relatorio %}
-    <div class="table-responsive mb-5">
-        <h4 class="text-center text-success">Geração, Injeção, Perda e Consumo</h4>
-        <table class="table table-bordered table-striped align-middle text-center table-consolidada-print">
-            <thead class="table-light">
-            <tr>
-                <th>Mês</th>
-                <th>Usina</th>
-                <th>Geração (kWh)</th>
-                <th>Injeção (kWh)</th>
-                <th>Perda (kWh)</th>
-                <th>Perda (%)</th> 
-                <th>Compensação (kWh)</th>
-            </tr>
-            </thead>
-            <tbody>
-            {% for linha in relatorio %}
-            {% set perc = ((linha.perda / linha.geracao) * 100) if linha.geracao else 0 %}
-            <tr>
-                <td>{{ "%02d"|format(linha.mes) }}/{{ linha.ano }}</td>
-                <td>{{ linha.usina_nome }}</td>
-                <td>{{ linha.geracao | formato_kwh }}</td>
-                <td>{{ linha.injecao | formato_kwh }}</td>
-                <td class="text-danger">{{ linha.perda | formato_kwh }}</td>
-                <td class="{% if perc > 7 %}text-danger fw-semibold{% endif %}">
-                {{ ('%.2f'|format(perc)).replace('.', ',') }}%
-                </td>
-                <td>{{ linha.consumo | formato_kwh }}</td>
-            </tr>
-            {% endfor %}
-            </tbody>
-        </table>
+        <!-- Seção 1: Geração, Injeção, Perda e Consumo -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-light">
+                <h5 class="mb-0 text-success">Geração, Injeção, Perda e Consumo</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle text-center mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Competência</th>
+                                <th>Geração (kWh)</th>
+                                <th>Injeção (kWh)</th>
+                                <th>Perda (kWh)</th>
+                                <th>Perda (%)</th>
+                                <th>Consumo (kWh)</th>
+                                <th>Crédito nas Unidades (kWh)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for linha in relatorio %}
+                                {% set perc = ((linha.perda / linha.geracao) * 100) if linha.geracao else 0 %}
+                                <tr>
+                                    <td>
+                                        {{ "%02d"|format(linha.mes) }}/{{ linha.ano }}
+                                        <br>
+                                        <small class="text-muted">
+                                            Geração: {{ "%02d"|format(mes_ref_geracao) }}/{{ ano_ref_geracao }}
+                                        </small>
+                                    </td>
+                                    <td>{{ linha.geracao | formato_kwh }}</td>
+                                    <td>{{ linha.injecao | formato_kwh }}</td>
+                                    <td class="text-danger">{{ linha.perda | formato_kwh }}</td>
+                                    <td class="{% if perc > 7 %}text-danger fw-semibold{% else %}text-muted{% endif %}">
+                                        {{ ('%.2f'|format(perc)).replace('.', ',') }}%
+                                    </td>
+                                    <td>{{ linha.consumo | formato_kwh }}</td>
+                                    <td>{{ linha.saldo_unidade | formato_kwh }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
 
-    <!-- Tabela de faturamento -->
-    <div class="table-responsive">
-        <h4 class="text-center text-primary">Faturamento e Acumulado</h4>
-        <table class="table table-bordered table-striped align-middle text-center table-consolidada-print">
-            <thead class="table-light">
-                <tr>
-                    <th>Mês</th>
-                    <th>Usina</th>
-                    <th>Faturado (R$)</th>
-                    <th>Faturado Acumulado (R$)</th>
-                    <th>Crédito (kWh)</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for linha in relatorio %}
-                <tr>
-                    <td>{{ "%02d"|format(linha.mes) }}/{{ linha.ano }}</td>
-                    <td>{{ linha.usina_nome }}</td>
-                    <td>{{ linha.faturado | formato_brasileiro }}</td>
-                    <td>{{ linha.faturado_acumulado | formato_brasileiro }}</td>
-                    <td>{{ linha.saldo_unidade | formato_kwh }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+        <!-- Seção 2: Faturamento (referência da fatura) -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-light">
+                <h5 class="mb-0 text-primary">Faturamento e Créditos</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">
+                    Valores faturados e créditos nas unidades com referência em
+                    <strong>{{ "%02d"|format(mes) }}/{{ ano }}</strong>.
+                </p>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle text-center mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Competência</th>
+                                <th>Faturado (R$)</th>
+                                <th>Crédito nas Unidades (kWh)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for linha in relatorio %}
+                                <tr>
+                                    <td>{{ "%02d"|format(linha.mes) }}/{{ linha.ano }}</td>
+                                    <td>{{ linha.faturado | formato_brasileiro }}</td>
+                                    <td>{{ linha.saldo_unidade | formato_kwh }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
 
-    <!-- Consolidação – Parte 1 
-    <div class="table-responsive mt-5">
-        <h4 class="text-center text-dark">
-            Consolidação - Energia ({{ "%02d"|format(mes_inicio) }}/{{ ano_inicio }} até {{ "%02d"|format(mes_fim) }}/{{ ano_fim }})
-        </h4>
-        <table class="table table-bordered table-striped align-middle text-center">
-            <thead class="table-light">
-                <tr>
-                    <th>Usina</th>
-                    <th>Geração Total (kWh)</th>
-                    <th>Injeção (kWh)</th>
-                    <th>Perda Total (kWh)</th>
-                    <th>Crédito na Usina (kWh)</th>
-                    <th>Crédito nas Unidades (kWh)</th>
-                    <th>À recuperar</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in consolidacao %}
-                <tr>
-                    <td>{{ item.usina_nome }}</td>
-                    <td>{{ item.geracao_total | formato_kwh }}</td>
-                    <td>{{ item.injecao_total | formato_kwh }}</td>
-                    <td class="text-danger">
-                        {{ (item.perda_total + item.saldo_kwh) | formato_kwh }}
-                    </td>
-                    <td class="text-success">{{ item.saldo_kwh | formato_kwh }}</td>
-                    <td>{{ item.ultimo_saldo | formato_kwh }}</td>
-                    {% set a_recuperar = (item.geracao_total - (item.perda_total + item.saldo_kwh) - item.injecao_total - item.saldo_kwh) %}
-                    <td>
-                    {% if a_recuperar > 0 %}                        
-                        <span class="ms-1">{{ a_recuperar | formato_kwh }}</span>
-                    {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>-->
+        <!-- Seção 3: Consolidação Financeira -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 text-dark">
+                    Consolidação Financeira – {{ usina_selecionada.nome if usina_selecionada else '' }}
+                </h5>
+                <small class="text-muted">
+                    Comparando {{ "%02d"|format(mes) }}/{{ ano }} com o mês anterior
+                </small>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive mb-3">
+                    <table class="table table-bordered align-middle text-center mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Faturamento Bruto (R$)</th>
+                                <th>Despesa Bruta (R$)</th>
+                                <th>Faturamento Líquido (R$)</th>
+                                <th>Líquido / Investimento (%)</th>
+                                <th>Líquido Mês Atual (R$)</th>
+                                <th>Líquido Mês Anterior (R$)</th>
+                                <th>Variação vs Mês Anterior (%)</th>
+                                <th>Payback (%)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in consolidacao %}
+                                <tr>
+                                    <td>{{ item.receita_total | formato_brasileiro }}</td>
+                                    <td>{{ item.despesa_total | formato_brasileiro }}</td>
+                                    <td>{{ item.resultado_liquido | formato_brasileiro }}</td>
+                                    <td>
+                                        {{ ('%.2f'|format(item.perc_liquido_sobre_inv)).replace('.', ',') }}%
+                                    </td>
+                                    <td>{{ item.liquido_ultimo_mes | formato_brasileiro }}</td>
+                                    <td>{{ item.liquido_mes_anterior | formato_brasileiro }}</td>
+                                    <td class="{% if item.variacao_liquido_pct < 0 %}text-danger{% elif item.variacao_liquido_pct > 0 %}text-success{% else %}text-muted{% endif %}">
+                                        {% if item.liquido_mes_anterior == 0 %}
+                                            -
+                                        {% else %}
+                                            {{ ('%.2f'|format(item.variacao_liquido_pct)).replace('.', ',') }}%
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {{ ('%.2f'|format(item.payback_percentual)).replace('.', ',') }}%
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
 
-    <!-- Consolidação – Parte 2 -->
-    <div class="table-responsive mt-4">
-        <h4 class="text-center text-dark">
-            Consolidação - Financeiro ({{ "%02d"|format(mes_inicio) }}/{{ ano_inicio }} até {{ "%02d"|format(mes_fim) }}/{{ ano_fim }})
-        </h4>
-        <table class="table table-bordered table-striped align-middle text-center">
-            <thead class="table-light">
-                <tr>
-                    <th>Usina</th>
-                    <th>Faturado Total (R$)</th>
-                    <th>Payback (%)</th>                    
-                    <th>Eficiência (%)</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in consolidacao %}
-                <tr>
-                    <td>{{ item.usina_nome }}</td>
-                    <td style="white-space: nowrap;">{{ item.faturado_total | formato_brasileiro }}</td>
-                    <td>{{ item.payback_percentual }}%</td>                    
-                    <td>{{ item.eficiencia }}%</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
+                <p class="text-muted small mb-0">
+                    <strong>Observação:</strong> Faturamento bruto e despesas consideram
+                    apenas lançamentos com <code>data_pagamento</code> dentro de
+                    {{ "%02d"|format(mes) }}/{{ ano }}.
+                </p>
+            </div>
+        </div>
     {% else %}
-        <div class="alert alert-warning mt-4 text-center">Nenhum dado encontrado para o período selecionado.</div>
+        <div class="alert alert-warning mt-4 text-center">
+            Nenhum dado encontrado para a competência selecionada.
+        </div>
     {% endif %}
 
     <div class="text-center mt-4" id="voltar-relatorio">
-        <a href="{{ url_for('menu_relatorios') }}?aba=investidores" class="btn btn-secondary mt-3">Voltar</a>
+        <a href="{{ url_for('menu_relatorios') }}?aba=investidores" class="btn btn-secondary mt-3">
+            Voltar
+        </a>
     </div>
 </div>
+
 {% endblock %}
