@@ -2,12 +2,10 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Login | SGU</title>
+    <title>Login | GUS</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <!-- Bootstrap -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
 
     <style>
@@ -18,16 +16,82 @@
             align-items: center;
             justify-content: center;
             font-family: 'Segoe UI', sans-serif;
+            overflow: hidden; /* Importante para o sol não criar barra de rolagem */
+            position: relative;
         }
 
+        /* --- Animação do Sol --- */
+        .sun-container {
+            position: absolute;
+            top: -100px;
+            right: -100px;
+            width: 500px;
+            height: 500px;
+            z-index: -1; /* Garante que fique atrás do login */
+            pointer-events: none; /* Garante que não atrapalhe cliques */
+        }
+
+        /* O núcleo do sol */
+        .the-sun {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 150px;
+            height: 150px;
+            background: radial-gradient(circle, #fff9c4 20%, #ffc107 80%);
+            border-radius: 50%;
+            box-shadow: 0 0 40px #ffc107, 0 0 80px #ff9800;
+            animation: sun-pulse 4s infinite alternate;
+        }
+
+        /* Os raios (feitos com borda tracejada girando) */
+        .sun-rays {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%;
+            height: 100%;
+            border: 4px dashed rgba(255, 255, 255, 0.4);
+            border-radius: 50%;
+            animation: sun-spin 30s linear infinite;
+        }
+
+        /* Segundo anel de raios */
+        .sun-rays-2 {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 70%;
+            height: 70%;
+            border: 10px dotted rgba(255, 193, 7, 0.3);
+            border-radius: 50%;
+            animation: sun-spin 20s linear infinite reverse;
+        }
+
+        @keyframes sun-spin {
+            from { transform: translate(-50%, -50%) rotate(0deg); }
+            to { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+
+        @keyframes sun-pulse {
+            from { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 40px #ffc107; }
+            to { transform: translate(-50%, -50%) scale(1.1); box-shadow: 0 0 60px #ffc107, 0 0 100px #ff9800; }
+        }
+        /* ----------------------- */
+
         .login-card {
-            background: white;
+            background: rgba(255, 255, 255, 0.95); /* Leve transparência para modernizar */
             padding: 2rem;
             border-radius: 1rem;
             box-shadow: 0 0.75rem 1.5rem rgba(0, 0, 0, 0.15);
             width: 100%;
             max-width: 420px;
             text-align: center;
+            z-index: 1; /* Garante que fique na frente do sol */
+            backdrop-filter: blur(5px); /* Efeito de vidro se passar por cima do sol */
         }
 
         .login-card img {
@@ -49,11 +113,16 @@
 </head>
 <body>
 
+<div class="sun-container">
+    <div class="sun-rays"></div>
+    <div class="sun-rays-2"></div>
+    <div class="the-sun"></div>
+</div>
+
 <div class="login-card">
-    <!-- Logo -->
     <img src="{{ url_for('static', filename='img/LogoEmpresa.jpg') }}" alt="Logo da Empresa">
 
-    <h4 class="mb-2">SGU</h4>
+    <h4 class="mb-2">GUS</h4>
     <p class="text-muted mb-4">Entre com seu e-mail e senha</p>
 
     {% if erro %}
@@ -73,7 +142,7 @@
     </form>
 
     <div class="footer">
-        Sistema de Gestão de Usinas
+        Gestão de Usina Solar
     </div>
 </div>
 
