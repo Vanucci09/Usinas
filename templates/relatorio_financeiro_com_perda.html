@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Relatório Financeiro com Perda{% endblock %}
+{% block title %}Relatório Financeiro do Consórcio{% endblock %}
 
 {% block content %}
 
@@ -55,7 +55,7 @@
     <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between mb-3">
         <div>
             <h2 class="mb-1 text-primary fw-semibold">
-                Prestação de Contas – {{ usina_selecionada.nome if usina_selecionada else 'Usina' }}
+                Relatório Financeiro do Consórcio – {{ usina_selecionada.nome if usina_selecionada else 'Usina' }}
             </h2>
             <p class="text-muted mb-0">
                 Competência do faturamento:
@@ -70,32 +70,18 @@
     <!-- Cards de KPI (apenas se houver consolidação) -->
     {% if consolidacao %}
         {% set k = consolidacao[0] %}
-        <div class="row g-3 mb-4">
+        <div class="row g-3 mb-4 align-items-stretch">
+
             <!-- Líquido do Mês -->
             <div class="col-md-3">
-                <div class="card shadow-sm kpi-card border-0 bg-light">
+                <div class="card shadow-sm kpi-card border-0 bg-light h-100">
                     <div class="card-body">
-                        <div class="kpi-label text-muted">Líquido do Mês</div>
+                        <div class="kpi-label text-muted">Geração de Caixa</div>
                         <div class="kpi-value text-success">
                             {{ k.liquido_ultimo_mes | formato_brasileiro }}
                         </div>
                         <small class="text-muted">
                             Resultado financeiro de {{ "%02d"|format(mes) }}/{{ ano }}
-                        </small>
-                    </div>
-                </div>
-            </div>
-
-            <!-- % Líquido / Investimento -->
-            <div class="col-md-3">
-                <div class="card shadow-sm kpi-card border-0 bg-light">
-                    <div class="card-body">
-                        <div class="kpi-label text-muted">Líquido / Investimento</div>
-                        <div class="kpi-value">
-                            {{ ('%.2f'|format(k.perc_liquido_sobre_inv)).replace('.', ',') }}%
-                        </div>
-                        <small class="text-muted">
-                            Percentual do líquido sobre o montante investido
                         </small>
                     </div>
                 </div>
@@ -109,7 +95,7 @@
                 {% elif k.variacao_liquido_pct < 0 %}
                     {% set var_class = 'text-danger' %}
                 {% endif %}
-                <div class="card shadow-sm kpi-card border-0 bg-light">
+                <div class="card shadow-sm kpi-card border-0 bg-light h-100">
                     <div class="card-body">
                         <div class="kpi-label text-muted">Variação vs Mês Anterior</div>
                         <div class="kpi-value {{ var_class }}">
@@ -126,20 +112,18 @@
                 </div>
             </div>
 
-            <!-- Payback (%) -->
-            <div class="col-md-3">
-                <div class="card shadow-sm kpi-card border-0 bg-light">
+            <!-- Gráfico: Líquido por mês do ano -->
+            <div class="col-md-6">
+                <div class="card shadow-sm kpi-card border-0 bg-light h-100">
                     <div class="card-body">
-                        <div class="kpi-label text-muted">Payback (% acumulado)</div>
-                        <div class="kpi-value">
-                            {{ ('%.2f'|format(k.payback_percentual)).replace('.', ',') }}%
+                        <div class="kpi-label text-muted mb-2">Líquido por mês em {{ ano }}</div>
+                        <div style="height: 180px;">
+                            <canvas id="liquidoMensalChart"></canvas>
                         </div>
-                        <small class="text-muted">
-                            Progresso de retorno sobre o investimento
-                        </small>
                     </div>
                 </div>
             </div>
+
         </div>
     {% endif %}
 
@@ -280,14 +264,14 @@
             </div>
         </div>
 
-        <!-- Seção 3: Consolidação Financeira -->
+        <!-- Seção 3: Consolidação Financeira (apenas Bruto, Despesa e Líquido + Acumulado) -->
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-light d-flex justify-content-between align-items-center">
                 <h5 class="mb-0 text-dark">
                     Consolidação Financeira – {{ usina_selecionada.nome if usina_selecionada else '' }}
                 </h5>
                 <small class="text-muted">
-                    Comparando {{ "%02d"|format(mes) }}/{{ ano }} com o mês anterior
+                    Mês {{ "%02d"|format(mes) }}/{{ ano }} e acumulado no ano
                 </small>
             </div>
             <div class="card-body">
@@ -295,37 +279,25 @@
                     <table class="table table-bordered align-middle text-center mb-0">
                         <thead class="table-light">
                             <tr>
+                                <th></th>
                                 <th>Faturamento Bruto (R$)</th>
                                 <th>Despesa Bruta (R$)</th>
-                                <th>Faturamento Líquido (R$)</th>
-                                <th>Líquido / Investimento (%)</th>
-                                <th>Líquido Mês Atual (R$)</th>
-                                <th>Líquido Mês Anterior (R$)</th>
-                                <th>Variação vs Mês Anterior (%)</th>
-                                <th>Payback (%)</th>
+                                <th>Geração de Caixa (R$)</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for item in consolidacao %}
                                 <tr>
+                                    <td><strong>Mês {{ "%02d"|format(mes) }}/{{ ano }}</strong></td>
                                     <td>{{ item.receita_total | formato_brasileiro }}</td>
                                     <td>{{ item.despesa_total | formato_brasileiro }}</td>
                                     <td>{{ item.resultado_liquido | formato_brasileiro }}</td>
-                                    <td>
-                                        {{ ('%.2f'|format(item.perc_liquido_sobre_inv)).replace('.', ',') }}%
-                                    </td>
-                                    <td>{{ item.liquido_ultimo_mes | formato_brasileiro }}</td>
-                                    <td>{{ item.liquido_mes_anterior | formato_brasileiro }}</td>
-                                    <td class="{% if item.variacao_liquido_pct < 0 %}text-danger{% elif item.variacao_liquido_pct > 0 %}text-success{% else %}text-muted{% endif %}">
-                                        {% if item.liquido_mes_anterior == 0 %}
-                                            -
-                                        {% else %}
-                                            {{ ('%.2f'|format(item.variacao_liquido_pct)).replace('.', ',') }}%
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {{ ('%.2f'|format(item.payback_percentual)).replace('.', ',') }}%
-                                    </td>
+                                </tr>
+                                <tr class="table-light">
+                                    <td><strong>Acumulado em {{ ano }}</strong></td>
+                                    <td>{{ item.receita_acumulada | formato_brasileiro }}</td>
+                                    <td>{{ item.despesa_acumulada | formato_brasileiro }}</td>
+                                    <td>{{ item.resultado_liquido_acumulado | formato_brasileiro }}</td>
                                 </tr>
                             {% endfor %}
                         </tbody>
@@ -333,8 +305,8 @@
                 </div>
 
                 <p class="text-muted small mb-0">
-                    <strong>Observação:</strong> Faturamento bruto e despesas consideram
-                    apenas lançamentos com <code>data_pagamento</code> dentro de
+                    <strong>Observação:</strong> O acumulado considera lançamentos de
+                    <code>data_pagamento</code> entre 01/01/{{ ano }} e o fim de
                     {{ "%02d"|format(mes) }}/{{ ano }}.
                 </p>
             </div>
@@ -351,5 +323,50 @@
         </a>
     </div>
 </div>
+
+{% if consolidacao and liquidos_mensais %}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const canvas = document.getElementById('liquidoMensalChart');
+        if (!canvas) return;
+
+        const labels = {{ liquidos_mensais | map(attribute='mes') | list | tojson }};
+        const valores = {{ liquidos_mensais | map(attribute='liquido') | list | tojson }};
+
+        new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels: labels.map(m => ('0' + m).slice(-2) + '/{{ ano }}'),
+                datasets: [{
+                    label: 'Líquido (R$)',
+                    data: valores
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                const v = ctx.parsed.y || 0;
+                                return 'R$ ' + v.toLocaleString('pt-BR', {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    });
+    </script>
+{% endif %}
 
 {% endblock %}
