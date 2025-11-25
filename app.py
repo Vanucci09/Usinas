@@ -6264,7 +6264,9 @@ def relatorio_financeiro_com_perda():
     # início do ano para cálculo de acumulado
     ano_inicio = datetime(ano, 1, 1)
 
+    # =========================
     # Série do líquido mês a mês no ano selecionado (para o gráfico)
+    # =========================
     liquidos_mensais = []
     usina_ref = usina_selecionada
 
@@ -6281,6 +6283,7 @@ def relatorio_financeiro_com_perda():
             FinanceiroUsina.data_pagamento < fim_m
         ).scalar() or 0.0
 
+        # DESPESA MENSAL (EXCLUINDO CATEGORIAS 7, 12, 14)
         despesa_m = db.session.query(
             func.coalesce(func.sum(FinanceiroUsina.valor), 0.0)
         ).filter(
@@ -6288,7 +6291,10 @@ def relatorio_financeiro_com_perda():
             FinanceiroUsina.tipo == 'despesa',
             FinanceiroUsina.data_pagamento >= inicio_m,
             FinanceiroUsina.data_pagamento < fim_m,
-            ~FinanceiroUsina.categoria_id.in_([7, 12, 14])
+            or_(
+                FinanceiroUsina.categoria_id.is_(None),
+                FinanceiroUsina.categoria_id.notin_([7, 12, 14])
+            )
         ).scalar() or 0.0
 
         liquido_m = float(receita_m) - float(despesa_m)
@@ -6357,7 +6363,7 @@ def relatorio_financeiro_com_perda():
             'consumo': round(consumo, 2),
             'saldo_unidade': round(saldo_unidade, 2),
             'faturado': round(faturado, 2),
-            'faturado_acumulado': round(faturado, 2),  # mantido por compatibilidade
+            'faturado_acumulado': round(faturado, 2),
         })
 
     # ====== CONSOLIDAÇÃO (apenas a usina selecionada) ======
@@ -6380,7 +6386,11 @@ def relatorio_financeiro_com_perda():
             FinanceiroUsina.usina_id == usina.id,
             FinanceiroUsina.tipo == 'despesa',
             FinanceiroUsina.data_pagamento >= janela_inicio,
-            FinanceiroUsina.data_pagamento < janela_fim_exclusivo
+            FinanceiroUsina.data_pagamento < janela_fim_exclusivo,
+            or_(
+                FinanceiroUsina.categoria_id.is_(None),
+                FinanceiroUsina.categoria_id.notin_([7, 12, 14])
+            )
         ).scalar() or 0.0
         despesa_total = float(despesa_total)
 
@@ -6404,7 +6414,10 @@ def relatorio_financeiro_com_perda():
             FinanceiroUsina.tipo == 'despesa',
             FinanceiroUsina.data_pagamento >= mes_anterior_inicio,
             FinanceiroUsina.data_pagamento < mes_anterior_fim_exclusivo,
-            ~FinanceiroUsina.categoria_id.in_([7, 12, 14])
+            or_(
+                FinanceiroUsina.categoria_id.is_(None),
+                FinanceiroUsina.categoria_id.notin_([7, 12, 14])
+            )
         ).scalar() or 0.0
         despesa_mes_anterior = float(despesa_mes_anterior)
 
@@ -6434,7 +6447,10 @@ def relatorio_financeiro_com_perda():
             FinanceiroUsina.tipo == 'despesa',
             FinanceiroUsina.data_pagamento >= ano_inicio,
             FinanceiroUsina.data_pagamento < janela_fim_exclusivo,
-            ~FinanceiroUsina.categoria_id.in_([7, 12, 14])
+            or_(
+                FinanceiroUsina.categoria_id.is_(None),
+                FinanceiroUsina.categoria_id.notin_([7, 12, 14])
+            )
         ).scalar() or 0.0
         despesa_acumulada = float(despesa_acumulada)
 
