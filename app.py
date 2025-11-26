@@ -1420,7 +1420,7 @@ def listar_faturas():
 
     query = FaturaMensal.query.join(Cliente).join(Usina)
 
-    # Aplicação dos Filtros da URL
+    # Aplicação dos Filtros da URL (Mantidos)
     if usina_id:
         query = query.filter(Usina.id == usina_id)
     if cliente_id:
@@ -1432,17 +1432,21 @@ def listar_faturas():
 
     faturas = query.order_by(FaturaMensal.ano_referencia.desc(), FaturaMensal.mes_referencia.desc()).all()
 
-    # Dados auxiliares (mantidos)
+    # Dados auxiliares (Mantidos)
     usinas = Usina.query.all()
     clientes = Cliente.query.all()
     anos = sorted({f.ano_referencia for f in FaturaMensal.query.all()}, reverse=True)
     
+    # Inicializa variáveis para evitar erro "is not defined"
     qtd_sem_fatura = None
     clientes_sem_fatura = []
-    rateios_map = {} 
     
+    # =========================================================================
+    # LÓGICA DE CLIENTES SEM FATURA (Depende dos filtros de URL)
+    # =========================================================================
+
     if mes and ano:
-        # Lógica de Clientes sem Fatura (mantida)
+        # A Lógica de Clientes sem Fatura (mantida)
         clientes_q = Cliente.query.filter(Cliente.ativo.is_(True))
         if usina_id:
             clientes_q = clientes_q.filter(Cliente.usina_id == usina_id)
@@ -1456,53 +1460,60 @@ def listar_faturas():
         ).exists()
 
         sem_fatura_q = clientes_q.filter(~fatura_existe)
-
         qtd_sem_fatura = sem_fatura_q.count()
         clientes_sem_fatura = sem_fatura_q.order_by(Cliente.nome).all()
 
-        # Lógica para encontrar o rateio mais recente e ativo 
+    # =========================================================================
+    # CÁLCULO FINANCEIRO E BUSCA DO RATEIO VIGENTE (NOVO BLOCO CORRIGIDO)
+    # Garante o rateio correto para CADA FATURA, usando a competência da fatura.
+    # =========================================================================
+    
+    BOLETOS_PATH = os.getenv('BOLETOS_PATH', '/data/boletos')
+    total_faturas = Decimal('0') 
+    
+    # Dicionário para cachear os rateios já buscados, otimizando a consulta.
+    rateio_cache = {}
+
+    for fatura in faturas:
+        # 1. Checagem de boleto (mantida)
+        nome_arquivo = f"boleto_{fatura.id}.pdf"
+        fatura.tem_boleto = os.path.exists(os.path.join(BOLETOS_PATH, nome_arquivo))
+
+        # 2. Determina a data limite para busca do rateio (último dia da competência da fatura)
         try:
-            _, last_day = monthrange(ano, mes)
-            data_base = datetime(ano, mes, last_day).date()
+            _, last_day = monthrange(fatura.ano_referencia, fatura.mes_referencia)
+            data_base = datetime(fatura.ano_referencia, fatura.mes_referencia, last_day).date()
         except ValueError:
             data_base = None
 
+        rateio = None
         if data_base:
-            cliente_ids = list({f.cliente_id for f in faturas})
+            cache_key = (fatura.cliente_id, fatura.ano_referencia, fatura.mes_referencia)
             
-            # Busca e mapeia o rateio correto para cada cliente (lógica de desempate)
-            for c_id in cliente_ids:
-                rateio_vigente = Rateio.query.filter(
-                    Rateio.cliente_id == c_id,
+            # Tenta buscar do cache
+            if cache_key in rateio_cache:
+                rateio = rateio_cache[cache_key]
+            else:
+                # Busca o rateio correto: vigente para a competência desta fatura
+                rateio = Rateio.query.filter(
+                    Rateio.cliente_id == fatura.cliente_id,
                     Rateio.data_inicio <= data_base
                 ).order_by(
                     Rateio.data_inicio.desc(), 
                     Rateio.ativo.desc(),       
                     Rateio.id.desc()           
                 ).first()
-                rateios_map[c_id] = rateio_vigente
-    
-    BOLETOS_PATH = os.getenv('BOLETOS_PATH', '/data/boletos')
-    total_faturas = Decimal('0') 
+                # Armazena no cache
+                rateio_cache[cache_key] = rateio
 
-    for fatura in faturas:
-        # 1. Checagem de boleto (mantida)
-        nome_arquivo = f"boleto_{fatura.id}.pdf"
-        fatura.tem_boleto = os.path.exists(os.path.join(BOLETOS_PATH, nome_arquivo))
-        
-        # 2. Obtém o rateio (priorizando o mapa ou o fallback)
-        rateio = rateios_map.get(fatura.cliente_id)
-        
-        if not rateio and not (mes and ano) and fatura.cliente.rateios:
-            rateio = fatura.cliente.rateios[0] 
-        elif not rateio:
-            rateio = None 
+        # Anexa o rateio correto à fatura. Se for None, significa que não há rateio válido.
+        fatura.rateio_vigente = rateio 
             
         # 3. Definição das variáveis de cálculo com Decimal
-        tarifa_cliente = Decimal(str(rateio.tarifa_kwh)) if rateio else Decimal('0')
+        tarifa_cliente = Decimal(str(fatura.rateio_vigente.tarifa_kwh)) if fatura.rateio_vigente else Decimal('0')
         consumo_usina = Decimal(str(fatura.consumo_usina or 0)) 
         
-        # 4. Lógica de Cálculo (replicando a rota /relatorio)
+        # 4. Lógica de Cálculo
         valor_usina_bruto = consumo_usina * tarifa_cliente
         
         usina = getattr(fatura.cliente, 'usina', None) 
@@ -1516,7 +1527,7 @@ def listar_faturas():
         else:
             valor_usina_liquido = valor_usina_bruto
             
-        # 5. Anexa o resultado final
+        # 5. Anexa o resultado final e acumula o total
         fatura.valor_final_boleto = valor_usina_liquido
         total_faturas += valor_usina_liquido
         
@@ -1525,7 +1536,9 @@ def listar_faturas():
         faturas = [f for f in faturas if f.tem_boleto]
     elif com_boleto == '0':
         faturas = [f for f in faturas if not f.tem_boleto]
-        # Reacumula o total após o filtro (se a opção de total for no Python)
+        
+    # Recalcula o total após o filtro (se aplicado)
+    if com_boleto:
         total_faturas = sum(f.valor_final_boleto for f in faturas)
 
 
@@ -1543,8 +1556,7 @@ def listar_faturas():
         email_enviado=email_enviado,
         qtd_sem_fatura=qtd_sem_fatura,
         clientes_sem_fatura=clientes_sem_fatura,
-        rateios_map=rateios_map,
-        total_faturas=total_faturas # Passando o total calculado
+        total_faturas=total_faturas 
     )
 
 @app.route('/editar_fatura/<int:id>', methods=['GET', 'POST'])

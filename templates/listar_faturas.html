@@ -123,16 +123,12 @@
 
             <tbody>
             {% for fatura in faturas %}
-                {# 
-                O cálculo do rateio e do valor_final_boleto foi movido para o Python.
-                Acessamos o objeto fatura.valor_final_boleto diretamente.
-                #}
-                {% set rateio = rateios_map.get(fatura.cliente_id) if rateios_map and fatura.cliente_id in rateios_map else (fatura.cliente.rateios[0] if fatura.cliente.rateios else None) %}
                 
                 <tr>
                     <td>
-                        {% if rateio %}
-                            {{ rateio.codigo_rateio }}
+                        {# NOVO CÓDIGO: Usa o rateio_vigente anexado pelo Python #}
+                        {% if fatura.rateio_vigente %}
+                            {{ fatura.rateio_vigente.codigo_rateio }}
                         {% else %}
                             <span class="text-danger">-</span>
                         {% endif %}
@@ -146,6 +142,7 @@
                     <td>{{ "%02d"|format(fatura.mes_referencia) }}/{{ fatura.ano_referencia }}</td>
 
                     <td style="white-space: nowrap;">
+                        {# EXIBIÇÃO CORRIGIDA: Usa o valor já calculado no Python #}
                         {% if fatura.valor_final_boleto is not none %}
                             {{ fatura.valor_final_boleto | formato_brasileiro }}
                         {% else %}
@@ -219,6 +216,7 @@
             <tfoot>
                 <tr>
                     <th colspan="3" class="text-end">Total:</th>
+                    {# USO CORRIGIDO: Usa a variável total_faturas calculada no Python #}
                     <th>{{ total_faturas | formato_brasileiro }}</th>
                     <th colspan="2"></th>
                 </tr>
