@@ -1420,6 +1420,7 @@ def listar_faturas():
 
     query = FaturaMensal.query.join(Cliente).join(Usina)
 
+    # Aplicação dos Filtros da URL
     if usina_id:
         query = query.filter(Usina.id == usina_id)
     if cliente_id:
@@ -1431,28 +1432,17 @@ def listar_faturas():
 
     faturas = query.order_by(FaturaMensal.ano_referencia.desc(), FaturaMensal.mes_referencia.desc()).all()
 
-    # Verifica se existe boleto PDF no sistema de arquivos    
-    BOLETOS_PATH = os.getenv('BOLETOS_PATH', '/data/boletos')
-
-    for f in faturas:
-        nome_arquivo = f"boleto_{f.id}.pdf"
-        f.tem_boleto = os.path.exists(os.path.join(BOLETOS_PATH, nome_arquivo))
-
-    # Filtro por existência do boleto (aplicado após carregar todos os objetos)
-    if com_boleto == '1':
-        faturas = [f for f in faturas if f.tem_boleto]
-    elif com_boleto == '0':
-        faturas = [f for f in faturas if not f.tem_boleto]
-
-    # Dados auxiliares para os filtros
+    # Dados auxiliares (mantidos)
     usinas = Usina.query.all()
     clientes = Cliente.query.all()
     anos = sorted({f.ano_referencia for f in FaturaMensal.query.all()}, reverse=True)
     
-    # === Clientes ativos SEM fatura na competência (respeitando filtros) ===
     qtd_sem_fatura = None
     clientes_sem_fatura = []
+    rateios_map = {} 
+    
     if mes and ano:
+        # Lógica de Clientes sem Fatura (mantida)
         clientes_q = Cliente.query.filter(Cliente.ativo.is_(True))
         if usina_id:
             clientes_q = clientes_q.filter(Cliente.usina_id == usina_id)
@@ -1470,6 +1460,75 @@ def listar_faturas():
         qtd_sem_fatura = sem_fatura_q.count()
         clientes_sem_fatura = sem_fatura_q.order_by(Cliente.nome).all()
 
+        # Lógica para encontrar o rateio mais recente e ativo 
+        try:
+            _, last_day = monthrange(ano, mes)
+            data_base = datetime(ano, mes, last_day).date()
+        except ValueError:
+            data_base = None
+
+        if data_base:
+            cliente_ids = list({f.cliente_id for f in faturas})
+            
+            # Busca e mapeia o rateio correto para cada cliente (lógica de desempate)
+            for c_id in cliente_ids:
+                rateio_vigente = Rateio.query.filter(
+                    Rateio.cliente_id == c_id,
+                    Rateio.data_inicio <= data_base
+                ).order_by(
+                    Rateio.data_inicio.desc(), 
+                    Rateio.ativo.desc(),       
+                    Rateio.id.desc()           
+                ).first()
+                rateios_map[c_id] = rateio_vigente
+    
+    BOLETOS_PATH = os.getenv('BOLETOS_PATH', '/data/boletos')
+    total_faturas = Decimal('0') 
+
+    for fatura in faturas:
+        # 1. Checagem de boleto (mantida)
+        nome_arquivo = f"boleto_{fatura.id}.pdf"
+        fatura.tem_boleto = os.path.exists(os.path.join(BOLETOS_PATH, nome_arquivo))
+        
+        # 2. Obtém o rateio (priorizando o mapa ou o fallback)
+        rateio = rateios_map.get(fatura.cliente_id)
+        
+        if not rateio and not (mes and ano) and fatura.cliente.rateios:
+            rateio = fatura.cliente.rateios[0] 
+        elif not rateio:
+            rateio = None 
+            
+        # 3. Definição das variáveis de cálculo com Decimal
+        tarifa_cliente = Decimal(str(rateio.tarifa_kwh)) if rateio else Decimal('0')
+        consumo_usina = Decimal(str(fatura.consumo_usina or 0)) 
+        
+        # 4. Lógica de Cálculo (replicando a rota /relatorio)
+        valor_usina_bruto = consumo_usina * tarifa_cliente
+        
+        usina = getattr(fatura.cliente, 'usina', None) 
+        tusd_ativo = bool(getattr(usina, 'tusd_fio_b', False)) if usina else False
+        custo_tusd = Decimal(str(getattr(fatura, 'custo_tusd_fio_b', 0) or 0))
+        
+        if tusd_ativo:
+            valor_usina_liquido = valor_usina_bruto - custo_tusd
+            if valor_usina_liquido < Decimal('0'):
+                valor_usina_liquido = Decimal('0')
+        else:
+            valor_usina_liquido = valor_usina_bruto
+            
+        # 5. Anexa o resultado final
+        fatura.valor_final_boleto = valor_usina_liquido
+        total_faturas += valor_usina_liquido
+        
+    # Filtro final de existência de boleto (mantido)
+    if com_boleto == '1':
+        faturas = [f for f in faturas if f.tem_boleto]
+    elif com_boleto == '0':
+        faturas = [f for f in faturas if not f.tem_boleto]
+        # Reacumula o total após o filtro (se a opção de total for no Python)
+        total_faturas = sum(f.valor_final_boleto for f in faturas)
+
+
     return render_template(
         'listar_faturas.html',
         faturas=faturas,
@@ -1483,7 +1542,9 @@ def listar_faturas():
         com_boleto=com_boleto,
         email_enviado=email_enviado,
         qtd_sem_fatura=qtd_sem_fatura,
-        clientes_sem_fatura=clientes_sem_fatura
+        clientes_sem_fatura=clientes_sem_fatura,
+        rateios_map=rateios_map,
+        total_faturas=total_faturas # Passando o total calculado
     )
 
 @app.route('/editar_fatura/<int:id>', methods=['GET', 'POST'])
@@ -1536,7 +1597,11 @@ def relatorio_fatura(fatura_id):
         Rateio.cliente_id == cliente.id,
         Rateio.usina_id == usina.id,
         Rateio.data_inicio <= data_base
-    ).order_by(Rateio.data_inicio.desc()).first()
+    ).order_by(
+        Rateio.data_inicio.desc(),  # 1º Critério: Data mais recente
+        Rateio.ativo.desc(),        # 2º Critério (Desempate): Ativo=True (1) vem antes de Ativo=False (0)
+        Rateio.id.desc()            # 3º Critério (Desempate Final): ID mais recente, para garantir ordem consistente
+    ).first()
 
     tarifa_cliente = Decimal(str(rateio.tarifa_kwh)) if rateio else Decimal('0')
 

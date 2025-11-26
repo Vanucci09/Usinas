@@ -6,7 +6,6 @@
 <div class="container mt-5 mb-5 p-4 bg-white shadow rounded">
     <h2 class="mb-4 text-primary text-center">Faturas Cadastradas</h2>
 
-    <!-- Filtros -->
     <form method="GET" class="row g-3 mb-4">
         <div class="col-md-3">
             <label for="usina_id" class="form-label">Usina</label>
@@ -109,7 +108,6 @@
         </div>
     {% endif %}
 
-    <!-- Tabela -->
     <div class="table-responsive">
         <table id="faturas-table" class="table table-bordered table-hover align-middle">
             <thead class="table-light">
@@ -124,22 +122,13 @@
             </thead>
 
             <tbody>
-            {% set ns = namespace(total=0) %}
             {% for fatura in faturas %}
-                {% set rateio = fatura.cliente.rateios[0] if fatura.cliente.rateios else None %}
-                {% set tusd_ativo = fatura.cliente.usina.tusd_fio_b if fatura.cliente and fatura.cliente.usina else False %}
-
-                {# Converte tudo para float #}
-                {% set custo_tusd = (fatura.custo_tusd_fio_b or 0) | float %}
-                {% set tarifa = (rateio.tarifa_kwh if rateio else 0) | float %}
-                {% set consumo_usina_f = (fatura.consumo_usina or 0) | float %}
-
-                {% set bruto = consumo_usina_f * tarifa %}
-                {% set valor_boleto = bruto - (custo_tusd if tusd_ativo else 0.0) %}
-                {% set valor_boleto = valor_boleto if valor_boleto > 0 else 0.0 %}
-
-                {% set ns.total = ns.total + valor_boleto %}
-
+                {# 
+                O cálculo do rateio e do valor_final_boleto foi movido para o Python.
+                Acessamos o objeto fatura.valor_final_boleto diretamente.
+                #}
+                {% set rateio = rateios_map.get(fatura.cliente_id) if rateios_map and fatura.cliente_id in rateios_map else (fatura.cliente.rateios[0] if fatura.cliente.rateios else None) %}
+                
                 <tr>
                     <td>
                         {% if rateio %}
@@ -157,8 +146,8 @@
                     <td>{{ "%02d"|format(fatura.mes_referencia) }}/{{ fatura.ano_referencia }}</td>
 
                     <td style="white-space: nowrap;">
-                        {% if rateio %}
-                            {{ valor_boleto | formato_brasileiro }}
+                        {% if fatura.valor_final_boleto is not none %}
+                            {{ fatura.valor_final_boleto | formato_brasileiro }}
                         {% else %}
                             R$ 0,00
                         {% endif %}
@@ -230,7 +219,7 @@
             <tfoot>
                 <tr>
                     <th colspan="3" class="text-end">Total:</th>
-                    <th>{{ ns.total | formato_brasileiro }}</th>
+                    <th>{{ total_faturas | formato_brasileiro }}</th>
                     <th colspan="2"></th>
                 </tr>
             </tfoot>
@@ -242,7 +231,6 @@
     </div>
 </div>
 
-<!-- Estilo para coluna Ações -->
 <style>
     .acoes-btns a,
     .acoes-btns form { flex: 0 0 auto; }
@@ -252,7 +240,6 @@
     .acoes-btns i { font-size: 1rem; }
 </style>
 
-<!-- DataTables -->
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
 <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
