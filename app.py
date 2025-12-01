@@ -39,6 +39,7 @@ from sqlalchemy.exc import IntegrityError
 from dateutil.relativedelta import relativedelta
 import re, unicodedata
 from sqlalchemy.dialects.postgresql import JSONB
+from urllib.parse import urljoin
 
 
 app = Flask(__name__)
@@ -70,7 +71,7 @@ app.config['MAIL_SERVER'] = 'smtp.gmail.com'  # ou outro servidor
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = 'nuza@cgrenergia.com.br'
-app.config['MAIL_PASSWORD'] = 'kwou zhvp iszj hqtz'
+app.config['MAIL_PASSWORD'] = 'mzmn lhcl rwhp tuhb'
 app.config['MAIL_DEFAULT_SENDER'] = 'nuza@cgrenergia.com.br'
 
 mail = Mail(app)
@@ -2413,6 +2414,222 @@ def excluir_usuario(id):
     db.session.delete(usuario)
     db.session.commit()
     return redirect(url_for('listar_usuarios'))
+
+def _to_float(v):
+    """
+    Converte o valor para float de forma segura:
+    - None, '', '-' etc. viram 0.0
+    - troca vírgula por ponto, se vier '12,34'
+    """
+    if v is None:
+        return 0.0
+    try:
+        s = str(v).strip()
+        if s in ("", "-", "--"):
+            return 0.0
+        s = s.replace(",", ".")
+        return float(s)
+    except (ValueError, TypeError):
+        return 0.0
+
+BASE_URL = "https://gateway.isolarcloud.com.hk"
+
+APP_KEY = "EBE1031E3B716CA93B03CFC3E4093768" 
+SECRET_KEY = "fx52xkkzcey2vecrnkr5v433sjhfa0df" 
+
+USER_ACCOUNT = "monitoramento@cgrenergia.com.br"
+USER_PASSWORD = "Cgr@3021"
+
+
+def post_to_sungrow(path, payload=None, method_name="UNNAMED", add_auth=None):
+    """
+    Envia POST para a API Sungrow com:
+      - appkey SEMPRE no body
+      - token, user_id, org_id se add_auth vier preenchido
+      - SECRET_KEY no header (x-access-key)
+    """
+    url = urljoin(BASE_URL, path)
+
+    body = {"appkey": APP_KEY}
+
+    if add_auth:
+        body.update({
+            "token":   add_auth["token"],
+            "user_id": add_auth["user_id"],
+            "org_id":  add_auth["org_id"],
+        })
+
+    if payload:
+        body.update(payload)
+
+    headers = {
+        "Content-Type": "application/json",
+        "x-access-key": SECRET_KEY,
+    }
+
+    # Se quiser debugar, descomenta:
+    # print(f"\n>> {method_name}")
+    # print("URL:", url)
+    # print("Payload enviado:")
+    # print(json.dumps(body, indent=2, ensure_ascii=False))
+
+    resp = requests.post(url, json=body, headers=headers, timeout=15)
+    resp.raise_for_status()
+    data = resp.json()
+
+    if str(data.get("result_code")) != "1":
+        # log simples de erro
+        print(f"❌ {method_name} FALHOU. Código: {data.get('result_code')}, Msg: {data.get('result_msg')}")
+        print("Resposta completa:")
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        return None
+
+    return data.get("result_data") or {}
+
+
+def login():
+    """
+    Faz login na iSolarCloud e retorna dict com token, user_id e org_id.
+    """
+    payload = {
+        "user_account":  USER_ACCOUNT,
+        "user_password": USER_PASSWORD,
+        # appkey já é adicionada em post_to_sungrow
+    }
+
+    data = post_to_sungrow(
+        "/openapi/login",
+        payload=payload,
+        method_name="LOGIN",
+        add_auth=None,   # login não envia token
+    )
+    if not data:
+        return None
+
+    token   = data.get("token")
+    user_id = data.get("user_id")
+    org_id  = data.get("user_master_org_id")
+
+    if not token:
+        print("❌ LOGIN retornou sem token:")
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        return None
+
+    return {
+        "token": token,
+        "user_id": user_id,
+        "org_id": org_id,
+    }
+    
+def get_all_plants(auth):
+    """
+    Retorna TODAS as usinas da conta Sungrow, varrendo todas as páginas
+    do endpoint /openapi/getPowerStationList.
+    """
+    all_plants = []
+    page = 1
+    size = 100   # pode aumentar até o limite da API (200 se suportar)
+
+    while True:
+        payload = {
+            "curPage": page,
+            "size": size,
+            # ps_name não vai no payload -> sem filtro por nome
+            "ps_type": "1,3,4,5,6,7,8,9,10,12",
+            "valid_flag": "1,2,3",
+            "share_type": "0,1,2",
+        }
+
+        result = post_to_sungrow(
+            "/openapi/getPowerStationList",
+            payload=payload,
+            method_name=f"GET_PLANT_LIST_PAGE_{page}",
+            add_auth=auth
+        )
+        if not result:
+            break
+
+        # Detectar a lista de usinas dentro de result_data
+        if isinstance(result, list):
+            data_list = result
+        else:
+            data_list = (
+                result.get("pageList")
+                or result.get("list")
+                or result.get("ps_list")
+                or next((v for v in result.values() if isinstance(v, list)), [])
+            )
+
+        if not data_list:
+            break
+
+        all_plants.extend(data_list)
+
+        # Se veio menos que "size", acabou a paginação
+        if len(data_list) < size:
+            break
+
+        page += 1
+
+    return all_plants
+
+def listar_usinas_sungrow():
+    """
+    Faz login, busca TODAS as usinas e retorna uma lista simplificada
+    para ser consumida pelo template.
+    """
+    auth = login()
+    if not auth:
+        raise RuntimeError("Falha no login Sungrow")
+
+    lista = get_all_plants(auth)
+    if not lista:
+        return []
+
+    usinas = []
+    for p in lista:
+        today_val = _to_float((p.get("today_energy") or {}).get("value"))
+        total_val = _to_float((p.get("total_energy") or {}).get("value"))
+        curr_val  = _to_float((p.get("curr_power")   or {}).get("value"))
+
+        # total_energy vem em "万度" (10.000 kWh) -> seu cálculo antigo era *10 pra virar MWh
+        total_mwh = total_val * 10
+
+        usinas.append({
+            "ps_id":      p.get("ps_id"),
+            "nome":       p.get("ps_name"),
+            "capacidade": (p.get("total_capcity") or {}).get("value"),
+            "today_kwh":  today_val,
+            "total_mwh":  total_mwh,
+            "curr_kw":    curr_val,
+            "ps_status":  p.get("ps_status"),
+        })
+
+    # Ordena por nome pra ficar mais organizado
+    return sorted(usinas, key=lambda x: x["nome"] or "")
+
+@app.route('/portal_usinas_sungrow')
+@login_required
+def portal_usinas_sungrow():
+    try:
+        usinas_sungrow = listar_usinas_sungrow()
+    except Exception as e:
+        # Em caso de erro na API, mostra mensagem e página vazia
+        return render_template(
+            'portal_usinas_sungrow.html',
+            erro=f"Erro ao acessar API Sungrow: {e}",
+            usinas_info=[],
+            usinas=[],
+            hoje=date.today().strftime("%Y-%m-%d")
+        )
+
+    return render_template(
+        'portal_usinas_sungrow.html',
+        erro=None,
+        usinas_info=usinas_sungrow,
+        usinas=Usina.query.all(),  # suas usinas do banco
+        hoje=date.today().strftime("%Y-%m-%d")
+    )
 
 def montar_headers_solis(path: str, body_dict: dict) -> tuple[dict, str]:
     # 1) JSON “compacto”
