@@ -94,6 +94,7 @@ class Usina(db.Model):
     valor_investido = db.Column(db.Numeric(precision=12, scale=2))
     saldo_kwh = db.Column(db.Float, default=0)
     kehua_station_id = db.Column(db.String, nullable=True, unique=True)
+    sungrow_ps_id = db.Column(db.String(32), unique=True, nullable=True)
     tusd_fio_b = db.Column(db.Boolean, nullable=False, default=False)
     boleto_proprio = db.Column(db.Boolean, nullable=False, default=False)
     
@@ -2442,12 +2443,6 @@ USER_PASSWORD = "Cgr@3021"
 
 
 def post_to_sungrow(path, payload=None, method_name="UNNAMED", add_auth=None):
-    """
-    Envia POST para a API Sungrow com:
-      - appkey SEMPRE no body
-      - token, user_id, org_id se add_auth vier preenchido
-      - SECRET_KEY no header (x-access-key)
-    """
     url = urljoin(BASE_URL, path)
 
     body = {"appkey": APP_KEY}
@@ -2467,25 +2462,17 @@ def post_to_sungrow(path, payload=None, method_name="UNNAMED", add_auth=None):
         "x-access-key": SECRET_KEY,
     }
 
-    # Se quiser debugar, descomenta:
-    # print(f"\n>> {method_name}")
-    # print("URL:", url)
-    # print("Payload enviado:")
-    # print(json.dumps(body, indent=2, ensure_ascii=False))
-
     resp = requests.post(url, json=body, headers=headers, timeout=15)
     resp.raise_for_status()
     data = resp.json()
 
     if str(data.get("result_code")) != "1":
-        # log simples de erro
         print(f"❌ {method_name} FALHOU. Código: {data.get('result_code')}, Msg: {data.get('result_msg')}")
         print("Resposta completa:")
         print(json.dumps(data, indent=2, ensure_ascii=False))
         return None
 
     return data.get("result_data") or {}
-
 
 def login():
     """
@@ -2528,7 +2515,7 @@ def get_all_plants(auth):
     """
     all_plants = []
     page = 1
-    size = 100   # pode aumentar até o limite da API (200 se suportar)
+    size = 200   # pode aumentar até o limite da API (200 se suportar)
 
     while True:
         payload = {
@@ -2576,7 +2563,7 @@ def get_all_plants(auth):
 def listar_usinas_sungrow():
     """
     Faz login, busca TODAS as usinas e retorna uma lista simplificada
-    para ser consumida pelo template.
+    para ser consumida pelo template (nível planta).
     """
     auth = login()
     if not auth:
@@ -2592,43 +2579,490 @@ def listar_usinas_sungrow():
         total_val = _to_float((p.get("total_energy") or {}).get("value"))
         curr_val  = _to_float((p.get("curr_power")   or {}).get("value"))
 
-        # total_energy vem em "万度" (10.000 kWh) -> seu cálculo antigo era *10 pra virar MWh
+        # total_energy geralmente vem em 10 MWh / 万度 → aqui mantive a sua lógica antiga
         total_mwh = total_val * 10
 
         usinas.append({
-            "ps_id":      p.get("ps_id"),
-            "nome":       p.get("ps_name"),
+            "ps_id": p.get("ps_id"),
+            "nome": p.get("ps_name"),
             "capacidade": (p.get("total_capcity") or {}).get("value"),
-            "today_kwh":  today_val,
-            "total_mwh":  total_mwh,
-            "curr_kw":    curr_val,
-            "ps_status":  p.get("ps_status"),
+            "today_kwh": today_val,
+            "total_mwh": total_mwh,
+            "curr_kw": curr_val,
+            "ps_status": p.get("ps_status"),
         })
 
-    # Ordena por nome pra ficar mais organizado
+    # Ordena por nome pra ficar organizado
     return sorted(usinas, key=lambda x: x["nome"] or "")
+    
+def listar_todos_inversores_sungrow():
+    """
+    Usa login() + get_all_plants() e para cada usina chama um endpoint
+    de lista de dispositivos, retornando uma lista de dicts:
+
+      {
+        "sn": "<serial>",
+        "dev_name": "<nome do inversor>",
+        "ps_id": "<id usina Sungrow>",
+        "ps_name": "<nome usina Sungrow>"
+      }
+
+    ⚠️ Ajuste o 'path_devices' e os nomes dos campos conforme a doc da sua conta.
+    """
+    auth = login()
+    if not auth:
+        raise RuntimeError("Falha no login Sungrow")
+
+    plants = get_all_plants(auth)
+    todos = []
+
+    # endpoint típico para listar dispositivos de uma usina.
+    # Se na sua doc for outro (ex.: /webAppService/getAllDeviceByPsId),
+    # é só trocar aqui:
+    path_devices = "/openapi/getAllDeviceByPsId"
+
+    for p in plants:
+        ps_id = p.get("ps_id")
+        ps_name = p.get("ps_name") or ""
+        if not ps_id:
+            continue
+
+        payload = {
+            "ps_id": ps_id,
+            "curPage": 1,
+            "size": 200,
+        }
+
+        result = post_to_sungrow(
+            path_devices,
+            payload=payload,
+            method_name=f"GET_DEVICES_PS_{ps_id}",
+            add_auth=auth
+        )
+        if not result:
+            continue
+
+        if isinstance(result, list):
+            dev_list = result
+        else:
+            dev_list = (
+                result.get("deviceList")
+                or result.get("list")
+                or next((v for v in result.values() if isinstance(v, list)), [])
+            )
+
+        for d in dev_list or []:
+            sn = d.get("esn") or d.get("device_sn") or d.get("sn")
+            if not sn:
+                continue
+
+            dev_name = (
+                d.get("dev_alias")
+                or d.get("dev_name")
+                or d.get("device_alias")
+                or d.get("device_name")
+                or ""
+            )
+
+            todos.append({
+                "sn": sn,
+                "dev_name": dev_name,
+                "ps_id": ps_id,
+                "ps_name": ps_name,
+            })
+
+    # remove duplicados por SN
+    vistos = set()
+    unicos = []
+    for r in todos:
+        sn = r["sn"]
+        if sn not in vistos:
+            vistos.add(sn)
+            unicos.append(r)
+
+    print(f"[Sungrow] Total de inversores únicos: {len(unicos)}")
+    return unicos
+
+@app.route('/vincular_inversores_sungrow', methods=['GET', 'POST'])
+@login_required
+def vincular_inversores_sungrow():
+    try:
+        registros = listar_todos_inversores_sungrow()
+    except Exception as e:
+        return render_template(
+            'vincular_inversores_sungrow.html',
+            erro=str(e),
+            inversores=[],
+            usinas=[]
+        )
+
+    # garante unicidade pelo SN
+    vistos = set()
+    unicos = []
+    for r in registros:
+        sn = r.get("sn")
+        if sn and sn not in vistos:
+            vistos.add(sn)
+            unicos.append(r)
+
+    usinas = Usina.query.all()
+
+    if request.method == 'POST':
+        sn = request.form.get('inverter_sn')
+        usina_id = request.form.get('usina_id')
+
+        if sn and usina_id:
+            existente = Inversor.query.filter_by(inverter_sn=sn).first()
+            if not existente:
+                novo = Inversor(inverter_sn=sn, usina_id=usina_id)
+                db.session.add(novo)
+                db.session.commit()
+                flash(f"[Sungrow] Inversor {sn} vinculado com sucesso!", "success")
+            else:
+                flash(f"[Sungrow] Inversor {sn} já está vinculado.", "warning")
+
+        return redirect(url_for('vincular_inversores_sungrow'))
+
+    return render_template(
+        'vincular_inversores_sungrow.html',
+        inversores=unicos,
+        usinas=usinas,
+        erro=None
+    )
+    
+@app.route('/vincular_usinas_sungrow', methods=['GET', 'POST'])
+@login_required
+def vincular_usinas_sungrow():
+    # Usinas do seu banco
+    usinas_bd = Usina.query.order_by(Usina.nome).all()
+
+    # Lista de plantas vinda da Sungrow (já formatada por listar_usinas_sungrow)
+    try:
+        plantas_sungrow = listar_usinas_sungrow()  # usa a função que você já tem
+    except Exception as e:
+        flash(f"Erro ao buscar usinas na API Sungrow: {e}", "danger")
+        plantas_sungrow = []
+
+    if request.method == 'POST':
+        ps_id = request.form.get('ps_id')
+        usina_id = request.form.get('usina_id', type=int)
+
+        if not ps_id or not usina_id:
+            flash("Planta Sungrow e usina são obrigatórias.", "warning")
+            return redirect(url_for('vincular_usinas_sungrow'))
+
+        # Garante string pra comparar com coluna sungrow_ps_id (String)
+        ps_id_str = str(ps_id)
+
+        # Se alguma outra usina já estiver usando esse ps_id, limpa
+        Usina.query.filter(
+            Usina.sungrow_ps_id == ps_id_str,
+            Usina.id != usina_id
+        ).update({Usina.sungrow_ps_id: None})
+
+        usina = Usina.query.get(usina_id)
+        if not usina:
+            flash("Usina não encontrada.", "danger")
+            return redirect(url_for('vincular_usinas_sungrow'))
+
+        usina.sungrow_ps_id = ps_id_str
+        db.session.commit()
+
+        flash(f"Usina '{usina.nome}' vinculada à planta Sungrow {ps_id_str} com sucesso!", "success")
+        return redirect(url_for('vincular_usinas_sungrow'))
+
+    # Mapeia ps_id -> usina já vinculada (para exibir no template)
+    mapa_ps_para_usina = {}
+    for u in usinas_bd:
+        if u.sungrow_ps_id:
+            mapa_ps_para_usina[str(u.sungrow_ps_id)] = u
+
+    return render_template(
+        'vincular_usinas_sungrow.html',
+        plantas=plantas_sungrow,
+        usinas=usinas_bd,
+        mapa_ps_para_usina=mapa_ps_para_usina
+    )
+
+DEVICE_LIST_PATH = "/openapi/getDeviceList"
+REALTIME_PATH    = "/openapi/getDeviceRealTimeData"
+
+
+def sungrow_listar_dispositivos_da_usina(auth, ps_id, ps_name=""):
+    """
+    Lista APENAS inversores (device_type = 1) de uma usina via /openapi/getDeviceList.
+
+    Retorna lista de dicts:
+      {
+        "sn": "...",
+        "ps_key": "...",
+        "dev_name": "...",
+        "ps_id": "...",
+        "ps_name": "...",
+        "state": 1 ou 0   # on-line/off-line (dev_status ou rel_state)
+      }
+    """
+    payload = {
+        "ps_id": ps_id,
+        "curPage": 1,
+        "size": 50,
+        "device_type_list": [1],   # só inversores
+    }
+
+    result = post_to_sungrow(
+        DEVICE_LIST_PATH,
+        payload=payload,
+        method_name=f"DEV_LIST_{ps_id}",
+        add_auth=auth
+    )
+    if not result:
+        return []
+
+    if isinstance(result, list):
+        dev_list = result
+    else:
+        dev_list = (
+            result.get("pageList")
+            or result.get("deviceList")
+            or result.get("list")
+            or next((v for v in result.values() if isinstance(v, list)), [])
+        )
+
+    dispositivos = []
+
+    for d in dev_list or []:
+        # garante que é inversor (se vier device_type no JSON)
+        if d.get("device_type") not in (None, 1):
+            continue
+
+        sn = d.get("device_sn") or d.get("esn") or d.get("sn")
+        ps_key = d.get("ps_key") or d.get("psKey")
+        if not sn or not ps_key:
+            continue
+
+        dev_name = (
+            d.get("device_name")
+            or d.get("dev_name")
+            or d.get("device_alias")
+            or ""
+        )
+
+        # dev_status / rel_state = 1 => normal / on-line
+        raw_status = d.get("dev_status", d.get("rel_state", 0))
+        state = 1 if str(raw_status) == "1" else 0
+
+        dispositivos.append({
+            "sn": sn,
+            "ps_key": ps_key,
+            "dev_name": dev_name,
+            "ps_id": ps_id,
+            "ps_name": ps_name or "",
+            "state": state,
+        })
+
+    return dispositivos
+
+
+def sungrow_buscar_realtime_por_sn(auth, sn_list):
+    """
+    Usa /openapi/getDeviceRealTimeData para pegar, por SN, os pontos:
+      - p83022: energia do dia (Wh)  -> today_kwh
+      - p83033: energia total (Wh)   -> total_kwh   (opcional)
+
+    Retorna dict:
+      { "SN": {"today_kwh": float, "total_kwh": float} }
+    """
+    if not sn_list:
+        return {}
+
+    saida = {}
+    chunk_size = 50  # limite da API
+
+    for i in range(0, len(sn_list), chunk_size):
+        chunk = sn_list[i:i + chunk_size]
+
+        payload = {
+            "device_type": 1,          # inversor
+            "sn_list": chunk,
+            "point_id_list": ["83022", "83033"],
+        }
+
+        result = post_to_sungrow(
+            REALTIME_PATH,
+            payload=payload,
+            method_name="REALTIME_BATCH",
+            add_auth=auth
+        )
+        if not result:
+            continue
+
+        for item in result.get("device_point_list", []):
+            dp = (item or {}).get("device_point", {}) or {}
+
+            sn = dp.get("device_sn")
+            if not sn:
+                # fallback: se algum dia vier sem SN, dá pra tratar por ps_key
+                ps_key = dp.get("ps_key")
+                if ps_key:
+                    sn = ps_key
+
+            if not sn:
+                continue
+
+            wh_day   = _to_float(dp.get("p83022"))   # dia (Wh)
+            wh_total = _to_float(dp.get("p83033"))   # total (Wh)
+
+            saida[sn] = {
+                "today_kwh": wh_day / 1000.0,                     # Wh -> kWh
+                "total_kwh": (wh_total / 1000.0) if wh_total else 0.0,
+            }
+
+    return saida
+
+def chunks(lista, n):
+    for i in range(0, len(lista), n):
+        yield lista[i:i+n]
+
+def sungrow_listar_geracao_inversores():
+    auth = login()
+    if not auth:
+        raise RuntimeError("Falha no login Sungrow")
+
+    # 1) Lista todas as usinas
+    plants = get_all_plants(auth) or []
+
+    # 2) Para cada usina, lista dispositivos (só inversores – device_type=1)
+    dispositivos = []
+    for p in plants:
+        ps_id = p.get("ps_id")
+        ps_name = p.get("ps_name") or ""
+        if not ps_id:
+            continue
+
+        devs = sungrow_listar_dispositivos_da_usina(auth, ps_id, ps_name=ps_name)
+        dispositivos.extend(devs)
+
+    if not dispositivos:
+        print("[Sungrow] Nenhum dispositivo retornado em Device List.")
+        return []
+
+    ps_keys = [d["ps_key"] for d in dispositivos]
+
+    # ==========================================================
+    # 3) LISTA DE PONTOS ENXUTA (BEM < 100)
+    #    - faixa 830xx (energia/dia, mês, ano, etc)
+    #    - alguns 30xx (energia antiga)
+    #    - alguns genéricos entre 20 e 40
+    # ==========================================================
+    point_ids = []
+
+    # pontos que a doc cita diretamente
+    point_ids += ["24", "83022", "83033"]
+
+    # faixa 83010–83059 (50 pontos)
+    point_ids += [str(x) for x in range(83010, 83060)]
+
+    # faixa 3020–3034 (15 pontos)
+    point_ids += [str(x) for x in range(3020, 3035)]
+
+    # faixa 20–29 (10 pontos)
+    point_ids += [str(x) for x in range(20, 30)]
+
+    # garantir unicidade e ordenar
+    point_ids = sorted(list(set(point_ids)))
+    path_rt = "/openapi/getDeviceRealTimeData"
+    mapa_pontos = {}
+
+    # vamos continuar em lotes de ps_keys (máx 30 devices por chamada)
+    for lote_ps in chunks(ps_keys, 30):
+        payload = {
+            "device_type": 1,        # inversor
+            "ps_key_list": lote_ps,  # até 30 por vez
+            "point_id_list": point_ids,
+        }
+
+        data = post_to_sungrow(
+            path_rt,
+            payload=payload,
+            method_name="REALTIME_DISCOVERY",
+            add_auth=auth
+        )
+        if not data:
+            continue
+
+        for item in data.get("device_point_list", []):
+            dp = item.get("device_point") or {}
+            ps_key = dp.get("ps_key")
+            if not ps_key:
+                continue
+
+            # coleta somente pontos com valor (não nulos/nem vazios)
+            pontos_com_valor = {}
+            for k, v in dp.items():
+                if k.startswith("p") and v not in (None, "", "null", "None"):
+                    pontos_com_valor[k] = v
+
+            mapa_pontos[ps_key] = pontos_com_valor
+
+    for ps_key, pontos in mapa_pontos.items():
+        print(f"\n>>> {ps_key}")
+        print(json.dumps(pontos, indent=2, ensure_ascii=False))
+
+    # Por enquanto, só devolvo registros "zerados" para não quebrar a tela
+    registros = []
+    vistos = set()
+    for d in dispositivos:
+        sn = d["sn"]
+        if sn in vistos:
+            continue
+        vistos.add(sn)
+
+        registros.append({
+            "sn": sn,
+            "ps_id": d.get("ps_id"),
+            "ps_name": d.get("ps_name"),
+            "dev_name": d.get("dev_name") or "",
+            "today_kwh": 0.0,    # vamos acertar depois que achar o ponto certo
+            "total_kwh": 0.0,
+            "state": d.get("state", 0),
+        })
+
+    print(f"[Sungrow] Registros de geração por inversor (debug): {len(registros)}")
+    return registros
 
 @app.route('/portal_usinas_sungrow')
 @login_required
 def portal_usinas_sungrow():
+    hoje = date.today().strftime("%Y-%m-%d")
+
     try:
         usinas_sungrow = listar_usinas_sungrow()
     except Exception as e:
-        # Em caso de erro na API, mostra mensagem e página vazia
         return render_template(
             'portal_usinas_sungrow.html',
             erro=f"Erro ao acessar API Sungrow: {e}",
             usinas_info=[],
-            usinas=[],
-            hoje=date.today().strftime("%Y-%m-%d")
+            detalhe_por_plant={},
+            hoje=hoje
         )
+
+    try:
+        registros_inv = sungrow_listar_geracao_inversores()
+    except Exception as e:
+        print(f"❌ Erro ao listar inversores/geração Sungrow: {e}")
+        registros_inv = []
+
+    detalhe_por_plant = {}
+    for rec in registros_inv:
+        nome_plant = rec.get("ps_name") or f"PS {rec.get('ps_id')}"
+        detalhe_por_plant.setdefault(nome_plant, []).append(rec)
 
     return render_template(
         'portal_usinas_sungrow.html',
         erro=None,
         usinas_info=usinas_sungrow,
-        usinas=Usina.query.all(),  # suas usinas do banco
-        hoje=date.today().strftime("%Y-%m-%d")
+        detalhe_por_plant=detalhe_por_plant,
+        hoje=hoje
     )
 
 def montar_headers_solis(path: str, body_dict: dict) -> tuple[dict, str]:
@@ -2969,161 +3403,90 @@ def vincular_estacoes():
 @app.route('/atualizar_geracao')
 @login_required
 def atualizar_geracao():
-    registros = listar_todos_inversores()
     hoje = date.today()
 
-    # Dicionário para acumular por usina
-    soma_por_usina = {}
+    listar_e_salvar_geracoes(hoje=hoje)      # Solis + Sungrow
+    listar_e_salvar_geracoes_kehua()         # Kehua
 
-    for r in registros:
-        sn = r.get("sn")
-        if not sn:
-            continue
-
-        etoday = float(r.get("etoday", 0) or 0)
-        etotal = float(r.get("etotal", 0) or 0)
-
-        # Atualiza/inclui na tabela geracoes_inversores (opcional)
-        existente = GeracaoInversor.query.filter_by(inverter_sn=sn, data=hoje).first()
-        if existente:
-            existente.etoday = etoday
-            existente.etotal = etotal
-        else:
-            nova = GeracaoInversor(
-                data=hoje,
-                inverter_sn=sn,
-                etoday=etoday,
-                etotal=etotal
-            )
-            inversor = Inversor.query.filter_by(inverter_sn=sn).first()
-            if inversor:
-                nova.usina_id = inversor.usina_id
-                db.session.add(nova)
-            else:
-                continue  # não insere se não achar o inversor
-
-        # Acumula total por usina
-        inversor = Inversor.query.filter_by(inverter_sn=sn).first()
-        if inversor and inversor.usina_id:
-            soma_por_usina[inversor.usina_id] = soma_por_usina.get(inversor.usina_id, 0) + etoday
-
-    # Atualiza ou insere na tabela GERACOES (por usina e dia)
-    for usina_id, total_kwh in soma_por_usina.items():
-        geracao = Geracao.query.filter_by(usina_id=usina_id, data=hoje).first()
-        if geracao:
-            geracao.energia_kwh = total_kwh
-        else:
-            nova_geracao = Geracao(
-                usina_id=usina_id,
-                data=hoje,
-                energia_kwh=total_kwh
-            )
-            db.session.add(nova_geracao)
-
-    db.session.commit()
-    flash("Geração dos inversores e das usinas atualizada com sucesso.", "success")
+    flash("Geração das usinas atualizada com sucesso.", "success")
     return redirect(url_for('portal_usinas'))
 
-def listar_e_salvar_geracoes():
-    hoje = date.today()
+def listar_e_salvar_geracoes(hoje=None):
+    if hoje is None:
+        hoje = date.today()
+
     usina_kwh_por_dia = {}
 
-    #  PARTE SOLIS
-    
-    registros = listar_todos_inversores()
+    # =========================================================
+    # 1) SOLIS - por inversor (SÓ etoday, sem acumular nada)
+    # =========================================================
+    try:
+        registros_solis = listar_todos_inversores()
+    except Exception as e:
+        print(f"❌ Erro ao listar inversores Solis: {e}")
+        registros_solis = []
 
-    for r in registros:
+    for r in registros_solis:
         sn = r.get("sn")
         if not sn:
             continue
 
         etoday = float(r.get("etoday", 0) or 0)
-        etotal = float(r.get("etotal", 0) or 0)
 
         inversor = Inversor.query.filter_by(inverter_sn=sn).first()
         if not inversor:
+            # inversor não vinculado no banco -> ignora
             continue
 
-        # Salvar por inversor
+        # Sempre grava APENAS o valor do dia vindo da API.
         existente = GeracaoInversor.query.filter_by(inverter_sn=sn, data=hoje).first()
         if existente:
             existente.etoday = etoday
-            existente.etotal = etotal
         else:
             nova = GeracaoInversor(
                 data=hoje,
                 inverter_sn=sn,
                 etoday=etoday,
-                etotal=etotal,
                 usina_id=inversor.usina_id
             )
             db.session.add(nova)
 
-        usina_kwh_por_dia[inversor.usina_id] = usina_kwh_por_dia.get(inversor.usina_id, 0) + etoday
+        # Acumula por usina só com esse etoday
+        usina_kwh_por_dia[inversor.usina_id] = usina_kwh_por_dia.get(inversor.usina_id, 0.0) + etoday
 
-    #  PARTE KEHUA
-    
-    def login_kehua():
-        url_login = "https://energy.kehua.com/necp/login/northboundLogin"
-        login_data = {
-            "username": "monitoramento@cgrenergia.com",
-            "password": "12345678",
-            "locale": "en"
-        }
-        response = requests.post(url_login, data=login_data)
-        return response.headers.get("Authorization")
+    # =========================================================
+    # 2) SUNGROW - por planta (ps_id vinculado em Usina.sungrow_ps_id)
+    # =========================================================
+    try:
+        usinas_sungrow_api = listar_usinas_sungrow()  # já retorna today_kwh e total_mwh
+    except Exception as e:
+        print(f"❌ Erro ao listar usinas Sungrow: {e}")
+        usinas_sungrow_api = []
 
-    token = login_kehua()
-    if token:
-        headers = {"Authorization": token, "Content-Type": "application/json"}
-        usinas_kehua = Usina.query.filter(Usina.kehua_station_id.isnot(None)).all()
+    # Mapa ps_id(string) -> today_kwh
+    mapa_sungrow = {}
+    for p in usinas_sungrow_api:
+        ps_id = str(p.get("ps_id"))
+        today_kwh = float(p.get("today_kwh") or 0.0)
+        mapa_sungrow[ps_id] = today_kwh
 
-        for usina in usinas_kehua:
-            station_id = usina.kehua_station_id
-            try:
-                resp = requests.post(
-                    "https://energy.kehua.com/necp/north/getDeviceInfo",
-                    headers=headers,
-                    json={"stationId": station_id}
-                )
-                if resp.status_code != 200 or resp.json().get("code") != "0":
-                    print(f"⚠️ Falha ao consultar {usina.nome} ({station_id})")
-                    continue
+    usinas_com_sungrow = Usina.query.filter(Usina.sungrow_ps_id.isnot(None)).all()
 
-                inversores = resp.json().get("data", [])
-                total_etoday = 0.0
+    for usina in usinas_com_sungrow:
+        ps_id_str = str(usina.sungrow_ps_id)
+        etoday = float(mapa_sungrow.get(ps_id_str, 0.0))
 
-                for inv in inversores:
-                    sn = inv.get("sn")
-                    etoday = float(inv.get("etoday") or 0)
-                    etotal = float(inv.get("etotal") or 0)
-                    total_etoday += etoday
+        # logs enxutos, só pra ter uma noção
+        if etoday > 0:
+            print(f"✅ Sungrow: {usina.nome} (ps_id={ps_id_str}) -> {etoday:.2f} kWh")
+        else:
+            print(f"⚠️ Sungrow: {usina.nome} (ps_id={ps_id_str}) sem geração hoje ou não retornada.")
 
-                    # Salvar geração por inversor
-                    leitura_inv = GeracaoInversor.query.filter_by(inverter_sn=sn, data=hoje).first()
-                    if leitura_inv:
-                        leitura_inv.etoday = etoday
-                        leitura_inv.etotal = etotal
-                    else:
-                        nova_leitura = GeracaoInversor(
-                            data=hoje,
-                            inverter_sn=sn,
-                            etoday=etoday,
-                            etotal=etotal,
-                            usina_id=usina.id
-                        )
-                        db.session.add(nova_leitura)
+        usina_kwh_por_dia[usina.id] = usina_kwh_por_dia.get(usina.id, 0.0) + etoday
 
-                usina_kwh_por_dia[usina.id] = usina_kwh_por_dia.get(usina.id, 0) + total_etoday
-                print(f"✅ Kehua: Geração de {usina.nome}: {total_etoday:.2f} kWh")
-
-            except Exception as e:
-                print(f"❌ Erro na estação {usina.nome}: {e}")
-    else:
-        print("❌ Token da Kehua não obtido.")
-
-    #  Salvar total por usina
-    
+    # =========================================================
+    # 3) SALVAR TOTAL POR USINA (tabela Geracao)
+    # =========================================================
     for usina_id, soma_etoday in usina_kwh_por_dia.items():
         leitura = Geracao.query.filter_by(usina_id=usina_id, data=hoje).first()
         if leitura:
@@ -3137,23 +3500,27 @@ def listar_e_salvar_geracoes():
             db.session.add(nova_leitura)
 
     db.session.commit()
-    print("✅ Geração diária salva para todas as usinas.")
+    print("✅ Geração diária salva para todas as usinas (Solis + Sungrow).")
 
 def atualizar_geracao_agendada():
     with app.app_context():
         try:
             print(f"[{datetime.now()}] Atualizando geração automaticamente...")
-            listar_e_salvar_geracoes()         # Solis
-            listar_e_salvar_geracoes_kehua()   # Kehua
+            listar_e_salvar_geracoes()        # Solis + Sungrow
+            listar_e_salvar_geracoes_kehua()  # Kehua com getDeviceRealtimeData
             print("✅ Atualização concluída.")
         except Exception as e:
             print(f"❌ Erro na atualização agendada: {e}")
 
+# Scheduler único
 scheduler = BackgroundScheduler()
-scheduler.add_job(func=atualizar_geracao_agendada, trigger="interval", minutes=25)
+scheduler.add_job(
+    func=atualizar_geracao_agendada,
+    trigger="interval",
+    minutes=15
+)
 scheduler.start()
 
-# Garantir que pare quando o app for encerrado
 atexit.register(lambda: scheduler.shutdown())
 
 @app.route('/atualizar_periodo', methods=['GET', 'POST'])
@@ -3207,7 +3574,6 @@ def atualizar_periodo():
         return redirect(url_for('atualizar_periodo'))
 
     return render_template('atualizar_periodo.html', usinas=usinas)
-
 
 def listar_todos_inversores_por_data(data: date):
     """
@@ -5216,11 +5582,16 @@ def listar_e_salvar_geracoes_kehua():
             "password": "12345678",
             "locale": "en"
         }
-        response = requests.post(url_login, data=login_data)
-        if response.status_code == 200:
-            json_resp = response.json()
-            return json_resp.get("token") or response.headers.get("Authorization")
-        return None
+        resp = requests.post(url_login, data=login_data)
+
+        if resp.status_code != 200:
+            print(f"❌ Login Kehua falhou. HTTP {resp.status_code}")
+            return None
+
+        json_resp = resp.json()
+        # Alguns ambientes Kehua mandam token no header, outros no JSON
+        token = json_resp.get("token") or resp.headers.get("Authorization")
+        return token
 
     hoje = date.today()
     token = login_kehua()
@@ -5235,50 +5606,67 @@ def listar_e_salvar_geracoes_kehua():
         "clienttype": "web"
     }
 
+    KEHUA_CONFIG = {
+        # usina.id: {payload fixo pra essa estação}
+        9: {  # Bloco A Expansão
+            "stationId": "31080",
+            "companyId": "757",
+            "areaCode": "903",
+            "deviceId": "16872",
+            "deviceType": "00010001",
+            "templateId": "1041"
+        }
+    }
+
     usinas = Usina.query.filter(Usina.kehua_station_id.isnot(None)).all()
 
     for usina in usinas:
+        cfg = KEHUA_CONFIG.get(usina.id)
+        if not cfg:
+            print(f"⚠️ Kehua: usina {usina.nome} (id={usina.id}) ainda não está configurada em KEHUA_CONFIG.")
+            continue
+
         soma_kwh = 0.0
 
-        if usina.id == 9:  # ID da usina Bloco A Expansão
-            payload = {
-                "stationId": "31080",
-                "companyId": "757",
-                "areaCode": "903",
-                "deviceId": "16872",  # ID numérico válido
-                "deviceType": "00010001",
-                "templateId": "1041"
-            }
+        try:
+            resp = requests.post(
+                "https://energy.kehua.com/necp/monitor/getDeviceRealtimeData",
+                headers=headers,
+                data=cfg
+            )
 
-            try:
-                resp = requests.post(
-                    "https://energy.kehua.com/necp/monitor/getDeviceRealtimeData",
-                    headers=headers,
-                    data=payload
-                )
-                
-                json_resp = resp.json()                
+            if resp.status_code != 200:
+                print(f"⚠️ Erro HTTP ao consultar {usina.nome}: {resp.status_code}")
+                continue
 
-                if json_resp.get("code") != "0":
-                    print(f"⚠️ Erro API Kehua: {json_resp.get('message')}")
-                    continue
+            json_resp = resp.json()
+            if json_resp.get("code") != "0":
+                print(f"⚠️ Erro API Kehua ({usina.nome}): {json_resp.get('message')}")
+                continue
 
-                yc_infos = json_resp.get("data", {}).get("ycInfos", [])
-                kwh = 0.0
-                for grupo in yc_infos:
-                    data_points = grupo.get("dataPoint")
-                    if isinstance(data_points, list):  
-                        for ponto in data_points:
-                            if ponto.get("property") == "dayElec":
-                                kwh = float(ponto.get("val", 0))
-                                break
-                
-                soma_kwh += kwh
+            data = json_resp.get("data", {})
+            yc_infos = data.get("ycInfos") or data.get("ycInfo") or []
 
-            except Exception as e:
-                print(f"❌ Erro ao consultar Bloco A Expansão: {e}")
+            kwh = 0.0
+            for grupo in yc_infos:
+                data_points = grupo.get("dataPoint") or grupo.get("datapoint") or []
+                for ponto in data_points:
+                    prop = ponto.get("property") or ponto.get("name")
+                    if prop in ("dayElec", "day_elec", "dayEnergy"):
+                        try:
+                            kwh = float(ponto.get("val") or 0)
+                        except (TypeError, ValueError):
+                            kwh = 0.0
+                        break
+                if kwh > 0:
+                    break
 
-        # Salvar geração
+            soma_kwh += kwh
+
+        except Exception as e:
+            print(f"❌ Erro ao consultar {usina.nome}: {e}")
+            continue
+
         if soma_kwh > 0:
             geracao = Geracao.query.filter_by(usina_id=usina.id, data=hoje).first()
             if geracao:
@@ -5290,7 +5678,7 @@ def listar_e_salvar_geracoes_kehua():
             db.session.commit()
             print(f"✅ Kehua: Geração salva para {usina.nome}: {soma_kwh:.2f} kWh")
         else:
-            print(f"⚠️ Kehua: {usina.nome} retornou geração 0")
+            print(f"⚠️ Kehua: {usina.nome} retornou geração 0 (dayElec não veio ou veio 0)")
 
 def buscar_estacoes_kehua():
     url_login = "https://energy.kehua.com/necp/login/northboundLogin"
