@@ -40,6 +40,7 @@ from dateutil.relativedelta import relativedelta
 import re, unicodedata
 from sqlalchemy.dialects.postgresql import JSONB
 from urllib.parse import urljoin
+import traceback
 
 
 app = Flask(__name__)
@@ -188,8 +189,10 @@ class FaturaMensal(db.Model):
     energia_injetada_real = db.Column(db.Float, default=0.0)
     custo_tusd_fio_b = db.Column(Numeric(12, 2), nullable=True, default=None)
     whatsapp_enviado = db.Column(db.Boolean, default=False)
-    
+    usina_id = db.Column(db.Integer, db.ForeignKey('usinas.id'))
     data_cadastro = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    
+    usina = db.relationship('Usina')    
 
     cliente = db.relationship('Cliente', backref='faturas')
     
@@ -1268,6 +1271,17 @@ def faturamento():
                  .strip()
         )
 
+    # >>> NOVO: escolhe o rateio vigente (ativo, mais recente) <<<
+    def obter_rateio_vigente(cliente_id, usina_id):
+        return Rateio.query.filter(
+            Rateio.cliente_id == cliente_id,
+            Rateio.usina_id == usina_id
+        ).order_by(
+            Rateio.ativo.desc(),          # ativos primeiro
+            Rateio.data_inicio.desc(),    # data mais recente
+            Rateio.id.desc()              # maior id como desempate
+        ).first()
+
     if request.method == 'POST':
         try:
             cliente_id = int(request.form.get('cliente_id', 0))
@@ -1279,10 +1293,11 @@ def faturamento():
                 raise ValueError("Cliente e Usina são obrigatórios")
 
             cliente = Cliente.query.get(cliente_id)
-            rateio = cliente.rateios[0] if cliente and cliente.rateios else None
-            codigo_rateio = rateio.codigo_rateio if rateio else "SEM"
-            
             usina = Usina.query.get(usina_id)
+
+            # >>> usa rateio vigente, não mais cliente.rateios[0]
+            rateio = obter_rateio_vigente(cliente.id, usina.id) if (cliente and usina) else None
+            codigo_rateio = rateio.codigo_rateio if rateio else "SEM"
 
             inicio_leitura = datetime.strptime(request.form['inicio_leitura'], '%Y-%m-%d').date()
             fim_leitura = datetime.strptime(request.form['fim_leitura'], '%Y-%m-%d').date()
@@ -1296,13 +1311,10 @@ def faturamento():
             injetado = limpar_valor(request.form['injetado'])
             energia_injetada_real = limpar_valor(request.form.get('energia_injetada_real', '0'))
             consumo_instantaneo = 0.0
-            
-            # ✅ custo TUSD Fio B: pega do form se a usina usa TUSD Fio B; senão 0
-            custo_tusd_fio_b_form = request.form.get('custo_tusd_fio_b')  # string tipo "322,82" (preenchida via extração)
-            custo_tusd_fio_b = limpar_valor(custo_tusd_fio_b_form) if (usina and usina.tusd_fio_b) else 0.0
-            # print opcional:
-            # print(f"[DEBUG] usina.tusd_fio_b={getattr(usina,'tusd_fio_b',None)}; custo_tusd_fio_b={custo_tusd_fio_b}")
 
+            # ✅ custo TUSD Fio B: pega do form se a usina usa TUSD Fio B; senão 0
+            custo_tusd_fio_b_form = request.form.get('custo_tusd_fio_b')  # string tipo "322,82"
+            custo_tusd_fio_b = limpar_valor(custo_tusd_fio_b_form) if (usina and usina.tusd_fio_b) else 0.0
 
             if cliente and cliente.consumo_instantaneo:
                 consumo_instantaneo = db.session.query(func.sum(Geracao.energia_kwh)).filter(
@@ -1321,8 +1333,10 @@ def faturamento():
             if existente:
                 mensagem = 'Já existe uma fatura para esse cliente neste mês.'
             else:
+                # >>> AQUI: adicionamos usina_id para gravar na fatura <<<
                 fatura = FaturaMensal(
                     cliente_id=cliente_id,
+                    usina_id=usina_id,  # ✅ agora salva a usina na fatura
                     mes_referencia=mes,
                     ano_referencia=ano,
                     inicio_leitura=inicio_leitura,
@@ -1354,11 +1368,10 @@ def faturamento():
                     consumo_base_receita = injetado_total if (cliente and cliente.consumo_instantaneo) else consumo_usina
 
                     # --- RECEITA LÍQUIDA = RECEITA BRUTA - (TUSD Fio B se aplicável) ---
-                    # receita bruta: consumo * tarifa_kwh, com arredondamento de 2 casas
-                    receita_bruta = (Decimal(str(consumo_base_receita)) * Decimal(str(rateio.tarifa_kwh))) \
-                                        .quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                    tarifa_cliente = Decimal(str(rateio.tarifa_kwh))
+                    receita_bruta = (Decimal(str(consumo_base_receita)) * tarifa_cliente) \
+                        .quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
-                    # TUSD Fio B (já vem limpinho do form; se não for TUSD Fio B, é 0.0)
                     tusd_dec = Decimal(str(custo_tusd_fio_b)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
                     # se a usina NÃO é TUSD Fio B, garante 0
@@ -1370,9 +1383,6 @@ def faturamento():
                         receita_liquida = Decimal('0.00')
 
                     receita_valor = float(receita_liquida)
-
-                    # (opcional) debug
-                    # print(f"[DEBUG] receita_bruta={receita_bruta}, tusd={tusd_dec}, receita_liquida={receita_liquida}")
 
                     receita = FinanceiroUsina(
                         usina_id=rateio.usina_id,
@@ -1386,6 +1396,7 @@ def faturamento():
                     )
                     db.session.add(receita)
                     db.session.commit()
+
                 mensagem = 'Fatura cadastrada com sucesso.'
 
         except Exception as e:
@@ -1562,26 +1573,235 @@ def listar_faturas():
     )
 
 @app.route('/editar_fatura/<int:id>', methods=['GET', 'POST'])
+@login_required
 def editar_fatura(id):
+    app.logger.debug(f"[EDITAR_FATURA] Início handler para fatura_id={id}")
     fatura = FaturaMensal.query.get_or_404(id)
     clientes = Cliente.query.all()
     usinas = Usina.query.all()
 
+    def limpar_valor(valor):
+        if valor is None:
+            return 0.0
+        s = str(valor).strip()
+        s = s.replace('R$', '').replace('%', '').strip()
+        if not s:
+            return 0.0
+        if '.' in s and ',' in s:
+            s = s.replace('.', '').replace(',', '.')
+        elif ',' in s:
+            s = s.replace(',', '.')
+        return float(s)
+
+    def obter_rateio_vigente(cliente_id, usina_id):
+        """
+        Escolhe o rateio 'vigente':
+          1) ativo = True primeiro
+          2) data_inicio mais recente
+          3) maior id como desempate
+        (sem usar data_base pra evitar ficar sem rateio)
+        """
+        r = Rateio.query.filter(
+            Rateio.cliente_id == cliente_id,
+            Rateio.usina_id == usina_id
+        ).order_by(
+            Rateio.ativo.desc(),          # ativos primeiro
+            Rateio.data_inicio.desc(),    # mais recente
+            Rateio.id.desc()              # desempate final
+        ).first()
+        app.logger.debug(
+            "[EDITAR_FATURA] obter_rateio_vigente -> %s",
+            f"id={r.id}, tarifa={r.tarifa_kwh}, ativo={r.ativo}"
+            if r else "NENHUM RATEIO ENCONTRADO"
+        )
+        return r
+
     if request.method == 'POST':
-        fatura.mes_referencia = int(request.form['mes'])
-        fatura.ano_referencia = int(request.form['ano'])
-        fatura.inicio_leitura = datetime.strptime(request.form['inicio_leitura'], '%Y-%m-%d').date()
-        fatura.fim_leitura = datetime.strptime(request.form['fim_leitura'], '%Y-%m-%d').date()
-        fatura.tarifa_neoenergia = float(request.form['tarifa_neoenergia'].replace(',', '.'))
-        fatura.icms = float(request.form['icms'].replace(',', '.'))
-        fatura.consumo_total = float(request.form['consumo_total'].replace(',', '.'))
-        fatura.consumo_neoenergia = float(request.form['consumo_neoenergia'].replace(',', '.'))
-        fatura.consumo_usina = float(request.form['consumo_usina'].replace(',', '.'))
-        fatura.saldo_unidade = float(request.form['saldo_unidade'].replace(',', '.'))
-        fatura.injetado = float(request.form['injetado'].replace(',', '.'))
-        fatura.valor_conta_neoenergia = float(request.form['valor_conta_neoenergia'].replace(',', '.'))
-        db.session.commit()
-        return redirect(url_for('listar_faturas'))
+        try:
+            app.logger.debug("[EDITAR_FATURA] POST recebido, form=%s", dict(request.form))
+
+            # ---------- (1) Encontrar receita antiga ----------
+            old_mes = fatura.mes_referencia
+            old_ano = fatura.ano_referencia
+            old_identificador = fatura.identificador
+            old_cliente = fatura.cliente
+
+            receita_antiga = None
+            if old_mes and old_ano and old_identificador and old_cliente:
+                data_base_ant = date(old_ano, old_mes, 1)
+                prox_ant = (data_base_ant + timedelta(days=32)).replace(day=1)
+                ref_mes_ant = prox_ant.month
+                ref_ano_ant = prox_ant.year
+                desc_antiga = f"Fatura {old_identificador} - {old_cliente.nome}"
+
+                receita_antiga = FinanceiroUsina.query.filter(
+                    FinanceiroUsina.tipo == 'receita',
+                    FinanceiroUsina.referencia_mes == ref_mes_ant,
+                    FinanceiroUsina.referencia_ano == ref_ano_ant,
+                    FinanceiroUsina.descricao == desc_antiga
+                ).order_by(FinanceiroUsina.id.desc()).first()
+
+            app.logger.debug(
+                "[EDITAR_FATURA] receita_antiga encontrada? %s",
+                f"id={receita_antiga.id}, valor={receita_antiga.valor}"
+                if receita_antiga else "NÃO"
+            )
+
+            # ---------- (2) Ler novos dados do formulário ----------
+            cliente_id = int(request.form.get('cliente_id', 0))
+            usina_id = int(request.form.get('usina_id', 0))
+            mes = int(request.form.get('mes', 0))
+            ano = int(request.form.get('ano', 0))
+
+            if not cliente_id or not usina_id:
+                raise ValueError("Cliente e Usina são obrigatórios")
+
+            cliente = Cliente.query.get(cliente_id)
+            usina = Usina.query.get(usina_id)
+
+            app.logger.debug(
+                "[EDITAR_FATURA] Cliente=%s, Usina=%s",
+                cliente.nome if cliente else None,
+                usina.nome if usina else None
+            )
+
+            # usa SEMPRE o rateio vigente (com ativo=True se houver)
+            rateio = obter_rateio_vigente(cliente.id, usina.id)
+            codigo_rateio = rateio.codigo_rateio if rateio else "SEM"
+
+            inicio_leitura = datetime.strptime(request.form['inicio_leitura'], '%Y-%m-%d').date()
+            fim_leitura = datetime.strptime(request.form['fim_leitura'], '%Y-%m-%d').date()
+
+            tarifa_neoenergia = limpar_valor(request.form['tarifa_neoenergia'])
+            icms = limpar_valor(request.form['icms'])
+            consumo_total = limpar_valor(request.form['consumo_total'])
+            consumo_neoenergia = limpar_valor(request.form['consumo_neoenergia'])
+            consumo_usina_raw = limpar_valor(request.form['consumo_usina'])
+            saldo_unidade = limpar_valor(request.form['saldo_unidade'])
+            injetado = limpar_valor(request.form['injetado'])
+            energia_injetada_real = limpar_valor(request.form.get('energia_injetada_real', '0'))
+            valor_conta_neoenergia = limpar_valor(request.form['valor_conta_neoenergia'])
+
+            custo_tusd_fio_b_form = request.form.get('custo_tusd_fio_b')
+            custo_tusd_fio_b = limpar_valor(custo_tusd_fio_b_form) if (usina and usina.tusd_fio_b) else 0.0
+
+            # consumo instantâneo
+            consumo_instantaneo = 0.0
+            if cliente and getattr(cliente, 'consumo_instantaneo', False):
+                consumo_instantaneo = db.session.query(
+                    func.sum(Geracao.energia_kwh)
+                ).filter(
+                    Geracao.usina_id == usina_id,
+                    Geracao.data >= inicio_leitura,
+                    Geracao.data <= fim_leitura
+                ).scalar() or 0.0
+
+            injetado_total = consumo_usina_raw + consumo_instantaneo - energia_injetada_real
+            consumo_usina_final = injetado_total if getattr(cliente, 'consumo_instantaneo', False) else consumo_usina_raw
+
+            app.logger.debug(
+                "[EDITAR_FATURA] consumo_usina_raw=%s, consumo_instantaneo=%s, energia_injetada_real=%s, consumo_usina_final=%s",
+                consumo_usina_raw, consumo_instantaneo, energia_injetada_real, consumo_usina_final
+            )
+
+            # ---------- (3) Atualizar Fatura ----------
+            fatura.cliente_id = cliente_id
+            fatura.usina_id = usina_id
+            fatura.mes_referencia = mes
+            fatura.ano_referencia = ano
+            fatura.inicio_leitura = inicio_leitura
+            fatura.fim_leitura = fim_leitura
+            fatura.tarifa_neoenergia = tarifa_neoenergia
+            fatura.icms = icms
+            fatura.consumo_total = consumo_total
+            fatura.consumo_neoenergia = consumo_neoenergia
+            fatura.consumo_usina = consumo_usina_final
+            fatura.saldo_unidade = saldo_unidade
+            fatura.injetado = injetado
+            fatura.valor_conta_neoenergia = valor_conta_neoenergia
+            fatura.energia_injetada_real = energia_injetada_real
+            fatura.custo_tusd_fio_b = custo_tusd_fio_b
+
+            fatura.identificador = f"U{usina_id}: {codigo_rateio}-{mes:02d}-{ano}"
+            app.logger.debug("[EDITAR_FATURA] Novo identificador=%s", fatura.identificador)
+
+            # ---------- (4) Atualizar RECEITA EM financeiro_usina ----------
+            if rateio:
+                tarifa_cliente = Decimal(str(rateio.tarifa_kwh))
+                consumo_dec = Decimal(str(consumo_usina_final))
+
+                valor_bruto = consumo_dec * tarifa_cliente
+                tusd_dec = Decimal(str(custo_tusd_fio_b))
+
+                if usina.tusd_fio_b:
+                    valor_liq = valor_bruto - tusd_dec
+                    if valor_liq < 0:
+                        valor_liq = Decimal("0")
+                else:
+                    valor_liq = valor_bruto
+
+                valor_liq = valor_liq.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                receita_valor = float(valor_liq)
+
+                app.logger.debug(
+                    "[EDITAR_FATURA] Cálculo receita: consumo=%s, tarifa=%s, bruto=%s, TUSD=%s, liquido=%s",
+                    consumo_dec, tarifa_cliente, valor_bruto, tusd_dec, valor_liq
+                )
+
+                # mês subsequente
+                data_base_fat = date(ano, mes, 1)
+                prox = (data_base_fat + timedelta(days=32)).replace(day=1)
+                ref_mes = prox.month
+                ref_ano = prox.year
+
+                descricao_nova = f"Fatura {fatura.identificador} - {cliente.nome}"
+
+                if receita_antiga:
+                    app.logger.debug(
+                        "[EDITAR_FATURA] Atualizando receita_antiga id=%s de valor=%s para valor=%s",
+                        receita_antiga.id, receita_antiga.valor, receita_valor
+                    )
+                    receita_antiga.usina_id = rateio.usina_id
+                    receita_antiga.data = date(ref_ano, ref_mes, 1)
+                    receita_antiga.descricao = descricao_nova
+                    receita_antiga.valor = receita_valor
+                    receita_antiga.referencia_mes = ref_mes
+                    receita_antiga.referencia_ano = ref_ano
+                else:
+                    app.logger.debug(
+                        "[EDITAR_FATURA] Criando nova receita em financeiro_usina com valor=%s",
+                        receita_valor
+                    )
+                    nova = FinanceiroUsina(
+                        usina_id=rateio.usina_id,
+                        categoria_id=None,
+                        data=date(ref_ano, ref_mes, 1),
+                        tipo="receita",
+                        descricao=descricao_nova,
+                        valor=receita_valor,
+                        referencia_mes=ref_mes,
+                        referencia_ano=ref_ano
+                    )
+                    db.session.add(nova)
+
+            else:
+                app.logger.debug("[EDITAR_FATURA] Nenhum rateio encontrado; se houver receita_antiga, será removida")
+                if receita_antiga:
+                    app.logger.debug("[EDITAR_FATURA] Deletando receita_antiga id=%s", receita_antiga.id)
+                    db.session.delete(receita_antiga)
+
+            db.session.commit()
+            app.logger.debug("[EDITAR_FATURA] Commit concluído com sucesso")
+            flash('Fatura e receita associada atualizadas com sucesso.', 'success')
+            return redirect(url_for('listar_faturas'))
+
+        except Exception as e:
+            db.session.rollback()
+            app.logger.error(
+                "[EDITAR_FATURA] EXCEPTION: %s\n%s",
+                e, traceback.format_exc()
+            )
+            flash(f'Erro ao salvar alterações: {str(e)}', 'danger')
 
     return render_template('editar_fatura.html', fatura=fatura, clientes=clientes, usinas=usinas)
 
@@ -1921,25 +2141,33 @@ def excluir_fatura(id):
     fatura = FaturaMensal.query.get_or_404(id)
 
     try:
-        # Buscar a receita associada à fatura
         cliente = fatura.cliente
-        rateio = cliente.rateios[0] if cliente.rateios else None
-        if rateio:
-            descricao_receita = f"Fatura {fatura.identificador} - {cliente.nome}"
-            receita = FinanceiroUsina.query.filter_by(
-                usina_id=rateio.usina_id,
-                tipo='receita',
-                referencia_mes=fatura.mes_referencia,
-                referencia_ano=fatura.ano_referencia,
-                descricao=descricao_receita
-            ).first()
-            if receita:
-                db.session.delete(receita)
 
-        # Excluir a fatura
+        # mês/ano da receita = mês seguinte ao da fatura
+        data_base = date(fatura.ano_referencia, fatura.mes_referencia, 1)
+        proximo_mes = (data_base + timedelta(days=32)).replace(day=1)
+        ref_mes = proximo_mes.month
+        ref_ano = proximo_mes.year
+
+        # mesma descrição usada na criação/edição da receita
+        descricao_receita = f"Fatura {fatura.identificador} - {cliente.nome}"
+
+        # apaga TODAS as receitas vinculadas a essa fatura
+        receitas = FinanceiroUsina.query.filter(
+            FinanceiroUsina.usina_id == fatura.usina_id,
+            FinanceiroUsina.tipo == 'receita',
+            FinanceiroUsina.referencia_mes == ref_mes,
+            FinanceiroUsina.referencia_ano == ref_ano,
+            FinanceiroUsina.descricao == descricao_receita
+        ).all()
+
+        for rec in receitas:
+            db.session.delete(rec)
+
+        # por fim, apaga a fatura
         db.session.delete(fatura)
         db.session.commit()
-        flash('Fatura e receita vinculada excluídas com sucesso.', 'success')
+        flash('Fatura e receitas vinculadas excluídas com sucesso.', 'success')
 
     except Exception as e:
         db.session.rollback()
@@ -3417,9 +3645,8 @@ def listar_e_salvar_geracoes(hoje=None):
 
     usina_kwh_por_dia = {}
 
-    # =========================================================
     # 1) SOLIS - por inversor (SÓ etoday, sem acumular nada)
-    # =========================================================
+    
     try:
         registros_solis = listar_todos_inversores()
     except Exception as e:
@@ -3454,9 +3681,8 @@ def listar_e_salvar_geracoes(hoje=None):
         # Acumula por usina só com esse etoday
         usina_kwh_por_dia[inversor.usina_id] = usina_kwh_por_dia.get(inversor.usina_id, 0.0) + etoday
 
-    # =========================================================
     # 2) SUNGROW - por planta (ps_id vinculado em Usina.sungrow_ps_id)
-    # =========================================================
+    
     try:
         usinas_sungrow_api = listar_usinas_sungrow()  # já retorna today_kwh e total_mwh
     except Exception as e:
@@ -3484,9 +3710,8 @@ def listar_e_salvar_geracoes(hoje=None):
 
         usina_kwh_por_dia[usina.id] = usina_kwh_por_dia.get(usina.id, 0.0) + etoday
 
-    # =========================================================
     # 3) SALVAR TOTAL POR USINA (tabela Geracao)
-    # =========================================================
+    
     for usina_id, soma_etoday in usina_kwh_por_dia.items():
         leitura = Geracao.query.filter_by(usina_id=usina_id, data=hoje).first()
         if leitura:
@@ -6597,11 +6822,10 @@ def receitas_avulsas():
     data_inicio = request.args.get('data_inicio')
     data_fim = request.args.get('data_fim')
 
-    query = FinanceiroUsina.query.filter(
-        FinanceiroUsina.tipo == 'receita',
-        ~func.lower(FinanceiroUsina.descricao).like('fatura%')  # exclui descrições que começam com "fatura"
-    )
+    # 👉 Agora traz TODAS as receitas, inclusive de fatura (sem excluir nada)
+    query = FinanceiroUsina.query.filter(FinanceiroUsina.tipo == 'receita')
 
+    # Filtros opcionais
     if usina_id:
         query = query.filter(FinanceiroUsina.usina_id == usina_id)
     if data_inicio:
@@ -6611,8 +6835,14 @@ def receitas_avulsas():
 
     receitas = query.order_by(FinanceiroUsina.data.desc()).all()
 
-    return render_template('receitas_avulsas.html', receitas=receitas, usinas=usinas,
-                           usina_id=usina_id, data_inicio=data_inicio, data_fim=data_fim)
+    return render_template(
+        'receitas_avulsas.html',
+        receitas=receitas,
+        usinas=usinas,
+        usina_id=usina_id,
+        data_inicio=data_inicio,
+        data_fim=data_fim
+    )
 
 @app.route('/excluir_receita_avulsa/<int:id>', methods=['POST'])
 @login_required

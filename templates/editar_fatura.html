@@ -16,7 +16,7 @@
             <label class="form-label">Usina</label>
             <select name="usina_id" id="usina_id" class="form-select" required>
                 {% for usina in usinas %}
-                    <option value="{{ usina.id }}" {% if usina.id == fatura.cliente.usina_id %}selected{% endif %}>{{ usina.nome }}</option>
+                    <option value="{{ usina.id }}" {% if usina.id == fatura.usina_id %}selected{% endif %}>{{ usina.nome }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -65,36 +65,61 @@
 
         <div class="row">
             <div class="col-md-6 mb-3">
-                <label class="form-label">Consumo Total</label>
+                <label class="form-label">Consumo Total (kWh)</label>
                 <input type="text" class="form-control" name="consumo_total" value="{{ fatura.consumo_total }}" required>
             </div>
             <div class="col-md-6 mb-3">
-                <label class="form-label">Consumo Neoenergia</label>
+                <label class="form-label">Consumo Neoenergia (kWh)</label>
                 <input type="text" class="form-control" name="consumo_neoenergia" value="{{ fatura.consumo_neoenergia }}" required>
             </div>
         </div>
 
         <div class="row">
             <div class="col-md-6 mb-3">
-                <label class="form-label">Consumo da Usina</label>
+                <label class="form-label">Consumo da Usina (kWh)</label>
                 <input type="text" class="form-control" name="consumo_usina" value="{{ fatura.consumo_usina }}" required>
             </div>
             <div class="col-md-6 mb-3">
-                <label class="form-label">Saldo na Unidade</label>
+                <label class="form-label">Saldo na Unidade (kWh)</label>
                 <input type="text" class="form-control" name="saldo_unidade" value="{{ fatura.saldo_unidade }}" required>
             </div>
         </div>
 
         <div class="row">
             <div class="col-md-6 mb-3">
-                <label class="form-label">Energia Injetada</label>
+                <label class="form-label">Energia Injetada (kWh)</label>
                 <input type="text" class="form-control" name="injetado" value="{{ fatura.injetado }}" required>
             </div>
             <div class="col-md-6 mb-3">
-                <label class="form-label">Valor da Conta Neoenergia</label>
+                <label class="form-label">Valor da Conta Neoenergia (R$)</label>
                 <input type="text" class="form-control" name="valor_conta_neoenergia" value="{{ fatura.valor_conta_neoenergia }}" required>
             </div>
         </div>
+
+        <!-- NOVOS CAMPOS -->
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Energia Injetada Real (kWh)</label>
+                <input type="text"
+                       class="form-control"
+                       name="energia_injetada_real"
+                       value="{{ fatura.energia_injetada_real or '' }}">
+                <div class="form-text">
+                    Use o mesmo valor extraído da fatura quando houver campo específico.
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Custo TUSD Fio B (R$)</label>
+                <input type="text"
+                       class="form-control"
+                       name="custo_tusd_fio_b"
+                       value="{{ fatura.custo_tusd_fio_b or '' }}">
+                <div class="form-text">
+                    Preencha apenas se a usina utilizar TUSD Fio B.
+                </div>
+            </div>
+        </div>
+        <!-- FIM NOVOS CAMPOS -->
 
         <div class="d-grid">
             <button class="btn btn-primary btn-lg" type="submit">Salvar Alterações</button>
