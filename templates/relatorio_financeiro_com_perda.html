@@ -234,11 +234,11 @@
         <!-- Seção 2: Faturamento (referência da fatura) -->
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-light">
-                <h5 class="mb-0 text-primary">Faturamento e Créditos</h5>
+                <h5 class="mb-0 text-primary">Créditos</h5>
             </div>
             <div class="card-body">
                 <p class="text-muted small mb-3">
-                    Valores faturados e créditos nas unidades com referência em
+                    Créditos da usina e das unidades referentes a
                     <strong>{{ "%02d"|format(mes) }}/{{ ano }}</strong>.
                 </p>
                 <div class="table-responsive">
@@ -246,7 +246,7 @@
                         <thead class="table-light">
                             <tr>
                                 <th>Competência</th>
-                                <th>Faturado (R$)</th>
+                                <th>Crédito da Usina (kWh)</th>
                                 <th>Crédito nas Unidades (kWh)</th>
                             </tr>
                         </thead>
@@ -254,7 +254,8 @@
                             {% for linha in relatorio %}
                                 <tr>
                                     <td>{{ "%02d"|format(linha.mes) }}/{{ linha.ano }}</td>
-                                    <td>{{ linha.faturado | formato_brasileiro }}</td>
+                                    <!-- 🔹 usa saldo_kwh_usina vindo da Usina -->
+                                    <td>{{ saldo_kwh_usina | formato_kwh }}</td>
                                     <td>{{ linha.saldo_unidade | formato_kwh }}</td>
                                 </tr>
                             {% endfor %}
