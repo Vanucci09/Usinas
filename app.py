@@ -1482,65 +1482,76 @@ def listar_faturas():
     # =========================================================================
     
     BOLETOS_PATH = os.getenv('BOLETOS_PATH', '/data/boletos')
-    total_faturas = Decimal('0') 
-    
+    total_faturas = Decimal('0')    
     # Dicionário para cachear os rateios já buscados, otimizando a consulta.
     rateio_cache = {}
 
     for fatura in faturas:
-        # 1. Checagem de boleto (mantida)
+        # 1) verifica se tem boleto
         nome_arquivo = f"boleto_{fatura.id}.pdf"
         fatura.tem_boleto = os.path.exists(os.path.join(BOLETOS_PATH, nome_arquivo))
 
-        # 2. Determina a data limite para busca do rateio (último dia da competência da fatura)
+        # 2) define a usina base da fatura
+        usina_id_base = fatura.usina_id or (fatura.cliente.usina_id if fatura.cliente else None)
+
+        # 3) data_base = último dia da competência
         try:
             _, last_day = monthrange(fatura.ano_referencia, fatura.mes_referencia)
-            data_base = datetime(fatura.ano_referencia, fatura.mes_referencia, last_day).date()
+            data_base = date(fatura.ano_referencia, fatura.mes_referencia, last_day)
         except ValueError:
             data_base = None
 
         rateio = None
-        if data_base:
-            cache_key = (fatura.cliente_id, fatura.ano_referencia, fatura.mes_referencia)
-            
-            # Tenta buscar do cache
+        if data_base and usina_id_base:
+            cache_key = (fatura.cliente_id, usina_id_base, fatura.ano_referencia, fatura.mes_referencia)
+
             if cache_key in rateio_cache:
                 rateio = rateio_cache[cache_key]
             else:
-                # Busca o rateio correto: vigente para a competência desta fatura
+                # 3a) tenta achar rateio vigente NAQUELA USINA para a competência da fatura
                 rateio = Rateio.query.filter(
                     Rateio.cliente_id == fatura.cliente_id,
+                    Rateio.usina_id == usina_id_base,
                     Rateio.data_inicio <= data_base
                 ).order_by(
-                    Rateio.data_inicio.desc(), 
-                    Rateio.ativo.desc(),       
-                    Rateio.id.desc()           
+                    Rateio.data_inicio.desc(),  # mais recente
+                    Rateio.ativo.desc(),        # ativo primeiro
+                    Rateio.id.desc()            # desempate
                 ).first()
-                # Armazena no cache
+
+                # 3b) fallback: se não achou por data, pega o ativo mais recente para aquela usina
+                if not rateio:
+                    rateio = Rateio.query.filter(
+                        Rateio.cliente_id == fatura.cliente_id,
+                        Rateio.usina_id == usina_id_base
+                    ).order_by(
+                        Rateio.ativo.desc(),
+                        Rateio.data_inicio.desc(),
+                        Rateio.id.desc()
+                    ).first()
+
                 rateio_cache[cache_key] = rateio
 
-        # Anexa o rateio correto à fatura. Se for None, significa que não há rateio válido.
-        fatura.rateio_vigente = rateio 
-            
-        # 3. Definição das variáveis de cálculo com Decimal
-        tarifa_cliente = Decimal(str(fatura.rateio_vigente.tarifa_kwh)) if fatura.rateio_vigente else Decimal('0')
-        consumo_usina = Decimal(str(fatura.consumo_usina or 0)) 
-        
-        # 4. Lógica de Cálculo
+        fatura.rateio_vigente = rateio
+
+        # 4) cálculo do valor_final_boleto
+        tarifa_cliente = Decimal(str(rateio.tarifa_kwh)) if rateio else Decimal('0')
+        consumo_usina = Decimal(str(fatura.consumo_usina or 0))
+
         valor_usina_bruto = consumo_usina * tarifa_cliente
-        
-        usina = getattr(fatura.cliente, 'usina', None) 
-        tusd_ativo = bool(getattr(usina, 'tusd_fio_b', False)) if usina else False
+
+        # TUSD Fio B
+        usina_obj = getattr(fatura.cliente, 'usina', None)
+        tusd_ativo = bool(getattr(usina_obj, 'tusd_fio_b', False)) if usina_obj else False
         custo_tusd = Decimal(str(getattr(fatura, 'custo_tusd_fio_b', 0) or 0))
-        
+
         if tusd_ativo:
             valor_usina_liquido = valor_usina_bruto - custo_tusd
             if valor_usina_liquido < Decimal('0'):
                 valor_usina_liquido = Decimal('0')
         else:
             valor_usina_liquido = valor_usina_bruto
-            
-        # 5. Anexa o resultado final e acumula o total
+
         fatura.valor_final_boleto = valor_usina_liquido
         total_faturas += valor_usina_liquido
         
