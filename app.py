@@ -1521,13 +1521,15 @@ def listar_faturas():
 
                 # 3b) fallback: se não achou por data, pega o ativo mais recente para aquela usina
                 if not rateio:
+                    # 👇 Fallback: competência ANTES do primeiro rateio.
+                    # Nesse caso usamos o rateio MAIS ANTIGO (primeiro contrato),
+                    # ignorando se está ativo ou não.
                     rateio = Rateio.query.filter(
                         Rateio.cliente_id == fatura.cliente_id,
                         Rateio.usina_id == usina_id_base
                     ).order_by(
-                        Rateio.ativo.desc(),
-                        Rateio.data_inicio.desc(),
-                        Rateio.id.desc()
+                        Rateio.data_inicio.asc(),  # mais antigo primeiro
+                        Rateio.id.asc()
                     ).first()
 
                 rateio_cache[cache_key] = rateio
