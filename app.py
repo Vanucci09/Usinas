@@ -1271,7 +1271,6 @@ def faturamento():
                  .strip()
         )
 
-    # >>> NOVO: escolhe o rateio vigente (ativo, mais recente) <<<
     def obter_rateio_vigente(cliente_id, usina_id):
         return Rateio.query.filter(
             Rateio.cliente_id == cliente_id,
@@ -1295,7 +1294,7 @@ def faturamento():
             cliente = Cliente.query.get(cliente_id)
             usina = Usina.query.get(usina_id)
 
-            # >>> usa rateio vigente, não mais cliente.rateios[0]
+            # usa rateio vigente, não mais cliente.rateios[0]
             rateio = obter_rateio_vigente(cliente.id, usina.id) if (cliente and usina) else None
             codigo_rateio = rateio.codigo_rateio if rateio else "SEM"
 
@@ -1333,10 +1332,9 @@ def faturamento():
             if existente:
                 mensagem = 'Já existe uma fatura para esse cliente neste mês.'
             else:
-                # >>> AQUI: adicionamos usina_id para gravar na fatura <<<
                 fatura = FaturaMensal(
                     cliente_id=cliente_id,
-                    usina_id=usina_id,  # ✅ agora salva a usina na fatura
+                    usina_id=usina_id,
                     mes_referencia=mes,
                     ano_referencia=ano,
                     inicio_leitura=inicio_leitura,
@@ -1454,10 +1452,6 @@ def listar_faturas():
     qtd_sem_fatura = None
     clientes_sem_fatura = []
     
-    # =========================================================================
-    # LÓGICA DE CLIENTES SEM FATURA (Depende dos filtros de URL)
-    # =========================================================================
-
     if mes and ano:
         # A Lógica de Clientes sem Fatura (mantida)
         clientes_q = Cliente.query.filter(Cliente.ativo.is_(True))
@@ -1475,11 +1469,6 @@ def listar_faturas():
         sem_fatura_q = clientes_q.filter(~fatura_existe)
         qtd_sem_fatura = sem_fatura_q.count()
         clientes_sem_fatura = sem_fatura_q.order_by(Cliente.nome).all()
-
-    # =========================================================================
-    # CÁLCULO FINANCEIRO E BUSCA DO RATEIO VIGENTE (NOVO BLOCO CORRIGIDO)
-    # Garante o rateio correto para CADA FATURA, usando a competência da fatura.
-    # =========================================================================
     
     BOLETOS_PATH = os.getenv('BOLETOS_PATH', '/data/boletos')
     total_faturas = Decimal('0')    
@@ -1519,9 +1508,8 @@ def listar_faturas():
                     Rateio.id.desc()            # desempate
                 ).first()
 
-                # 3b) fallback: se não achou por data, pega o ativo mais recente para aquela usina
                 if not rateio:
-                    # 👇 Fallback: competência ANTES do primeiro rateio.
+                    # Fallback: competência ANTES do primeiro rateio.
                     # Nesse caso usamos o rateio MAIS ANTIGO (primeiro contrato),
                     # ignorando se está ativo ou não.
                     rateio = Rateio.query.filter(
@@ -4413,7 +4401,7 @@ def relatorio_consolidado():
     )
 
     for u in usinas:
-        # — receitas pagas no mês/ano (data_pagamento)
+        # --- receitas pagas no mês/ano (data_pagamento) ---
         receitas = db.session.query(
             func.coalesce(
                 func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)),
@@ -4427,7 +4415,7 @@ def relatorio_consolidado():
             extract('month', FinanceiroUsina.data_pagamento) == mes
         ).scalar()
 
-        # — despesas pagas no mês/ano (data_pagamento)
+        # --- despesas pagas no mês/ano (data_pagamento) ---
         despesas = db.session.query(
             func.coalesce(func.sum(FinanceiroUsina.valor), 0)
         ).filter(
@@ -4438,9 +4426,7 @@ def relatorio_consolidado():
             extract('month', FinanceiroUsina.data_pagamento) == mes
         ).scalar()
 
-        saldo = Decimal(receitas) - Decimal(despesas)
-
-        # — acumulado de receitas até o mês (data_pagamento)
+        # --- acumulado de receitas até o mês (data_pagamento) ---
         receitas_acum = db.session.query(
             func.coalesce(
                 func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)),
@@ -4453,7 +4439,7 @@ def relatorio_consolidado():
             cond_dp_acum
         ).scalar()
 
-        # — acumulado de despesas até o mês (data_pagamento)
+        # --- acumulado de despesas até o mês (data_pagamento) ---
         despesas_acum = db.session.query(
             func.coalesce(func.sum(FinanceiroUsina.valor), 0)
         ).filter(
@@ -4463,7 +4449,12 @@ def relatorio_consolidado():
             cond_dp_acum
         ).scalar()
 
+        # saldo acumulado (já considera meses anteriores + mês atual)
         saldo_acumulado = Decimal(receitas_acum) - Decimal(despesas_acum)
+
+        # saldo do mês PASSANDO pelo saldo anterior
+        # (na prática, é o saldo final do mês selecionado)
+        saldo = saldo_acumulado
 
         resultado.append({
             'usina_id': u.id,
