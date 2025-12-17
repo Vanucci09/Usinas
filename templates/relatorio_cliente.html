@@ -107,17 +107,35 @@
             <tfoot>
                 {% set diffTot = (totais.diferenca_kwh or 0) %}
                 <tr class="table-secondary fw-semibold">
-                    <td colspan="2" class="text-end">Totais:</td>
+                    <td colspan="3" class="text-end">Totais:</td>
+
+                    {# kWh/mês Injetado #}
                     <td class="text-end">{{ (totais.kwh_contratado or 0) | formato_kwh }}</td>
-                    <td class="text-end">{{ (totais.consumo_total  or 0) | formato_kwh }}</td>
-                    <td class="text-end">—</td> {# média 6M não soma #}
+
+                    {# kWh/mês Consumido #}
+                    <td class="text-end">{{ (totais.consumo_total or 0) | formato_kwh }}</td>
+
+                    {# Média 6M #}
+                    <td class="text-end">—</td>
+
+                    {# Diferença kWh #}
                     <td class="text-end {% if diffTot > 0 %}text-success{% elif diffTot < 0 %}text-danger{% endif %}">
                         {{ diffTot | formato_kwh }}
                     </td>
-                    <td class="text-end">—</td> {# % diferença não soma #}
+
+                    {# Diferença % #}
+                    <td class="text-end">—</td>
+
+                    {# Economia #}
                     <td class="text-end text-nowrap">{{ (totais.economia or 0) | formato_brasileiro }}</td>
+
+                    {# Economia Acumulada #}
                     <td class="text-end text-nowrap">{{ (totais.economia_acumulada or 0) | formato_brasileiro }}</td>
+
+                    {# Saldo #}
                     <td class="text-end">{{ (totais.saldo_unidade or 0) | formato_kwh }}</td>
+
+                    {# Meses cobertos #}
                     <td class="text-end">—</td>
                 </tr>
             </tfoot>
