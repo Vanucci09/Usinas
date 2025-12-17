@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="container mt-4">
-    <h2 class="mb-4 text-primary">Relatório Consolidado - {{ "%02d"|format(mes) }}/{{ ano }}</h2>
+    <h2 class="mb-4 text-primary">Conciliação Bancária - {{ "%02d"|format(mes) }}/{{ ano }}</h2>
 
     <form class="row g-3 mb-4" method="get">
         <div class="col-md-2">
@@ -31,7 +31,6 @@
                 <th>Total Receitas (R$)</th>
                 <th>Total Despesas (R$)</th>
                 <th>Saldo Mês (R$)</th>
-                <th>Saldo Acumulado (R$)</th>
             </tr>
         </thead>
         <tbody>
@@ -48,13 +47,6 @@
                             <span class="text-danger">{{ r.saldo | formato_brasileiro }}</span>
                         {% endif %}
                     </a>
-                </td>
-                <td>
-                    {% if r.saldo_acumulado >= 0 %}
-                        <span class="text-success">{{ r.saldo_acumulado | formato_brasileiro }}</span>
-                    {% else %}
-                        <span class="text-danger">{{ r.saldo_acumulado | formato_brasileiro }}</span>
-                    {% endif %}
                 </td>
             </tr>
             {% endfor %}

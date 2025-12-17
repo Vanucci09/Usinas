@@ -4649,22 +4649,10 @@ def relatorio_cliente():
 
     d1_mes, dF_mes = periodo_mes(ano, mes)
 
-    # ---------- kWh injetado por usina no mês/ano ----------
-    sub_injecao = (
-        db.session.query(
-            InjecaoMensalUsina.usina_id.label('usina_id'),
-            func.coalesce(InjecaoMensalUsina.kwh_injetado, 0.0).label('kwh_injetado')
-        )
-        .filter(
-            InjecaoMensalUsina.mes == mes,
-            InjecaoMensalUsina.ano == ano
-        )
-        .subquery()
-    )
-
     # ---------- Base por cliente/usina (consumo e saldo no mês) ----------
     consumo_sum_expr = func.sum(FaturaMensal.consumo_usina)
     saldo_unidade_sum = func.sum(FaturaMensal.saldo_unidade)
+    injetado_sum_expr = func.sum(FaturaMensal.injetado)
 
     query = (
         db.session.query(
@@ -4677,11 +4665,10 @@ def relatorio_cliente():
             FaturaMensal.ano_referencia,
             consumo_sum_expr.label("consumo_total"),
             saldo_unidade_sum.label("saldo_unidade"),
-            sub_injecao.c.kwh_injetado.label("kwh_injetado"),
+            injetado_sum_expr.label("kwh_injetado"),
         )
         .join(Cliente, FaturaMensal.cliente_id == Cliente.id)
         .join(Usina, Cliente.usina_id == Usina.id)
-        .join(sub_injecao, sub_injecao.c.usina_id == Usina.id, isouter=True)
         .filter(
             FaturaMensal.mes_referencia == mes,
             FaturaMensal.ano_referencia == ano
@@ -4697,8 +4684,8 @@ def relatorio_cliente():
         query.group_by(
             Cliente.id, Cliente.nome,
             Usina.id, Usina.nome,
-            FaturaMensal.mes_referencia, FaturaMensal.ano_referencia,
-            sub_injecao.c.kwh_injetado,
+            FaturaMensal.mes_referencia,
+            FaturaMensal.ano_referencia
         )
         .order_by(Cliente.nome)
     )
@@ -4759,8 +4746,7 @@ def relatorio_cliente():
         pct_mes, _tarifa_mes = rateio_contratado_para_mes(cid, uid, d1_mes, dF_mes)
 
         # Base do contratado: injeção do mês
-        kwh_base = float(r.kwh_injetado or 0.0)
-        kwh_contratado = (pct_mes / 100.0) * kwh_base
+        kwh_contratado = float(r.kwh_injetado or 0.0)
 
         consumo_total = float(r.consumo_total or 0.0)
         diferenca_kwh = kwh_contratado - consumo_total
