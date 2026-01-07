@@ -42,13 +42,20 @@
 .kpi-value { font-size: 1.28rem; font-weight: 700; }
 .kpi-sub { font-size: 0.82rem; }
 
-/* Logo da Usina */
+/* Logo da Usina - Versão Ampliada */
 .usina-logo {
-    max-height: 62px;
-    max-width: 180px;
+    max-height: 100px; /* Aumentado de 62px para 100px */
+    max-width: 250px;  /* Aumentado de 180px para 250px */
     object-fit: contain;
+    transition: transform 0.3s ease; /* Efeito suave ao passar o mouse */
 }
-@media print { .usina-logo { max-height: 58px !important; } }
+
+@media print { 
+    .usina-logo { 
+        max-height: 90px !important; 
+        max-width: 220px !important;
+    } 
+}
 
 /* Alinhamento geral das tabelas */
 .table th, .table td { vertical-align: middle !important; }
@@ -57,27 +64,27 @@
 <div class="container mt-4">
 
     <!-- Cabeçalho com logo da usina -->
-    <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between mb-3 gap-3">
-        <div class="d-flex align-items-center gap-3">
-            {% if logo_usina_data_uri %}
-                <img src="{{ logo_usina_data_uri }}"
-                     alt="Logo da Usina"
-                     class="usina-logo">
+    <div class="d-flex flex-column flex-md-row align-items-center justify-content-between mb-4 pb-3 border-bottom gap-4">
+        <div class="d-flex align-items-center gap-4"> {% if logo_usina_data_uri %}
+                <div class="bg-white p-2 rounded shadow-sm border"> <img src="{{ logo_usina_data_uri }}"
+                        alt="Logo da Usina"
+                        class="usina-logo">
+                </div>
             {% endif %}
 
             <div>
-                <h2 class="mb-1 text-primary fw-semibold">
-                    Relatório Financeiro do Consórcio – {{ usina_selecionada.nome }}
+                <h2 class="mb-1 text-primary fw-bold"> Relatório Financeiro do Consórcio
                 </h2>
+                <h4 class="text-secondary mb-1">{{ usina_selecionada.nome }}</h4>
                 <p class="text-muted mb-0">
                     Competência do faturamento:
-                    <strong>{{ "%02d"|format(mes) }}/{{ ano }}</strong>
+                    <span class="badge bg-primary fs-6">{{ "%02d"|format(mes) }}/{{ ano }}</span>
                 </p>
             </div>
         </div>
 
-        <div id="print-btn" class="mt-2 mt-md-0">
-            <button class="btn btn-outline-secondary" onclick="window.print()">🖨️ Imprimir</button>
+        <div id="print-btn">
+            <button class="btn btn-lg btn-outline-secondary" onclick="window.print()">🖨️ Imprimir Relatório</button>
         </div>
     </div>
 
@@ -390,6 +397,24 @@
                             {% endfor %}
                         </tbody>
                     </table>
+                    {% set mes_ref = mes - 2 %}
+                    {% set ano_ref = ano %}
+
+                    {% if mes_ref <= 0 %}
+                        {% set mes_ref = mes_ref + 12 %}
+                        {% set ano_ref = ano - 1 %}
+                    {% endif %}
+
+                    <div class="alert alert-secondary mt-3">
+                        <strong>Nota técnica:</strong>
+                        No setor elétrico, o faturamento ocorre com defasagem.
+                        Por isso, os valores financeiros de
+                        <strong>{{ "%02d"|format(mes) }}/{{ ano }}</strong>
+                        utilizam como referência a geração efetiva de
+                        <strong>{{ "%02d"|format(mes_ref) }}/{{ ano_ref }}</strong>,
+                        correspondente a <strong>dois meses anteriores</strong>
+                        à competência do faturamento.
+                    </div>
                 </div>
 
             </div>

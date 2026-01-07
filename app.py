@@ -7169,16 +7169,9 @@ def relatorio_financeiro_com_perda():
         usina_selecionada = usinas[0]
         usina_id = usina_selecionada.id
 
-    # referência da geração = 2 meses antes da competência de faturamento
-    if mes > 2:
-        mes_ref_geracao = mes - 2
-        ano_ref_geracao = ano
-    elif mes == 2:
-        mes_ref_geracao = 12
-        ano_ref_geracao = ano - 1
-    else:  # mes == 1
-        mes_ref_geracao = 11
-        ano_ref_geracao = ano - 1
+    # referência da geração = mês/ano selecionado
+    mes_ref_geracao = mes
+    ano_ref_geracao = ano
 
     # janelas de data (competência de faturamento) pelo data_pagamento
     janela_inicio = datetime(ano, mes, 1)
