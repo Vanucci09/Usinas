@@ -1948,8 +1948,8 @@ def relatorio_fatura(fatura_id):
         nome_arquivo = (usina.logo_url or "").strip()
 
         logos_base = os.path.abspath(os.getenv('LOGOS_PATH', os.path.join('static', 'logos')))
-        path_env   = os.path.join(logos_base, nome_arquivo)
-        path_stat  = os.path.abspath(os.path.join('static', 'logos', nome_arquivo))
+        path_env = os.path.join(logos_base, nome_arquivo)
+        path_stat = os.path.abspath(os.path.join('static', 'logos', nome_arquivo))
 
         chosen = None
         if os.path.exists(path_env):
@@ -7189,9 +7189,7 @@ def relatorio_financeiro_com_perda():
 
     ano_inicio = datetime(ano, 1, 1)
 
-    # =========================
     # Série do líquido mês a mês no ano selecionado (gráfico)
-    # =========================
     liquidos_mensais = []
     usina_ref = usina_selecionada
 
@@ -7231,9 +7229,7 @@ def relatorio_financeiro_com_perda():
         liquido_m = receita_m - despesa_m
         liquidos_mensais.append({'mes': m, 'liquido': _safe_round(liquido_m, 2)})
 
-    # =========================
-    # DADOS DO MÊS SELECIONADO (tabelas)
-    # =========================
+    # DADOS DO MÊS SELECIONADO
     dados = []
     usinas_filtradas = [usina_selecionada]
 
@@ -7279,7 +7275,6 @@ def relatorio_financeiro_com_perda():
         saldo_unidade = _safe_float(saldo_unidade)
 
         # perda
-        # (mantive seu critério: só calcula se houver injeção > 0)
         perda = (geracao - injecao) if injecao > 0 else 0.0
         perda = _safe_float(perda)
 
@@ -7513,7 +7508,7 @@ def relatorio_financeiro_com_perda():
         performance_pct = (geracao_ref / previsao_ref * 100.0) if previsao_ref > 0 else 0.0
         performance_pct = _safe_float(performance_pct)
 
-        # ===== ACUMULADO TOTAL (todos os períodos) =====
+        # ACUMULADO TOTAL
         receita_total_geral = db.session.query(
             func.coalesce(func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)), 0.0)
         ).filter(
@@ -7562,12 +7557,24 @@ def relatorio_financeiro_com_perda():
     saldo_kwh_usina = getattr(usina_selecionada, 'saldo_kwh', 0) if usina_selecionada else 0
     saldo_kwh_usina = _safe_float(saldo_kwh_usina)
     
-    LOGOS_PATH = os.getenv("LOGOS_PATH", "/data/logos")
+    logo_usina_data_uri = None
+    if usina.logo_url:
+        nome_arquivo = (usina.logo_url or "").strip()
 
-    logo_usina_path = None
-    if usina_selecionada and usina_selecionada.logo_url:
-        logo_usina_path = f"{LOGOS_PATH}/{usina_selecionada.logo_url}"
+        logos_base = os.path.abspath(os.getenv('LOGOS_PATH', os.path.join('static', 'logos')))
+        path_env = os.path.join(logos_base, nome_arquivo)
+        path_stat = os.path.abspath(os.path.join('static', 'logos', nome_arquivo))
 
+        chosen = None
+        if os.path.exists(path_env):
+            chosen = path_env
+        elif os.path.exists(path_stat):
+            chosen = path_stat
+
+        if chosen:
+            ext = os.path.splitext(chosen)[1].lower()
+            mime = "png" if ext == ".png" else "jpeg"
+            logo_usina_data_uri = f"data:image/{mime};base64,{imagem_para_base64(chosen)}"
 
     return render_template(
         'relatorio_financeiro_com_perda.html',
@@ -7585,7 +7592,7 @@ def relatorio_financeiro_com_perda():
         saldo_kwh_usina=saldo_kwh_usina,
         acumulado_ano=acumulado_ano,
         acumulado_total=acumulado_total,
-        logo_usina_path=logo_usina_path
+        logo_usina_data_uri=logo_usina_data_uri
     )
     
 @app.route("/injecoes_mensais")

@@ -48,9 +48,10 @@
     max-width: 180px;
     object-fit: contain;
 }
-@media print {
-    .usina-logo { max-height: 58px !important; }
-}
+@media print { .usina-logo { max-height: 58px !important; } }
+
+/* Alinhamento geral das tabelas */
+.table th, .table td { vertical-align: middle !important; }
 </style>
 
 <div class="container mt-4">
@@ -58,12 +59,15 @@
     <!-- Cabeçalho com logo da usina -->
     <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between mb-3 gap-3">
         <div class="d-flex align-items-center gap-3">
-            {% if logo_usina_path %}
-                <img src="{{ logo_usina_path }}" alt="Logo da Usina" class="usina-logo">
+            {% if logo_usina_data_uri %}
+                <img src="{{ logo_usina_data_uri }}"
+                     alt="Logo da Usina"
+                     class="usina-logo">
             {% endif %}
+
             <div>
                 <h2 class="mb-1 text-primary fw-semibold">
-                    Relatório Financeiro do Consórcio – {{ usina_selecionada.nome if usina_selecionada else 'Usina' }}
+                    Relatório Financeiro do Consórcio – {{ usina_selecionada.nome }}
                 </h2>
                 <p class="text-muted mb-0">
                     Competência do faturamento:
@@ -108,9 +112,6 @@
                         <div class="kpi-value {{ e_class }}">
                             {{ ('%.2f'|format(k.ebitda_pct)).replace('.', ',') }}%
                         </div>
-                        <div class="kpi-sub text-muted mt-1">
-                            (Receita − Despesa) ÷ Receita
-                        </div>
                     </div>
                 </div>
             </div>
@@ -130,9 +131,6 @@
                         <div class="kpi-sub text-muted mt-1">
                             Previsto {{ (k.previsao_ref or 0) | formato_kwh }}
                             • Real {{ (k.geracao_ref or 0) | formato_kwh }}
-                        </div>
-                        <div class="kpi-sub text-muted mt-1">
-                            Referência: {{ "%02d"|format(mes_ref_geracao) }}/{{ ano_ref_geracao }}
                         </div>
                     </div>
                 </div>
@@ -166,26 +164,10 @@
                     <div class="card-body">
                         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-2">
                             <div class="kpi-label text-muted">Geração de Caixa ao mês em {{ ano }}</div>
-                            <div class="small text-muted mt-2 mt-md-0">
-                                <strong>Nota:</strong>
-                                Resultado Ebtida é o resultado da usina descontado as despesas em percentual,
-                                valor total das despesas dividido pelo faturado total em %.
-                            </div>
                         </div>
 
                         <div style="height: 180px;">
                             <canvas id="liquidoMensalChart"></canvas>
-                        </div>
-
-                        <div class="mt-2 small text-muted">
-                            <strong>EBITDA (%):</strong>
-                            {{ ('%.2f'|format(k.ebitda_pct)).replace('.', ',') }}%
-                            &nbsp;•&nbsp;
-                            <strong>Performance (%):</strong>
-                            {{ ('%.2f'|format(k.performance_pct or 0)).replace('.', ',') }}%
-                            <span class="text-muted">
-                                (Ref. {{ "%02d"|format(mes_ref_geracao) }}/{{ ano_ref_geracao }})
-                            </span>
                         </div>
                     </div>
                 </div>
@@ -200,7 +182,7 @@
             <strong>Referências:</strong>
             Geração apurada em <strong>{{ "%02d"|format(mes_ref_geracao) }}/{{ ano_ref_geracao }}</strong>
             &nbsp;•&nbsp;
-            Injeção, consumo e faturamento referentes a <strong>{{ "%02d"|format(mes) }}/{{ ano }}</strong>
+            Injeção e faturamento referentes a <strong>{{ "%02d"|format(mes) }}/{{ ano }}</strong>
         </small>
     </div>
 
@@ -252,7 +234,7 @@
         <!-- Seção 1 -->
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-light">
-                <h5 class="mb-0 text-success">Geração, Injeção, Perda e Consumo</h5>
+                <h5 class="mb-0 text-success">Geração, Injeção e Perda</h5>
             </div>
             <div class="card-body">
                 <div class="table-responsive">
@@ -264,8 +246,6 @@
                                 <th>Injeção (kWh)</th>
                                 <th>Perda (kWh)</th>
                                 <th>Perda (%)</th>
-                                <th>Consumo (kWh)</th>
-                                <th>Crédito nas Unidades (kWh)</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -285,8 +265,6 @@
                                     <td class="{% if perc > 7 %}text-danger fw-semibold{% else %}text-muted{% endif %}">
                                         {{ ('%.2f'|format(perc)).replace('.', ',') }}%
                                     </td>
-                                    <td>{{ linha.consumo | formato_kwh }}</td>
-                                    <td>{{ linha.saldo_unidade | formato_kwh }}</td>
                                 </tr>
                             {% endfor %}
 
@@ -303,8 +281,6 @@
                                     <td class="{% if perc_ano > 7 %}text-danger fw-semibold{% else %}text-muted{% endif %}">
                                         <strong>{{ ('%.2f'|format(perc_ano)).replace('.', ',') }}%</strong>
                                     </td>
-                                    <td><strong>{{ acumulado_ano.consumo | formato_kwh }}</strong></td>
-                                    <td><strong>{{ acumulado_ano.saldo_unidade | formato_kwh }}</strong></td>
                                 </tr>
                             {% endif %}
 
@@ -321,8 +297,6 @@
                                     <td class="{% if perc_total > 7 %}text-danger fw-semibold{% else %}text-muted{% endif %}">
                                         <strong>{{ ('%.2f'|format(perc_total)).replace('.', ',') }}%</strong>
                                     </td>
-                                    <td><strong>{{ acumulado_total.consumo | formato_kwh }}</strong></td>
-                                    <td><strong>{{ acumulado_total.saldo_unidade | formato_kwh }}</strong></td>
                                 </tr>
                             {% endif %}
                         </tbody>
@@ -418,11 +392,6 @@
                     </table>
                 </div>
 
-                <p class="text-muted small mb-0">
-                    <strong>Observação:</strong> O acumulado considera lançamentos de
-                    <code>data_pagamento</code> entre 01/01/{{ ano }} e o fim de
-                    {{ "%02d"|format(mes) }}/{{ ano }}.
-                </p>
             </div>
         </div>
 
