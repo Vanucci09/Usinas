@@ -7327,13 +7327,14 @@ def relatorio_financeiro_com_perda():
         "saldo_unidade": _safe_round(saldo_unidade_posicao, 2),
     }
 
-    # ACUMULADO TOTAL
-    # 1) GERAÇÃO: total sem o mês atual do calendário
-    # 2) INJEÇÃO: total + crédito da usina (saldo_kwh)
+    # 1) Definir os marcos temporais para exclusão (Mês Atual e Mês Anterior)
     hoje = date.today()
-    inicio_mes_atual = datetime(hoje.year, hoje.month, 1)
-    fim_mes_atual = inicio_mes_atual + relativedelta(months=1)
+    # Início do mês anterior (ex: se hoje é 08/01/2026, inicio_exclusao é 01/12/2025)
+    inicio_exclusao = datetime(hoje.year, hoje.month, 1) - relativedelta(months=1)
+    # Fim do mês atual (limite superior para a query)
+    fim_mes_atual = datetime(hoje.year, hoje.month, 1) + relativedelta(months=1)
 
+    # 2) GERAÇÃO TOTAL BRUTA (Histórico completo)
     geracao_total_bruta = db.session.query(
         func.coalesce(func.sum(Geracao.energia_kwh), 0.0)
     ).filter(
@@ -7341,16 +7342,19 @@ def relatorio_financeiro_com_perda():
     ).scalar()
     geracao_total_bruta = _safe_float(geracao_total_bruta)
 
-    geracao_mes_atual = db.session.query(
+    # 3) GERAÇÃO DOS ÚLTIMOS 2 MESES (Atual + Anterior)
+    # Somamos o que houve de geração entre o início do mês passado e o fim deste mês
+    geracao_periodo_exclusao = db.session.query(
         func.coalesce(func.sum(Geracao.energia_kwh), 0.0)
     ).filter(
         Geracao.usina_id == usina_selecionada.id,
-        Geracao.data >= inicio_mes_atual,
+        Geracao.data >= inicio_exclusao,
         Geracao.data < fim_mes_atual
     ).scalar()
-    geracao_mes_atual = _safe_float(geracao_mes_atual)
+    geracao_periodo_exclusao = _safe_float(geracao_periodo_exclusao)
 
-    geracao_total = _safe_float(geracao_total_bruta - geracao_mes_atual)
+    # 4) GERAÇÃO TOTAL FINAL (Bruto - Período de exclusão)
+    geracao_total = _safe_float(geracao_total_bruta - geracao_periodo_exclusao)
 
     injecao_total = db.session.query(
         func.coalesce(func.sum(InjecaoMensalUsina.kwh_injetado), 0.0)
