@@ -7158,7 +7158,8 @@ def relatorio_financeiro_com_perda():
             liquidos_mensais=[],
             saldo_kwh_usina=0,
             acumulado_ano=None,
-            acumulado_total=None
+            acumulado_total=None,
+            logo_usina_data_uri=None
         )
 
     if not usina_id:
@@ -7169,7 +7170,7 @@ def relatorio_financeiro_com_perda():
         usina_selecionada = usinas[0]
         usina_id = usina_selecionada.id
 
-    # referência da geração = mês/ano selecionado
+    # REFERÊNCIA DA GERAÇÃO = MÊS/ANO FILTRADO (SEM DEFASAGEM)
     mes_ref_geracao = mes
     ano_ref_geracao = ano
 
@@ -7181,7 +7182,7 @@ def relatorio_financeiro_com_perda():
     mes_anterior_fim_exclusivo = janela_inicio
 
     ano_inicio = datetime(ano, 1, 1)
-
+    
     # Série do líquido mês a mês no ano selecionado (gráfico)
     liquidos_mensais = []
     usina_ref = usina_selecionada
@@ -7190,7 +7191,6 @@ def relatorio_financeiro_com_perda():
         inicio_m = datetime(ano, m, 1)
         fim_m = inicio_m + relativedelta(months=1)
 
-        # RECEITA (valor + juros)
         receita_m = db.session.query(
             func.coalesce(
                 func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)),
@@ -7204,7 +7204,6 @@ def relatorio_financeiro_com_perda():
         ).scalar()
         receita_m = _safe_float(receita_m)
 
-        # DESPESA (excluindo categorias 7, 12, 14)
         despesa_m = db.session.query(
             func.coalesce(func.sum(FinanceiroUsina.valor), 0.0)
         ).filter(
@@ -7227,7 +7226,6 @@ def relatorio_financeiro_com_perda():
     usinas_filtradas = [usina_selecionada]
 
     for usina in usinas_filtradas:
-        # geração (mês referência)
         geracao = db.session.query(
             func.coalesce(func.sum(Geracao.energia_kwh), 0.0)
         ).filter(
@@ -7237,7 +7235,6 @@ def relatorio_financeiro_com_perda():
         ).scalar()
         geracao = _safe_float(geracao)
 
-        # injeção (competência faturamento)
         injecao = db.session.query(
             func.coalesce(func.sum(InjecaoMensalUsina.kwh_injetado), 0.0)
         ).filter(
@@ -7247,7 +7244,6 @@ def relatorio_financeiro_com_perda():
         ).scalar()
         injecao = _safe_float(injecao)
 
-        # consumo (competência faturamento)
         consumo = db.session.query(
             func.coalesce(func.sum(FaturaMensal.consumo_usina), 0.0)
         ).join(Cliente, Cliente.id == FaturaMensal.cliente_id).filter(
@@ -7257,7 +7253,6 @@ def relatorio_financeiro_com_perda():
         ).scalar()
         consumo = _safe_float(consumo)
 
-        # saldo unidade (posição na competência faturamento)
         saldo_unidade = db.session.query(
             func.coalesce(func.sum(FaturaMensal.saldo_unidade), 0.0)
         ).join(Cliente, Cliente.id == FaturaMensal.cliente_id).filter(
@@ -7267,7 +7262,6 @@ def relatorio_financeiro_com_perda():
         ).scalar()
         saldo_unidade = _safe_float(saldo_unidade)
 
-        # perda
         perda = (geracao - injecao) if injecao > 0 else 0.0
         perda = _safe_float(perda)
 
@@ -7282,7 +7276,7 @@ def relatorio_financeiro_com_perda():
             'saldo_unidade': _safe_round(saldo_unidade, 2),
         })
 
-    # (A) GERAÇÃO: ano_ref_geracao até mes_ref_geracao
+    # ACUMULADO ANO (geração/injeção/consumo até o mês filtrado)
     inicio_ger_ano = datetime(ano_ref_geracao, 1, 1)
     fim_ger_ate_mes = datetime(ano_ref_geracao, mes_ref_geracao, 1) + relativedelta(months=1)
 
@@ -7295,14 +7289,6 @@ def relatorio_financeiro_com_perda():
     ).scalar()
     geracao_ano = _safe_float(geracao_ano)
 
-    geracao_total = db.session.query(
-        func.coalesce(func.sum(Geracao.energia_kwh), 0.0)
-    ).filter(
-        Geracao.usina_id == usina_selecionada.id
-    ).scalar()
-    geracao_total = _safe_float(geracao_total)
-
-    # (B) INJEÇÃO: acumulado no ano (ano/mes do faturamento)
     injecao_ano = db.session.query(
         func.coalesce(func.sum(InjecaoMensalUsina.kwh_injetado), 0.0)
     ).filter(
@@ -7312,14 +7298,6 @@ def relatorio_financeiro_com_perda():
     ).scalar()
     injecao_ano = _safe_float(injecao_ano)
 
-    injecao_total = db.session.query(
-        func.coalesce(func.sum(InjecaoMensalUsina.kwh_injetado), 0.0)
-    ).filter(
-        InjecaoMensalUsina.usina_id == usina_selecionada.id
-    ).scalar()
-    injecao_total = _safe_float(injecao_total)
-
-    # (C) CONSUMO: acumulado no ano e total (somando)
     consumo_ano = db.session.query(
         func.coalesce(func.sum(FaturaMensal.consumo_usina), 0.0)
     ).join(Cliente, Cliente.id == FaturaMensal.cliente_id).filter(
@@ -7329,14 +7307,6 @@ def relatorio_financeiro_com_perda():
     ).scalar()
     consumo_ano = _safe_float(consumo_ano)
 
-    consumo_total = db.session.query(
-        func.coalesce(func.sum(FaturaMensal.consumo_usina), 0.0)
-    ).join(Cliente, Cliente.id == FaturaMensal.cliente_id).filter(
-        Cliente.usina_id == usina_selecionada.id
-    ).scalar()
-    consumo_total = _safe_float(consumo_total)
-
-    # (D) SALDO_UNIDADE: POSIÇÃO na competência selecionada (mes/ano)
     saldo_unidade_posicao = db.session.query(
         func.coalesce(func.sum(FaturaMensal.saldo_unidade), 0.0)
     ).join(Cliente, Cliente.id == FaturaMensal.cliente_id).filter(
@@ -7346,35 +7316,77 @@ def relatorio_financeiro_com_perda():
     ).scalar()
     saldo_unidade_posicao = _safe_float(saldo_unidade_posicao)
 
-    saldo_unidade_ano = saldo_unidade_posicao
-    saldo_unidade_total = saldo_unidade_posicao
-
-    # (E) PERDA (acumulada): segue seu critério (só calcula se houver injeção)
     perda_ano = (geracao_ano - injecao_ano) if injecao_ano > 0 else 0.0
-    perda_total = (geracao_total - injecao_total) if injecao_total > 0 else 0.0
     perda_ano = _safe_float(perda_ano)
-    perda_total = _safe_float(perda_total)
 
     acumulado_ano = {
         "geracao": _safe_round(geracao_ano, 2),
         "injecao": _safe_round(injecao_ano, 2),
         "perda": _safe_round(perda_ano, 2),
         "consumo": _safe_round(consumo_ano, 2),
-        "saldo_unidade": _safe_round(saldo_unidade_ano, 2),
+        "saldo_unidade": _safe_round(saldo_unidade_posicao, 2),
     }
+
+    # ACUMULADO TOTAL
+    # 1) GERAÇÃO: total sem o mês atual do calendário
+    # 2) INJEÇÃO: total + crédito da usina (saldo_kwh)
+    hoje = date.today()
+    inicio_mes_atual = datetime(hoje.year, hoje.month, 1)
+    fim_mes_atual = inicio_mes_atual + relativedelta(months=1)
+
+    geracao_total_bruta = db.session.query(
+        func.coalesce(func.sum(Geracao.energia_kwh), 0.0)
+    ).filter(
+        Geracao.usina_id == usina_selecionada.id
+    ).scalar()
+    geracao_total_bruta = _safe_float(geracao_total_bruta)
+
+    geracao_mes_atual = db.session.query(
+        func.coalesce(func.sum(Geracao.energia_kwh), 0.0)
+    ).filter(
+        Geracao.usina_id == usina_selecionada.id,
+        Geracao.data >= inicio_mes_atual,
+        Geracao.data < fim_mes_atual
+    ).scalar()
+    geracao_mes_atual = _safe_float(geracao_mes_atual)
+
+    geracao_total = _safe_float(geracao_total_bruta - geracao_mes_atual)
+
+    injecao_total = db.session.query(
+        func.coalesce(func.sum(InjecaoMensalUsina.kwh_injetado), 0.0)
+    ).filter(
+        InjecaoMensalUsina.usina_id == usina_selecionada.id
+    ).scalar()
+    injecao_total = _safe_float(injecao_total)
+
+    consumo_total = db.session.query(
+        func.coalesce(func.sum(FaturaMensal.consumo_usina), 0.0)
+    ).join(Cliente, Cliente.id == FaturaMensal.cliente_id).filter(
+        Cliente.usina_id == usina_selecionada.id
+    ).scalar()
+    consumo_total = _safe_float(consumo_total)
+
+    # crédito da usina (posição atual)
+    saldo_kwh_usina = getattr(usina_selecionada, 'saldo_kwh', 0) if usina_selecionada else 0
+    saldo_kwh_usina = _safe_float(saldo_kwh_usina)
+
+    # regra: injeção total + crédito da usina
+    injecao_total_com_credito = _safe_float(injecao_total + saldo_kwh_usina)
+
+    perda_total = (geracao_total - injecao_total_com_credito) if injecao_total_com_credito > 0 else 0.0
+    perda_total = _safe_float(perda_total)
 
     acumulado_total = {
         "geracao": _safe_round(geracao_total, 2),
-        "injecao": _safe_round(injecao_total, 2),
+        "injecao": _safe_round(injecao_total_com_credito, 2),
         "perda": _safe_round(perda_total, 2),
         "consumo": _safe_round(consumo_total, 2),
-        "saldo_unidade": _safe_round(saldo_unidade_total, 2),
+        "saldo_unidade": _safe_round(saldo_unidade_posicao, 2),
     }
 
+    # CONSOLIDAÇÃO FINANCEIRA
     consolidacao = []
-
     for usina in usinas_filtradas:
-        # RECEITA DO MÊS (valor + juros)
         receita_total = db.session.query(
             func.coalesce(
                 func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)),
@@ -7388,7 +7400,6 @@ def relatorio_financeiro_com_perda():
         ).scalar()
         receita_total = _safe_float(receita_total)
 
-        # DESPESA DO MÊS (excluindo categorias 7, 12, 14)
         despesa_total = db.session.query(
             func.coalesce(func.sum(FinanceiroUsina.valor), 0.0)
         ).filter(
@@ -7403,14 +7414,9 @@ def relatorio_financeiro_com_perda():
         ).scalar()
         despesa_total = _safe_float(despesa_total)
 
-        resultado_liquido = receita_total - despesa_total
-        resultado_liquido = _safe_float(resultado_liquido)
+        resultado_liquido = _safe_float(receita_total - despesa_total)
+        ebitda_pct = _safe_float((resultado_liquido / receita_total * 100.0) if receita_total > 0 else 0.0)
 
-        # EBITDA (%) (margem)
-        ebitda_pct = (resultado_liquido / receita_total * 100.0) if receita_total > 0 else 0.0
-        ebitda_pct = _safe_float(ebitda_pct)
-
-        # MÊS ANTERIOR (valor + juros)
         receita_mes_anterior = db.session.query(
             func.coalesce(
                 func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)),
@@ -7438,17 +7444,12 @@ def relatorio_financeiro_com_perda():
         ).scalar()
         despesa_mes_anterior = _safe_float(despesa_mes_anterior)
 
-        liquido_mes_anterior = receita_mes_anterior - despesa_mes_anterior
-        liquido_mes_anterior = _safe_float(liquido_mes_anterior)
+        liquido_mes_anterior = _safe_float(receita_mes_anterior - despesa_mes_anterior)
+        variacao_liquido_pct = _safe_float(
+            ((resultado_liquido - liquido_mes_anterior) / abs(liquido_mes_anterior) * 100.0)
+            if liquido_mes_anterior else 0.0
+        )
 
-        liquido_ultimo_mes = resultado_liquido
-
-        variacao_liquido_pct = (
-            (liquido_ultimo_mes - liquido_mes_anterior) / abs(liquido_mes_anterior) * 100.0
-        ) if liquido_mes_anterior else 0.0
-        variacao_liquido_pct = _safe_float(variacao_liquido_pct)
-
-        # ACUMULADO NO ANO (valor + juros)
         receita_acumulada = db.session.query(
             func.coalesce(
                 func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)),
@@ -7476,10 +7477,8 @@ def relatorio_financeiro_com_perda():
         ).scalar()
         despesa_acumulada = _safe_float(despesa_acumulada)
 
-        resultado_liquido_acumulado = receita_acumulada - despesa_acumulada
-        resultado_liquido_acumulado = _safe_float(resultado_liquido_acumulado)
+        resultado_liquido_acumulado = _safe_float(receita_acumulada - despesa_acumulada)
 
-        # PERFORMANCE USINA (%): previsão vs geração (no mês de referência da geração)
         geracao_ref = db.session.query(
             func.coalesce(func.sum(Geracao.energia_kwh), 0.0)
         ).filter(
@@ -7498,10 +7497,9 @@ def relatorio_financeiro_com_perda():
         ).scalar()
         previsao_ref = _safe_float(previsao_ref)
 
-        performance_pct = (geracao_ref / previsao_ref * 100.0) if previsao_ref > 0 else 0.0
-        performance_pct = _safe_float(performance_pct)
+        performance_pct = _safe_float((geracao_ref / previsao_ref * 100.0) if previsao_ref > 0 else 0.0)
 
-        # ACUMULADO TOTAL
+        # acumulado total financeiro (com data_pagamento preenchida)
         receita_total_geral = db.session.query(
             func.coalesce(func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)), 0.0)
         ).filter(
@@ -7509,6 +7507,7 @@ def relatorio_financeiro_com_perda():
             FinanceiroUsina.tipo == 'receita',
             FinanceiroUsina.data_pagamento.isnot(None)
         ).scalar()
+        receita_total_geral = _safe_float(receita_total_geral)
 
         despesa_total_geral = db.session.query(
             func.coalesce(func.sum(FinanceiroUsina.valor), 0.0)
@@ -7523,8 +7522,7 @@ def relatorio_financeiro_com_perda():
         ).scalar()
         despesa_total_geral = _safe_float(despesa_total_geral)
 
-        resultado_liquido_total_geral = receita_total_geral - despesa_total_geral
-        resultado_liquido_total_geral = _safe_float(resultado_liquido_total_geral)
+        resultado_liquido_total_geral = _safe_float(receita_total_geral - despesa_total_geral)
 
         consolidacao.append({
             'usina_nome': usina.nome,
@@ -7537,7 +7535,7 @@ def relatorio_financeiro_com_perda():
             'receita_total_geral': _safe_round(receita_total_geral, 2),
             'despesa_total_geral': _safe_round(despesa_total_geral, 2),
             'resultado_liquido_total_geral': _safe_round(resultado_liquido_total_geral, 2),
-            'liquido_ultimo_mes': _safe_round(liquido_ultimo_mes, 2),
+            'liquido_ultimo_mes': _safe_round(resultado_liquido, 2),
             'liquido_mes_anterior': _safe_round(liquido_mes_anterior, 2),
             'variacao_liquido_pct': _safe_round(variacao_liquido_pct, 2),
             'ebitda_pct': _safe_round(ebitda_pct, 2),
@@ -7546,13 +7544,10 @@ def relatorio_financeiro_com_perda():
             'performance_pct': _safe_round(performance_pct, 2),
         })
 
-    # saldo_kwh da usina para a tabela de Créditos
-    saldo_kwh_usina = getattr(usina_selecionada, 'saldo_kwh', 0) if usina_selecionada else 0
-    saldo_kwh_usina = _safe_float(saldo_kwh_usina)
-    
+    # LOGO DA USINA
     logo_usina_data_uri = None
-    if usina.logo_url:
-        nome_arquivo = (usina.logo_url or "").strip()
+    if usina_selecionada and usina_selecionada.logo_url:
+        nome_arquivo = (usina_selecionada.logo_url or "").strip()
 
         logos_base = os.path.abspath(os.getenv('LOGOS_PATH', os.path.join('static', 'logos')))
         path_env = os.path.join(logos_base, nome_arquivo)
@@ -7585,7 +7580,9 @@ def relatorio_financeiro_com_perda():
         saldo_kwh_usina=saldo_kwh_usina,
         acumulado_ano=acumulado_ano,
         acumulado_total=acumulado_total,
-        logo_usina_data_uri=logo_usina_data_uri
+        logo_usina_data_uri=logo_usina_data_uri,
+        mes_calendario_atual=hoje.month,
+        ano_calendario_atual=hoje.year
     )
     
 @app.route("/injecoes_mensais")
