@@ -10,25 +10,6 @@
 </div>
 
 <style>
-@media print {
-    #filtros-relatorio,
-    #voltar-relatorio,
-    #print-btn,
-    header,
-    .user-info,
-    .logout-btn,
-    nav,
-    footer {
-        display: none !important;
-    }
-
-    .only-logo-print {
-        display: block !important;
-        text-align: center;
-        margin-bottom: 14px;
-    }
-}
-
 /* Oculta a logo CGR fora da impressão */
 .only-logo-print { display: none; }
 
@@ -50,20 +31,103 @@
     transition: transform 0.3s ease;
 }
 
+/* Alinhamento geral das tabelas */
+.table th, .table td { vertical-align: middle !important; }
+
+/* ---------------- PRINT (PDF) ---------------- */
+@page {
+    size: A4 landscape;
+    margin: 10mm;
+}
+
 @media print {
+    /* Esconde itens do layout */
+    #filtros-relatorio,
+    #voltar-relatorio,
+    #print-btn,
+    header,
+    .user-info,
+    .logout-btn,
+    nav,
+    footer {
+        display: none !important;
+    }
+
+    .only-logo-print {
+        display: block !important;
+        text-align: center;
+        margin-bottom: 10px;
+    }
+
+    html, body {
+        width: 100% !important;
+        height: auto !important;
+        background: #fff !important;
+    }
+
+    /* Remove limites do Bootstrap container */
+    .container {
+        max-width: 100% !important;
+        width: 100% !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        margin: 0 !important;
+    }
+
+    /* remove sombras e arredondamentos que "quebram" no print */
+    .card, .shadow-sm, .border, .rounded, .rounded-3, .rounded-4, .rounded-5 {
+        box-shadow: none !important;
+    }
+
+    /* cores no print */
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    /* Evita quebrar elementos no meio */
+    .card, .kpi-card, .table-responsive, .alert, .border-bottom {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+    }
+
+    /* table-responsive não pode cortar no PDF */
+    .table-responsive { overflow: visible !important; }
+
+    /* tipografia compacta */
+    h2 { font-size: 18px !important; }
+    h4 { font-size: 14px !important; }
+    h5 { font-size: 13px !important; }
+    h6 { font-size: 12px !important; }
+    p, small { font-size: 11px !important; }
+
+    .kpi-label { font-size: 10px !important; }
+    .kpi-value { font-size: 16px !important; }
+    .kpi-sub   { font-size: 11px !important; }
+
+    .table { font-size: 11px !important; }
+    .table th, .table td { padding: 6px 8px !important; }
+
+    /* gráfico mais baixo */
+    canvas { max-height: 140px !important; }
+
+    /* força quebra de página (use no elemento) */
+    .print-break-before {
+        break-before: page !important;
+        page-break-before: always !important;
+    }
+
+    /* logo da usina no print */
     .usina-logo {
         max-height: 90px !important;
         max-width: 220px !important;
     }
 }
-
-/* Alinhamento geral das tabelas */
-.table th, .table td { vertical-align: middle !important; }
 </style>
 
 <div class="container mt-4">
 
-    <!-- Cabeçalho com logo da usina -->
+    <!-- Cabeçalho -->
     <div class="d-flex flex-column flex-md-row align-items-center justify-content-between mb-4 pb-3 border-bottom gap-4">
         <div class="d-flex align-items-center gap-4">
             {% if logo_usina_data_uri %}
@@ -79,7 +143,7 @@
                     Ano:
                     <span class="badge bg-primary fs-6">{{ ano }}</span>
                     <span class="ms-2 text-muted">
-                        (KPIs do último mês: <strong>12/{{ ano }}</strong>)
+                        (KPIs até: <strong>{{ "%02d"|format(mes_limite or 12) }}/{{ ano }}</strong>)
                     </span>
                 </p>
             </div>
@@ -90,83 +154,99 @@
         </div>
     </div>
 
-    {% set ultimo_mes = 12 %}
-    {% set mes_anterior = 11 %}
+    {# mês vigente (limite) vindo do backend #}
+    {% set mes_lim = mes_limite or 12 %}
+    {% set ultimo_mes = mes_lim %}
+    {% set mes_anterior = (mes_lim - 1) if mes_lim > 1 else 12 %}
+    {% set ano_mes_anterior = ano if mes_lim > 1 else (ano - 1) %}
 
-    {# KPI: pega último mês e mês anterior direto de liquidos_mensais #}
+    {# pega último mês e anterior da série do gráfico #}
     {% set liq_ultimo = (liquidos_mensais | selectattr('mes', 'equalto', ultimo_mes) | list | first) %}
     {% set liq_anterior = (liquidos_mensais | selectattr('mes', 'equalto', mes_anterior) | list | first) %}
     {% set v_ultimo = (liq_ultimo.liquido if liq_ultimo else 0) %}
     {% set v_anterior = (liq_anterior.liquido if liq_anterior else 0) %}
 
-    {# Variação percentual vs mês anterior #}
     {% if v_anterior %}
         {% set variacao_pct = ((v_ultimo - v_anterior) / (v_anterior | abs) * 100) %}
     {% else %}
         {% set variacao_pct = None %}
     {% endif %}
 
-    {# KPI: EBITDA % -> usando consolidacao[0] (se vier calculado p/ dezembro no backend) #}
     {% set k = consolidacao[0] if consolidacao else None %}
 
-    <!-- Cards de KPI (ÚLTIMO MÊS) -->
+    <!-- KPIs -->
     <div class="row g-3 mb-4 align-items-stretch">
 
-        <!-- KPI 1 -->
+        <!-- KPI 1: Geração de Caixa (mês vigente) -->
         <div class="col-md-3">
             <div class="card shadow-sm kpi-card border-0 bg-light h-100">
                 <div class="card-body">
-                    <div class="kpi-label text-muted">Geração de Caixa (último mês)</div>
-                    <div class="kpi-value text-success">
+                    <div class="kpi-label text-muted">Geração de Caixa (mês vigente)</div>
+                    <div class="kpi-value {% if v_ultimo < 0 %}text-danger{% else %}text-success{% endif %}">
                         {{ v_ultimo | formato_brasileiro }}
                     </div>
                     <div class="kpi-sub text-muted mt-1">
-                        Resultado financeiro de <strong>12/{{ ano }}</strong>
+                        Resultado financeiro de <strong>{{ "%02d"|format(ultimo_mes) }}/{{ ano }}</strong>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- KPI 2 -->
+        <!-- KPI 2: EBITDA anual acumulado até mês vigente -->
         <div class="col-md-3">
+            {% set e = (k.ebitda_pct if k else 0) %}
             {% set e_class = 'text-muted' %}
-            {% if k and k.ebitda_pct > 0 %}{% set e_class = 'text-success' %}{% endif %}
-            {% if k and k.ebitda_pct < 0 %}{% set e_class = 'text-danger' %}{% endif %}
+            {% if e > 0 %}{% set e_class = 'text-success' %}{% endif %}
+            {% if e < 0 %}{% set e_class = 'text-danger' %}{% endif %}
             <div class="card shadow-sm kpi-card border-0 bg-light h-100">
                 <div class="card-body">
-                    <div class="kpi-label text-muted">Resultado EBITDA (%) (último mês)</div>
+                    <div class="kpi-label text-muted">Resultado EBITDA (%) (Ano)</div>
                     <div class="kpi-value {{ e_class }}">
-                        {{ ('%.2f'|format(k.ebitda_pct if k else 0)).replace('.', ',') }}%
+                        {{ ('%.2f'|format(e)).replace('.', ',') }}%
                     </div>
                     <div class="kpi-sub text-muted mt-1">
-                        Referente a <strong>12/{{ ano }}</strong>
+                        Acumulado até <strong>{{ "%02d"|format(mes_lim) }}/{{ ano }}</strong>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- KPI 3 -->
+        <!-- KPI 3: Performance anual acumulada até mês vigente -->
         <div class="col-md-3">
+            {% set prev = (k.previsao_ref if k else 0) %}
+            {% set real = (k.geracao_ref if k else 0) %}
             {% set p = (k.performance_pct if k else 0) %}
-            {% set p_class = 'text-muted' %}
-            {% if p >= 100 %}{% set p_class = 'text-success' %}{% endif %}
-            {% if p < 95 %}{% set p_class = 'text-danger' %}{% endif %}
+
+            {% if prev == 0 %}
+                {% set p_text = '-' %}
+                {% set p_class = 'text-muted' %}
+            {% else %}
+                {% set p_text = ('%.2f'|format(p)).replace('.', ',') ~ '%' %}
+                {% set p_class = 'text-muted' %}
+                {% if p >= 100 %}{% set p_class = 'text-success' %}{% endif %}
+                {% if p < 95 %}{% set p_class = 'text-danger' %}{% endif %}
+            {% endif %}
+
             <div class="card shadow-sm kpi-card border-0 bg-light h-100">
                 <div class="card-body">
-                    <div class="kpi-label text-muted">Performance da Usina (%) (último mês)</div>
+                    <div class="kpi-label text-muted">Performance da Usina (%) (Ano)</div>
                     <div class="kpi-value {{ p_class }}">
-                        {{ ('%.2f'|format(p)).replace('.', ',') }}%
+                        {{ p_text }}
                     </div>
                     <div class="kpi-sub text-muted mt-1">
-                        Previsto {{ (k.previsao_ref if k else 0) | formato_kwh }}
-                        • Real {{ (k.geracao_ref if k else 0) | formato_kwh }}
-                        <span class="ms-1">(12/{{ ano }})</span>
+                        {% if prev == 0 %}
+                            Sem previsão cadastrada até <strong>{{ "%02d"|format(mes_lim) }}/{{ ano }}</strong>
+                        {% else %}
+                            Previsto {{ prev | formato_kwh }}
+                            • Real {{ real | formato_kwh }}
+                            <span class="ms-1">(até {{ "%02d"|format(mes_lim) }}/{{ ano }})</span>
+                        {% endif %}
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- KPI 4 -->
+        <!-- KPI 4: Variação vs mês anterior -->
         <div class="col-md-3">
             {% set var_class = 'text-muted' %}
             {% if variacao_pct is not none and variacao_pct > 0 %}{% set var_class = 'text-success' %}{% endif %}
@@ -182,7 +262,9 @@
                         {% endif %}
                     </div>
                     <div class="kpi-sub text-muted mt-1">
-                        Comparação <strong>12/{{ ano }}</strong> vs <strong>11/{{ ano }}</strong>
+                        Comparação <strong>{{ "%02d"|format(ultimo_mes) }}/{{ ano }}</strong>
+                        vs
+                        <strong>{{ "%02d"|format(mes_anterior) }}/{{ ano_mes_anterior }}</strong>
                     </div>
                 </div>
             </div>
@@ -207,7 +289,7 @@
 
     </div>
 
-    <!-- Filtros (ANUAL: sem mês) -->
+    <!-- Filtros -->
     <div id="filtros-relatorio" class="card shadow-sm mb-4">
         <div class="card-body">
             <form method="get" class="row g-3 align-items-end">
@@ -241,8 +323,9 @@
     </div>
 
     {% if relatorio %}
-        <!-- Seção 1 -->
-        <div class="card shadow-sm mb-4">
+
+        <!-- Seção 1 (começa em nova página no PDF) -->
+        <div class="card shadow-sm mb-4 print-break-before">
             <div class="card-header bg-light">
                 <h5 class="mb-0 text-success">Geração, Injeção e Perda (Ano {{ ano }})</h5>
             </div>
@@ -349,7 +432,7 @@
 
             <div class="card-body">
 
-                <!-- RESUMO: Ano + Total Geral -->
+                <!-- RESUMO -->
                 <div class="table-responsive mb-3">
                     <table class="table table-bordered align-middle text-center mb-0">
                         <thead class="table-light">
@@ -384,12 +467,12 @@
 
                     <div class="alert alert-secondary mt-3">
                         <strong>KPIs:</strong>
-                        Os cards no topo representam o <strong>último mês do ano (12/{{ ano }})</strong>.
-                        O relatório abaixo está detalhado mês a mês para o ano inteiro.
+                        KPI 1 e 4 são do <strong>mês vigente ({{ "%02d"|format(mes_lim) }}/{{ ano }})</strong>.
+                        EBITDA e Performance são <strong>anuais acumulados até o mês vigente</strong>.
                     </div>
                 </div>
 
-                <!-- DETALHE MENSAL: Jan–Dez -->
+                <!-- DETALHE MENSAL -->
                 {% if consolidacao_mensal %}
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <h6 class="mb-0 text-primary fw-bold">Detalhamento Mensal – {{ ano }}</h6>
@@ -418,7 +501,6 @@
                                     </tr>
                                 {% endfor %}
 
-                                {# Totalizador do ano (feito no template) #}
                                 {% set soma_receita = consolidacao_mensal | sum(attribute='receita') %}
                                 {% set soma_despesa = consolidacao_mensal | sum(attribute='despesa') %}
                                 {% set soma_liquido = consolidacao_mensal | sum(attribute='liquido') %}
