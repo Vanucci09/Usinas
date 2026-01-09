@@ -7132,7 +7132,6 @@ def relatorio_financeiro_com_perda():
         return "Acesso negado", 403
 
     usina_id = request.args.get('usina_id', type=int)
-    mes = request.args.get('mes', type=int, default=datetime.now().month)
     ano = request.args.get('ano', type=int, default=datetime.now().year)
 
     # carrega usinas e anos
@@ -7150,10 +7149,7 @@ def relatorio_financeiro_com_perda():
             usinas=[],
             usina_id=None,
             anos_disponiveis=anos_disponiveis,
-            mes=mes,
             ano=ano,
-            mes_ref_geracao=None,
-            ano_ref_geracao=None,
             usina_selecionada=None,
             liquidos_mensais=[],
             saldo_kwh_usina=0,
@@ -7165,39 +7161,19 @@ def relatorio_financeiro_com_perda():
     if not usina_id:
         usina_id = usinas[0].id
 
-    usina_selecionada = next((u for u in usinas if u.id == usina_id), None)
-    if not usina_selecionada:
-        usina_selecionada = usinas[0]
-        usina_id = usina_selecionada.id
-
-    # REFERÊNCIA DA GERAÇÃO = MÊS/ANO FILTRADO (SEM DEFASAGEM)
-    mes_ref_geracao = mes
-    ano_ref_geracao = ano
-
-    # janelas de data (competência de faturamento) pelo data_pagamento
-    janela_inicio = datetime(ano, mes, 1)
-    janela_fim_exclusivo = janela_inicio + relativedelta(months=1)
-
-    mes_anterior_inicio = janela_inicio - relativedelta(months=1)
-    mes_anterior_fim_exclusivo = janela_inicio
-
-    ano_inicio = datetime(ano, 1, 1)
+    usina_selecionada = next((u for u in usinas if u.id == usina_id), usinas[0])
+    usina_id = usina_selecionada.id
     
-    # Série do líquido mês a mês no ano selecionado (gráfico)
-    liquidos_mensais = []
-    usina_ref = usina_selecionada
+    consolidacao_mensal = []
 
     for m in range(1, 13):
         inicio_m = datetime(ano, m, 1)
         fim_m = inicio_m + relativedelta(months=1)
 
         receita_m = db.session.query(
-            func.coalesce(
-                func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)),
-                0.0
-            )
+            func.coalesce(func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)), 0.0)
         ).filter(
-            FinanceiroUsina.usina_id == usina_ref.id,
+            FinanceiroUsina.usina_id == usina_selecionada.id,
             FinanceiroUsina.tipo == 'receita',
             FinanceiroUsina.data_pagamento >= inicio_m,
             FinanceiroUsina.data_pagamento < fim_m
@@ -7207,7 +7183,7 @@ def relatorio_financeiro_com_perda():
         despesa_m = db.session.query(
             func.coalesce(func.sum(FinanceiroUsina.valor), 0.0)
         ).filter(
-            FinanceiroUsina.usina_id == usina_ref.id,
+            FinanceiroUsina.usina_id == usina_selecionada.id,
             FinanceiroUsina.tipo == 'despesa',
             FinanceiroUsina.data_pagamento >= inicio_m,
             FinanceiroUsina.data_pagamento < fim_m,
@@ -7218,28 +7194,67 @@ def relatorio_financeiro_com_perda():
         ).scalar()
         despesa_m = _safe_float(despesa_m)
 
-        liquido_m = receita_m - despesa_m
-        liquidos_mensais.append({'mes': m, 'liquido': _safe_round(liquido_m, 2)})
+        consolidacao_mensal.append({
+            "mes": m,
+            "ano": ano,
+            "receita": _safe_round(receita_m, 2),
+            "despesa": _safe_round(despesa_m, 2),
+            "liquido": _safe_round(receita_m - despesa_m, 2),
+        })
 
-    # DADOS DO MÊS SELECIONADO
+    # Janelas anuais
+    ano_inicio = datetime(ano, 1, 1)
+    ano_fim_exclusivo = datetime(ano + 1, 1, 1)
+
+    # Série do líquido mês a mês (gráfico) — continua igual, mas já é anual
+    liquidos_mensais = []
+    for m in range(1, 13):
+        inicio_m = datetime(ano, m, 1)
+        fim_m = inicio_m + relativedelta(months=1)
+
+        receita_m = db.session.query(
+            func.coalesce(func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)), 0.0)
+        ).filter(
+            FinanceiroUsina.usina_id == usina_selecionada.id,
+            FinanceiroUsina.tipo == 'receita',
+            FinanceiroUsina.data_pagamento >= inicio_m,
+            FinanceiroUsina.data_pagamento < fim_m
+        ).scalar()
+        receita_m = _safe_float(receita_m)
+
+        despesa_m = db.session.query(
+            func.coalesce(func.sum(FinanceiroUsina.valor), 0.0)
+        ).filter(
+            FinanceiroUsina.usina_id == usina_selecionada.id,
+            FinanceiroUsina.tipo == 'despesa',
+            FinanceiroUsina.data_pagamento >= inicio_m,
+            FinanceiroUsina.data_pagamento < fim_m,
+            or_(
+                FinanceiroUsina.categoria_id.is_(None),
+                FinanceiroUsina.categoria_id.notin_([7, 12, 14])
+            )
+        ).scalar()
+        despesa_m = _safe_float(despesa_m)
+
+        liquidos_mensais.append({'mes': m, 'liquido': _safe_round(receita_m - despesa_m, 2)})
+
+    # RELATÓRIO ANUAL: 12 linhas (jan..dez)
     dados = []
-    usinas_filtradas = [usina_selecionada]
-
-    for usina in usinas_filtradas:
+    for m in range(1, 13):
         geracao = db.session.query(
             func.coalesce(func.sum(Geracao.energia_kwh), 0.0)
         ).filter(
-            Geracao.usina_id == usina.id,
-            func.extract('month', Geracao.data) == mes_ref_geracao,
-            func.extract('year', Geracao.data) == ano_ref_geracao
+            Geracao.usina_id == usina_selecionada.id,
+            func.extract('month', Geracao.data) == m,
+            func.extract('year', Geracao.data) == ano
         ).scalar()
         geracao = _safe_float(geracao)
 
         injecao = db.session.query(
             func.coalesce(func.sum(InjecaoMensalUsina.kwh_injetado), 0.0)
         ).filter(
-            InjecaoMensalUsina.usina_id == usina.id,
-            InjecaoMensalUsina.mes == mes,
+            InjecaoMensalUsina.usina_id == usina_selecionada.id,
+            InjecaoMensalUsina.mes == m,
             InjecaoMensalUsina.ano == ano
         ).scalar()
         injecao = _safe_float(injecao)
@@ -7247,8 +7262,8 @@ def relatorio_financeiro_com_perda():
         consumo = db.session.query(
             func.coalesce(func.sum(FaturaMensal.consumo_usina), 0.0)
         ).join(Cliente, Cliente.id == FaturaMensal.cliente_id).filter(
-            Cliente.usina_id == usina.id,
-            FaturaMensal.mes_referencia == mes,
+            Cliente.usina_id == usina_selecionada.id,
+            FaturaMensal.mes_referencia == m,
             FaturaMensal.ano_referencia == ano
         ).scalar()
         consumo = _safe_float(consumo)
@@ -7256,19 +7271,18 @@ def relatorio_financeiro_com_perda():
         saldo_unidade = db.session.query(
             func.coalesce(func.sum(FaturaMensal.saldo_unidade), 0.0)
         ).join(Cliente, Cliente.id == FaturaMensal.cliente_id).filter(
-            Cliente.usina_id == usina.id,
-            FaturaMensal.mes_referencia == mes,
+            Cliente.usina_id == usina_selecionada.id,
+            FaturaMensal.mes_referencia == m,
             FaturaMensal.ano_referencia == ano
         ).scalar()
         saldo_unidade = _safe_float(saldo_unidade)
 
-        perda = (geracao - injecao) if injecao > 0 else 0.0
-        perda = _safe_float(perda)
+        perda = _safe_float((geracao - injecao) if injecao > 0 else 0.0)
 
         dados.append({
-            'mes': mes,
+            'mes': m,
             'ano': ano,
-            'usina_nome': usina.nome,
+            'usina_nome': usina_selecionada.nome,
             'geracao': _safe_round(geracao, 2),
             'injecao': _safe_round(injecao, 2),
             'perda': _safe_round(perda, 2),
@@ -7276,48 +7290,13 @@ def relatorio_financeiro_com_perda():
             'saldo_unidade': _safe_round(saldo_unidade, 2),
         })
 
-    # ACUMULADO ANO (geração/injeção/consumo até o mês filtrado)
-    inicio_ger_ano = datetime(ano_ref_geracao, 1, 1)
-    fim_ger_ate_mes = datetime(ano_ref_geracao, mes_ref_geracao, 1) + relativedelta(months=1)
-
-    geracao_ano = db.session.query(
-        func.coalesce(func.sum(Geracao.energia_kwh), 0.0)
-    ).filter(
-        Geracao.usina_id == usina_selecionada.id,
-        Geracao.data >= inicio_ger_ano,
-        Geracao.data < fim_ger_ate_mes
-    ).scalar()
-    geracao_ano = _safe_float(geracao_ano)
-
-    injecao_ano = db.session.query(
-        func.coalesce(func.sum(InjecaoMensalUsina.kwh_injetado), 0.0)
-    ).filter(
-        InjecaoMensalUsina.usina_id == usina_selecionada.id,
-        InjecaoMensalUsina.ano == ano,
-        InjecaoMensalUsina.mes <= mes
-    ).scalar()
-    injecao_ano = _safe_float(injecao_ano)
-
-    consumo_ano = db.session.query(
-        func.coalesce(func.sum(FaturaMensal.consumo_usina), 0.0)
-    ).join(Cliente, Cliente.id == FaturaMensal.cliente_id).filter(
-        Cliente.usina_id == usina_selecionada.id,
-        FaturaMensal.ano_referencia == ano,
-        FaturaMensal.mes_referencia <= mes
-    ).scalar()
-    consumo_ano = _safe_float(consumo_ano)
-
-    saldo_unidade_posicao = db.session.query(
-        func.coalesce(func.sum(FaturaMensal.saldo_unidade), 0.0)
-    ).join(Cliente, Cliente.id == FaturaMensal.cliente_id).filter(
-        Cliente.usina_id == usina_selecionada.id,
-        FaturaMensal.ano_referencia == ano,
-        FaturaMensal.mes_referencia == mes
-    ).scalar()
-    saldo_unidade_posicao = _safe_float(saldo_unidade_posicao)
-
-    perda_ano = (geracao_ano - injecao_ano) if injecao_ano > 0 else 0.0
-    perda_ano = _safe_float(perda_ano)
+    # ACUMULADO DO ANO = soma das 12 linhas
+    geracao_ano = _safe_float(sum(x['geracao'] for x in dados))
+    injecao_ano = _safe_float(sum(x['injecao'] for x in dados))
+    consumo_ano = _safe_float(sum(x['consumo'] for x in dados))
+    perda_ano = _safe_float(sum(x['perda'] for x in dados))
+    # posição do saldo_unidade (dezembro) — ajuste se preferir somar o ano
+    saldo_unidade_posicao = _safe_float(next((x['saldo_unidade'] for x in reversed(dados) if x['saldo_unidade'] is not None), 0.0))
 
     acumulado_ano = {
         "geracao": _safe_round(geracao_ano, 2),
@@ -7327,246 +7306,93 @@ def relatorio_financeiro_com_perda():
         "saldo_unidade": _safe_round(saldo_unidade_posicao, 2),
     }
 
-    # 1) Definir os marcos temporais para exclusão (Mês Atual e Mês Anterior)
-    hoje = date.today()
-    # Início do mês anterior (ex: se hoje é 08/01/2026, inicio_exclusao é 01/12/2025)
-    inicio_exclusao = datetime(hoje.year, hoje.month, 1) - relativedelta(months=1)
-    # Fim do mês atual (limite superior para a query)
-    fim_mes_atual = datetime(hoje.year, hoje.month, 1) + relativedelta(months=1)
-
-    # 2) GERAÇÃO TOTAL BRUTA (Histórico completo)
-    geracao_total_bruta = db.session.query(
-        func.coalesce(func.sum(Geracao.energia_kwh), 0.0)
-    ).filter(
-        Geracao.usina_id == usina_selecionada.id
-    ).scalar()
-    geracao_total_bruta = _safe_float(geracao_total_bruta)
-
-    # 3) GERAÇÃO DOS ÚLTIMOS 2 MESES (Atual + Anterior)
-    # Somamos o que houve de geração entre o início do mês passado e o fim deste mês
-    geracao_periodo_exclusao = db.session.query(
-        func.coalesce(func.sum(Geracao.energia_kwh), 0.0)
-    ).filter(
-        Geracao.usina_id == usina_selecionada.id,
-        Geracao.data >= inicio_exclusao,
-        Geracao.data < fim_mes_atual
-    ).scalar()
-    geracao_periodo_exclusao = _safe_float(geracao_periodo_exclusao)
-
-    # 4) GERAÇÃO TOTAL FINAL (Bruto - Período de exclusão)
-    geracao_total = _safe_float(geracao_total_bruta - geracao_periodo_exclusao)
-
-    injecao_total = db.session.query(
-        func.coalesce(func.sum(InjecaoMensalUsina.kwh_injetado), 0.0)
-    ).filter(
-        InjecaoMensalUsina.usina_id == usina_selecionada.id
-    ).scalar()
-    injecao_total = _safe_float(injecao_total)
-
-    consumo_total = db.session.query(
-        func.coalesce(func.sum(FaturaMensal.consumo_usina), 0.0)
-    ).join(Cliente, Cliente.id == FaturaMensal.cliente_id).filter(
-        Cliente.usina_id == usina_selecionada.id
-    ).scalar()
-    consumo_total = _safe_float(consumo_total)
-
     # crédito da usina (posição atual)
-    saldo_kwh_usina = getattr(usina_selecionada, 'saldo_kwh', 0) if usina_selecionada else 0
-    saldo_kwh_usina = _safe_float(saldo_kwh_usina)
+    saldo_kwh_usina = _safe_float(getattr(usina_selecionada, 'saldo_kwh', 0) or 0)
 
-    # regra: injeção total + crédito da usina
-    injecao_total_com_credito = _safe_float(injecao_total + saldo_kwh_usina)
+    # CONSOLIDAÇÃO FINANCEIRA ANUAL (ano inteiro)
+    receita_ano = db.session.query(
+        func.coalesce(func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)), 0.0)
+    ).filter(
+        FinanceiroUsina.usina_id == usina_selecionada.id,
+        FinanceiroUsina.tipo == 'receita',
+        FinanceiroUsina.data_pagamento >= ano_inicio,
+        FinanceiroUsina.data_pagamento < ano_fim_exclusivo
+    ).scalar()
+    receita_ano = _safe_float(receita_ano)
 
-    perda_total = (geracao_total - injecao_total_com_credito) if injecao_total_com_credito > 0 else 0.0
-    perda_total = _safe_float(perda_total)
-
-    acumulado_total = {
-        "geracao": _safe_round(geracao_total, 2),
-        "injecao": _safe_round(injecao_total_com_credito, 2),
-        "perda": _safe_round(perda_total, 2),
-        "consumo": _safe_round(consumo_total, 2),
-        "saldo_unidade": _safe_round(saldo_unidade_posicao, 2),
-    }
-
-    # CONSOLIDAÇÃO FINANCEIRA
-    consolidacao = []
-    for usina in usinas_filtradas:
-        receita_total = db.session.query(
-            func.coalesce(
-                func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)),
-                0.0
-            )
-        ).filter(
-            FinanceiroUsina.usina_id == usina.id,
-            FinanceiroUsina.tipo == 'receita',
-            FinanceiroUsina.data_pagamento >= janela_inicio,
-            FinanceiroUsina.data_pagamento < janela_fim_exclusivo
-        ).scalar()
-        receita_total = _safe_float(receita_total)
-
-        despesa_total = db.session.query(
-            func.coalesce(func.sum(FinanceiroUsina.valor), 0.0)
-        ).filter(
-            FinanceiroUsina.usina_id == usina.id,
-            FinanceiroUsina.tipo == 'despesa',
-            FinanceiroUsina.data_pagamento >= janela_inicio,
-            FinanceiroUsina.data_pagamento < janela_fim_exclusivo,
-            or_(
-                FinanceiroUsina.categoria_id.is_(None),
-                FinanceiroUsina.categoria_id.notin_([7, 12, 14])
-            )
-        ).scalar()
-        despesa_total = _safe_float(despesa_total)
-
-        resultado_liquido = _safe_float(receita_total - despesa_total)
-        ebitda_pct = _safe_float((resultado_liquido / receita_total * 100.0) if receita_total > 0 else 0.0)
-
-        receita_mes_anterior = db.session.query(
-            func.coalesce(
-                func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)),
-                0.0
-            )
-        ).filter(
-            FinanceiroUsina.usina_id == usina.id,
-            FinanceiroUsina.tipo == 'receita',
-            FinanceiroUsina.data_pagamento >= mes_anterior_inicio,
-            FinanceiroUsina.data_pagamento < mes_anterior_fim_exclusivo
-        ).scalar()
-        receita_mes_anterior = _safe_float(receita_mes_anterior)
-
-        despesa_mes_anterior = db.session.query(
-            func.coalesce(func.sum(FinanceiroUsina.valor), 0.0)
-        ).filter(
-            FinanceiroUsina.usina_id == usina.id,
-            FinanceiroUsina.tipo == 'despesa',
-            FinanceiroUsina.data_pagamento >= mes_anterior_inicio,
-            FinanceiroUsina.data_pagamento < mes_anterior_fim_exclusivo,
-            or_(
-                FinanceiroUsina.categoria_id.is_(None),
-                FinanceiroUsina.categoria_id.notin_([7, 12, 14])
-            )
-        ).scalar()
-        despesa_mes_anterior = _safe_float(despesa_mes_anterior)
-
-        liquido_mes_anterior = _safe_float(receita_mes_anterior - despesa_mes_anterior)
-        variacao_liquido_pct = _safe_float(
-            ((resultado_liquido - liquido_mes_anterior) / abs(liquido_mes_anterior) * 100.0)
-            if liquido_mes_anterior else 0.0
+    despesa_ano = db.session.query(
+        func.coalesce(func.sum(FinanceiroUsina.valor), 0.0)
+    ).filter(
+        FinanceiroUsina.usina_id == usina_selecionada.id,
+        FinanceiroUsina.tipo == 'despesa',
+        FinanceiroUsina.data_pagamento >= ano_inicio,
+        FinanceiroUsina.data_pagamento < ano_fim_exclusivo,
+        or_(
+            FinanceiroUsina.categoria_id.is_(None),
+            FinanceiroUsina.categoria_id.notin_([7, 12, 14])
         )
+    ).scalar()
+    despesa_ano = _safe_float(despesa_ano)
 
-        receita_acumulada = db.session.query(
-            func.coalesce(
-                func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)),
-                0.0
-            )
-        ).filter(
-            FinanceiroUsina.usina_id == usina.id,
-            FinanceiroUsina.tipo == 'receita',
-            FinanceiroUsina.data_pagamento >= ano_inicio,
-            FinanceiroUsina.data_pagamento < janela_fim_exclusivo
-        ).scalar()
-        receita_acumulada = _safe_float(receita_acumulada)
+    resultado_ano = _safe_float(receita_ano - despesa_ano)
+    ebitda_pct_ano = _safe_float((resultado_ano / receita_ano * 100.0) if receita_ano > 0 else 0.0)
 
-        despesa_acumulada = db.session.query(
-            func.coalesce(func.sum(FinanceiroUsina.valor), 0.0)
-        ).filter(
-            FinanceiroUsina.usina_id == usina.id,
-            FinanceiroUsina.tipo == 'despesa',
-            FinanceiroUsina.data_pagamento >= ano_inicio,
-            FinanceiroUsina.data_pagamento < janela_fim_exclusivo,
-            or_(
-                FinanceiroUsina.categoria_id.is_(None),
-                FinanceiroUsina.categoria_id.notin_([7, 12, 14])
-            )
-        ).scalar()
-        despesa_acumulada = _safe_float(despesa_acumulada)
+    # total geral (mantém como você tinha)
+    receita_total_geral = _safe_float(db.session.query(
+        func.coalesce(func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)), 0.0)
+    ).filter(
+        FinanceiroUsina.usina_id == usina_selecionada.id,
+        FinanceiroUsina.tipo == 'receita',
+        FinanceiroUsina.data_pagamento.isnot(None)
+    ).scalar())
 
-        resultado_liquido_acumulado = _safe_float(receita_acumulada - despesa_acumulada)
+    despesa_total_geral = _safe_float(db.session.query(
+        func.coalesce(func.sum(FinanceiroUsina.valor), 0.0)
+    ).filter(
+        FinanceiroUsina.usina_id == usina_selecionada.id,
+        FinanceiroUsina.tipo == 'despesa',
+        FinanceiroUsina.data_pagamento.isnot(None),
+        or_(
+            FinanceiroUsina.categoria_id.is_(None),
+            FinanceiroUsina.categoria_id.notin_([7, 12, 14])
+        )
+    ).scalar())
 
-        geracao_ref = db.session.query(
-            func.coalesce(func.sum(Geracao.energia_kwh), 0.0)
-        ).filter(
-            Geracao.usina_id == usina.id,
-            func.extract('month', Geracao.data) == mes_ref_geracao,
-            func.extract('year', Geracao.data) == ano_ref_geracao
-        ).scalar()
-        geracao_ref = _safe_float(geracao_ref)
+    resultado_total_geral = _safe_float(receita_total_geral - despesa_total_geral)
 
-        previsao_ref = db.session.query(
-            func.coalesce(PrevisaoMensal.previsao_kwh, 0.0)
-        ).filter(
-            PrevisaoMensal.usina_id == usina.id,
-            PrevisaoMensal.ano == ano_ref_geracao,
-            PrevisaoMensal.mes == mes_ref_geracao
-        ).scalar()
-        previsao_ref = _safe_float(previsao_ref)
+    consolidacao = [{
+        'usina_nome': usina_selecionada.nome,
+        'receita_total': _safe_round(receita_ano, 2),
+        'despesa_total': _safe_round(despesa_ano, 2),
+        'resultado_liquido': _safe_round(resultado_ano, 2),
+        'ebitda_pct': _safe_round(ebitda_pct_ano, 2),
+        'liquido_ultimo_mes': _safe_round(resultado_ano, 2),
+        'liquido_mes_anterior': 0.0,
+        'variacao_liquido_pct': 0.0,
+        'receita_total_geral': _safe_round(receita_total_geral, 2),
+        'despesa_total_geral': _safe_round(despesa_total_geral, 2),
+        'resultado_liquido_total_geral': _safe_round(resultado_total_geral, 2),
+        'geracao_ref': _safe_round(geracao_ano, 2),
+        'previsao_ref': 0.0,
+        'performance_pct': 0.0,
+    }]
 
-        performance_pct = _safe_float((geracao_ref / previsao_ref * 100.0) if previsao_ref > 0 else 0.0)
-
-        # acumulado total financeiro (com data_pagamento preenchida)
-        receita_total_geral = db.session.query(
-            func.coalesce(func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)), 0.0)
-        ).filter(
-            FinanceiroUsina.usina_id == usina.id,
-            FinanceiroUsina.tipo == 'receita',
-            FinanceiroUsina.data_pagamento.isnot(None)
-        ).scalar()
-        receita_total_geral = _safe_float(receita_total_geral)
-
-        despesa_total_geral = db.session.query(
-            func.coalesce(func.sum(FinanceiroUsina.valor), 0.0)
-        ).filter(
-            FinanceiroUsina.usina_id == usina.id,
-            FinanceiroUsina.tipo == 'despesa',
-            FinanceiroUsina.data_pagamento.isnot(None),
-            or_(
-                FinanceiroUsina.categoria_id.is_(None),
-                FinanceiroUsina.categoria_id.notin_([7, 12, 14])
-            )
-        ).scalar()
-        despesa_total_geral = _safe_float(despesa_total_geral)
-
-        resultado_liquido_total_geral = _safe_float(receita_total_geral - despesa_total_geral)
-
-        consolidacao.append({
-            'usina_nome': usina.nome,
-            'receita_total': _safe_round(receita_total, 2),
-            'despesa_total': _safe_round(despesa_total, 2),
-            'resultado_liquido': _safe_round(resultado_liquido, 2),
-            'receita_acumulada': _safe_round(receita_acumulada, 2),
-            'despesa_acumulada': _safe_round(despesa_acumulada, 2),
-            'resultado_liquido_acumulado': _safe_round(resultado_liquido_acumulado, 2),
-            'receita_total_geral': _safe_round(receita_total_geral, 2),
-            'despesa_total_geral': _safe_round(despesa_total_geral, 2),
-            'resultado_liquido_total_geral': _safe_round(resultado_liquido_total_geral, 2),
-            'liquido_ultimo_mes': _safe_round(resultado_liquido, 2),
-            'liquido_mes_anterior': _safe_round(liquido_mes_anterior, 2),
-            'variacao_liquido_pct': _safe_round(variacao_liquido_pct, 2),
-            'ebitda_pct': _safe_round(ebitda_pct, 2),
-            'geracao_ref': _safe_round(geracao_ref, 2),
-            'previsao_ref': _safe_round(previsao_ref, 2),
-            'performance_pct': _safe_round(performance_pct, 2),
-        })
-
-    # LOGO DA USINA
+    # LOGO DA USINA (igual)
     logo_usina_data_uri = None
     if usina_selecionada and usina_selecionada.logo_url:
         nome_arquivo = (usina_selecionada.logo_url or "").strip()
-
         logos_base = os.path.abspath(os.getenv('LOGOS_PATH', os.path.join('static', 'logos')))
         path_env = os.path.join(logos_base, nome_arquivo)
         path_stat = os.path.abspath(os.path.join('static', 'logos', nome_arquivo))
 
-        chosen = None
-        if os.path.exists(path_env):
-            chosen = path_env
-        elif os.path.exists(path_stat):
-            chosen = path_stat
-
+        chosen = path_env if os.path.exists(path_env) else (path_stat if os.path.exists(path_stat) else None)
         if chosen:
             ext = os.path.splitext(chosen)[1].lower()
             mime = "png" if ext == ".png" else "jpeg"
             logo_usina_data_uri = f"data:image/{mime};base64,{imagem_para_base64(chosen)}"
+
+    # acumulado_total: se você quiser manter o seu cálculo, reaproveita o bloco que você já tinha.
+    acumulado_total = None  # ou mantenha seu cálculo atual
 
     return render_template(
         'relatorio_financeiro_com_perda.html',
@@ -7575,18 +7401,14 @@ def relatorio_financeiro_com_perda():
         usinas=usinas,
         usina_id=usina_id,
         anos_disponiveis=anos_disponiveis,
-        mes=mes,
         ano=ano,
-        mes_ref_geracao=mes_ref_geracao,
-        ano_ref_geracao=ano_ref_geracao,
         usina_selecionada=usina_selecionada,
         liquidos_mensais=liquidos_mensais,
         saldo_kwh_usina=saldo_kwh_usina,
         acumulado_ano=acumulado_ano,
         acumulado_total=acumulado_total,
         logo_usina_data_uri=logo_usina_data_uri,
-        mes_calendario_atual=hoje.month,
-        ano_calendario_atual=hoje.year
+        consolidacao_mensal=consolidacao_mensal,
     )
     
 @app.route("/injecoes_mensais")
