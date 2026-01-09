@@ -34,7 +34,7 @@
 /* Alinhamento geral das tabelas */
 .table th, .table td { vertical-align: middle !important; }
 
-/* ---------------- PRINT (PDF) ---------------- */
+/*PRINT (PDF)*/
 @page {
     size: A4 landscape;
     margin: 10mm;
@@ -253,7 +253,7 @@
             {% if variacao_pct is not none and variacao_pct < 0 %}{% set var_class = 'text-danger' %}{% endif %}
             <div class="card shadow-sm kpi-card border-0 bg-light h-100">
                 <div class="card-body">
-                    <div class="kpi-label text-muted">Variação vs mês anterior</div>
+                    <div class="kpi-label text-muted">Variação de caixa vs mês anterior</div>
                     <div class="kpi-value {{ var_class }}">
                         {% if variacao_pct is none %}
                             -

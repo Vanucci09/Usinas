@@ -7166,23 +7166,19 @@ def relatorio_financeiro_com_perda():
     usina_selecionada = next((u for u in usinas if u.id == usina_id), usinas[0])
     usina_id = usina_selecionada.id
 
-    # -------------------------------
     # REGRA: ano vigente -> acumula até mês vigente
     # ano passado -> fecha em dezembro
-    # -------------------------------
     hoje = date.today()
     mes_limite = hoje.month if ano == hoje.year else 12
 
     inicio_periodo = datetime(ano, 1, 1)
     fim_periodo_exclusivo = datetime(ano, mes_limite, 1) + relativedelta(months=1)
 
-    # Janelas anuais completas (para consultas "ano inteiro", se quiser)
+    # Janelas anuais completas (para consultas "ano inteiro")
     ano_inicio = datetime(ano, 1, 1)
     ano_fim_exclusivo = datetime(ano + 1, 1, 1)
 
-    # -------------------------------
     # CONSOLIDAÇÃO MENSAL (Tabela mensal)
-    # -------------------------------
     consolidacao_mensal = []
     for m in range(1, 13):
         inicio_m = datetime(ano, m, 1)
@@ -7220,9 +7216,7 @@ def relatorio_financeiro_com_perda():
             "liquido": _safe_round(receita_m - despesa_m, 2),
         })
 
-    # -------------------------------
     # SÉRIE DO LÍQUIDO (Gráfico)
-    # -------------------------------
     liquidos_mensais = []
     for m in range(1, 13):
         inicio_m = datetime(ano, m, 1)
@@ -7257,9 +7251,7 @@ def relatorio_financeiro_com_perda():
             'liquido': _safe_round(receita_m - despesa_m, 2)
         })
 
-    # -------------------------------
     # RELATÓRIO ANUAL (12 linhas - geração/injeção/perda)
-    # -------------------------------
     dados = []
     for m in range(1, 13):
         geracao = db.session.query(
@@ -7311,9 +7303,7 @@ def relatorio_financeiro_com_perda():
             'saldo_unidade': _safe_round(saldo_unidade, 2),
         })
 
-    # -------------------------------
     # ACUMULADO DO ANO (até mês vigente se ano atual)
-    # -------------------------------
     dados_ate = [x for x in dados if x['mes'] <= mes_limite]
 
     geracao_ano = _safe_float(sum(x['geracao'] for x in dados_ate))
@@ -7337,9 +7327,7 @@ def relatorio_financeiro_com_perda():
     # crédito da usina (posição atual)
     saldo_kwh_usina = _safe_float(getattr(usina_selecionada, 'saldo_kwh', 0) or 0)
 
-    # -------------------------------
     # EBITDA ANUAL (até mês vigente se ano atual)
-    # -------------------------------
     receita_ate = db.session.query(
         func.coalesce(func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)), 0.0)
     ).filter(
@@ -7367,9 +7355,7 @@ def relatorio_financeiro_com_perda():
     resultado_ate = _safe_float(receita_ate - despesa_ate)
     ebitda_pct_ate = _safe_float((resultado_ate / receita_ate * 100.0) if receita_ate > 0 else 0.0)
 
-    # -------------------------------
     # PERFORMANCE ANUAL (até mês vigente se ano atual)
-    # -------------------------------
     geracao_ate_perf = db.session.query(
         func.coalesce(func.sum(Geracao.energia_kwh), 0.0)
     ).filter(
@@ -7391,9 +7377,7 @@ def relatorio_financeiro_com_perda():
 
     performance_pct_ate = _safe_float((geracao_ate_perf / previsao_ate_perf * 100.0) if previsao_ate_perf > 0 else 0.0)
 
-    # -------------------------------
-    # Total geral (mantém como você tinha)
-    # -------------------------------
+    # Total geral
     receita_total_geral = _safe_float(db.session.query(
         func.coalesce(func.sum(FinanceiroUsina.valor + func.coalesce(FinanceiroUsina.juros, 0)), 0.0)
     ).filter(
@@ -7416,39 +7400,24 @@ def relatorio_financeiro_com_perda():
 
     resultado_total_geral = _safe_float(receita_total_geral - despesa_total_geral)
 
-    # -------------------------------
     # CONSOLIDAÇÃO PRINCIPAL (Ano até mês vigente + Total Geral)
-    # -------------------------------
     consolidacao = [{
         'usina_nome': usina_selecionada.nome,
-
-        # Ano (até mês vigente se for ano atual)
         'receita_total': _safe_round(receita_ate, 2),
         'despesa_total': _safe_round(despesa_ate, 2),
         'resultado_liquido': _safe_round(resultado_ate, 2),
-
-        # EBITDA anual (até mês vigente se for ano atual)
         'ebitda_pct': _safe_round(ebitda_pct_ate, 2),
-
-        # Total geral
         'receita_total_geral': _safe_round(receita_total_geral, 2),
         'despesa_total_geral': _safe_round(despesa_total_geral, 2),
         'resultado_liquido_total_geral': _safe_round(resultado_total_geral, 2),
-
-        # Performance anual (até mês vigente se for ano atual)
         'geracao_ref': _safe_round(geracao_ate_perf, 2),
         'previsao_ref': _safe_round(previsao_ate_perf, 2),
         'performance_pct': _safe_round(performance_pct_ate, 2),
-
-        # referência p/ exibição
         'mes_limite': mes_limite,
         'ano_ref': ano,
     }]
 
-    # -------------------------------
-    # LOGO DA USINA (igual)
-    # -------------------------------
-    logo_usina_data_uri = None
+    # LOGO DA USINA
     if usina_selecionada and usina_selecionada.logo_url:
         nome_arquivo = (usina_selecionada.logo_url or "").strip()
         logos_base = os.path.abspath(os.getenv('LOGOS_PATH', os.path.join('static', 'logos')))
@@ -7461,7 +7430,6 @@ def relatorio_financeiro_com_perda():
             mime = "png" if ext == ".png" else "jpeg"
             logo_usina_data_uri = f"data:image/{mime};base64,{imagem_para_base64(chosen)}"
 
-    # acumulado_total: mantenha como estava (se desejar)
     acumulado_total = None
 
     return render_template(
