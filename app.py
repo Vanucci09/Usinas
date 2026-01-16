@@ -7195,7 +7195,7 @@ def relatorio_financeiro_com_perda():
         ).scalar()
         receita_m = _safe_float(receita_m)
 
-        # Despesa "normal" (mantém regra de desconsiderar 5, 7,12,14)
+        # Despesa bruta (mantém sua regra de desconsiderar 5, 7,12,14)
         despesa_m = db.session.query(
             func.coalesce(func.sum(FinanceiroUsina.valor), 0.0)
         ).filter(
@@ -7210,7 +7210,7 @@ def relatorio_financeiro_com_perda():
         ).scalar()
         despesa_m = _safe_float(despesa_m)
 
-        # Transferência à empresa = despesa com categoria_id = 5
+        # Transferência à empresa (somente informativo)
         transferencia_m = db.session.query(
             func.coalesce(func.sum(FinanceiroUsina.valor), 0.0)
         ).filter(
@@ -7222,8 +7222,8 @@ def relatorio_financeiro_com_perda():
         ).scalar()
         transferencia_m = _safe_float(transferencia_m)
 
-        # Geração de Caixa ajustada (subtrai a transferência também)
-        liquido_m = _safe_float(receita_m - (despesa_m + transferencia_m))
+        # Geração de Caixa NÃO muda
+        liquido_m = _safe_float(receita_m - despesa_m)
 
         consolidacao_mensal.append({
             "mes": m,

@@ -31,6 +31,12 @@
     transition: transform 0.3s ease;
 }
 
+.text-success-soft {
+    color: rgba(25, 135, 84, 0.45) !important; /* verde Bootstrap com transparência */
+    font-weight: 600;
+}
+
+
 /* Alinhamento geral das tabelas */
 .table th, .table td { vertical-align: middle !important; }
 
@@ -486,7 +492,7 @@
                                     <th>Mês</th>
                                     <th>Faturamento Bruto (R$)</th>
                                     <th>Despesa Bruta (R$)</th>
-                                    <th>Transferência à empresa (R$)</th>
+                                    <th>Arrendamento (R$)</th>
                                     <th>Geração de Caixa (R$)</th>
                                 </tr>
                             </thead>
@@ -497,8 +503,18 @@
                                     <td>{{ m.receita | formato_brasileiro }}</td>
                                     <td>{{ m.despesa | formato_brasileiro }}</td>
                                     <td class="text-muted">{{ (m.transferencia_empresa or 0) | formato_brasileiro }}</td>
-                                    <td class="{% if m.liquido < 0 %}text-danger fw-semibold{% else %}text-success fw-semibold{% endif %}">
-                                        {{ m.liquido | formato_brasileiro }}
+                                    <td class="
+                                        {% if m.liquido < 0 %}
+                                            text-danger fw-semibold
+                                        {% else %}
+                                            {% if m.transferencia_empresa and m.transferencia_empresa > 0 %}
+                                                text-success-soft
+                                            {% else %}
+                                                text-success fw-semibold
+                                            {% endif %}
+                                        {% endif %}
+                                    ">
+                                    {{ m.liquido | formato_brasileiro }}
                                     </td>
                                     </tr>
                                 {% endfor %}
