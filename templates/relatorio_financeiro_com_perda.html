@@ -486,30 +486,34 @@
                                     <th>Mês</th>
                                     <th>Faturamento Bruto (R$)</th>
                                     <th>Despesa Bruta (R$)</th>
+                                    <th>Transferência à empresa (R$)</th>
                                     <th>Geração de Caixa (R$)</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for m in consolidacao_mensal %}
                                     <tr>
-                                        <td><strong>{{ "%02d"|format(m.mes) }}/{{ m.ano }}</strong></td>
-                                        <td>{{ m.receita | formato_brasileiro }}</td>
-                                        <td>{{ m.despesa | formato_brasileiro }}</td>
-                                        <td class="{% if m.liquido < 0 %}text-danger fw-semibold{% else %}text-success fw-semibold{% endif %}">
-                                            {{ m.liquido | formato_brasileiro }}
-                                        </td>
+                                    <td><strong>{{ "%02d"|format(m.mes) }}/{{ m.ano }}</strong></td>
+                                    <td>{{ m.receita | formato_brasileiro }}</td>
+                                    <td>{{ m.despesa | formato_brasileiro }}</td>
+                                    <td class="text-muted">{{ (m.transferencia_empresa or 0) | formato_brasileiro }}</td>
+                                    <td class="{% if m.liquido < 0 %}text-danger fw-semibold{% else %}text-success fw-semibold{% endif %}">
+                                        {{ m.liquido | formato_brasileiro }}
+                                    </td>
                                     </tr>
                                 {% endfor %}
 
                                 {% set soma_receita = consolidacao_mensal | sum(attribute='receita') %}
                                 {% set soma_despesa = consolidacao_mensal | sum(attribute='despesa') %}
+                                {% set soma_transf = consolidacao_mensal | sum(attribute='transferencia_empresa') %}
                                 {% set soma_liquido = consolidacao_mensal | sum(attribute='liquido') %}
 
                                 <tr class="table-light">
-                                    <td><strong>Total {{ ano }}</strong></td>
-                                    <td><strong>{{ soma_receita | formato_brasileiro }}</strong></td>
-                                    <td><strong>{{ soma_despesa | formato_brasileiro }}</strong></td>
-                                    <td><strong>{{ soma_liquido | formato_brasileiro }}</strong></td>
+                                <td><strong>Total {{ ano }}</strong></td>
+                                <td><strong>{{ soma_receita | formato_brasileiro }}</strong></td>
+                                <td><strong>{{ soma_despesa | formato_brasileiro }}</strong></td>
+                                <td><strong>{{ soma_transf | formato_brasileiro }}</strong></td>
+                                <td><strong>{{ soma_liquido | formato_brasileiro }}</strong></td>
                                 </tr>
                             </tbody>
                         </table>

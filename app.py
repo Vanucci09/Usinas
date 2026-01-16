@@ -7133,6 +7133,7 @@ def relatorio_financeiro_com_perda():
 
     usina_id = request.args.get('usina_id', type=int)
     ano = request.args.get('ano', type=int, default=datetime.now().year)
+    logo_usina_data_uri = None
 
     # carrega usinas e anos
     usinas = Usina.query.order_by(Usina.nome).all()
@@ -7194,6 +7195,7 @@ def relatorio_financeiro_com_perda():
         ).scalar()
         receita_m = _safe_float(receita_m)
 
+        # Despesa "normal" (mantém regra de desconsiderar 5, 7,12,14)
         despesa_m = db.session.query(
             func.coalesce(func.sum(FinanceiroUsina.valor), 0.0)
         ).filter(
@@ -7203,17 +7205,33 @@ def relatorio_financeiro_com_perda():
             FinanceiroUsina.data_pagamento < fim_m,
             or_(
                 FinanceiroUsina.categoria_id.is_(None),
-                FinanceiroUsina.categoria_id.notin_([7, 12, 14])
+                FinanceiroUsina.categoria_id.notin_([5, 7, 12, 14])
             )
         ).scalar()
         despesa_m = _safe_float(despesa_m)
+
+        # Transferência à empresa = despesa com categoria_id = 5
+        transferencia_m = db.session.query(
+            func.coalesce(func.sum(FinanceiroUsina.valor), 0.0)
+        ).filter(
+            FinanceiroUsina.usina_id == usina_selecionada.id,
+            FinanceiroUsina.tipo == 'despesa',
+            FinanceiroUsina.categoria_id == 5,
+            FinanceiroUsina.data_pagamento >= inicio_m,
+            FinanceiroUsina.data_pagamento < fim_m
+        ).scalar()
+        transferencia_m = _safe_float(transferencia_m)
+
+        # Geração de Caixa ajustada (subtrai a transferência também)
+        liquido_m = _safe_float(receita_m - (despesa_m + transferencia_m))
 
         consolidacao_mensal.append({
             "mes": m,
             "ano": ano,
             "receita": _safe_round(receita_m, 2),
             "despesa": _safe_round(despesa_m, 2),
-            "liquido": _safe_round(receita_m - despesa_m, 2),
+            "transferencia_empresa": _safe_round(transferencia_m, 2),
+            "liquido": _safe_round(liquido_m, 2),
         })
 
     # SÉRIE DO LÍQUIDO (Gráfico)
