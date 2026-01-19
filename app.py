@@ -1146,13 +1146,14 @@ def listar_rateios():
     usinas = Usina.query.all()
     usina_id_filtro = request.args.get('usina_id', type=int)
 
-    # Subquery que pega o maior ID de rateio por cliente + usina
+    # Subquery que pega o maior ID de rateio ATIVO por cliente + usina
     subquery = (
         db.session.query(
             Rateio.cliente_id,
             Rateio.usina_id,
             func.max(Rateio.id).label("max_id")
         )
+        .filter(Rateio.ativo.is_(True))
         .group_by(Rateio.cliente_id, Rateio.usina_id)
     )
 
@@ -1161,12 +1162,10 @@ def listar_rateios():
 
     subquery = subquery.subquery()
 
-    # Junta com Rateio para pegar os registros completos
     rateios = (
         db.session.query(Rateio)
-        .join(subquery, and_(
-            Rateio.id == subquery.c.max_id
-        ))
+        .join(subquery, Rateio.id == subquery.c.max_id)
+        .filter(Rateio.ativo.is_(True))  # segurança extra
         .order_by(Rateio.usina_id, Rateio.cliente_id)
         .all()
     )
