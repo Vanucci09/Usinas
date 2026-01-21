@@ -1,304 +1,242 @@
 import os
-import json
 import time
-import random
+import json
 import requests
-from datetime import date
-from typing import Dict, Any, Optional, List
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
+
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 
-BASE_URL = "https://energy.kehua.com.cn"
-TIMEOUT = 25
+TZ_BR = ZoneInfo("America/Sao_Paulo")
 
-AUTH_CACHE_FILE = "kehua_auth.json"
+BASE = "https://energy.kehua.com.cn"
+LOGIN_PAGE = f"{BASE}/sellerLogin"
+SYS_INVERTER_PAGE = f"{BASE}/sysInverter"
+REALTIME_URL = f"{BASE}/necp/server-maintenance/monitor/getDeviceRealtimeData"
 
-MAX_RETRIES = 5
-BACKOFF_BASE = 0.8
-BACKOFF_CAP = 15.0
+UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+      "AppleWebKit/537.36 (KHTML, like Gecko) "
+      "Chrome/143.0.0.0 Safari/537.36")
 
-
-# === Endpoints que você já confirmou no curl ===
-STATION_TYPE_ENDPOINT = "/necp/server-maintenance/station/listStationType"
-
-# === Endpoint típico para listar usinas (já usamos antes) ===
-STATION_LIST_ENDPOINT = "/necp/server-maintenance/station/listStationByPage"
-
-# === Lista de candidatos para "geração hoje" / realtime (varia muito por conta da Kehua) ===
-ENERGY_ENDPOINTS = [
-    "/necp/monitor/station/getStationRealtimeData",
-    "/necp/monitor/station/getStationRealTimeData",
-    "/necp/monitor/station/getStationStatistics",
-    "/necp/monitor/station/getTodayEnergy",
-    "/necp/monitor/station/getEnergyToday",
-    "/necp/monitor/station/getStationEnergy",
-    "/necp/monitor/report/getStationEnergyCurve",
-    "/necp/monitor/report/getEnergyCurve",
-]
+REQUIRED_HEADER_KEYS = ["authorization", "sign", "clienttype", "web_version", "locale"]
 
 
-# ============================================================
-# EXCEPTIONS
-# ============================================================
-class KehuaError(Exception):
-    pass
-
-class KehuaAuthExpired(KehuaError):
-    pass
-
-class KehuaSystemBusy(KehuaError):
-    pass
-
-
-# ============================================================
-# AUTH CACHE
-# ============================================================
-def load_auth_from_cache() -> Optional[Dict[str, str]]:
-    if not os.path.exists(AUTH_CACHE_FILE):
-        return None
+def _focus_and_type(driver, el, text: str):
+    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
+    time.sleep(0.15)
     try:
-        with open(AUTH_CACHE_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        token = (data.get("token") or "").strip()
-        sign = (data.get("sign") or "").strip()
-        if token and sign:
-            return {"token": token, "sign": sign}
-        return None
+        el.click()
     except Exception:
-        return None
-
-def save_auth_to_cache(token: str, sign: str):
-    with open(AUTH_CACHE_FILE, "w", encoding="utf-8") as f:
-        json.dump({"token": token, "sign": sign, "saved_at": time.time()}, f, ensure_ascii=False, indent=2)
-
-def get_auth_interactive() -> Dict[str, str]:
-    print("\n⚠️ Preciso de um token/sign válido.")
-    print("Pegue no DevTools (Network → Headers) da requisição do portal Kehua.\n")
-    token = input("authorization (KEHUA_TOKEN): ").strip()
-    sign = input("sign (KEHUA_SIGN): ").strip()
-    if not token or not sign:
-        raise SystemExit("❌ Token/sign vazios. Abortei.")
-    save_auth_to_cache(token, sign)
-    print(f"✅ Salvo em {AUTH_CACHE_FILE}.")
-    return {"token": token, "sign": sign}
+        driver.execute_script("arguments[0].click();", el)
+    time.sleep(0.1)
+    try:
+        el.clear()
+    except Exception:
+        el.send_keys(Keys.CONTROL, "a")
+        el.send_keys(Keys.DELETE)
+    el.send_keys(text)
 
 
-# ============================================================
-# CLIENT
-# ============================================================
-class KehuaClient:
-    def __init__(self, token: str, sign: str):
-        self.token = token
-        self.sign = sign
-        self.session = requests.Session()
-        self._apply_headers()
+def _mark_required_checkboxes(driver):
+    time.sleep(0.4)
+    cbs = [cb for cb in driver.find_elements(By.CSS_SELECTOR, "input[type='checkbox']") if cb.is_enabled()]
+    marked = 0
+    for cb in cbs:
+        try:
+            if not cb.is_selected():
+                driver.execute_script("arguments[0].click();", cb)
+            if cb.is_selected():
+                marked += 1
+        except Exception:
+            pass
+    return marked
 
-    def _apply_headers(self):
-        self.session.headers.update({
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Cache-Control": "no-cache",
-            "Pragma": "no-cache",
-            "Connection": "keep-alive",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
 
-            "Origin": BASE_URL,
-            "Referer": BASE_URL + "/customerAgent",
+def _make_driver(headless: bool):
+    options = Options()
+    if headless:
+        options.add_argument("--headless=new")
 
-            # ESSENCIAIS
-            "authorization": self.token,
-            "clientType": "web",
-            "locale": "pt-BR",
-            "web_version": "3.0.4",
-            "sign": self.sign,
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--window-size=1366,900")
+    options.add_argument(f"--user-agent={UA}")
 
-            # para form
-            "Content-Type": "application/x-www-form-urlencoded",
-        })
+    # evitar popups/password manager
+    options.add_argument("--disable-features=PasswordLeakDetection,AutofillServerCommunication")
+    options.add_argument("--disable-save-password-bubble")
+    options.add_argument("--disable-notifications")
+    prefs = {
+        "credentials_enable_service": False,
+        "profile.password_manager_enabled": False,
+        "profile.default_content_setting_values.notifications": 2,
+    }
+    options.add_experimental_option("prefs", prefs)
 
-        # Também pode mandar token como cookie (igual seu curl), ajuda em alguns cenários:
-        self.session.cookies.set("token", self.token)
+    # logs de performance para capturar headers reais
+    options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
+    return webdriver.Chrome(options=options)
 
-    def update_auth(self, token: str, sign: str):
-        self.token = token
-        self.sign = sign
-        self._apply_headers()
 
-    def _sleep_backoff(self, attempt: int):
-        delay = min(BACKOFF_CAP, BACKOFF_BASE * (2 ** (attempt - 1)))
-        jitter = random.uniform(0, delay * 0.25)
-        time.sleep(delay + jitter)
+def _capture_realtime_headers(driver, timeout_sec=25):
+    """
+    Captura os headers do portal na request getDeviceRealtimeData.
+    Retorna dict headers.
+    """
+    # limpa logs antigos
+    try:
+        _ = driver.get_log("performance")
+    except Exception:
+        pass
 
-    def request(self, method: str, path: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        url = BASE_URL + path
-
-        for attempt in range(1, MAX_RETRIES + 1):
+    t0 = time.time()
+    while time.time() - t0 < timeout_sec:
+        logs = driver.get_log("performance")
+        for entry in logs:
             try:
-                if method.upper() == "GET":
-                    r = self.session.get(url, params=payload or {}, timeout=TIMEOUT)
-                else:
-                    # Kehua usa muito x-www-form-urlencoded
-                    r = self.session.post(url, data=payload or {}, timeout=TIMEOUT)
+                msg = json.loads(entry["message"])["message"]
+            except Exception:
+                continue
 
-                if r.status_code >= 500:
-                    if attempt < MAX_RETRIES:
-                        self._sleep_backoff(attempt)
-                        continue
-                    raise KehuaError(f"HTTP {r.status_code}: {r.text[:300]}")
+            if msg.get("method") == "Network.requestWillBeSent":
+                req = (msg.get("params") or {}).get("request") or {}
+                url = req.get("url", "")
+                if "getDeviceRealtimeData" in url:
+                    h = req.get("headers") or {}
+                    return url, h
+        time.sleep(0.6)
 
-                data = r.json()
-                code = str(data.get("code"))
-                msg = data.get("message") or data.get("msg") or ""
+    return None, None
 
-                # Seu erro original
-                if code == "111005":
-                    raise KehuaAuthExpired(msg or "Autenticação expirada")
 
-                # Sistema ocupado
-                if code == "120000":
-                    if attempt < MAX_RETRIES:
-                        self._sleep_backoff(attempt)
-                        continue
-                    raise KehuaSystemBusy(msg or "Sistema ocupado")
+def get_kehua_session_context(username: str, password: str, headless: bool = True):
+    """
+    Faz login no portal, captura:
+      - cookies
+      - headers essenciais (authorization, sign, clientType, web_version, locale)
+      - url do endpoint realtime
+    """
+    driver = _make_driver(headless=headless)
+    wait = WebDriverWait(driver, 60)
 
-                return data
+    try:
+        driver.get(LOGIN_PAGE)
+        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='password']")))
 
-            except (requests.Timeout, requests.ConnectionError) as e:
-                if attempt < MAX_RETRIES:
-                    self._sleep_backoff(attempt)
-                    continue
-                raise KehuaError(f"Falha de rede: {e}")
+        inputs = [e for e in driver.find_elements(By.CSS_SELECTOR, "input") if e.is_displayed()]
+        user_el = None
+        pass_el = None
+        for e in inputs:
+            t = (e.get_attribute("type") or "").lower()
+            name = (e.get_attribute("name") or "").lower()
+            ph = (e.get_attribute("placeholder") or "").lower()
+            if t in ("text", "email"):
+                if name == "username" or "mail" in ph or "email" in ph or user_el is None:
+                    user_el = e
+            if t == "password":
+                pass_el = e
 
-        raise KehuaError("Falha inesperada")
+        _focus_and_type(driver, user_el, username)
+        _focus_and_type(driver, pass_el, password)
+        _mark_required_checkboxes(driver)
 
-    # --------------------------------------------------------
-    # API METHODS
-    # --------------------------------------------------------
-    def list_station_types(self) -> List[Dict[str, Any]]:
-        resp = self.request("POST", STATION_TYPE_ENDPOINT, payload={})
-        # geralmente vem em resp["data"]
-        data = resp.get("data")
-        if isinstance(data, list):
-            return data
-        if isinstance(data, dict) and "result" in data:
-            return data["result"]
-        return []
+        # clicar login
+        btn = None
+        for b in driver.find_elements(By.CSS_SELECTOR, "button"):
+            if b.is_displayed() and "login" in ((b.text or "").lower()):
+                btn = b
+                break
+        if btn:
+            driver.execute_script("arguments[0].click();", btn)
+        else:
+            pass_el.send_keys(Keys.ENTER)
 
-    def list_stations(self, page_size: int = 50) -> List[Dict[str, Any]]:
-        payload = {
-            "pageNumber": 1,
-            "pageSize": page_size,
-            "stationName": "",
-            "stationType": "",
-            "stationStatus": "",
-            "customerId": "",
-            "addressTag": "",
-            "companyName": "",
-            "applicationScenario": "",
+        wait.until(lambda d: "monitor" in (d.current_url or "").lower())
+
+        # ir pra sysInverter (gera as chamadas XHR)
+        driver.get(SYS_INVERTER_PAGE)
+        wait.until(lambda d: "sysInverter" in (d.current_url or ""))
+
+        url, hdr = _capture_realtime_headers(driver, timeout_sec=25)
+        if not url or not hdr:
+            raise RuntimeError("Não consegui capturar headers do getDeviceRealtimeData.")
+
+        # normaliza keys para minúsculo
+        hdr_norm = {str(k).lower(): v for k, v in hdr.items()}
+
+        # monta só os essenciais (mantendo valor original)
+        essential = {}
+        for k in REQUIRED_HEADER_KEYS:
+            if k in hdr_norm:
+                essential[k] = hdr_norm[k]
+
+        # alguns vêm como ClientType no log; já normalizamos
+        if "clienttype" not in essential and "clientType" in hdr:
+            essential["clienttype"] = hdr["clientType"]
+
+        if "authorization" not in essential or "sign" not in essential:
+            raise RuntimeError(f"Headers insuficientes capturados: {list(essential.keys())}")
+
+        cookies = driver.get_cookies()
+
+        return {
+            "realtime_url": url,
+            "headers": essential,   # lower-case keys
+            "cookies": cookies
         }
-        resp = self.request("POST", STATION_LIST_ENDPOINT, payload=payload)
-        return resp["data"]["result"]
 
-    def try_energy_endpoints(self, station: Dict[str, Any]) -> List[Dict[str, Any]]:
-        station_id = station.get("stationId")
-        today = date.today().strftime("%Y-%m-%d")
-
-        payloads = [
-            {"stationId": station_id},
-            {"stationId": station_id, "date": today},
-            {"stationId": station_id, "day": today},
-            {"stationId": station_id, "startDate": today, "endDate": today},
-        ]
-
-        hits = []
-        for ep in ENERGY_ENDPOINTS:
-            for payload in payloads:
-                try:
-                    resp = self.request("POST", ep, payload=payload)
-                    txt = json.dumps(resp, ensure_ascii=False).lower()
-                    print(f"[OK] {ep} | payload={payload}")
-
-                    if any(k in txt for k in ["energy", "kwh", "elec", "power", "yield", "today"]):
-                        hits.append({"endpoint": ep, "payload": payload, "response": resp})
-
-                except KehuaSystemBusy:
-                    print(f"[BUSY] {ep}")
-                except KehuaAuthExpired:
-                    print(f"[AUTH EXPIRED] {ep}")
-                    return hits
-                except Exception as e:
-                    print(f"[ERR] {ep} | {e}")
-
-        return hits
+    finally:
+        driver.quit()
 
 
-# ============================================================
-# BOOTSTRAP
-# ============================================================
-def build_client() -> KehuaClient:
-    token = (os.getenv("KEHUA_TOKEN") or "").strip()
-    sign = (os.getenv("KEHUA_SIGN") or "").strip()
-    if token and sign:
-        return KehuaClient(token, sign)
+def call_realtime_dayelec(ctx: dict, payload: dict) -> tuple[float, dict]:
+    """
+    Faz POST no realtime com cookies + headers capturados.
+    Retorna (dayElec, json).
+    """
+    sess = requests.Session()
+    sess.headers.update({"User-Agent": UA})
 
-    cached = load_auth_from_cache()
-    if cached:
-        print(f"✅ Auth carregada do cache: {AUTH_CACHE_FILE}")
-        return KehuaClient(cached["token"], cached["sign"])
+    # cookies
+    for c in ctx["cookies"]:
+        sess.cookies.set(c["name"], c["value"], domain=c.get("domain"), path=c.get("path", "/"))
 
-    auth = get_auth_interactive()
-    return KehuaClient(auth["token"], auth["sign"])
+    headers = {
+        "accept": "application/json, text/plain, */*",
+        "content-type": "application/x-www-form-urlencoded",
+        "referer": SYS_INVERTER_PAGE,
+        "origin": BASE,
+        # essenciais
+        "authorization": ctx["headers"]["authorization"],
+        "sign": ctx["headers"]["sign"],
+        "clienttype": ctx["headers"].get("clienttype", "web"),
+        "web_version": ctx["headers"].get("web_version", "3.0.4"),
+        "locale": ctx["headers"].get("locale", "pt-BR"),
+    }
 
+    resp = sess.post(ctx["realtime_url"], headers=headers, data=payload, timeout=30)
+    j = resp.json()
 
-def main():
-    client = build_client()
+    if str(j.get("code")) != "0":
+        raise RuntimeError(f"Kehua realtime falhou: code={j.get('code')} msg={j.get('message')}")
 
-    # 1) tipos
-    print("== LISTANDO TIPOS DE USINA (listStationType) ==")
-    try:
-        types_ = client.list_station_types()
-    except KehuaAuthExpired as e:
-        print(f"⚠️ {e} — vou pedir token/sign novo e tentar de novo.")
-        auth = get_auth_interactive()
-        client.update_auth(auth["token"], auth["sign"])
-        types_ = client.list_station_types()
+    # extrair dayElec
+    day = 0.0
+    data = j.get("data") or {}
+    yc_infos = data.get("ycInfos") or data.get("ycInfo") or []
+    for grupo in yc_infos:
+        dps = grupo.get("dataPoint") or grupo.get("datapoint") or []
+        for p in dps:
+            if (p.get("property") or p.get("name")) in ("dayElec", "day_elec", "dayEnergy"):
+                day = float(p.get("val") or 0)
+                break
+        if day:
+            break
 
-    print(f"Tipos retornados: {len(types_)}")
-    for t in types_[:20]:
-        print("-", t)
-
-    # 2) usinas
-    print("\n== LISTANDO USINAS (listStationByPage) ==")
-    try:
-        stations = client.list_stations()
-    except KehuaAuthExpired as e:
-        print(f"⚠️ {e} — vou pedir token/sign novo e tentar de novo.")
-        auth = get_auth_interactive()
-        client.update_auth(auth["token"], auth["sign"])
-        stations = client.list_stations()
-
-    print(f"Total: {len(stations)}")
-    for s in stations:
-        print(f"- {s.get('stationId')} | {s.get('stationName')} | cap={s.get('capacity')}")
-
-    if not stations:
-        print("Nenhuma usina retornada.")
-        return
-
-    # 3) tenta achar endpoint de energia
-    station = stations[0]
-    print(f"\n== TESTANDO GERAÇÃO / REALTIME: {station.get('stationName')} (ID {station.get('stationId')}) ==")
-    hits = client.try_energy_endpoints(station)
-
-    print("\n== HITS DE ENERGIA ==")
-    if not hits:
-        print("Nenhum endpoint retornou dados óbvios de energia.")
-        print("➡️ Dica: pegue no DevTools (Network) qual endpoint o portal usa ao abrir o dashboard da usina.")
-    else:
-        for h in hits:
-            print("\n>>>", h["endpoint"])
-            print("payload:", h["payload"])
-            print("preview:", json.dumps(h["response"], ensure_ascii=False)[:900])
-
-
-if __name__ == "__main__":
-    main()
+    return day, j

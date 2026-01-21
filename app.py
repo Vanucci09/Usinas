@@ -41,6 +41,7 @@ import re, unicodedata
 from sqlalchemy.dialects.postgresql import JSONB
 from urllib.parse import urljoin
 import traceback
+from zoneinfo import ZoneInfo
 
 
 app = Flask(__name__)
@@ -3627,10 +3628,18 @@ def vincular_estacoes():
         usinas=usinas
     )
     
+TZ_BR = ZoneInfo("America/Sao_Paulo")
+
+def agora_br() -> datetime:
+    return datetime.now(TZ_BR)
+
+def hoje_br() -> date:
+    return agora_br().date()
+    
 @app.route('/atualizar_geracao')
 @login_required
 def atualizar_geracao():
-    hoje = date.today()
+    hoje = hoje_br()
 
     listar_e_salvar_geracoes(hoje=hoje)      # Solis + Sungrow
     listar_e_salvar_geracoes_kehua()         # Kehua
@@ -3640,7 +3649,7 @@ def atualizar_geracao():
 
 def listar_e_salvar_geracoes(hoje=None):
     if hoje is None:
-        hoje = date.today()
+        hoje = hoje_br()
 
     usina_kwh_por_dia = {}
 
@@ -3725,27 +3734,91 @@ def listar_e_salvar_geracoes(hoje=None):
 
     db.session.commit()
     print("✅ Geração diária salva para todas as usinas (Solis + Sungrow).")
+    
+TZ_BR = ZoneInfo("America/Sao_Paulo")
+
+GERACAO_JOB_LOCK = threading.Lock()
+GERACAO_JOB_RUNNING = False
+GERACAO_LAST_RUN_AT = None
+GERACAO_MIN_INTERVAL = 30  # segundos (anti-disparo duplo)
 
 def atualizar_geracao_agendada():
-    with app.app_context():
+    global GERACAO_JOB_RUNNING, GERACAO_LAST_RUN_AT
+
+    now = agora_br()
+
+    # trava concorrência (mesmo processo)
+    if not GERACAO_JOB_LOCK.acquire(blocking=False):
+        print(f"[{now}] ⏭️ Job já em execução. Ignorando.")
+        return
+
+    try:
+        # anti-disparo duplo: se rodou há poucos segundos, ignora
+        if GERACAO_LAST_RUN_AT is not None:
+            dt = (now - GERACAO_LAST_RUN_AT).total_seconds()
+            if dt < GERACAO_MIN_INTERVAL:
+                print(f"[{now}] ⏭️ Disparo duplicado ({dt:.1f}s). Ignorando.")
+                return
+
+        if GERACAO_JOB_RUNNING:
+            print(f"[{now}] ⏭️ Flag running ativa. Ignorando.")
+            return
+
+        GERACAO_JOB_RUNNING = True
+        GERACAO_LAST_RUN_AT = now
+
+        with app.app_context():
+            hoje = hoje_br()
+            print(f"[{agora_br()}] Atualizando geração automaticamente... " f"PID={os.getpid()} (data_ref={hoje})")
+
+            listar_e_salvar_geracoes(hoje=hoje)
+            listar_e_salvar_geracoes_kehua(hoje=hoje)
+
+            print(f"[{agora_br()}] ✅ Atualização concluída.")
+
+    except Exception as e:
+        print(f"[{agora_br()}] ❌ Erro na atualização agendada: {e}")
+        traceback.print_exc()
+
+    finally:
+        GERACAO_JOB_RUNNING = False
         try:
-            print(f"[{datetime.now()}] Atualizando geração automaticamente...")
-            listar_e_salvar_geracoes()        # Solis + Sungrow
-            listar_e_salvar_geracoes_kehua()  # Kehua com getDeviceRealtimeData
-            print("✅ Atualização concluída.")
-        except Exception as e:
-            print(f"❌ Erro na atualização agendada: {e}")
+            GERACAO_JOB_LOCK.release()
+        except Exception:
+            pass
 
 # Scheduler único
-scheduler = BackgroundScheduler()
-scheduler.add_job(
-    func=atualizar_geracao_agendada,
-    trigger="interval",
-    minutes=15
-)
-scheduler.start()
+scheduler = BackgroundScheduler(timezone=str(TZ_BR))
 
-atexit.register(lambda: scheduler.shutdown())
+def start_scheduler_once():
+    """
+    Em debug (reloader), só inicia no processo 'real'
+    Em produção, inicia normal (desde que você use 1 worker)
+    """
+    is_reloader_process = (os.environ.get("WERKZEUG_RUN_MAIN") == "true")
+    is_debug = bool(getattr(app, "debug", False))
+
+    if is_debug and not is_reloader_process:
+        print(f"[{agora_br()}] ⏭️ Debug reloader: não iniciando scheduler neste processo.")
+        return
+
+    if scheduler.running:
+        print(f"[{agora_br()}] ♻️ Scheduler já está rodando.")
+        return
+
+    scheduler.add_job(
+        func=atualizar_geracao_agendada,
+        trigger="interval",
+        minutes=15,
+        id="job_atualizar_geracao",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=60,
+    )
+    scheduler.start()
+    atexit.register(lambda: scheduler.shutdown(wait=False))
+    print(f"[{agora_br()}] ✅ Scheduler iniciado (único). PID={os.getpid()}")
 
 @app.route('/atualizar_periodo', methods=['GET', 'POST'])
 def atualizar_periodo():
@@ -5786,41 +5859,55 @@ def relatorio_prestacao():
         ano_atual=ano_atual
     )
 
-def listar_e_salvar_geracoes_kehua():
-    def login_kehua():
-        url_login = "https://energy.kehua.com/necp/login/northboundLogin"
-        login_data = {
-            "username": "monitoramento@cgrenergia.com",
-            "password": "12345678",
-            "locale": "en"
-        }
-        resp = requests.post(url_login, data=login_data)
+Z_BR = ZoneInfo("America/Sao_Paulo")
 
-        if resp.status_code != 200:
-            print(f"❌ Login Kehua falhou. HTTP {resp.status_code}")
-            return None
+BASE = "https://energy.kehua.com.cn"
+LOGIN_PAGE = f"{BASE}/sellerLogin"
+SYS_INVERTER_PAGE = f"{BASE}/sysInverter"
+REALTIME_URL = f"{BASE}/necp/server-maintenance/monitor/getDeviceRealtimeData"
 
-        json_resp = resp.json()
-        # Alguns ambientes Kehua mandam token no header, outros no JSON
-        token = json_resp.get("token") or resp.headers.get("Authorization")
-        return token
+UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+      "AppleWebKit/537.36 (KHTML, like Gecko) "
+      "Chrome/143.0.0.0 Safari/537.36")
 
-    hoje = date.today()
-    token = login_kehua()
 
-    if not token:
-        print("❌ Token da Kehua não encontrado.")
-        return
+def agora_br():
+    return datetime.now(TZ_BR)
 
-    headers = {
-        "Authorization": token,
-        "Content-Type": "application/x-www-form-urlencoded",
-        "clienttype": "web"
-    }
+def hoje_br():
+    return agora_br().date()
+
+
+# =========================
+# CACHE GLOBAL (em memória)
+# =========================
+KEHUA_AUTH_CACHE = {
+    "expires_at": None,     # datetime TZ_BR
+    "realtime_url": None,   # url capturada do portal
+    "headers": None,        # dict lower() com authorization/sign/clienttype/web_version/locale
+    "cookies": None,        # lista de cookies do selenium (dicts)
+}
+
+KEHUA_TTL_SECONDS = int(os.getenv("KEHUA_TTL_SECONDS", "10800"))  # 3h
+KEHUA_CAPTURE_TIMEOUT = int(os.getenv("KEHUA_CAPTURE_TIMEOUT", "35"))  # seg
+
+
+def listar_e_salvar_geracoes_kehua(hoje=None):
+    """
+    ✅ Versão ajustada:
+    - Usa CACHE em memória (não abre Selenium a cada ciclo)
+    - Reabre Selenium só quando cache expira ou quando a API retorna erro de auth
+    - Mantém suas travas anti-duplicidade (0-2h, igual ontem, não sobrescrever menor)
+    - Reduz logs barulhentos do Chrome
+    """
+    if hoje is None:
+        hoje = hoje_br()
+
+    KEHUA_USER = os.getenv("KEHUA_USER") or "monitoramento@cgrenergia.com"
+    KEHUA_PASS = os.getenv("KEHUA_PASS") or "12345678"
 
     KEHUA_CONFIG = {
-        # usina.id: {payload fixo pra essa estação}
-        9: {  # Bloco A Expansão
+        9: {
             "stationId": "31080",
             "companyId": "757",
             "areaCode": "903",
@@ -5830,67 +5917,324 @@ def listar_e_salvar_geracoes_kehua():
         }
     }
 
+    # -------------------------
+    # Helpers internos (CACHE)
+    # -------------------------
+    def _cache_valido() -> bool:
+        exp = KEHUA_AUTH_CACHE.get("expires_at")
+        return bool(exp and exp > agora_br()
+                    and KEHUA_AUTH_CACHE.get("headers")
+                    and KEHUA_AUTH_CACHE.get("cookies"))
+
+    def _make_driver():
+        options = Options()
+
+        HEADLESS = (os.getenv("HEADLESS", "1") == "1")
+        if HEADLESS:
+            options.add_argument("--headless=new")
+
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--window-size=1366,900")
+        options.add_argument(f"--user-agent={UA}")
+
+        # menos barulho no console
+        options.add_argument("--log-level=3")
+        options.add_argument("--disable-logging")
+        options.add_experimental_option("excludeSwitches", ["enable-logging"])
+
+        # evita popup/gerenciador de senhas
+        options.add_argument("--disable-features=PasswordLeakDetection,AutofillServerCommunication")
+        options.add_argument("--disable-save-password-bubble")
+        options.add_argument("--disable-notifications")
+        prefs = {
+            "credentials_enable_service": False,
+            "profile.password_manager_enabled": False,
+            "profile.default_content_setting_values.notifications": 2,
+        }
+        options.add_experimental_option("prefs", prefs)
+
+        # Performance logs p/ capturar headers do XHR
+        options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
+
+        return webdriver.Chrome(options=options)
+
+    def _focus_and_type(driver, el, text: str):
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
+        time.sleep(0.12)
+        try:
+            el.click()
+        except Exception:
+            driver.execute_script("arguments[0].click();", el)
+        time.sleep(0.08)
+        try:
+            el.clear()
+        except Exception:
+            el.send_keys(Keys.CONTROL, "a")
+            el.send_keys(Keys.DELETE)
+        el.send_keys(text)
+
+    def _mark_checkboxes(driver):
+        time.sleep(0.35)
+        cbs = [cb for cb in driver.find_elements(By.CSS_SELECTOR, "input[type='checkbox']") if cb.is_enabled()]
+        # marca todos os que aparecerem (no seu caso são 2)
+        for cb in cbs:
+            try:
+                if not cb.is_selected():
+                    driver.execute_script("arguments[0].click();", cb)
+            except Exception:
+                pass
+
+    def _capture_headers_realtime(driver, timeout_sec=35):
+        # limpa logs
+        try:
+            _ = driver.get_log("performance")
+        except Exception:
+            pass
+
+        t0 = time.time()
+        while time.time() - t0 < timeout_sec:
+            try:
+                logs = driver.get_log("performance")
+            except Exception:
+                logs = []
+
+            for entry in logs:
+                try:
+                    msg = json.loads(entry["message"])["message"]
+                except Exception:
+                    continue
+
+                if msg.get("method") != "Network.requestWillBeSent":
+                    continue
+
+                req = (msg.get("params") or {}).get("request") or {}
+                url = req.get("url", "") or ""
+                if "getDeviceRealtimeData" not in url:
+                    continue
+
+                headers = req.get("headers") or {}
+                h = {str(k).lower(): v for k, v in headers.items()}
+                return url, h
+
+            time.sleep(0.5)
+
+        return None, None
+
+    def _login_e_atualizar_cache():
+        driver = _make_driver()
+        wait = WebDriverWait(driver, 60)
+
+        try:
+            driver.get(LOGIN_PAGE)
+            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='password']")))
+
+            inputs = [e for e in driver.find_elements(By.CSS_SELECTOR, "input") if e.is_displayed()]
+            user_el = None
+            pass_el = None
+            for e in inputs:
+                t = (e.get_attribute("type") or "").lower()
+                name = (e.get_attribute("name") or "").lower()
+                ph = (e.get_attribute("placeholder") or "").lower()
+                if t in ("text", "email"):
+                    if name == "username" or "mail" in ph or "email" in ph or user_el is None:
+                        user_el = e
+                if t == "password":
+                    pass_el = e
+
+            if not user_el or not pass_el:
+                raise RuntimeError("Não encontrei inputs de login (username/password).")
+
+            _focus_and_type(driver, user_el, KEHUA_USER)
+            _focus_and_type(driver, pass_el, KEHUA_PASS)
+            _mark_checkboxes(driver)
+
+            # clicar login
+            clicked = False
+            for b in driver.find_elements(By.CSS_SELECTOR, "button"):
+                if b.is_displayed() and "login" in ((b.text or "").lower()):
+                    driver.execute_script("arguments[0].click();", b)
+                    clicked = True
+                    break
+            if not clicked:
+                pass_el.send_keys(Keys.ENTER)
+
+            wait.until(lambda d: "monitor" in (d.current_url or "").lower())
+
+            # ir pra sysInverter (onde o portal costuma fazer a XHR)
+            driver.get(SYS_INVERTER_PAGE)
+            wait.until(lambda d: "sysinverter" in (d.current_url or "").lower())
+            time.sleep(2.5)  # dá tempo do portal disparar XHR
+
+            realtime_url, realtime_headers = _capture_headers_realtime(driver, timeout_sec=KEHUA_CAPTURE_TIMEOUT)
+            if not realtime_url:
+                realtime_url = REALTIME_URL
+            if not realtime_headers:
+                realtime_headers = {}
+
+            # cookies (selenium) para requests
+            cookies = driver.get_cookies()
+
+            # valida “essenciais” (se ainda não tiver, tenta um retry curto)
+            h = {str(k).lower(): v for k, v in (realtime_headers or {}).items()}
+            if not h.get("authorization") or not h.get("sign"):
+                time.sleep(2)
+                realtime_url2, realtime_headers2 = _capture_headers_realtime(driver, timeout_sec=KEHUA_CAPTURE_TIMEOUT)
+                if realtime_url2:
+                    realtime_url = realtime_url2
+                if realtime_headers2:
+                    h = {str(k).lower(): v for k, v in realtime_headers2.items()}
+
+            if not h.get("authorization") or not h.get("sign"):
+                raise RuntimeError("Headers essenciais (authorization/sign) não capturados.")
+
+            KEHUA_AUTH_CACHE["realtime_url"] = realtime_url
+            KEHUA_AUTH_CACHE["headers"] = h
+            KEHUA_AUTH_CACHE["cookies"] = cookies
+            KEHUA_AUTH_CACHE["expires_at"] = agora_br() + timedelta(seconds=KEHUA_TTL_SECONDS)
+
+            print(f"✅ Kehua: cache de autenticação atualizado (expira em {KEHUA_AUTH_CACHE['expires_at']}).")
+
+        finally:
+            try:
+                driver.quit()
+            except Exception:
+                pass
+
+    def _session_from_cache() -> requests.Session:
+        sess = requests.Session()
+        sess.headers.update({"User-Agent": UA})
+
+        for c in (KEHUA_AUTH_CACHE.get("cookies") or []):
+            # selenium entrega domain/path, então respeita isso
+            sess.cookies.set(
+                c["name"],
+                c["value"],
+                domain=c.get("domain"),
+                path=c.get("path", "/")
+            )
+        return sess
+
+    def _call_realtime(sess: requests.Session, url: str, h: dict, payload: dict) -> float:
+        headers = {
+            "accept": "application/json, text/plain, */*",
+            "content-type": "application/x-www-form-urlencoded",
+            "referer": SYS_INVERTER_PAGE,
+            "origin": BASE,
+
+            "authorization": h.get("authorization"),
+            "sign": h.get("sign"),
+            "clienttype": h.get("clienttype", "web"),
+            "web_version": h.get("web_version", "3.0.4"),
+            "locale": h.get("locale", "pt-BR"),
+        }
+
+        if not headers["authorization"] or not headers["sign"]:
+            raise RuntimeError("Headers essenciais (authorization/sign) ausentes no cache.")
+
+        resp = sess.post(url, headers=headers, data=payload, timeout=30)
+        j = resp.json()
+
+        if str(j.get("code")) != "0":
+            # se perder auth, vamos forçar refresh do cache
+            raise RuntimeError(f"Kehua code={j.get('code')} msg={j.get('message')}")
+
+        # extrair dayElec
+        kwh = 0.0
+        data = j.get("data") or {}
+        yc_infos = data.get("ycInfos") or data.get("ycInfo") or []
+        for grupo in yc_infos:
+            dps = grupo.get("dataPoint") or grupo.get("datapoint") or []
+            for p in dps:
+                prop = p.get("property") or p.get("name")
+                if prop in ("dayElec", "day_elec", "dayEnergy"):
+                    try:
+                        kwh = float(p.get("val") or 0)
+                    except Exception:
+                        kwh = 0.0
+                    break
+            if kwh:
+                break
+
+        return kwh
+
+    # =========================================================
+    # 0) Garantir cache válido
+    # =========================================================
+    try:
+        if not _cache_valido():
+            _login_e_atualizar_cache()
+    except Exception as e:
+        print(f"❌ Kehua: falha ao atualizar cache de autenticação: {e}")
+        return  # sem auth não dá pra consultar
+
+    # =========================================================
+    # 1) Consultar e salvar no banco (com travas anti-duplicidade)
+    # =========================================================
     usinas = Usina.query.filter(Usina.kehua_station_id.isnot(None)).all()
+    if not usinas:
+        return
+
+    sess = _session_from_cache()
+    realtime_url = KEHUA_AUTH_CACHE.get("realtime_url") or REALTIME_URL
+    realtime_headers = KEHUA_AUTH_CACHE.get("headers") or {}
 
     for usina in usinas:
         cfg = KEHUA_CONFIG.get(usina.id)
         if not cfg:
-            print(f"⚠️ Kehua: usina {usina.nome} (id={usina.id}) ainda não está configurada em KEHUA_CONFIG.")
+            print(f"⚠️ Kehua: usina {usina.nome} (id={usina.id}) sem config no KEHUA_CONFIG.")
             continue
 
-        soma_kwh = 0.0
-
+        # ---- tenta consultar; se falhar por auth/param, renova cache 1x e tenta novamente ----
         try:
-            resp = requests.post(
-                "https://energy.kehua.com/necp/monitor/getDeviceRealtimeData",
-                headers=headers,
-                data=cfg
-            )
+            kwh = _call_realtime(sess, realtime_url, realtime_headers, cfg)
+        except Exception as e1:
+            msg = str(e1)
+            print(f"⚠️ Kehua: tentativa 1 falhou ({usina.nome}): {msg}. Vou renovar cache e tentar 1x...")
 
-            if resp.status_code != 200:
-                print(f"⚠️ Erro HTTP ao consultar {usina.nome}: {resp.status_code}")
+            try:
+                _login_e_atualizar_cache()
+                sess = _session_from_cache()
+                realtime_url = KEHUA_AUTH_CACHE.get("realtime_url") or REALTIME_URL
+                realtime_headers = KEHUA_AUTH_CACHE.get("headers") or {}
+                kwh = _call_realtime(sess, realtime_url, realtime_headers, cfg)
+            except Exception as e2:
+                print(f"❌ Kehua: erro ao consultar {usina.nome} após renovar cache: {e2}")
                 continue
 
-            json_resp = resp.json()
-            if json_resp.get("code") != "0":
-                print(f"⚠️ Erro API Kehua ({usina.nome}): {json_resp.get('message')}")
-                continue
+        # ===== TRAVAS ANTI-ERRO =====
+        ontem = hoje - timedelta(days=1)
+        ger_ontem = Geracao.query.filter_by(usina_id=usina.id, data=ontem).first()
 
-            data = json_resp.get("data", {})
-            yc_infos = data.get("ycInfos") or data.get("ycInfo") or []
-
-            kwh = 0.0
-            for grupo in yc_infos:
-                data_points = grupo.get("dataPoint") or grupo.get("datapoint") or []
-                for ponto in data_points:
-                    prop = ponto.get("property") or ponto.get("name")
-                    if prop in ("dayElec", "day_elec", "dayEnergy"):
-                        try:
-                            kwh = float(ponto.get("val") or 0)
-                        except (TypeError, ValueError):
-                            kwh = 0.0
-                        break
-                if kwh > 0:
-                    break
-
-            soma_kwh += kwh
-
-        except Exception as e:
-            print(f"❌ Erro ao consultar {usina.nome}: {e}")
+        # (A) janela crítica pós-meia-noite
+        hora = agora_br().hour
+        if 0 <= hora < 2 and kwh > 0:
+            print(f"🚫 Kehua: {usina.nome} {hoje} ({hora}h) retornou {kwh:.2f} cedo demais. Não vou gravar.")
             continue
 
-        if soma_kwh > 0:
-            geracao = Geracao.query.filter_by(usina_id=usina.id, data=hoje).first()
-            if geracao:
-                geracao.energia_kwh = soma_kwh
+        # (B) se igual ao de ontem, não grava
+        if ger_ontem and kwh > 0:
+            if abs(float(ger_ontem.energia_kwh or 0) - float(kwh)) < 0.0001:
+                print(f"🚫 Kehua: {usina.nome} retornou {kwh:.2f} igual ontem ({ontem}). Não vou gravar em {hoje}.")
+                continue
+
+        # (C) não sobrescrever se já tem hoje e veio menor
+        ger_hoje = Geracao.query.filter_by(usina_id=usina.id, data=hoje).first()
+        if ger_hoje and kwh > 0 and float(ger_hoje.energia_kwh or 0) > float(kwh):
+            print(f"⚠️ Kehua: {usina.nome} veio menor ({kwh:.2f}) que salvo ({ger_hoje.energia_kwh}). Mantendo maior.")
+            continue
+
+        # ===== GRAVAR =====
+        if kwh > 0:
+            if ger_hoje:
+                ger_hoje.energia_kwh = kwh
             else:
-                nova = Geracao(data=hoje, usina_id=usina.id, energia_kwh=soma_kwh)
-                db.session.add(nova)
+                db.session.add(Geracao(data=hoje, usina_id=usina.id, energia_kwh=kwh))
 
             db.session.commit()
-            print(f"✅ Kehua: Geração salva para {usina.nome}: {soma_kwh:.2f} kWh")
+            print(f"✅ Kehua: {usina.nome} salvo em {hoje}: {kwh:.2f} kWh")
         else:
-            print(f"⚠️ Kehua: {usina.nome} retornou geração 0 (dayElec não veio ou veio 0)")
+            print(f"⚠️ Kehua: {usina.nome} retornou 0 em {hoje}.")
 
 def buscar_estacoes_kehua():
     url_login = "https://energy.kehua.com/necp/login/northboundLogin"
@@ -9960,4 +10304,5 @@ def empresa_conta_bancaria_excluir(conta_id):
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(debug=True)
+    start_scheduler_once()
+    app.run(debug=True, use_reloader=False)
