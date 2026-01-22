@@ -3809,7 +3809,7 @@ def start_scheduler_once():
     scheduler.add_job(
         func=atualizar_geracao_agendada,
         trigger="interval",
-        minutes=5,
+        minutes=15,
         id="job_atualizar_geracao",
         replace_existing=True,
         max_instances=1,
@@ -5880,13 +5880,11 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
       "AppleWebKit/537.36 (KHTML, like Gecko) "
       "Chrome/143.0.0.0 Safari/537.36")
 
-
 def agora_br():
     return datetime.now(TZ_BR)
 
 def hoje_br():
     return agora_br().date()
-
 
 # =========================
 # CACHE GLOBAL (em memória)
@@ -5901,15 +5899,15 @@ KEHUA_AUTH_CACHE = {
 KEHUA_TTL_SECONDS = int(os.getenv("KEHUA_TTL_SECONDS", "10800"))  # 3h
 KEHUA_CAPTURE_TIMEOUT = int(os.getenv("KEHUA_CAPTURE_TIMEOUT", "35"))  # seg
 
-
 def listar_e_salvar_geracoes_kehua(hoje=None):
     """
-    ✅ Versão ajustada:
-    - Usa CACHE em memória (não abre Selenium a cada ciclo)
-    - Reabre Selenium só quando cache expira ou quando a API retorna erro de auth
-    - Mantém suas travas anti-duplicidade (0-2h, igual ontem, não sobrescrever menor)
-    - Reduz logs barulhentos do Chrome
+    ✔ Versão FINAL
+    - Cache em memória (não abre Selenium sempre)
+    - Selenium só quando auth expira ou falha
+    - Funciona em local + Render
+    - Travas anti-duplicidade
     """
+
     if hoje is None:
         hoje = hoje_br()
 
@@ -5917,7 +5915,7 @@ def listar_e_salvar_geracoes_kehua(hoje=None):
     KEHUA_PASS = os.getenv("KEHUA_PASS") or "12345678"
 
     KEHUA_CONFIG = {
-        9: {
+        9: {  # Bloco A Expansão
             "stationId": "31080",
             "companyId": "757",
             "areaCode": "903",
@@ -5927,183 +5925,235 @@ def listar_e_salvar_geracoes_kehua(hoje=None):
         }
     }
 
-    # -------------------------
-    # Helpers internos (CACHE)
-    # -------------------------
-    def _cache_valido() -> bool:
-        exp = KEHUA_AUTH_CACHE.get("expires_at")
-        return bool(exp and exp > agora_br()
-                    and KEHUA_AUTH_CACHE.get("headers")
-                    and KEHUA_AUTH_CACHE.get("cookies"))
+    # =========================================================
+    # Helpers
+    # =========================================================
+    def cache_valido():
+        return (
+            KEHUA_AUTH_CACHE.get("sess")
+            and KEHUA_AUTH_CACHE.get("headers")
+            and KEHUA_AUTH_CACHE.get("expires_at")
+            and KEHUA_AUTH_CACHE["expires_at"] > agora_br()
+        )
 
-    def _make_driver():
+    def extrair_day_kwh(json_resp: dict) -> float:
+        data = json_resp.get("data") or {}
+        yc_infos = data.get("ycInfos") or []
+        for grupo in yc_infos:
+            for p in grupo.get("dataPoint") or []:
+                if p.get("property") == "dayElec":
+                    return float(p.get("val") or 0)
+        return 0.0
+
+    # =========================================================
+    # LOGIN + CAPTURA HEADERS (SELENIUM)
+    # =========================================================
+    def autenticar_kehua():
         options = Options()
-
-        HEADLESS = (os.getenv("HEADLESS", "1") == "1")
-        if HEADLESS:
+        if os.getenv("HEADLESS", "1") == "1":
             options.add_argument("--headless=new")
 
+        # Render/Docker flags
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
         options.add_argument("--window-size=1366,900")
+        options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_argument(f"--user-agent={UA}")
 
-        # menos barulho no console
+        # diminuir barulho
         options.add_argument("--log-level=3")
         options.add_argument("--disable-logging")
         options.add_experimental_option("excludeSwitches", ["enable-logging"])
 
-        # evita popup/gerenciador de senhas
-        options.add_argument("--disable-features=PasswordLeakDetection,AutofillServerCommunication")
-        options.add_argument("--disable-save-password-bubble")
-        options.add_argument("--disable-notifications")
-        prefs = {
-            "credentials_enable_service": False,
-            "profile.password_manager_enabled": False,
-            "profile.default_content_setting_values.notifications": 2,
-        }
-        options.add_experimental_option("prefs", prefs)
-
-        # Performance logs p/ capturar headers do XHR
+        # performance logs (capturar headers reais)
         options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
 
-        return webdriver.Chrome(options=options)
+        driver = webdriver.Chrome(options=options)
+        wait = WebDriverWait(driver, 90)
 
-    def _focus_and_type(driver, el, text: str):
-        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
-        time.sleep(0.12)
-        try:
-            el.click()
-        except Exception:
-            driver.execute_script("arguments[0].click();", el)
-        time.sleep(0.08)
-        try:
-            el.clear()
-        except Exception:
-            el.send_keys(Keys.CONTROL, "a")
-            el.send_keys(Keys.DELETE)
-        el.send_keys(text)
-
-    def _mark_checkboxes(driver):
-        time.sleep(0.35)
-        cbs = [cb for cb in driver.find_elements(By.CSS_SELECTOR, "input[type='checkbox']") if cb.is_enabled()]
-        # marca todos os que aparecerem (no seu caso são 2)
-        for cb in cbs:
+        def dump_debug(prefix="kehua_login_fail"):
             try:
-                if not cb.is_selected():
-                    driver.execute_script("arguments[0].click();", cb)
+                driver.save_screenshot(f"{prefix}.png")
+            except Exception:
+                pass
+            try:
+                html = driver.page_source or ""
+                with open(f"{prefix}.html", "w", encoding="utf-8") as f:
+                    f.write(html)
+            except Exception:
+                pass
+            try:
+                print(f"[{agora_br()}] DEBUG URL:", driver.current_url)
             except Exception:
                 pass
 
-    def _capture_headers_realtime(driver, timeout_sec=35):
-        # limpa logs
-        try:
-            _ = driver.get_log("performance")
-        except Exception:
-            pass
-
-        t0 = time.time()
-        while time.time() - t0 < timeout_sec:
+        def has_token_cookie():
             try:
-                logs = driver.get_log("performance")
+                for c in driver.get_cookies():
+                    if (c.get("name") or "").lower() == "token" and c.get("value"):
+                        return True
             except Exception:
-                logs = []
+                pass
+            return False
 
-            for entry in logs:
+        def click_login_button():
+            # tenta achar botão "Login" visível/clicável
+            buttons = driver.find_elements(By.CSS_SELECTOR, "button")
+            for b in buttons:
                 try:
-                    msg = json.loads(entry["message"])["message"]
+                    txt = (b.text or "").strip().lower()
+                    if b.is_displayed() and b.is_enabled() and "login" in txt:
+                        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", b)
+                        driver.execute_script("arguments[0].click();", b)
+                        return True
                 except Exception:
                     continue
-
-                if msg.get("method") != "Network.requestWillBeSent":
-                    continue
-
-                req = (msg.get("params") or {}).get("request") or {}
-                url = req.get("url", "") or ""
-                if "getDeviceRealtimeData" not in url:
-                    continue
-
-                headers = req.get("headers") or {}
-                h = {str(k).lower(): v for k, v in headers.items()}
-                return url, h
-
-            time.sleep(0.5)
-
-        return None, None
-
-    def _login_e_atualizar_cache():
-        driver = _make_driver()
-        wait = WebDriverWait(driver, 60)
+            return False
 
         try:
+            print(f"[{agora_br()}] 🔐 Kehua: abrindo login")
             driver.get(LOGIN_PAGE)
+
+            # garante que inputs carregaram
             wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='password']")))
 
-            inputs = [e for e in driver.find_elements(By.CSS_SELECTOR, "input") if e.is_displayed()]
+            # localizar inputs VISÍVEIS
+            inputs = [i for i in driver.find_elements(By.CSS_SELECTOR, "input") if i.is_displayed()]
             user_el = None
             pass_el = None
-            for e in inputs:
-                t = (e.get_attribute("type") or "").lower()
-                name = (e.get_attribute("name") or "").lower()
-                ph = (e.get_attribute("placeholder") or "").lower()
-                if t in ("text", "email"):
-                    if name == "username" or "mail" in ph or "email" in ph or user_el is None:
-                        user_el = e
+            for i in inputs:
+                t = (i.get_attribute("type") or "").lower()
+                if t in ("text", "email") and user_el is None:
+                    user_el = i
                 if t == "password":
-                    pass_el = e
+                    pass_el = i
 
             if not user_el or not pass_el:
-                raise RuntimeError("Não encontrei inputs de login (username/password).")
+                dump_debug("kehua_inputs_not_found")
+                raise RuntimeError("Não encontrei inputs visíveis de usuário/senha.")
 
-            _focus_and_type(driver, user_el, KEHUA_USER)
-            _focus_and_type(driver, pass_el, KEHUA_PASS)
-            _mark_checkboxes(driver)
+            # preencher
+            user_el.click()
+            user_el.send_keys(Keys.CONTROL, "a")
+            user_el.send_keys(Keys.DELETE)
+            user_el.send_keys(KEHUA_USER)
 
-            # clicar login
-            clicked = False
-            for b in driver.find_elements(By.CSS_SELECTOR, "button"):
-                if b.is_displayed() and "login" in ((b.text or "").lower()):
-                    driver.execute_script("arguments[0].click();", b)
-                    clicked = True
-                    break
-            if not clicked:
+            pass_el.click()
+            pass_el.send_keys(Keys.CONTROL, "a")
+            pass_el.send_keys(Keys.DELETE)
+            pass_el.send_keys(KEHUA_PASS)
+
+            # marcar checkboxes (tem que marcar os 2)
+            # NOTE: às vezes o checkbox real é o input hidden + label clicável.
+            cbs = driver.find_elements(By.CSS_SELECTOR, "input[type='checkbox']")
+            for cb in cbs:
+                try:
+                    if cb.is_displayed() and cb.is_enabled() and not cb.is_selected():
+                        driver.execute_script("arguments[0].click();", cb)
+                except Exception:
+                    pass
+
+            # tenta clicar no botão Login, se não achar -> ENTER
+            if not click_login_button():
                 pass_el.send_keys(Keys.ENTER)
 
-            wait.until(lambda d: "monitor" in (d.current_url or "").lower())
+            # ✅ condição correta de “logou”:
+            # 1) cookie token aparece OU
+            # 2) URL sai do sellerLogin OU
+            # 3) página troca e some o input password
+            def login_ok(d):
+                try:
+                    url = (d.current_url or "").lower()
+                    if has_token_cookie():
+                        return True
+                    if "sellerlogin" not in url:
+                        return True
+                    pw = d.find_elements(By.CSS_SELECTOR, "input[type='password']")
+                    if not any(x.is_displayed() for x in pw):
+                        return True
+                except Exception:
+                    pass
+                return False
 
-            # ir pra sysInverter (onde o portal costuma fazer a XHR)
+            try:
+                wait.until(login_ok)
+            except TimeoutException as e:
+                # tenta 2ª vez: clicar login de novo
+                print(f"[{agora_br()}] ⚠️ Kehua: timeout no login. Tentando novamente...")
+                click_login_button()
+                try:
+                    WebDriverWait(driver, 25).until(login_ok)
+                except Exception:
+                    dump_debug("kehua_login_timeout")
+                    raise e
+
+            print(f"[{agora_br()}] ✅ Kehua: pós-login OK. URL:", driver.current_url)
+
+            # abrir sysInverter
             driver.get(SYS_INVERTER_PAGE)
-            wait.until(lambda d: "sysinverter" in (d.current_url or "").lower())
-            time.sleep(2.5)  # dá tempo do portal disparar XHR
+            WebDriverWait(driver, 60).until(lambda d: "sysinverter" in (d.current_url or "").lower())
+            time.sleep(1.0)
 
-            realtime_url, realtime_headers = _capture_headers_realtime(driver, timeout_sec=KEHUA_CAPTURE_TIMEOUT)
-            if not realtime_url:
-                realtime_url = REALTIME_URL
-            if not realtime_headers:
-                realtime_headers = {}
+            # limpa logs e força fetch (pra gerar XHR)
+            try:
+                _ = driver.get_log("performance")
+            except Exception:
+                pass
 
-            # cookies (selenium) para requests
-            cookies = driver.get_cookies()
+            payload = next(iter(KEHUA_CONFIG.values()))
+            driver.execute_script("""
+                fetch(arguments[1], {
+                method: "POST",
+                headers: {"Content-Type":"application/x-www-form-urlencoded","clientType":"web"},
+                body: new URLSearchParams(arguments[0]).toString()
+                });
+            """, payload, REALTIME_URL)
 
-            # valida “essenciais” (se ainda não tiver, tenta um retry curto)
-            h = {str(k).lower(): v for k, v in (realtime_headers or {}).items()}
-            if not h.get("authorization") or not h.get("sign"):
-                time.sleep(2)
-                realtime_url2, realtime_headers2 = _capture_headers_realtime(driver, timeout_sec=KEHUA_CAPTURE_TIMEOUT)
-                if realtime_url2:
-                    realtime_url = realtime_url2
-                if realtime_headers2:
-                    h = {str(k).lower(): v for k, v in realtime_headers2.items()}
+            time.sleep(1.2)
 
-            if not h.get("authorization") or not h.get("sign"):
+            realtime_url = None
+            headers = None
+
+            # capturar headers do XHR real
+            t0 = time.time()
+            while time.time() - t0 < 45:
+                for entry in driver.get_log("performance"):
+                    try:
+                        msg = json.loads(entry["message"])["message"]
+                    except Exception:
+                        continue
+                    if msg.get("method") != "Network.requestWillBeSent":
+                        continue
+                    req = (msg.get("params") or {}).get("request") or {}
+                    u = req.get("url") or ""
+                    if "getDeviceRealtimeData" in u:
+                        realtime_url = u
+                        headers = {k.lower(): v for k, v in (req.get("headers") or {}).items()}
+                        break
+                if realtime_url and headers:
+                    break
+                time.sleep(0.6)
+
+            if not headers or not headers.get("authorization") or not headers.get("sign"):
+                dump_debug("kehua_headers_not_captured")
                 raise RuntimeError("Headers essenciais (authorization/sign) não capturados.")
 
-            KEHUA_AUTH_CACHE["realtime_url"] = realtime_url
-            KEHUA_AUTH_CACHE["headers"] = h
-            KEHUA_AUTH_CACHE["cookies"] = cookies
-            KEHUA_AUTH_CACHE["expires_at"] = agora_br() + timedelta(seconds=KEHUA_TTL_SECONDS)
+            # cookies -> session
+            sess = requests.Session()
+            sess.headers.update({"User-Agent": UA})
+            for c in driver.get_cookies():
+                sess.cookies.set(c["name"], c["value"], domain=c.get("domain"))
 
-            print(f"✅ Kehua: cache de autenticação atualizado (expira em {KEHUA_AUTH_CACHE['expires_at']}).")
+            # cache
+            KEHUA_AUTH_CACHE.update({
+                "sess": sess,
+                "headers": headers,
+                "realtime_url": realtime_url,
+                "expires_at": agora_br() + timedelta(minutes=20),
+            })
+
+            print(f"[{agora_br()}] ✅ Kehua: cache atualizado (expira em {KEHUA_AUTH_CACHE['expires_at']})")
 
         finally:
             try:
@@ -6111,140 +6161,75 @@ def listar_e_salvar_geracoes_kehua(hoje=None):
             except Exception:
                 pass
 
-    def _session_from_cache() -> requests.Session:
-        sess = requests.Session()
-        sess.headers.update({"User-Agent": UA})
-
-        for c in (KEHUA_AUTH_CACHE.get("cookies") or []):
-            # selenium entrega domain/path, então respeita isso
-            sess.cookies.set(
-                c["name"],
-                c["value"],
-                domain=c.get("domain"),
-                path=c.get("path", "/")
-            )
-        return sess
-
-    def _call_realtime(sess: requests.Session, url: str, h: dict, payload: dict) -> float:
-        headers = {
-            "accept": "application/json, text/plain, */*",
-            "content-type": "application/x-www-form-urlencoded",
-            "referer": SYS_INVERTER_PAGE,
-            "origin": BASE,
-
-            "authorization": h.get("authorization"),
-            "sign": h.get("sign"),
-            "clienttype": h.get("clienttype", "web"),
-            "web_version": h.get("web_version", "3.0.4"),
-            "locale": h.get("locale", "pt-BR"),
-        }
-
-        if not headers["authorization"] or not headers["sign"]:
-            raise RuntimeError("Headers essenciais (authorization/sign) ausentes no cache.")
-
-        resp = sess.post(url, headers=headers, data=payload, timeout=30)
-        j = resp.json()
-
-        if str(j.get("code")) != "0":
-            # se perder auth, vamos forçar refresh do cache
-            raise RuntimeError(f"Kehua code={j.get('code')} msg={j.get('message')}")
-
-        # extrair dayElec
-        kwh = 0.0
-        data = j.get("data") or {}
-        yc_infos = data.get("ycInfos") or data.get("ycInfo") or []
-        for grupo in yc_infos:
-            dps = grupo.get("dataPoint") or grupo.get("datapoint") or []
-            for p in dps:
-                prop = p.get("property") or p.get("name")
-                if prop in ("dayElec", "day_elec", "dayEnergy"):
-                    try:
-                        kwh = float(p.get("val") or 0)
-                    except Exception:
-                        kwh = 0.0
-                    break
-            if kwh:
-                break
-
-        return kwh
-
     # =========================================================
-    # 0) Garantir cache válido
+    # GARANTIR AUTH
     # =========================================================
     try:
-        if not _cache_valido():
-            _login_e_atualizar_cache()
+        if not cache_valido():
+            autenticar_kehua()
     except Exception as e:
-        print(f"❌ Kehua: falha ao atualizar cache de autenticação: {e}")
-        return  # sem auth não dá pra consultar
-
-    # =========================================================
-    # 1) Consultar e salvar no banco (com travas anti-duplicidade)
-    # =========================================================
-    usinas = Usina.query.filter(Usina.kehua_station_id.isnot(None)).all()
-    if not usinas:
+        print(f"❌ Kehua: falha ao autenticar: {type(e).__name__} | {repr(e)}")
         return
 
-    sess = _session_from_cache()
-    realtime_url = KEHUA_AUTH_CACHE.get("realtime_url") or REALTIME_URL
-    realtime_headers = KEHUA_AUTH_CACHE.get("headers") or {}
+    # =========================================================
+    # CONSULTA + GRAVAÇÃO
+    # =========================================================
+    sess = KEHUA_AUTH_CACHE["sess"]
+    headers_base = KEHUA_AUTH_CACHE["headers"]
+    url = KEHUA_AUTH_CACHE["realtime_url"]
+
+    usinas = Usina.query.filter(Usina.kehua_station_id.isnot(None)).all()
 
     for usina in usinas:
-        cfg = KEHUA_CONFIG.get(usina.id)
-        if not cfg:
-            print(f"⚠️ Kehua: usina {usina.nome} (id={usina.id}) sem config no KEHUA_CONFIG.")
+        payload = KEHUA_CONFIG.get(usina.id)
+        if not payload:
             continue
 
-        # ---- tenta consultar; se falhar por auth/param, renova cache 1x e tenta novamente ----
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "authorization": headers_base.get("authorization"),
+            "sign": headers_base.get("sign"),
+            "clientType": "web",
+            "locale": "pt-BR",
+            "referer": SYS_INVERTER_PAGE,
+            "origin": BASE,
+        }
+
         try:
-            kwh = _call_realtime(sess, realtime_url, realtime_headers, cfg)
-        except Exception as e1:
-            msg = str(e1)
-            print(f"⚠️ Kehua: tentativa 1 falhou ({usina.nome}): {msg}. Vou renovar cache e tentar 1x...")
+            resp = sess.post(url, headers=headers, data=payload, timeout=30)
+            data = resp.json()
 
-            try:
-                _login_e_atualizar_cache()
-                sess = _session_from_cache()
-                realtime_url = KEHUA_AUTH_CACHE.get("realtime_url") or REALTIME_URL
-                realtime_headers = KEHUA_AUTH_CACHE.get("headers") or {}
-                kwh = _call_realtime(sess, realtime_url, realtime_headers, cfg)
-            except Exception as e2:
-                print(f"❌ Kehua: erro ao consultar {usina.nome} após renovar cache: {e2}")
-                continue
+            if str(data.get("code")) != "0":
+                raise RuntimeError(data.get("message"))
 
-        # ===== TRAVAS ANTI-ERRO =====
+            kwh = extrair_day_kwh(data)
+
+        except Exception as e:
+            print(f"❌ Kehua: erro em {usina.nome}: {e}")
+            KEHUA_AUTH_CACHE["expires_at"] = None
+            continue
+
+        # --------- TRAVAS ---------
         ontem = hoje - timedelta(days=1)
         ger_ontem = Geracao.query.filter_by(usina_id=usina.id, data=ontem).first()
-
-        # (A) janela crítica pós-meia-noite
-        hora = agora_br().hour
-        if 0 <= hora < 2 and kwh > 0:
-            print(f"🚫 Kehua: {usina.nome} {hoje} ({hora}h) retornou {kwh:.2f} cedo demais. Não vou gravar.")
-            continue
-
-        # (B) se igual ao de ontem, não grava
-        if ger_ontem and kwh > 0:
-            if abs(float(ger_ontem.energia_kwh or 0) - float(kwh)) < 0.0001:
-                print(f"🚫 Kehua: {usina.nome} retornou {kwh:.2f} igual ontem ({ontem}). Não vou gravar em {hoje}.")
-                continue
-
-        # (C) não sobrescrever se já tem hoje e veio menor
         ger_hoje = Geracao.query.filter_by(usina_id=usina.id, data=hoje).first()
-        if ger_hoje and kwh > 0 and float(ger_hoje.energia_kwh or 0) > float(kwh):
-            print(f"⚠️ Kehua: {usina.nome} veio menor ({kwh:.2f}) que salvo ({ger_hoje.energia_kwh}). Mantendo maior.")
+
+        if 0 <= agora_br().hour < 2 and kwh > 0:
             continue
 
-        # ===== GRAVAR =====
+        if ger_ontem and abs((ger_ontem.energia_kwh or 0) - kwh) < 0.001:
+            continue
+
+        if ger_hoje and ger_hoje.energia_kwh > kwh:
+            continue
+
         if kwh > 0:
             if ger_hoje:
                 ger_hoje.energia_kwh = kwh
             else:
-                db.session.add(Geracao(data=hoje, usina_id=usina.id, energia_kwh=kwh))
-
+                db.session.add(Geracao(usina_id=usina.id, data=hoje, energia_kwh=kwh))
             db.session.commit()
             print(f"✅ Kehua: {usina.nome} salvo em {hoje}: {kwh:.2f} kWh")
-        else:
-            print(f"⚠️ Kehua: {usina.nome} retornou 0 em {hoje}.")
 
 def buscar_estacoes_kehua():
     url_login = "https://energy.kehua.com/necp/login/northboundLogin"

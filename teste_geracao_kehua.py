@@ -26,7 +26,6 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
 
 REQUIRED_HEADER_KEYS = ["authorization", "sign", "clienttype", "web_version", "locale"]
 
-
 def _focus_and_type(driver, el, text: str):
     driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
     time.sleep(0.15)
@@ -42,7 +41,6 @@ def _focus_and_type(driver, el, text: str):
         el.send_keys(Keys.DELETE)
     el.send_keys(text)
 
-
 def _mark_required_checkboxes(driver):
     time.sleep(0.4)
     cbs = [cb for cb in driver.find_elements(By.CSS_SELECTOR, "input[type='checkbox']") if cb.is_enabled()]
@@ -56,7 +54,6 @@ def _mark_required_checkboxes(driver):
         except Exception:
             pass
     return marked
-
 
 def _make_driver(headless: bool):
     options = Options()
@@ -82,7 +79,6 @@ def _make_driver(headless: bool):
     # logs de performance para capturar headers reais
     options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
     return webdriver.Chrome(options=options)
-
 
 def _capture_realtime_headers(driver, timeout_sec=25):
     """
@@ -113,7 +109,6 @@ def _capture_realtime_headers(driver, timeout_sec=25):
         time.sleep(0.6)
 
     return None, None
-
 
 def get_kehua_session_context(username: str, password: str, headless: bool = True):
     """
@@ -193,7 +188,6 @@ def get_kehua_session_context(username: str, password: str, headless: bool = Tru
 
     finally:
         driver.quit()
-
 
 def call_realtime_dayelec(ctx: dict, payload: dict) -> tuple[float, dict]:
     """
