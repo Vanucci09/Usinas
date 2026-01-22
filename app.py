@@ -3809,7 +3809,7 @@ def start_scheduler_once():
     scheduler.add_job(
         func=atualizar_geracao_agendada,
         trigger="interval",
-        minutes=15,
+        minutes=5,
         id="job_atualizar_geracao",
         replace_existing=True,
         max_instances=1,
@@ -3819,6 +3819,16 @@ def start_scheduler_once():
     scheduler.start()
     atexit.register(lambda: scheduler.shutdown(wait=False))
     print(f"[{agora_br()}] ✅ Scheduler iniciado (único). PID={os.getpid()}")
+    
+def init_background_jobs():
+    if os.getenv("RUN_SCHEDULER", "1") != "1":
+        print(f"[{agora_br()}] ⏭️ RUN_SCHEDULER=0, não iniciando scheduler.")
+        return
+    start_scheduler_once()
+
+# ... cria app, configurações, db, login_manager, etc
+
+init_background_jobs()
 
 @app.route('/atualizar_periodo', methods=['GET', 'POST'])
 def atualizar_periodo():
@@ -10301,8 +10311,7 @@ def empresa_conta_bancaria_excluir(conta_id):
     return redirect(url_for('empresa_contas_listar'))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     with app.app_context():
         db.create_all()
-    start_scheduler_once()
     app.run(debug=True, use_reloader=False)
