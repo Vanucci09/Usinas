@@ -1,9 +1,11 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import os
 import time
-import json
-import requests
-from datetime import date, datetime, timedelta
-from zoneinfo import ZoneInfo
+import tempfile
+import shutil
+from typing import Tuple, Optional
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -13,224 +15,392 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 
-TZ_BR = ZoneInfo("America/Sao_Paulo")
-
 BASE = "https://energy.kehua.com.cn"
 LOGIN_PAGE = f"{BASE}/sellerLogin"
-SYS_INVERTER_PAGE = f"{BASE}/sysInverter"
-REALTIME_URL = f"{BASE}/necp/server-maintenance/monitor/getDeviceRealtimeData"
 
-UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-      "AppleWebKit/537.36 (KHTML, like Gecko) "
-      "Chrome/143.0.0.0 Safari/537.36")
+UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/144.0.0.0 Safari/537.36"
+)
 
-REQUIRED_HEADER_KEYS = ["authorization", "sign", "clienttype", "web_version", "locale"]
+HEADLESS = os.getenv("KEHUA_HEADLESS", "0").strip().lower() not in ("0", "false", "no")
+KEEP_OPEN = os.getenv("KEHUA_KEEP_OPEN", "0").strip() in ("1", "true", "yes", "sim", "on")
+PAGELOAD_TIMEOUT = int(os.getenv("KEHUA_PAGELOAD_TIMEOUT", "60"))
+DEFAULT_TIMEOUT = int(os.getenv("KEHUA_TIMEOUT", "60"))
+RETRIES = int(os.getenv("KEHUA_RETRIES", "2"))
 
-def _focus_and_type(driver, el, text: str):
-    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
-    time.sleep(0.15)
-    try:
-        el.click()
-    except Exception:
-        driver.execute_script("arguments[0].click();", el)
-    time.sleep(0.1)
-    try:
-        el.clear()
-    except Exception:
-        el.send_keys(Keys.CONTROL, "a")
-        el.send_keys(Keys.DELETE)
-    el.send_keys(text)
 
-def _mark_required_checkboxes(driver):
-    time.sleep(0.4)
-    cbs = [cb for cb in driver.find_elements(By.CSS_SELECTOR, "input[type='checkbox']") if cb.is_enabled()]
-    marked = 0
-    for cb in cbs:
-        try:
-            if not cb.is_selected():
-                driver.execute_script("arguments[0].click();", cb)
-            if cb.is_selected():
-                marked += 1
-        except Exception:
-            pass
-    return marked
+def _make_driver() -> Tuple[webdriver.Chrome, str]:
+    profile_dir = tempfile.mkdtemp(prefix="kehua_profile_")
 
-def _make_driver(headless: bool):
-    options = Options()
-    if headless:
-        options.add_argument("--headless=new")
+    opts = Options()
+    if HEADLESS:
+        opts.add_argument("--headless=new")
 
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--window-size=1366,900")
-    options.add_argument(f"--user-agent={UA}")
+    opts.add_argument("--no-sandbox")
+    opts.add_argument("--disable-dev-shm-usage")
+    opts.add_argument("--window-size=1366,900")
+    opts.add_argument("--disable-gpu")
+    opts.add_argument("--lang=pt-BR")
+    opts.add_argument(f"--user-agent={UA}")
+    opts.add_argument("--disable-notifications")
+    opts.add_argument("--disable-popup-blocking")
+    opts.add_argument("--disable-features=PasswordLeakDetection,PasswordManagerOnboarding,PasswordManagerRedesign")
+    opts.add_argument(f"--user-data-dir={profile_dir}")
 
-    # evitar popups/password manager
-    options.add_argument("--disable-features=PasswordLeakDetection,AutofillServerCommunication")
-    options.add_argument("--disable-save-password-bubble")
-    options.add_argument("--disable-notifications")
     prefs = {
         "credentials_enable_service": False,
         "profile.password_manager_enabled": False,
         "profile.default_content_setting_values.notifications": 2,
     }
-    options.add_experimental_option("prefs", prefs)
+    opts.add_experimental_option("prefs", prefs)
 
-    # logs de performance para capturar headers reais
-    options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
-    return webdriver.Chrome(options=options)
+    driver = webdriver.Chrome(options=opts)
+    driver.set_page_load_timeout(PAGELOAD_TIMEOUT)
+    return driver, profile_dir
 
-def _capture_realtime_headers(driver, timeout_sec=25):
-    """
-    Captura os headers do portal na request getDeviceRealtimeData.
-    Retorna dict headers.
-    """
-    # limpa logs antigos
+
+def _save_debug(driver: webdriver.Chrome, prefix: str):
     try:
-        _ = driver.get_log("performance")
+        driver.save_screenshot(f"{prefix}.png")
+    except Exception:
+        pass
+    try:
+        with open(f"{prefix}.html", "w", encoding="utf-8") as f:
+            f.write(driver.page_source)
     except Exception:
         pass
 
-    t0 = time.time()
-    while time.time() - t0 < timeout_sec:
-        logs = driver.get_log("performance")
-        for entry in logs:
+
+def _vue_set_value(driver: webdriver.Chrome, el, value: str):
+    """
+    Vue/iView costuma precisar de eventos (input/change) pra "assumir" o valor.
+    """
+    driver.execute_script(
+        """
+        const el = arguments[0];
+        const val = arguments[1];
+        el.focus();
+        el.value = '';
+        el.dispatchEvent(new Event('input', {bubbles:true}));
+        el.value = val;
+        el.dispatchEvent(new Event('input', {bubbles:true}));
+        el.dispatchEvent(new Event('change', {bubbles:true}));
+        """,
+        el, value
+    )
+
+
+def _safe_click(driver: webdriver.Chrome, el) -> bool:
+    try:
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
+        time.sleep(0.08)
+        el.click()
+        return True
+    except Exception:
+        try:
+            driver.execute_script("arguments[0].click();", el)
+            return True
+        except Exception:
+            return False
+
+
+def _find_login_inputs(driver: webdriver.Chrome):
+    """
+    Padrão do login:
+      - 1 input texto/email
+      - 1 input password
+    """
+    inputs = driver.find_elements(By.CSS_SELECTOR, "input")
+    visible = [i for i in inputs if i.is_displayed()]
+
+    user_el = None
+    pass_el = None
+
+    for e in visible:
+        t = (e.get_attribute("type") or "").lower().strip()
+        if t in ("text", "email", "") and user_el is None:
+            user_el = e
+        elif t == "password" and pass_el is None:
+            pass_el = e
+
+    return user_el, pass_el
+
+
+def _checkbox_is_checked(driver: webdriver.Chrome, input_el) -> bool:
+    try:
+        return bool(driver.execute_script("return arguments[0].checked === true;", input_el))
+    except Exception:
+        try:
+            return input_el.is_selected()
+        except Exception:
+            return False
+
+
+def _force_check_vue(driver: webdriver.Chrome, input_el) -> bool:
+    """
+    Força "checked=true" + dispara eventos. Isso normalmente resolve quando o clique
+    mexe no visual mas o Vue não assume.
+    """
+    try:
+        driver.execute_script(
+            """
+            const cb = arguments[0];
+            cb.checked = true;
+            cb.dispatchEvent(new Event('input', {bubbles:true}));
+            cb.dispatchEvent(new Event('change', {bubbles:true}));
+            cb.dispatchEvent(new MouseEvent('click', {bubbles:true}));
+            """,
+            input_el
+        )
+        time.sleep(0.15)
+        return _checkbox_is_checked(driver, input_el)
+    except Exception:
+        return False
+
+
+def _mark_login_automatico(driver: webdriver.Chrome) -> bool:
+    """
+    Esse costuma ser um <label class="ivu-checkbox-wrapper ...">Login automático</label>
+    """
+    try:
+        label = driver.find_element(By.XPATH, "//label[contains(., 'Login automático')]")
+        # clicar no label geralmente marca
+        _safe_click(driver, label)
+        time.sleep(0.2)
+
+        # garantir via input interno (se existir)
+        cb = None
+        try:
+            cb = label.find_element(By.CSS_SELECTOR, "input[type='checkbox']")
+        except Exception:
+            pass
+
+        if cb:
+            if _checkbox_is_checked(driver, cb):
+                return True
+            # tenta clicar no "inner" do ivu-checkbox (melhor que clicar no input)
             try:
-                msg = json.loads(entry["message"])["message"]
+                inner = label.find_element(By.CSS_SELECTOR, ".ivu-checkbox-inner")
+                _safe_click(driver, inner)
+                time.sleep(0.2)
             except Exception:
-                continue
+                pass
+            if _checkbox_is_checked(driver, cb):
+                return True
+            return _force_check_vue(driver, cb)
 
-            if msg.get("method") == "Network.requestWillBeSent":
-                req = (msg.get("params") or {}).get("request") or {}
-                url = req.get("url", "")
-                if "getDeviceRealtimeData" in url:
-                    h = req.get("headers") or {}
-                    return url, h
-        time.sleep(0.6)
+        return True  # se não achou input, pelo menos tentou clicar no label
+    except Exception:
+        return False
 
-    return None, None
 
-def get_kehua_session_context(username: str, password: str, headless: bool = True):
+def _mark_agreement(driver: webdriver.Chrome) -> bool:
     """
-    Faz login no portal, captura:
-      - cookies
-      - headers essenciais (authorization, sign, clientType, web_version, locale)
-      - url do endpoint realtime
+    Esse é o chato: ele fica em div.agreement e às vezes o texto/links ficam fora do label.
+    A forma mais confiável:
+      - achar div.agreement
+      - achar o input[type=checkbox].ivu-checkbox-input lá dentro
+      - clicar no .ivu-checkbox-inner (ou no wrapper) e, se necessário, forçar via JS
     """
-    driver = _make_driver(headless=headless)
-    wait = WebDriverWait(driver, 60)
+    try:
+        agreement_box = driver.find_element(By.CSS_SELECTOR, "div.agreement")
+    except Exception:
+        return False
+
+    # tenta pegar o input do agreement
+    cb = None
+    try:
+        cb = agreement_box.find_element(By.CSS_SELECTOR, "input[type='checkbox']")
+    except Exception:
+        cb = None
+
+    if not cb:
+        return False
+
+    # 1) tenta clicar no "inner" (melhor que clicar no input)
+    clicked_any = False
+    for css in (".ivu-checkbox-inner", ".ivu-checkbox", "label.ivu-checkbox-wrapper", "input[type='checkbox']"):
+        try:
+            el = agreement_box.find_element(By.CSS_SELECTOR, css)
+            if _safe_click(driver, el):
+                clicked_any = True
+                time.sleep(0.25)
+                break
+        except Exception:
+            continue
+
+    if _checkbox_is_checked(driver, cb):
+        return True
+
+    # 2) se clicou mas não marcou, força via Vue events
+    ok = _force_check_vue(driver, cb)
+    if ok:
+        return True
+
+    # 3) última tentativa: clicar no texto "Ler e concordar" (às vezes o click handler está nele)
+    try:
+        txt = agreement_box.find_element(By.XPATH, ".//*[contains(., 'Ler e concordar')]")
+        _safe_click(driver, txt)
+        time.sleep(0.25)
+    except Exception:
+        pass
+
+    if _checkbox_is_checked(driver, cb):
+        return True
+
+    # 4) força de novo
+    return _force_check_vue(driver, cb)
+
+
+def _click_login(driver: webdriver.Chrome) -> bool:
+    """
+    Clica no botão Login. Na tela é um <button> com texto 'Login'.
+    """
+    # tenta botão visível
+    try:
+        btn = driver.find_element(By.XPATH, "//button[contains(translate(., 'LOGIN', 'login'), 'login')]")
+        return _safe_click(driver, btn)
+    except Exception:
+        pass
+
+    # fallback: ENTER no password
+    try:
+        pass_el = driver.find_element(By.CSS_SELECTOR, "input[type='password']")
+        pass_el.send_keys(Keys.ENTER)
+        return True
+    except Exception:
+        return False
+
+
+def _is_logged_in(driver: webdriver.Chrome) -> bool:
+    url = (driver.current_url or "").lower()
+    if "/sellerlogin" in url:
+        return False
+    # normalmente vai pra /index após login
+    return any(x in url for x in ("/index", "/monitor", "/monitorow", "/sysinverter"))
+
+
+def _try_accept_terms_on_index(driver: webdriver.Chrome):
+    """
+    Quando cai em /index, às vezes aparece modal pedindo "Concordo".
+    """
+    end = time.time() + 12
+    xps = [
+        "//*[self::button or self::a or self::span][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZÁÀÃÂÉÊÍÓÔÕÚÇ','abcdefghijklmnopqrstuvwxyzáàãâéêíóôõúç'),'concordo')]",
+        "//*[self::button or self::a][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'agree')]",
+        "//*[self::button or self::a][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'accept')]",
+    ]
+    while time.time() < end:
+        for xp in xps:
+            els = driver.find_elements(By.XPATH, xp)
+            for el in els:
+                try:
+                    if el.is_displayed() and el.is_enabled():
+                        if _safe_click(driver, el):
+                            print("✅ Termos em /index: cliquei em 'Concordo'.")
+                            return
+                except Exception:
+                    pass
+        time.sleep(0.4)
+    print("📝 Modal de termos: não apareceu (ou já estava ok).")
+
+
+def do_login_once(driver: webdriver.Chrome, user: str, pwd: str) -> bool:
+    wait = WebDriverWait(driver, DEFAULT_TIMEOUT)
+
+    print(f"🔐 Abrindo login: {LOGIN_PAGE}")
+    driver.get(LOGIN_PAGE)
+
+    # espera os inputs existirem
+    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input")))
+    time.sleep(0.8)
+
+    user_el, pass_el = _find_login_inputs(driver)
+    if not user_el or not pass_el:
+        print("❌ Não encontrei campos de login.")
+        _save_debug(driver, "debug_no_fields")
+        return False
+
+    print("✅ Campos encontrados. Preenchendo (Vue)...")
+    _vue_set_value(driver, user_el, user)
+    _vue_set_value(driver, pass_el, pwd)
+
+    print("☑️ Marcando checkboxes (Login automático + Agreement)...")
+    ok_auto = _mark_login_automatico(driver)
+    ok_agree = _mark_agreement(driver)
+    print(f"   Resultado: login_automatico={ok_auto} | agreement={ok_agree}")
+
+    if not ok_agree:
+        print("❌ Agreement NÃO ficou marcado. Salvei debug_agreement_not_marked.png/html")
+        _save_debug(driver, "debug_agreement_not_marked")
+        return False
+
+    # clica login
+    _click_login(driver)
+
+    # aguarda navegar (ou pelo menos mudar algo)
+    t0 = time.time()
+    while time.time() - t0 < 20:
+        if _is_logged_in(driver):
+            break
+        time.sleep(0.35)
+
+    print(f"🌐 URL final: {driver.current_url}")
+    if _is_logged_in(driver):
+        print("✅ Login confirmado (saiu de /sellerLogin).")
+        if "/index" in (driver.current_url or "").lower():
+            _try_accept_terms_on_index(driver)
+        return True
+
+    print("❌ Continuou em /sellerLogin após tentar logar.")
+    _save_debug(driver, "debug_still_sellerLogin")
+    return False
+
+
+def main():
+    user = os.getenv("KEHUA_USER", "").strip()
+    pwd = os.getenv("KEHUA_PASS", "").strip()
+    if not user or not pwd:
+        print("❌ Defina KEHUA_USER e KEHUA_PASS antes de rodar.")
+        return
+
+    print(f"🧪 Headless: {HEADLESS} | keep_open={KEEP_OPEN} | pageLoadTimeout={PAGELOAD_TIMEOUT}s | retries={RETRIES}")
+
+    driver, profile_dir = _make_driver()
+    ok = False
 
     try:
-        driver.get(LOGIN_PAGE)
-        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='password']")))
-
-        inputs = [e for e in driver.find_elements(By.CSS_SELECTOR, "input") if e.is_displayed()]
-        user_el = None
-        pass_el = None
-        for e in inputs:
-            t = (e.get_attribute("type") or "").lower()
-            name = (e.get_attribute("name") or "").lower()
-            ph = (e.get_attribute("placeholder") or "").lower()
-            if t in ("text", "email"):
-                if name == "username" or "mail" in ph or "email" in ph or user_el is None:
-                    user_el = e
-            if t == "password":
-                pass_el = e
-
-        _focus_and_type(driver, user_el, username)
-        _focus_and_type(driver, pass_el, password)
-        _mark_required_checkboxes(driver)
-
-        # clicar login
-        btn = None
-        for b in driver.find_elements(By.CSS_SELECTOR, "button"):
-            if b.is_displayed() and "login" in ((b.text or "").lower()):
-                btn = b
+        for attempt in range(1, RETRIES + 2):
+            print(f"\n🔁 Tentativa {attempt}/{RETRIES+1}")
+            ok = do_login_once(driver, user, pwd)
+            if ok:
                 break
-        if btn:
-            driver.execute_script("arguments[0].click();", btn)
+            # pequena pausa e tenta de novo (às vezes o Vue demora pra bindar)
+            time.sleep(1.2)
+
+        if ok:
+            print("🎉 Pronto. Agora você pode navegar/capturar requests nas páginas internas.")
         else:
-            pass_el.send_keys(Keys.ENTER)
-
-        wait.until(lambda d: "monitor" in (d.current_url or "").lower())
-
-        # ir pra sysInverter (gera as chamadas XHR)
-        driver.get(SYS_INVERTER_PAGE)
-        wait.until(lambda d: "sysInverter" in (d.current_url or ""))
-
-        url, hdr = _capture_realtime_headers(driver, timeout_sec=25)
-        if not url or not hdr:
-            raise RuntimeError("Não consegui capturar headers do getDeviceRealtimeData.")
-
-        # normaliza keys para minúsculo
-        hdr_norm = {str(k).lower(): v for k, v in hdr.items()}
-
-        # monta só os essenciais (mantendo valor original)
-        essential = {}
-        for k in REQUIRED_HEADER_KEYS:
-            if k in hdr_norm:
-                essential[k] = hdr_norm[k]
-
-        # alguns vêm como ClientType no log; já normalizamos
-        if "clienttype" not in essential and "clientType" in hdr:
-            essential["clienttype"] = hdr["clientType"]
-
-        if "authorization" not in essential or "sign" not in essential:
-            raise RuntimeError(f"Headers insuficientes capturados: {list(essential.keys())}")
-
-        cookies = driver.get_cookies()
-
-        return {
-            "realtime_url": url,
-            "headers": essential,   # lower-case keys
-            "cookies": cookies
-        }
+            print("🚫 Login NÃO confirmado.")
+            print("👉 Abra debug_still_sellerLogin.html/.png pra ver mensagem/validação.")
 
     finally:
-        driver.quit()
+        if KEEP_OPEN:
+            print("🧷 KEEP_OPEN=1 -> NÃO vou fechar o Chrome nem apagar o profile_dir.")
+            print(f"   Profile: {profile_dir}")
+            return
 
-def call_realtime_dayelec(ctx: dict, payload: dict) -> tuple[float, dict]:
-    """
-    Faz POST no realtime com cookies + headers capturados.
-    Retorna (dayElec, json).
-    """
-    sess = requests.Session()
-    sess.headers.update({"User-Agent": UA})
+        try:
+            driver.quit()
+        except Exception:
+            pass
+        try:
+            shutil.rmtree(profile_dir, ignore_errors=True)
+        except Exception:
+            pass
 
-    # cookies
-    for c in ctx["cookies"]:
-        sess.cookies.set(c["name"], c["value"], domain=c.get("domain"), path=c.get("path", "/"))
 
-    headers = {
-        "accept": "application/json, text/plain, */*",
-        "content-type": "application/x-www-form-urlencoded",
-        "referer": SYS_INVERTER_PAGE,
-        "origin": BASE,
-        # essenciais
-        "authorization": ctx["headers"]["authorization"],
-        "sign": ctx["headers"]["sign"],
-        "clienttype": ctx["headers"].get("clienttype", "web"),
-        "web_version": ctx["headers"].get("web_version", "3.0.4"),
-        "locale": ctx["headers"].get("locale", "pt-BR"),
-    }
-
-    resp = sess.post(ctx["realtime_url"], headers=headers, data=payload, timeout=30)
-    j = resp.json()
-
-    if str(j.get("code")) != "0":
-        raise RuntimeError(f"Kehua realtime falhou: code={j.get('code')} msg={j.get('message')}")
-
-    # extrair dayElec
-    day = 0.0
-    data = j.get("data") or {}
-    yc_infos = data.get("ycInfos") or data.get("ycInfo") or []
-    for grupo in yc_infos:
-        dps = grupo.get("dataPoint") or grupo.get("datapoint") or []
-        for p in dps:
-            if (p.get("property") or p.get("name")) in ("dayElec", "day_elec", "dayEnergy"):
-                day = float(p.get("val") or 0)
-                break
-        if day:
-            break
-
-    return day, j
+if __name__ == "__main__":
+    main()

@@ -2,52 +2,335 @@
 
 {% block content %}
 <div class="container mt-4">
-    <div class="card shadow p-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h3 class="text-primary mb-0">Relatório de Distribuição de Lucros</h3>
-            <small class="text-muted">
-                {{ resultado.empresa }} – {{ "%02d"|format(resultado.mes) }}/{{ resultado.ano }}
-            </small>
-        </div>
 
-        <div class="alert alert-success">
-            <strong>Lucro Líquido Total:</strong>
-            <span class="fs-5">{{ resultado.lucro_liquido | formato_brasileiro }}</span>
-        </div>
+  <div class="card shadow p-4">
 
-        <table class="table table-striped table-bordered align-middle">
+    <!-- Cabeçalho -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+      <div>
+        <h3 class="text-primary mb-0">Relatório de Distribuição de Lucros</h3>
+        <div class="text-muted small mt-1">
+          {{ resultado.empresa }} – {{ "%02d"|format(resultado.mes) }}/{{ resultado.ano }}
+        </div>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button class="btn btn-outline-primary" onclick="window.print()">
+          <i class="bi bi-printer"></i> Imprimir
+        </button>
+        <a href="{{ url_for('selecionar_distribuicao_lucro') }}" class="btn btn-outline-secondary">
+          <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+      </div>
+    </div>
+
+    <!-- Lucro Líquido -->
+    <div class="alert alert-success d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div>
+        <strong>Lucro Líquido Total:</strong>
+      </div>
+      <div class="fs-5 fw-bold">
+        {{ resultado.lucro_liquido | formato_brasileiro }}
+      </div>
+    </div>
+
+    <!-- Extrato do Mês (Totais) -->
+    <h5 class="text-secondary mb-3">Extrato do Mês</h5>
+
+    <div class="card border-0 bg-light mb-3">
+      <div class="card-body">
+        <div class="row text-center g-2">
+          <div class="col-md-3 col-6">
+            <div class="small text-muted">Receita (Usinas)</div>
+            <div class="fw-bold">{{ resultado.extrato.totais.receita_usinas | formato_brasileiro }}</div>
+          </div>
+          <div class="col-md-3 col-6">
+            <div class="small text-muted">Despesa (Usinas)</div>
+            <div class="fw-bold">{{ resultado.extrato.totais.despesa_usinas | formato_brasileiro }}</div>
+          </div>
+          <div class="col-md-3 col-6">
+            <div class="small text-muted">Receita (Empresa)</div>
+            <div class="fw-bold">{{ resultado.extrato.totais.receita_empresa | formato_brasileiro }}</div>
+          </div>
+          <div class="col-md-3 col-6">
+            <div class="small text-muted">Despesa (Empresa)</div>
+            <div class="fw-bold">{{ resultado.extrato.totais.despesa_empresa | formato_brasileiro }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Receitas vindas das Usinas -->
+    <div class="card shadow-sm mb-3">
+      <div class="card-header bg-white">
+        <strong>Receitas vindas das Usinas</strong>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm table-striped table-bordered mb-0 align-middle">
             <thead class="table-light">
-                <tr>
-                    <th>Acionista</th>
-                    <th class="text-end">Percentual (%)</th>
-                    <th class="text-end">Valor a Receber (R$)</th>
-                </tr>
+              <tr>
+                <th>Usina</th>
+                <th>Data Pagamento</th>
+                <th>Descrição</th>
+                <th class="text-end">Valor (R$)</th>
+                <th class="text-end">Juros (R$)</th>
+                <th class="text-end">Total (R$)</th>
+              </tr>
             </thead>
             <tbody>
-                {% for dist in resultado.distribuicoes %}
+              {% if resultado.extrato.receitas_usinas %}
+                {% for r in resultado.extrato.receitas_usinas %}
                 <tr>
-                    <td>{{ dist.acionista }}</td>
-                    <td class="text-end">{{ "%.2f"|format(dist.percentual) }}</td>
-                    <td class="text-end">{{ dist.valor | formato_brasileiro }}</td>
+                  <td>{{ r.usina }}</td>
+                  <td>{{ r.data_pagamento.strftime("%d/%m/%Y") if r.data_pagamento else "-" }}</td>
+                  <td>{{ r.descricao }}</td>
+                  <td class="text-end">{{ r.valor | formato_brasileiro }}</td>
+                  <td class="text-end">{{ r.juros | formato_brasileiro }}</td>
+                  <td class="text-end fw-semibold">{{ r.total | formato_brasileiro }}</td>
                 </tr>
                 {% endfor %}
+              {% else %}
+                <tr>
+                  <td colspan="6" class="text-center text-muted py-3">
+                    Sem receitas de usinas no período.
+                  </td>
+                </tr>
+              {% endif %}
             </tbody>
             <tfoot>
-                <tr class="fw-bold bg-light">
-                    <td>Total</td>
-                    <td class="text-end">
-                        {{ resultado.distribuicoes | sum(attribute='percentual') | round(2) }}
-                    </td>
-                    <td class="text-end">
-                        {{ resultado.distribuicoes | sum(attribute='valor') | formato_brasileiro }}
-                    </td>
-                </tr>
+              <tr class="fw-bold bg-light">
+                <td colspan="5" class="text-end">Total Receitas Usinas</td>
+                <td class="text-end">{{ resultado.extrato.totais.receita_usinas | formato_brasileiro }}</td>
+              </tr>
             </tfoot>
-        </table>
-
-        <a href="{{ url_for('selecionar_distribuicao_lucro') }}" class="btn btn-outline-secondary mt-3">
-            <i class="bi bi-arrow-left"></i> Voltar
-        </a>
+          </table>
+        </div>
+      </div>
     </div>
+
+    <!-- Despesas das Usinas -->
+    <div class="card shadow-sm mb-3">
+      <div class="card-header bg-white">
+        <strong>Despesas das Usinas</strong>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm table-striped table-bordered mb-0 align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Usina</th>
+                <th>Data Pagamento</th>
+                <th>Descrição</th>
+                <th class="text-end">Valor (R$)</th>
+                <th class="text-end">Juros (R$)</th>
+                <th class="text-end">Total (R$)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if resultado.extrato.despesas_usinas %}
+                {% for r in resultado.extrato.despesas_usinas %}
+                <tr>
+                  <td>{{ r.usina }}</td>
+                  <td>{{ r.data_pagamento.strftime("%d/%m/%Y") if r.data_pagamento else "-" }}</td>
+                  <td>{{ r.descricao }}</td>
+                  <td class="text-end">{{ r.valor | formato_brasileiro }}</td>
+                  <td class="text-end">{{ r.juros | formato_brasileiro }}</td>
+                  <td class="text-end fw-semibold">{{ r.total | formato_brasileiro }}</td>
+                </tr>
+                {% endfor %}
+              {% else %}
+                <tr>
+                  <td colspan="6" class="text-center text-muted py-3">
+                    Sem despesas de usinas no período.
+                  </td>
+                </tr>
+              {% endif %}
+            </tbody>
+            <tfoot>
+              <tr class="fw-bold bg-light">
+                <td colspan="5" class="text-end">Total Despesas Usinas</td>
+                <td class="text-end">{{ resultado.extrato.totais.despesa_usinas | formato_brasileiro }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Despesas da Empresa (detalhado) -->
+    <div class="card shadow-sm mb-3">
+      <div class="card-header bg-white">
+        <strong>Despesas da Empresa</strong>
+        <div class="text-muted small">Itens em Financeiro Empresa</div>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm table-striped table-bordered mb-0 align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Referência</th>
+                <th>Data</th>
+                <th>Descrição</th>
+                <th class="text-end">Valor (R$)</th>
+                <th>Tipo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if resultado.extrato.movimentos_empresa_despesas %}
+                {% for m in resultado.extrato.movimentos_empresa_despesas %}
+                <tr>
+                  <td>
+                    {% if m.mes_referencia and m.ano_referencia %}
+                      {{ "%02d"|format(m.mes_referencia) }}/{{ m.ano_referencia }}
+                    {% else %}
+                      -
+                    {% endif %}
+                  </td>
+                  <td>{{ m.data.strftime("%d/%m/%Y") if m.data else "-" }}</td>
+                  <td>{{ m.descricao }}</td>
+                  <td class="text-end fw-semibold">{{ m.valor | formato_brasileiro }}</td>
+                  <td><span class="badge bg-secondary">{{ m.tipo }}</span></td>
+                </tr>
+                {% endfor %}
+              {% else %}
+                <tr>
+                  <td colspan="5" class="text-center text-muted py-3">
+                    Sem despesas de empresa no período.
+                  </td>
+                </tr>
+              {% endif %}
+            </tbody>
+            <tfoot>
+              <tr class="fw-bold bg-light">
+                <td colspan="3" class="text-end">Total Despesas Empresa</td>
+                <td class="text-end">{{ resultado.extrato.totais.despesa_empresa | formato_brasileiro }}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Receitas da Empresa (se tiver) -->
+    <div class="card shadow-sm mb-4">
+      <div class="card-header bg-white">
+        <strong>Receitas Diretas da Empresa (se houver)</strong>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm table-striped table-bordered mb-0 align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Referência</th>
+                <th>Data</th>
+                <th>Descrição</th>
+                <th class="text-end">Valor (R$)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if resultado.extrato.movimentos_empresa_receitas %}
+                {% for m in resultado.extrato.movimentos_empresa_receitas %}
+                <tr>
+                  <td>
+                    {% if m.mes_referencia and m.ano_referencia %}
+                      {{ "%02d"|format(m.mes_referencia) }}/{{ m.ano_referencia }}
+                    {% else %}
+                      -
+                    {% endif %}
+                  </td>
+                  <td>{{ m.data.strftime("%d/%m/%Y") if m.data else "-" }}</td>
+                  <td>{{ m.descricao }}</td>
+                  <td class="text-end fw-semibold">{{ m.valor | formato_brasileiro }}</td>
+                </tr>
+                {% endfor %}
+              {% else %}
+                <tr>
+                  <td colspan="4" class="text-center text-muted py-3">
+                    Sem receitas diretas da empresa no período.
+                  </td>
+                </tr>
+              {% endif %}
+            </tbody>
+            <tfoot>
+              <tr class="fw-bold bg-light">
+                <td colspan="3" class="text-end">Total Receitas Empresa</td>
+                <td class="text-end">{{ resultado.extrato.totais.receita_empresa | formato_brasileiro }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <hr class="my-4">
+
+    <!-- Tabela de Distribuição -->
+    <h5 class="text-secondary mb-3">Distribuição entre Acionistas</h5>
+
+    <div class="table-responsive">
+      <table class="table table-striped table-bordered align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Acionista</th>
+            <th class="text-end">Percentual (%)</th>
+            <th class="text-end">Valor a Receber (R$)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for dist in resultado.distribuicoes %}
+          <tr>
+            <td>{{ dist.acionista }}</td>
+            <td class="text-end">{{ "%.2f"|format(dist.percentual) }}</td>
+            <td class="text-end">{{ dist.valor | formato_brasileiro }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr class="fw-bold bg-light">
+            <td>Total</td>
+            <td class="text-end">
+              {{ resultado.distribuicoes | sum(attribute='percentual') | round(2) }}
+            </td>
+            <td class="text-end">
+              {{ resultado.distribuicoes | sum(attribute='valor') | formato_brasileiro }}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <!-- Rodapé de ações -->
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-3">
+      <a href="{{ url_for('selecionar_distribuicao_lucro') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Voltar
+      </a>
+
+      <small class="text-muted">
+        Gerado em {{ now().strftime("%d/%m/%Y %H:%M") if now is defined else "" }}
+      </small>
+    </div>
+
+  </div>
 </div>
+
+<!-- Estilos de impressão -->
+<style>
+@media print {
+  nav, header, footer, .btn, .alert + hr {
+    display: none !important;
+  }
+  .card {
+    box-shadow: none !important;
+    border: none !important;
+  }
+  .table {
+    font-size: 12px;
+  }
+  .container {
+    max-width: 100% !important;
+  }
+}
+</style>
 {% endblock %}

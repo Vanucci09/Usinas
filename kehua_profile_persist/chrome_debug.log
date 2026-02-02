@@ -1,0 +1,22 @@
+[19672:20728:0127/173154.889:INFO:components\enterprise\browser\controller\chrome_browser_cloud_management_controller.cc:206] No machine level policy manager exists.
+[21244:11092:0127/173155.081:ERROR:ui\gl\direct_composition_support.cc:243] GetGpuDriverOverlayInfo: Failed to retrieve video device
+[19672:20040:0127/173159.665:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR
+[19672:20040:0127/173159.679:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR
+[19672:20040:0127/173159.695:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR
+[19672:20040:0127/173200.203:ERROR:google_apis\gcm\engine\mcs_client.cc:700]   Error code: 401  Error message: Authentication Failed: wrong_secret
+[19672:20040:0127/173200.203:ERROR:google_apis\gcm\engine\mcs_client.cc:702] Failed to log in to GCM, resetting connection.
+[19672:20728:0127/173215.581:INFO:CONSOLE:1] "Uncaught (in promise) Error: 天地图API加载失败", source: https://energy.kehua.com.cn/static/js/app.2722cd3924a3896e6899.43261128.js?6b8a9b80a6a37c3e92a4 (1)
+[19672:20040:0127/173221.163:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+[19672:20040:0127/173310.723:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+[19672:20040:0127/173442.655:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+[19672:20040:0127/173751.051:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+[19672:20040:0127/174515.334:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+[19672:20728:0127/184543.172:ERROR:components\device_event_log\device_event_log_impl.cc:198] [18:45:43.173] USB: usb_service_win.cc:105 SetupDiGetDeviceProperty({{A45C254E-DF1C-4EFD-8020-67D146A850E0}, 6}) failed: Elemento não encontrado. (0x490)
+[19672:20040:0127/204542.762:ERROR:google_apis\gcm\engine\connection_factory_impl.cc:483] ConnectionHandler failed with net error: -2
+[19672:20040:0127/221400.297:ERROR:google_apis\gcm\engine\connection_factory_impl.cc:434] Failed to connect to MCS endpoint with error -7
+[19672:20728:0127/221522.982:WARNING:chrome\browser\ui\sad_tab.cc:256] Tab Killed: https://energy.kehua.com.cn/
+[19672:20040:0127/221533.021:ERROR:google_apis\gcm\engine\connection_factory_impl.cc:483] ConnectionHandler failed with net error: -2
+[19672:20728:0127/221533.027:ERROR:content\browser\network_service_instance_impl.cc:610] Network service crashed or was terminated, restarting service.
+[19672:20728:0127/221538.050:ERROR:content\browser\gpu\gpu_process_host.cc:1004] GPU process exited unexpectedly: exit_code=-1073741510
+[19672:20728:0127/221538.050:WARNING:content\browser\gpu\gpu_process_host.cc:1446] The GPU process has crashed 1 time(s)
+[26072:26144:0127/221538.234:ERROR:ui\gl\direct_composition_support.cc:243] GetGpuDriverOverlayInfo: Failed to retrieve video device

@@ -130,8 +130,6 @@ class GeracaoInversor(db.Model):
     etoday = db.Column(db.Float)
     etotal = db.Column(db.Float)
     usina_id = db.Column(db.Integer, db.ForeignKey('usinas.id'))
-
-    # NOVO: vínculo opcional com InversorCadastrado
     inversor_id = db.Column(db.Integer, db.ForeignKey('inversores_cadastrados.id'), nullable=True)
     inversor = db.relationship('InversorCadastrado', backref=db.backref('geracoes', lazy='dynamic'))
 
@@ -3809,7 +3807,7 @@ def start_scheduler_once():
     scheduler.add_job(
         func=atualizar_geracao_agendada,
         trigger="interval",
-        minutes=15,
+        minutes=5,
         id="job_atualizar_geracao",
         replace_existing=True,
         max_instances=1,
@@ -5314,57 +5312,196 @@ def calcular_distribuicao_lucro(empresa_id, mes, ano):
 
     # Usinas vinculadas
     usinas_ids = [vinculo.usina_id for vinculo in empresa.usinas]
+    if not usinas_ids:
+        return {
+            'empresa': empresa.razao_social,
+            'mes': mes,
+            'ano': ano,
+            'lucro_liquido': 0.0,
+            'distribuicoes': [],
+            'extrato': {
+                'receitas_usinas': [],
+                'despesas_usinas': [],
+                'movimentos_empresa_receitas': [],
+                'movimentos_empresa_despesas': [],
+                'totais': {
+                    'receita_usinas': 0.0,
+                    'despesa_usinas': 0.0,
+                    'receita_empresa': 0.0,
+                    'despesa_empresa': 0.0
+                }
+            }
+        }
 
-    # Receita das usinas
-    receitas_usinas = db.session.query(db.func.coalesce(db.func.sum(FinanceiroUsina.valor), 0)).filter(
-        FinanceiroUsina.usina_id.in_(usinas_ids),
-        FinanceiroUsina.tipo == 'receita',
-        FinanceiroUsina.referencia_mes == mes,
-        FinanceiroUsina.referencia_ano == ano
-    ).scalar()
+    # Helpers SQL
+    total_usina_expr = (func.coalesce(FinanceiroUsina.valor, 0.0) + func.coalesce(FinanceiroUsina.juros, 0.0))
+    valor_empresa_expr = func.coalesce(FinanceiroEmpresaInvestidora.valor, 0.0)
 
-    # Despesas das usinas
-    despesas_usinas = db.session.query(db.func.coalesce(db.func.sum(FinanceiroUsina.valor), 0)).filter(
-        FinanceiroUsina.usina_id.in_(usinas_ids),
-        FinanceiroUsina.tipo == 'despesa',
-        FinanceiroUsina.referencia_mes == mes,
-        FinanceiroUsina.referencia_ano == ano
-    ).scalar()
+    # -------------------------
+    # EXTRATO - RECEITAS USINAS (detalhado)
+    # -------------------------
+    receitas_usinas_rows = (
+        db.session.query(
+            FinanceiroUsina.usina_id,
+            Usina.nome.label("usina_nome"),
+            FinanceiroUsina.data_pagamento,
+            FinanceiroUsina.descricao,
+            func.coalesce(FinanceiroUsina.valor, 0.0).label("valor"),
+            func.coalesce(FinanceiroUsina.juros, 0.0).label("juros"),
+            (func.coalesce(FinanceiroUsina.valor, 0.0) + func.coalesce(FinanceiroUsina.juros, 0.0)).label("total")
+        )
+        .join(Usina, Usina.id == FinanceiroUsina.usina_id)
+        .filter(
+            FinanceiroUsina.usina_id.in_(usinas_ids),
+            FinanceiroUsina.tipo == 'receita',
+            FinanceiroUsina.data_pagamento.isnot(None),
+            db.extract('month', FinanceiroUsina.data_pagamento) == mes,
+            db.extract('year', FinanceiroUsina.data_pagamento) == ano
+        )
+        .order_by(FinanceiroUsina.data_pagamento.asc())
+        .all()
+    )
 
-    # Despesas da própria empresa
-    despesas_empresa = db.session.query(db.func.coalesce(db.func.sum(FinanceiroEmpresaInvestidora.valor), 0)).filter(
-        FinanceiroEmpresaInvestidora.empresa_id == empresa.id,
-        FinanceiroEmpresaInvestidora.tipo == 'despesa',
-        db.extract('month', FinanceiroEmpresaInvestidora.data) == mes,
-        db.extract('year', FinanceiroEmpresaInvestidora.data) == ano
-    ).scalar()
+    receitas_usinas = [{
+        "usina_id": r.usina_id,
+        "usina": r.usina_nome,
+        "data_pagamento": r.data_pagamento,
+        "descricao": r.descricao,
+        "valor": float(r.valor or 0),
+        "juros": float(r.juros or 0),
+        "total": float(r.total or 0),
+    } for r in receitas_usinas_rows]
 
-    # Receitas diretas da empresa
-    receitas_empresa = db.session.query(db.func.coalesce(db.func.sum(FinanceiroEmpresaInvestidora.valor), 0)).filter(
-        FinanceiroEmpresaInvestidora.empresa_id == empresa.id,
-        FinanceiroEmpresaInvestidora.tipo == 'receita',
-        db.extract('month', FinanceiroEmpresaInvestidora.data) == mes,
-        db.extract('year', FinanceiroEmpresaInvestidora.data) == ano
-    ).scalar()
+    # -------------------------
+    # EXTRATO - DESPESAS USINAS (detalhado)
+    # -------------------------
+    despesas_usinas_rows = (
+        db.session.query(
+            FinanceiroUsina.usina_id,
+            Usina.nome.label("usina_nome"),
+            FinanceiroUsina.data_pagamento,
+            FinanceiroUsina.descricao,
+            func.coalesce(FinanceiroUsina.valor, 0.0).label("valor"),
+            func.coalesce(FinanceiroUsina.juros, 0.0).label("juros"),
+            (func.coalesce(FinanceiroUsina.valor, 0.0) + func.coalesce(FinanceiroUsina.juros, 0.0)).label("total")
+        )
+        .join(Usina, Usina.id == FinanceiroUsina.usina_id)
+        .filter(
+            FinanceiroUsina.usina_id.in_(usinas_ids),
+            FinanceiroUsina.tipo == 'despesa',
+            FinanceiroUsina.data_pagamento.isnot(None),
+            db.extract('month', FinanceiroUsina.data_pagamento) == mes,
+            db.extract('year', FinanceiroUsina.data_pagamento) == ano
+        )
+        .order_by(FinanceiroUsina.data_pagamento.asc())
+        .all()
+    )
 
-    lucro_liquido = receitas_usinas - despesas_usinas - despesas_empresa + receitas_empresa
+    despesas_usinas = [{
+        "usina_id": r.usina_id,
+        "usina": r.usina_nome,
+        "data_pagamento": r.data_pagamento,
+        "descricao": r.descricao,
+        "valor": float(r.valor or 0),
+        "juros": float(r.juros or 0),
+        "total": float(r.total or 0),
+    } for r in despesas_usinas_rows]
 
-    # Agora, distribuir entre acionistas
+    # -------------------------
+    # EXTRATO - MOVIMENTOS EMPRESA (receitas e despesas)
+    # Ordenar por ano_referencia/mes_referencia (fallback data)
+    # Filtrar pelo mes/ano usando mes_referencia/ano_referencia; se nulo, usa data
+    # -------------------------
+    filtro_mes_ano_empresa = (
+        (FinanceiroEmpresaInvestidora.mes_referencia == mes) &
+        (FinanceiroEmpresaInvestidora.ano_referencia == ano)
+    ) | (
+        (FinanceiroEmpresaInvestidora.mes_referencia.is_(None)) &
+        (FinanceiroEmpresaInvestidora.ano_referencia.is_(None)) &
+        (db.extract('month', FinanceiroEmpresaInvestidora.data) == mes) &
+        (db.extract('year', FinanceiroEmpresaInvestidora.data) == ano)
+    )
+
+    movimentos_empresa_rows = (
+        db.session.query(
+            FinanceiroEmpresaInvestidora.tipo,
+            FinanceiroEmpresaInvestidora.descricao,
+            FinanceiroEmpresaInvestidora.data,
+            FinanceiroEmpresaInvestidora.mes_referencia,
+            FinanceiroEmpresaInvestidora.ano_referencia,
+            valor_empresa_expr.label("valor"),
+        )
+        .filter(
+            FinanceiroEmpresaInvestidora.empresa_id == empresa.id,
+            filtro_mes_ano_empresa
+        )
+        .order_by(
+            FinanceiroEmpresaInvestidora.ano_referencia.asc().nullslast(),
+            FinanceiroEmpresaInvestidora.mes_referencia.asc().nullslast(),
+            FinanceiroEmpresaInvestidora.data.asc()
+        )
+        .all()
+    )
+
+    movimentos_empresa_receitas = []
+    movimentos_empresa_despesas = []
+    for r in movimentos_empresa_rows:
+        item = {
+            "tipo": r.tipo,
+            "descricao": r.descricao,
+            "data": r.data,
+            "mes_referencia": r.mes_referencia,
+            "ano_referencia": r.ano_referencia,
+            "valor": float(r.valor or 0),
+        }
+        if (r.tipo or "").lower() == "receita":
+            movimentos_empresa_receitas.append(item)
+        else:
+            movimentos_empresa_despesas.append(item)
+
+    # -------------------------
+    # TOTAIS (para o lucro)
+    # -------------------------
+    receita_usinas_total = round(sum(x["total"] for x in receitas_usinas), 2)
+    despesa_usinas_total = round(sum(x["total"] for x in despesas_usinas), 2)
+    receita_empresa_total = round(sum(x["valor"] for x in movimentos_empresa_receitas), 2)
+    despesa_empresa_total = round(sum(x["valor"] for x in movimentos_empresa_despesas), 2)
+
+    lucro_liquido = round(
+        (receita_usinas_total + receita_empresa_total) - (despesa_usinas_total + despesa_empresa_total),
+        2
+    )
+
+    # -------------------------
+    # Distribuição por acionista
+    # -------------------------
     distribuicoes = []
     for participacao in empresa.acionistas:
-        valor_participante = lucro_liquido * (participacao.percentual / 100)
+        valor_participante = round(lucro_liquido * (participacao.percentual / 100.0), 2)
         distribuicoes.append({
             'acionista': participacao.acionista.nome,
             'percentual': participacao.percentual,
-            'valor': round(valor_participante, 2)
+            'valor': valor_participante
         })
 
     return {
         'empresa': empresa.razao_social,
         'mes': mes,
         'ano': ano,
-        'lucro_liquido': round(lucro_liquido, 2),
-        'distribuicoes': distribuicoes
+        'lucro_liquido': lucro_liquido,
+        'distribuicoes': distribuicoes,
+        'extrato': {
+            'receitas_usinas': receitas_usinas,
+            'despesas_usinas': despesas_usinas,
+            'movimentos_empresa_receitas': movimentos_empresa_receitas,
+            'movimentos_empresa_despesas': movimentos_empresa_despesas,
+            'totais': {
+                'receita_usinas': receita_usinas_total,
+                'despesa_usinas': despesa_usinas_total,
+                'receita_empresa': receita_empresa_total,
+                'despesa_empresa': despesa_empresa_total
+            }
+        }
     }
 
 @app.route('/distribuicao_lucro_empresa/<int:empresa_id>/<int:mes>/<int:ano>')
@@ -5898,24 +6035,65 @@ KEHUA_AUTH_CACHE = {
 
 KEHUA_TTL_SECONDS = int(os.getenv("KEHUA_TTL_SECONDS", "10800"))  # 3h
 KEHUA_CAPTURE_TIMEOUT = int(os.getenv("KEHUA_CAPTURE_TIMEOUT", "35"))  # seg
+KEHUA_CACHE_TTL = timedelta(minutes=25)
+
+def _capture_realtime_headers(driver, timeout_sec=30):
+    """
+    Captura os headers reais do portal Kehua na request:
+    /getDeviceRealtimeData
+    """
+    # limpa logs antigos
+    try:
+        _ = driver.get_log("performance")
+    except Exception:
+        pass
+
+    start = time.time()
+
+    while time.time() - start < timeout_sec:
+        try:
+            logs = driver.get_log("performance")
+        except Exception:
+            logs = []
+
+        for entry in logs:
+            try:
+                msg = json.loads(entry["message"])["message"]
+            except Exception:
+                continue
+
+            if msg.get("method") != "Network.requestWillBeSent":
+                continue
+
+            req = (msg.get("params") or {}).get("request") or {}
+            url = req.get("url", "")
+
+            if "getDeviceRealtimeData" in url:
+                headers = req.get("headers") or {}
+                # normaliza para lowercase
+                headers = {str(k).lower(): v for k, v in headers.items()}
+                return url, headers
+
+        time.sleep(0.5)
+
+    return None, None
 
 def listar_e_salvar_geracoes_kehua(hoje=None):
     """
-    ✔ Versão FINAL
-    - Cache em memória (não abre Selenium sempre)
-    - Selenium só quando auth expira ou falha
-    - Funciona em local + Render
-    - Travas anti-duplicidade
+    Atualiza geração diária via portal Kehua
+    - Login Selenium somente quando necessário
+    - Cache em memória (cookies + headers)
+    - Requests para coletar dayElec
     """
 
     if hoje is None:
         hoje = hoje_br()
 
-    KEHUA_USER = os.getenv("KEHUA_USER") or "monitoramento@cgrenergia.com"
-    KEHUA_PASS = os.getenv("KEHUA_PASS") or "12345678"
+    KEHUA_USER = os.getenv("KEHUA_USER", "monitoramento@cgrenergia.com")
+    KEHUA_PASS = os.getenv("KEHUA_PASS", "12345678")
 
     KEHUA_CONFIG = {
-        9: {  # Bloco A Expansão
+        9: {
             "stationId": "31080",
             "companyId": "757",
             "areaCode": "903",
@@ -5925,296 +6103,160 @@ def listar_e_salvar_geracoes_kehua(hoje=None):
         }
     }
 
-    # =========================================================
+    # ======================================================
     # Helpers
-    # =========================================================
+    # ======================================================
+
     def cache_valido():
         return (
-            KEHUA_AUTH_CACHE.get("sess")
-            and KEHUA_AUTH_CACHE.get("headers")
-            and KEHUA_AUTH_CACHE.get("expires_at")
-            and KEHUA_AUTH_CACHE["expires_at"] > agora_br()
+            KEHUA_AUTH_CACHE.get("cookies") and
+            KEHUA_AUTH_CACHE.get("headers") and
+            KEHUA_AUTH_CACHE.get("realtime_url") and
+            KEHUA_AUTH_CACHE.get("last_refresh") and
+            agora_br() - KEHUA_AUTH_CACHE["last_refresh"] < KEHUA_CACHE_TTL
         )
 
-    def extrair_day_kwh(json_resp: dict) -> float:
-        data = json_resp.get("data") or {}
-        yc_infos = data.get("ycInfos") or []
-        for grupo in yc_infos:
-            for p in grupo.get("dataPoint") or []:
-                if p.get("property") == "dayElec":
-                    return float(p.get("val") or 0)
-        return 0.0
+    def atualizar_cache_autenticacao():
+        print(f"[{agora_br()}] 🔐 Kehua: abrindo login")
 
-    # =========================================================
-    # LOGIN + CAPTURA HEADERS (SELENIUM)
-    # =========================================================
-    def autenticar_kehua():
         options = Options()
         if os.getenv("HEADLESS", "1") == "1":
             options.add_argument("--headless=new")
 
-        # Render/Docker flags
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-gpu")
         options.add_argument("--window-size=1366,900")
-        options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_argument(f"--user-agent={UA}")
-
-        # diminuir barulho
-        options.add_argument("--log-level=3")
-        options.add_argument("--disable-logging")
-        options.add_experimental_option("excludeSwitches", ["enable-logging"])
-
-        # performance logs (capturar headers reais)
         options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
 
         driver = webdriver.Chrome(options=options)
-        wait = WebDriverWait(driver, 90)
-
-        def dump_debug(prefix="kehua_login_fail"):
-            try:
-                driver.save_screenshot(f"{prefix}.png")
-            except Exception:
-                pass
-            try:
-                html = driver.page_source or ""
-                with open(f"{prefix}.html", "w", encoding="utf-8") as f:
-                    f.write(html)
-            except Exception:
-                pass
-            try:
-                print(f"[{agora_br()}] DEBUG URL:", driver.current_url)
-            except Exception:
-                pass
-
-        def has_token_cookie():
-            try:
-                for c in driver.get_cookies():
-                    if (c.get("name") or "").lower() == "token" and c.get("value"):
-                        return True
-            except Exception:
-                pass
-            return False
-
-        def click_login_button():
-            # tenta achar botão "Login" visível/clicável
-            buttons = driver.find_elements(By.CSS_SELECTOR, "button")
-            for b in buttons:
-                try:
-                    txt = (b.text or "").strip().lower()
-                    if b.is_displayed() and b.is_enabled() and "login" in txt:
-                        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", b)
-                        driver.execute_script("arguments[0].click();", b)
-                        return True
-                except Exception:
-                    continue
-            return False
+        wait = WebDriverWait(driver, 60)
 
         try:
-            print(f"[{agora_br()}] 🔐 Kehua: abrindo login")
+            # LOGIN
             driver.get(LOGIN_PAGE)
-
-            # garante que inputs carregaram
             wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='password']")))
 
-            # localizar inputs VISÍVEIS
-            inputs = [i for i in driver.find_elements(By.CSS_SELECTOR, "input") if i.is_displayed()]
-            user_el = None
-            pass_el = None
-            for i in inputs:
-                t = (i.get_attribute("type") or "").lower()
-                if t in ("text", "email") and user_el is None:
-                    user_el = i
-                if t == "password":
-                    pass_el = i
+            inputs = driver.find_elements(By.CSS_SELECTOR, "input")
+            user_el = next(e for e in inputs if (e.get_attribute("type") or "") in ("text", "email"))
+            pass_el = next(e for e in inputs if e.get_attribute("type") == "password")
 
-            if not user_el or not pass_el:
-                dump_debug("kehua_inputs_not_found")
-                raise RuntimeError("Não encontrei inputs visíveis de usuário/senha.")
-
-            # preencher
-            user_el.click()
-            user_el.send_keys(Keys.CONTROL, "a")
-            user_el.send_keys(Keys.DELETE)
             user_el.send_keys(KEHUA_USER)
-
-            pass_el.click()
-            pass_el.send_keys(Keys.CONTROL, "a")
-            pass_el.send_keys(Keys.DELETE)
             pass_el.send_keys(KEHUA_PASS)
 
-            # marcar checkboxes (tem que marcar os 2)
-            # NOTE: às vezes o checkbox real é o input hidden + label clicável.
-            cbs = driver.find_elements(By.CSS_SELECTOR, "input[type='checkbox']")
-            for cb in cbs:
-                try:
-                    if cb.is_displayed() and cb.is_enabled() and not cb.is_selected():
-                        driver.execute_script("arguments[0].click();", cb)
-                except Exception:
-                    pass
+            for cb in driver.find_elements(By.CSS_SELECTOR, "input[type='checkbox']"):
+                if cb.is_enabled() and not cb.is_selected():
+                    driver.execute_script("arguments[0].click();", cb)
 
-            # tenta clicar no botão Login, se não achar -> ENTER
-            if not click_login_button():
-                pass_el.send_keys(Keys.ENTER)
+            pass_el.send_keys(Keys.ENTER)
 
-            # ✅ condição correta de “logou”:
-            # 1) cookie token aparece OU
-            # 2) URL sai do sellerLogin OU
-            # 3) página troca e some o input password
-            def login_ok(d):
-                try:
-                    url = (d.current_url or "").lower()
-                    if has_token_cookie():
-                        return True
-                    if "sellerlogin" not in url:
-                        return True
-                    pw = d.find_elements(By.CSS_SELECTOR, "input[type='password']")
-                    if not any(x.is_displayed() for x in pw):
-                        return True
-                except Exception:
-                    pass
-                return False
+            # AGUARDA MONITOR
+            wait.until(lambda d: "/monitorow" in (d.current_url or "").lower())
 
-            try:
-                wait.until(login_ok)
-            except TimeoutException as e:
-                # tenta 2ª vez: clicar login de novo
-                print(f"[{agora_br()}] ⚠️ Kehua: timeout no login. Tentando novamente...")
-                click_login_button()
-                try:
-                    WebDriverWait(driver, 25).until(login_ok)
-                except Exception:
-                    dump_debug("kehua_login_timeout")
-                    raise e
+            driver.get(f"{BASE}/monitorOw")
+            wait.until(lambda d: "/monitorow" in (d.current_url or "").lower())
 
-            print(f"[{agora_br()}] ✅ Kehua: pós-login OK. URL:", driver.current_url)
-
-            # abrir sysInverter
-            driver.get(SYS_INVERTER_PAGE)
-            WebDriverWait(driver, 60).until(lambda d: "sysinverter" in (d.current_url or "").lower())
-            time.sleep(1.0)
-
-            # limpa logs e força fetch (pra gerar XHR)
-            try:
-                _ = driver.get_log("performance")
-            except Exception:
-                pass
-
-            payload = next(iter(KEHUA_CONFIG.values()))
+            # FORÇA UMA REQUEST REALTIME
             driver.execute_script("""
-                fetch(arguments[1], {
-                method: "POST",
-                headers: {"Content-Type":"application/x-www-form-urlencoded","clientType":"web"},
-                body: new URLSearchParams(arguments[0]).toString()
+            (async () => {
+              try {
+                await fetch("/necp/server-maintenance/monitor/getDeviceRealtimeData", {
+                  method: "POST",
+                  headers: {"content-type": "application/x-www-form-urlencoded"},
+                  body: "page=1&size=10"
                 });
-            """, payload, REALTIME_URL)
+              } catch(e) {}
+            })();
+            """)
+            time.sleep(1.5)
 
-            time.sleep(1.2)
+            # CAPTURA HEADERS
+            url, headers = _capture_realtime_headers(driver, timeout_sec=30)
+            if not url or not headers:
+                raise RuntimeError("Não foi possível capturar headers do Kehua")
 
-            realtime_url = None
-            headers = None
+            KEHUA_AUTH_CACHE["cookies"] = driver.get_cookies()
+            KEHUA_AUTH_CACHE["headers"] = {k.lower(): v for k, v in headers.items()}
+            KEHUA_AUTH_CACHE["realtime_url"] = url
+            KEHUA_AUTH_CACHE["last_refresh"] = agora_br()
 
-            # capturar headers do XHR real
-            t0 = time.time()
-            while time.time() - t0 < 45:
-                for entry in driver.get_log("performance"):
-                    try:
-                        msg = json.loads(entry["message"])["message"]
-                    except Exception:
-                        continue
-                    if msg.get("method") != "Network.requestWillBeSent":
-                        continue
-                    req = (msg.get("params") or {}).get("request") or {}
-                    u = req.get("url") or ""
-                    if "getDeviceRealtimeData" in u:
-                        realtime_url = u
-                        headers = {k.lower(): v for k, v in (req.get("headers") or {}).items()}
-                        break
-                if realtime_url and headers:
-                    break
-                time.sleep(0.6)
-
-            if not headers or not headers.get("authorization") or not headers.get("sign"):
-                dump_debug("kehua_headers_not_captured")
-                raise RuntimeError("Headers essenciais (authorization/sign) não capturados.")
-
-            # cookies -> session
-            sess = requests.Session()
-            sess.headers.update({"User-Agent": UA})
-            for c in driver.get_cookies():
-                sess.cookies.set(c["name"], c["value"], domain=c.get("domain"))
-
-            # cache
-            KEHUA_AUTH_CACHE.update({
-                "sess": sess,
-                "headers": headers,
-                "realtime_url": realtime_url,
-                "expires_at": agora_br() + timedelta(minutes=20),
-            })
-
-            print(f"[{agora_br()}] ✅ Kehua: cache atualizado (expira em {KEHUA_AUTH_CACHE['expires_at']})")
+            print(f"[{agora_br()}] ✅ Kehua: autenticação atualizada")
 
         finally:
-            try:
-                driver.quit()
-            except Exception:
-                pass
+            driver.quit()
 
-    # =========================================================
-    # GARANTIR AUTH
-    # =========================================================
-    try:
-        if not cache_valido():
-            autenticar_kehua()
-    except Exception as e:
-        print(f"❌ Kehua: falha ao autenticar: {type(e).__name__} | {repr(e)}")
-        return
+    def call_realtime(payload):
+        sess = requests.Session()
+        sess.headers.update({"User-Agent": UA})
 
-    # =========================================================
-    # CONSULTA + GRAVAÇÃO
-    # =========================================================
-    sess = KEHUA_AUTH_CACHE["sess"]
-    headers_base = KEHUA_AUTH_CACHE["headers"]
-    url = KEHUA_AUTH_CACHE["realtime_url"]
+        for c in KEHUA_AUTH_CACHE["cookies"]:
+            sess.cookies.set(c["name"], c["value"], domain=c.get("domain"), path=c.get("path", "/"))
 
-    usinas = Usina.query.filter(Usina.kehua_station_id.isnot(None)).all()
-
-    for usina in usinas:
-        payload = KEHUA_CONFIG.get(usina.id)
-        if not payload:
-            continue
+        h = KEHUA_AUTH_CACHE["headers"]
 
         headers = {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "authorization": headers_base.get("authorization"),
-            "sign": headers_base.get("sign"),
-            "clientType": "web",
-            "locale": "pt-BR",
-            "referer": SYS_INVERTER_PAGE,
+            "accept": "application/json, text/plain, */*",
+            "content-type": "application/x-www-form-urlencoded",
+            "referer": f"{BASE}/monitorOw",
             "origin": BASE,
+            "authorization": h.get("authorization"),
+            "sign": h.get("sign"),
+            "clienttype": h.get("clienttype", "web"),
+            "web_version": h.get("web_version", "3.0.4"),
+            "locale": h.get("locale", "pt-BR"),
         }
 
-        try:
-            resp = sess.post(url, headers=headers, data=payload, timeout=30)
-            data = resp.json()
+        r = sess.post(KEHUA_AUTH_CACHE["realtime_url"], headers=headers, data=payload, timeout=30)
+        j = r.json()
 
-            if str(data.get("code")) != "0":
-                raise RuntimeError(data.get("message"))
+        if str(j.get("code")) != "0":
+            raise RuntimeError(j.get("message"))
 
-            kwh = extrair_day_kwh(data)
+        for g in j.get("data", {}).get("ycInfos", []):
+            for p in g.get("dataPoint", []):
+                if p.get("property") == "dayElec":
+                    return float(p.get("val") or 0)
 
-        except Exception as e:
-            print(f"❌ Kehua: erro em {usina.nome}: {e}")
-            KEHUA_AUTH_CACHE["expires_at"] = None
+        return 0.0
+
+    # ======================================================
+    # EXECUÇÃO
+    # ======================================================
+
+    try:
+        if not cache_valido():
+            atualizar_cache_autenticacao()
+    except Exception as e:
+        print(f"❌ Kehua: falha ao autenticar: {e}")
+        return
+
+    usinas = Usina.query.filter(Usina.kehua_station_id.isnot(None)).all()
+    if not usinas:
+        return
+
+    for usina in usinas:
+        cfg = KEHUA_CONFIG.get(usina.id)
+        if not cfg:
             continue
 
-        # --------- TRAVAS ---------
+        try:
+            kwh = call_realtime(cfg)
+        except Exception:
+            print(f"⚠️ Kehua: renovando cache e tentando novamente ({usina.nome})")
+            try:
+                atualizar_cache_autenticacao()
+                kwh = call_realtime(cfg)
+            except Exception as e:
+                print(f"❌ Kehua: erro definitivo {usina.nome}: {e}")
+                continue
+
         ontem = hoje - timedelta(days=1)
         ger_ontem = Geracao.query.filter_by(usina_id=usina.id, data=ontem).first()
         ger_hoje = Geracao.query.filter_by(usina_id=usina.id, data=hoje).first()
 
-        if 0 <= agora_br().hour < 2 and kwh > 0:
+        hora = agora_br().hour
+        if 0 <= hora < 2:
+            print(f"🚫 Kehua: {usina.nome} madrugada — ignorando")
             continue
 
         if ger_ontem and abs((ger_ontem.energia_kwh or 0) - kwh) < 0.001:
@@ -6227,7 +6269,8 @@ def listar_e_salvar_geracoes_kehua(hoje=None):
             if ger_hoje:
                 ger_hoje.energia_kwh = kwh
             else:
-                db.session.add(Geracao(usina_id=usina.id, data=hoje, energia_kwh=kwh))
+                db.session.add(Geracao(data=hoje, usina_id=usina.id, energia_kwh=kwh))
+
             db.session.commit()
             print(f"✅ Kehua: {usina.nome} salvo em {hoje}: {kwh:.2f} kWh")
 
