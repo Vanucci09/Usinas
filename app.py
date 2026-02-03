@@ -5310,7 +5310,6 @@ def relatorio_financeiro_empresa():
 def calcular_distribuicao_lucro(empresa_id, mes, ano):
     empresa = EmpresaInvestidora.query.get_or_404(empresa_id)
 
-    # Usinas vinculadas
     usinas_ids = [vinculo.usina_id for vinculo in empresa.usinas]
     if not usinas_ids:
         return {
@@ -5321,25 +5320,23 @@ def calcular_distribuicao_lucro(empresa_id, mes, ano):
             'distribuicoes': [],
             'extrato': {
                 'receitas_usinas': [],
-                'despesas_usinas': [],
                 'movimentos_empresa_receitas': [],
                 'movimentos_empresa_despesas': [],
                 'totais': {
                     'receita_usinas': 0.0,
-                    'despesa_usinas': 0.0,
                     'receita_empresa': 0.0,
                     'despesa_empresa': 0.0
                 }
             }
         }
 
-    # Helpers SQL
     total_usina_expr = (func.coalesce(FinanceiroUsina.valor, 0.0) + func.coalesce(FinanceiroUsina.juros, 0.0))
     valor_empresa_expr = func.coalesce(FinanceiroEmpresaInvestidora.valor, 0.0)
 
-    # -------------------------
-    # EXTRATO - RECEITAS USINAS (detalhado)
-    # -------------------------
+    # =========================
+    # RECEITAS VINDAS DA USINA = categoria_id 14
+    # (apenas itens pagos no mês/ano filtrado)
+    # =========================
     receitas_usinas_rows = (
         db.session.query(
             FinanceiroUsina.usina_id,
@@ -5348,15 +5345,15 @@ def calcular_distribuicao_lucro(empresa_id, mes, ano):
             FinanceiroUsina.descricao,
             func.coalesce(FinanceiroUsina.valor, 0.0).label("valor"),
             func.coalesce(FinanceiroUsina.juros, 0.0).label("juros"),
-            (func.coalesce(FinanceiroUsina.valor, 0.0) + func.coalesce(FinanceiroUsina.juros, 0.0)).label("total")
+            total_usina_expr.label("total"),
         )
         .join(Usina, Usina.id == FinanceiroUsina.usina_id)
         .filter(
             FinanceiroUsina.usina_id.in_(usinas_ids),
-            FinanceiroUsina.tipo == 'receita',
+            FinanceiroUsina.categoria_id == 14,
             FinanceiroUsina.data_pagamento.isnot(None),
             db.extract('month', FinanceiroUsina.data_pagamento) == mes,
-            db.extract('year', FinanceiroUsina.data_pagamento) == ano
+            db.extract('year', FinanceiroUsina.data_pagamento) == ano,
         )
         .order_by(FinanceiroUsina.data_pagamento.asc())
         .all()
@@ -5372,46 +5369,9 @@ def calcular_distribuicao_lucro(empresa_id, mes, ano):
         "total": float(r.total or 0),
     } for r in receitas_usinas_rows]
 
-    # -------------------------
-    # EXTRATO - DESPESAS USINAS (detalhado)
-    # -------------------------
-    despesas_usinas_rows = (
-        db.session.query(
-            FinanceiroUsina.usina_id,
-            Usina.nome.label("usina_nome"),
-            FinanceiroUsina.data_pagamento,
-            FinanceiroUsina.descricao,
-            func.coalesce(FinanceiroUsina.valor, 0.0).label("valor"),
-            func.coalesce(FinanceiroUsina.juros, 0.0).label("juros"),
-            (func.coalesce(FinanceiroUsina.valor, 0.0) + func.coalesce(FinanceiroUsina.juros, 0.0)).label("total")
-        )
-        .join(Usina, Usina.id == FinanceiroUsina.usina_id)
-        .filter(
-            FinanceiroUsina.usina_id.in_(usinas_ids),
-            FinanceiroUsina.tipo == 'despesa',
-            FinanceiroUsina.data_pagamento.isnot(None),
-            db.extract('month', FinanceiroUsina.data_pagamento) == mes,
-            db.extract('year', FinanceiroUsina.data_pagamento) == ano
-        )
-        .order_by(FinanceiroUsina.data_pagamento.asc())
-        .all()
-    )
-
-    despesas_usinas = [{
-        "usina_id": r.usina_id,
-        "usina": r.usina_nome,
-        "data_pagamento": r.data_pagamento,
-        "descricao": r.descricao,
-        "valor": float(r.valor or 0),
-        "juros": float(r.juros or 0),
-        "total": float(r.total or 0),
-    } for r in despesas_usinas_rows]
-
-    # -------------------------
-    # EXTRATO - MOVIMENTOS EMPRESA (receitas e despesas)
-    # Ordenar por ano_referencia/mes_referencia (fallback data)
-    # Filtrar pelo mes/ano usando mes_referencia/ano_referencia; se nulo, usa data
-    # -------------------------
+    # =========================
+    # MOVIMENTOS DA EMPRESA (detalhado)
+    # =========================
     filtro_mes_ano_empresa = (
         (FinanceiroEmpresaInvestidora.mes_referencia == mes) &
         (FinanceiroEmpresaInvestidora.ano_referencia == ano)
@@ -5459,22 +5419,18 @@ def calcular_distribuicao_lucro(empresa_id, mes, ano):
         else:
             movimentos_empresa_despesas.append(item)
 
-    # -------------------------
-    # TOTAIS (para o lucro)
-    # -------------------------
+    # =========================
+    # TOTAIS E LUCRO (SEM DESPESAS DA USINA)
+    # =========================
     receita_usinas_total = round(sum(x["total"] for x in receitas_usinas), 2)
-    despesa_usinas_total = round(sum(x["total"] for x in despesas_usinas), 2)
     receita_empresa_total = round(sum(x["valor"] for x in movimentos_empresa_receitas), 2)
     despesa_empresa_total = round(sum(x["valor"] for x in movimentos_empresa_despesas), 2)
 
     lucro_liquido = round(
-        (receita_usinas_total + receita_empresa_total) - (despesa_usinas_total + despesa_empresa_total),
+        (receita_usinas_total + receita_empresa_total) - despesa_empresa_total,
         2
     )
 
-    # -------------------------
-    # Distribuição por acionista
-    # -------------------------
     distribuicoes = []
     for participacao in empresa.acionistas:
         valor_participante = round(lucro_liquido * (participacao.percentual / 100.0), 2)
@@ -5491,13 +5447,11 @@ def calcular_distribuicao_lucro(empresa_id, mes, ano):
         'lucro_liquido': lucro_liquido,
         'distribuicoes': distribuicoes,
         'extrato': {
-            'receitas_usinas': receitas_usinas,
-            'despesas_usinas': despesas_usinas,
+            'receitas_usinas': receitas_usinas,  # só cat=14
             'movimentos_empresa_receitas': movimentos_empresa_receitas,
             'movimentos_empresa_despesas': movimentos_empresa_despesas,
             'totais': {
                 'receita_usinas': receita_usinas_total,
-                'despesa_usinas': despesa_usinas_total,
                 'receita_empresa': receita_empresa_total,
                 'despesa_empresa': despesa_empresa_total
             }

@@ -265,7 +265,7 @@
             </div>
         </div>
         <!-- Investidores -->
-         {% if current_user.email == 'master@admin.com' %}
+         {% if current_user.email in ['master@admin.com', 'nuza@cgrenergia.com.br'] %}
         <div class="accordion-item">
             <h2 class="accordion-header" id="headingInvestidores">
                 <button class="accordion-button {% if request.args.get('aba') == 'investidores' %} {% else %}collapsed{% endif %}" 

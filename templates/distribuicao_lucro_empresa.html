@@ -40,19 +40,15 @@
     <div class="card border-0 bg-light mb-3">
       <div class="card-body">
         <div class="row text-center g-2">
-          <div class="col-md-3 col-6">
-            <div class="small text-muted">Receita (Usinas)</div>
+          <div class="col-md-4 col-6">
+            <div class="small text-muted">Receita (Usinas - Cat. 14)</div>
             <div class="fw-bold">{{ resultado.extrato.totais.receita_usinas | formato_brasileiro }}</div>
           </div>
-          <div class="col-md-3 col-6">
-            <div class="small text-muted">Despesa (Usinas)</div>
-            <div class="fw-bold">{{ resultado.extrato.totais.despesa_usinas | formato_brasileiro }}</div>
-          </div>
-          <div class="col-md-3 col-6">
+          <div class="col-md-4 col-6">
             <div class="small text-muted">Receita (Empresa)</div>
             <div class="fw-bold">{{ resultado.extrato.totais.receita_empresa | formato_brasileiro }}</div>
           </div>
-          <div class="col-md-3 col-6">
+          <div class="col-md-4 col-12">
             <div class="small text-muted">Despesa (Empresa)</div>
             <div class="fw-bold">{{ resultado.extrato.totais.despesa_empresa | formato_brasileiro }}</div>
           </div>
@@ -109,60 +105,11 @@
       </div>
     </div>
 
-    <!-- Despesas das Usinas -->
-    <div class="card shadow-sm mb-3">
-      <div class="card-header bg-white">
-        <strong>Despesas das Usinas</strong>
-      </div>
-      <div class="card-body p-0">
-        <div class="table-responsive">
-          <table class="table table-sm table-striped table-bordered mb-0 align-middle">
-            <thead class="table-light">
-              <tr>
-                <th>Usina</th>
-                <th>Data Pagamento</th>
-                <th>Descrição</th>
-                <th class="text-end">Valor (R$)</th>
-                <th class="text-end">Juros (R$)</th>
-                <th class="text-end">Total (R$)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% if resultado.extrato.despesas_usinas %}
-                {% for r in resultado.extrato.despesas_usinas %}
-                <tr>
-                  <td>{{ r.usina }}</td>
-                  <td>{{ r.data_pagamento.strftime("%d/%m/%Y") if r.data_pagamento else "-" }}</td>
-                  <td>{{ r.descricao }}</td>
-                  <td class="text-end">{{ r.valor | formato_brasileiro }}</td>
-                  <td class="text-end">{{ r.juros | formato_brasileiro }}</td>
-                  <td class="text-end fw-semibold">{{ r.total | formato_brasileiro }}</td>
-                </tr>
-                {% endfor %}
-              {% else %}
-                <tr>
-                  <td colspan="6" class="text-center text-muted py-3">
-                    Sem despesas de usinas no período.
-                  </td>
-                </tr>
-              {% endif %}
-            </tbody>
-            <tfoot>
-              <tr class="fw-bold bg-light">
-                <td colspan="5" class="text-end">Total Despesas Usinas</td>
-                <td class="text-end">{{ resultado.extrato.totais.despesa_usinas | formato_brasileiro }}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
-    </div>
-
     <!-- Despesas da Empresa (detalhado) -->
     <div class="card shadow-sm mb-3">
       <div class="card-header bg-white">
         <strong>Despesas da Empresa</strong>
-        <div class="text-muted small">Itens em Financeiro Empresa</div>
+        <div class="text-muted small">Itens em Financeiro Empresa (tipo diferente de "receita")</div>
       </div>
       <div class="card-body p-0">
         <div class="table-responsive">
