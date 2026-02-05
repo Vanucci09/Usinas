@@ -7,7 +7,7 @@ import pandas as pd
 from werkzeug.utils import secure_filename
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-from sqlalchemy import Numeric, text, func, case, cast, or_, and_, literal
+from sqlalchemy import Numeric, text, func, case, cast, or_, and_, literal, CheckConstraint, desc
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 import fitz, tempfile, glob, platform
 from PIL import Image
@@ -160,12 +160,26 @@ class Rateio(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     usina_id = db.Column(db.Integer, db.ForeignKey('usinas.id'), nullable=False)
     cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=False)
+
     percentual = db.Column(db.Float, nullable=False)
-    tarifa_kwh = db.Column(db.Float, nullable=False)
+
+    # Continua existindo para casos "fixos"
+    tarifa_kwh = db.Column(db.Float, nullable=True)
+
+    # NOVO: se True, tarifa_kwh será calculada com base na tarifa_neoenergia da fatura do mês
+    usar_tarifa_neoenergia = db.Column(db.Boolean, default=False, nullable=False)
+
+    # NOVO: desconto em %, ex: 15.0 = 15%
+    desconto_percentual = db.Column(db.Float, nullable=True)
+
     codigo_rateio = db.Column(db.Integer, nullable=True)
-    
     data_inicio = db.Column(db.Date, nullable=False, default=date.today)
     ativo = db.Column(db.Boolean, default=True)
+
+    __table_args__ = (
+        CheckConstraint('percentual > 0 AND percentual <= 100', name='ck_rateio_percentual'),
+        CheckConstraint('(desconto_percentual IS NULL) OR (desconto_percentual >= 0 AND desconto_percentual <= 100)', name='ck_rateio_desconto'),
+    )
     
 class FaturaMensal(db.Model):
     __tablename__ = 'faturas_mensais'
@@ -1072,49 +1086,108 @@ def listar_clientes():
         usinas=usinas,
         usina_id_filtro=usina_id_filtro
     )
+    
+@app.route('/api/tarifa_neoenergia', methods=['GET'])
+@login_required
+def api_tarifa_neoenergia():
+    usina_id = request.args.get('usina_id', type=int)
+    cliente_id = request.args.get('cliente_id', type=int)
+
+    if not usina_id or not cliente_id:
+        return jsonify({"ok": False, "msg": "Parâmetros inválidos"}), 400
+
+    fatura = (FaturaMensal.query
+              .filter_by(usina_id=usina_id, cliente_id=cliente_id)
+              .order_by(desc(FaturaMensal.ano_referencia), desc(FaturaMensal.mes_referencia))
+              .first())
+
+    if not fatura or fatura.tarifa_neoenergia is None:
+        return jsonify({"ok": True, "tarifa_neoenergia": None})
+
+    return jsonify({"ok": True, "tarifa_neoenergia": float(fatura.tarifa_neoenergia)})
 
 @app.route('/cadastrar_rateio', methods=['GET', 'POST'])
 @login_required
-def cadastrar_rateio():    
+def cadastrar_rateio():
+    # ---------- GET AJAX: carregar clientes ----------
     if request.method == 'GET' and request.args.get('ajax') == '1':
         usina_id = request.args.get('usina_id', type=int)
         if not usina_id:
             return jsonify([])
 
-        # Clientes da usina SEM rateio nessa mesma usina
         clientes = (
             db.session.query(Cliente)
             .outerjoin(
                 Rateio,
                 and_(Rateio.usina_id == usina_id,
-                     Rateio.cliente_id == Cliente.id)
+                     Rateio.cliente_id == Cliente.id,
+                     Rateio.ativo.is_(True))  # só bloqueia se já existir "vigente"
             )
             .filter(Cliente.usina_id == usina_id)
-            .filter(Rateio.id.is_(None))  # só quem não tem rateio na usina
+            .filter(Rateio.id.is_(None))
             .order_by(Cliente.nome)
             .all()
         )
 
         return jsonify([{"id": c.id, "nome": c.nome} for c in clientes])
 
-    # POST: cadastra rateio com proteção contra duplicidade
+    # ---------- POST: cadastrar rateio ----------
     if request.method == 'POST':
         usina_id = int(request.form['usina_id'])
         cliente_id = int(request.form['cliente_id'])
         percentual = float(request.form['percentual'])
-        tarifa_kwh = float(request.form['tarifa_kwh'])
 
-        # Impede duplicidade por segurança
+        modo_tarifa = request.form.get('modo_tarifa', 'fixo')  # fixo | neo
+        usar_tarifa_neoenergia = (modo_tarifa == 'neo')
+
+        desconto_percentual = request.form.get('desconto_percentual', type=float)
+        tarifa_kwh_form = request.form.get('tarifa_kwh', type=float)
+
+        # Impede duplicidade do "vigente" (ativo=True)
         existe = (
             db.session.query(Rateio.id)
-            .filter(Rateio.usina_id == usina_id,
-                    Rateio.cliente_id == cliente_id)
+            .filter(
+                Rateio.usina_id == usina_id,
+                Rateio.cliente_id == cliente_id,
+                Rateio.ativo.is_(True)
+            )
             .first()
         )
         if existe:
-            flash('Este cliente já possui rateio vinculado nesta usina.', 'warning')
+            flash('Este cliente já possui um rateio vigente (ativo) nesta usina.', 'warning')
             return redirect(url_for('cadastrar_rateio'))
 
+        # -------- OPÇÃO A: sempre gravar tarifa_kwh preenchida --------
+        if usar_tarifa_neoenergia:
+            # desconto é obrigatório no modo Neo
+            desconto = float(desconto_percentual or 0)
+
+            # 1) tenta pegar fatura Neoenergia
+            fatura = (FaturaMensal.query
+                    .filter_by(usina_id=usina_id, cliente_id=cliente_id)
+                    .order_by(desc(FaturaMensal.ano_referencia),
+                                desc(FaturaMensal.mes_referencia))
+                    .first())
+
+            if fatura and fatura.tarifa_neoenergia is not None:
+                tarifa_base = float(fatura.tarifa_neoenergia)
+
+            # 2) fallback: tarifa digitada
+            elif tarifa_kwh_form is not None:
+                tarifa_base = float(tarifa_kwh_form)
+
+            # 3) fallback final: 1.00
+            else:
+                tarifa_base = 1.00
+
+            tarifa_kwh = tarifa_base * (1 - (desconto / 100.0))
+
+        else:
+            # modo fixo
+            tarifa_kwh = float(tarifa_kwh_form)
+            desconto_percentual = None
+
+        # Código de rateio por usina (incremental)
         ultimo_codigo = (
             db.session.query(db.func.max(Rateio.codigo_rateio))
             .filter(Rateio.usina_id == usina_id)
@@ -1126,8 +1199,11 @@ def cadastrar_rateio():
             usina_id=usina_id,
             cliente_id=cliente_id,
             percentual=percentual,
-            tarifa_kwh=tarifa_kwh,
-            codigo_rateio=proximo_codigo
+            tarifa_kwh=tarifa_kwh,  # <- SEMPRE preenchido (NUNCA NULL)
+            usar_tarifa_neoenergia=usar_tarifa_neoenergia,
+            desconto_percentual=desconto_percentual,
+            codigo_rateio=proximo_codigo,
+            ativo=True
         )
 
         db.session.add(rateio)
@@ -1135,7 +1211,7 @@ def cadastrar_rateio():
         flash('Rateio cadastrado com sucesso!', 'success')
         return redirect(url_for('cadastrar_rateio'))
 
-    # GET normal: renderiza página    
+    # ---------- GET normal ----------
     usinas = Usina.query.order_by(Usina.nome).all()
     return render_template('cadastrar_rateio.html', usinas=usinas)
 
@@ -1184,25 +1260,66 @@ def editar_rateio(id):
     clientes = Cliente.query.all()
 
     if request.method == 'POST':
+        usina_id = int(request.form['usina_id'])
+        cliente_id = int(request.form['cliente_id'])
+        percentual = float(request.form['percentual'])
+
+        modo_tarifa = request.form.get('modo_tarifa', 'fixo')  # fixo | neo
+        usar_tarifa_neoenergia = (modo_tarifa == 'neo')
+
+        desconto_percentual = request.form.get('desconto_percentual', type=float)
+        tarifa_kwh_form = request.form.get('tarifa_kwh', type=float)
+
         # Desativa o rateio antigo
         rateio_antigo.ativo = False
 
-        # Cria um novo com os dados atualizados
+        # -------- calcula tarifa_kwh (NUNCA NULL) --------
+        if usar_tarifa_neoenergia:
+            desconto = float(desconto_percentual or 0.0)
+
+            # tenta fatura mais recente
+            fatura = (FaturaMensal.query
+                      .filter_by(usina_id=usina_id, cliente_id=cliente_id)
+                      .order_by(desc(FaturaMensal.ano_referencia), desc(FaturaMensal.mes_referencia))
+                      .first())
+
+            if fatura and fatura.tarifa_neoenergia is not None:
+                tarifa_base = float(fatura.tarifa_neoenergia)
+            elif tarifa_kwh_form is not None and float(tarifa_kwh_form) > 0:
+                tarifa_base = float(tarifa_kwh_form)
+            else:
+                tarifa_base = 1.00
+
+            tarifa_kwh = tarifa_base * (1 - (desconto / 100.0))
+
+        else:
+            # modo fixo (fallback final: 1.00 se vier vazio)
+            tarifa_kwh = float(tarifa_kwh_form) if tarifa_kwh_form is not None else 1.00
+            desconto_percentual = None
+
+        # Cria um novo com os dados atualizados (mantém o mesmo código_rateio)
         novo_rateio = Rateio(
-            usina_id=request.form['usina_id'],
-            cliente_id=request.form['cliente_id'],
-            percentual=float(request.form['percentual']),
-            tarifa_kwh=float(request.form['tarifa_kwh']),
+            usina_id=usina_id,
+            cliente_id=cliente_id,
+            percentual=percentual,
+            tarifa_kwh=tarifa_kwh,
+            usar_tarifa_neoenergia=usar_tarifa_neoenergia,
+            desconto_percentual=desconto_percentual,
             codigo_rateio=rateio_antigo.codigo_rateio,
             data_inicio=date.today(),
             ativo=True
         )
+
         db.session.add(novo_rateio)
         db.session.commit()
-
         return redirect(url_for('listar_rateios'))
 
-    return render_template('editar_rateio.html', rateio=rateio_antigo, usinas=usinas, clientes=clientes)
+    return render_template(
+        'editar_rateio.html',
+        rateio=rateio_antigo,
+        usinas=usinas,
+        clientes=clientes
+    )
 
 @app.route('/excluir_rateio/<int:id>', methods=['POST'])
 @login_required
@@ -1363,29 +1480,76 @@ def faturamento():
                     # Base de consumo para receita (igual ao que você usa pra salvar na Fatura)
                     consumo_base_receita = injetado_total if (cliente and cliente.consumo_instantaneo) else consumo_usina
 
-                    # --- RECEITA LÍQUIDA = RECEITA BRUTA - (TUSD Fio B se aplicável) ---
-                    tarifa_cliente = Decimal(str(rateio.tarifa_kwh))
-                    receita_bruta = (Decimal(str(consumo_base_receita)) * tarifa_cliente) \
-                        .quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                    # -----------------------------
+                    # TARIFA DO CLIENTE (APLICADA)
+                    # -----------------------------
+                    def _dec(v, default="1.00"):
+                        try:
+                            if v is None:
+                                return Decimal(default)
+                            return Decimal(str(v))
+                        except Exception:
+                            return Decimal(default)
 
+                    desconto_pct = float(rateio.desconto_percentual or 0.0)
+
+                    if getattr(rateio, "usar_tarifa_neoenergia", False):
+                        # Base preferencial: tarifa_neoenergia da fatura cadastrada neste POST
+                        tarifa_base = fatura.tarifa_neoenergia
+
+                        # Fallback: tarifa fixa armazenada no rateio
+                        if tarifa_base is None:
+                            tarifa_base = rateio.tarifa_kwh
+
+                        # Fallback final: 1.00
+                        if tarifa_base is None:
+                            tarifa_base = 1.00
+
+                        tarifa_base_dec = _dec(tarifa_base, default="1.00")
+                        fator_dec = (Decimal("1.00") - (Decimal(str(desconto_pct)) / Decimal("100.00")))
+                        tarifa_cliente_aplicada = (tarifa_base_dec * fator_dec).quantize(
+                            Decimal("0.0000001"), rounding=ROUND_HALF_UP
+                        )
+                    else:
+                        # Modo fixo (fallback final 1.00)
+                        tarifa_cliente_aplicada = _dec(rateio.tarifa_kwh, default="1.00").quantize(
+                            Decimal("0.0000001"), rounding=ROUND_HALF_UP
+                        )
+
+                    # -----------------------------
+                    # RECEITA BRUTA
+                    # -----------------------------
+                    receita_bruta = (
+                        Decimal(str(consumo_base_receita)) * tarifa_cliente_aplicada
+                    ).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+                    # -----------------------------
+                    # TUSD Fio B (se aplicável)
+                    # -----------------------------
                     tusd_dec = Decimal(str(custo_tusd_fio_b)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
                     # se a usina NÃO é TUSD Fio B, garante 0
                     if not (usina and usina.tusd_fio_b):
                         tusd_dec = Decimal('0.00')
 
+                    # -----------------------------
+                    # RECEITA LÍQUIDA
+                    # -----------------------------
                     receita_liquida = receita_bruta - tusd_dec
                     if receita_liquida < Decimal('0.00'):
                         receita_liquida = Decimal('0.00')
 
                     receita_valor = float(receita_liquida)
 
+                    # (Opcional) descrição mais completa com tarifa aplicada e desconto
+                    desc_tarifa = f"Tarifa={tarifa_cliente_aplicada} (Neoenergia={bool(getattr(rateio, 'usar_tarifa_neoenergia', False))}, desc={desconto_pct:.2f}%)"
+
                     receita = FinanceiroUsina(
                         usina_id=rateio.usina_id,
-                        categoria_id=None,  # pode adicionar a categoria
+                        categoria_id=None,
                         data=date(referencia_ano_receita, referencia_mes_receita, 1),  # 1º dia do mês subsequente
                         tipo='receita',
-                        descricao=f"Fatura {fatura.identificador} - {cliente.nome}",
+                        descricao=f"Fatura {fatura.identificador} - {cliente.nome} | {desc_tarifa}",
                         valor=receita_valor,
                         referencia_mes=referencia_mes_receita,
                         referencia_ano=referencia_ano_receita
@@ -1425,11 +1589,11 @@ def listar_faturas():
     mes = request.args.get('mes', type=int)
     ano = request.args.get('ano', type=int)
     cliente_id = request.args.get('cliente_id', type=int)
-    com_boleto = request.args.get('com_boleto') 
+    com_boleto = request.args.get('com_boleto')
 
     query = FaturaMensal.query.join(Cliente).join(Usina)
 
-    # Aplicação dos Filtros da URL (Mantidos)
+    # Filtros
     if usina_id:
         query = query.filter(Usina.id == usina_id)
     if cliente_id:
@@ -1439,19 +1603,21 @@ def listar_faturas():
     if ano:
         query = query.filter(FaturaMensal.ano_referencia == ano)
 
-    faturas = query.order_by(FaturaMensal.ano_referencia.desc(), FaturaMensal.mes_referencia.desc()).all()
+    faturas = query.order_by(
+        FaturaMensal.ano_referencia.desc(),
+        FaturaMensal.mes_referencia.desc()
+    ).all()
 
-    # Dados auxiliares (Mantidos)
+    # Dados auxiliares
     usinas = Usina.query.all()
     clientes = Cliente.query.all()
     anos = sorted({f.ano_referencia for f in FaturaMensal.query.all()}, reverse=True)
-    
-    # Inicializa variáveis para evitar erro "is not defined"
+
+    # Clientes sem fatura (mantido)
     qtd_sem_fatura = None
     clientes_sem_fatura = []
-    
+
     if mes and ano:
-        # A Lógica de Clientes sem Fatura (mantida)
         clientes_q = Cliente.query.filter(Cliente.ativo.is_(True))
         if usina_id:
             clientes_q = clientes_q.filter(Cliente.usina_id == usina_id)
@@ -1467,21 +1633,46 @@ def listar_faturas():
         sem_fatura_q = clientes_q.filter(~fatura_existe)
         qtd_sem_fatura = sem_fatura_q.count()
         clientes_sem_fatura = sem_fatura_q.order_by(Cliente.nome).all()
-    
+
+    # Caminho dos boletos
     BOLETOS_PATH = os.getenv('BOLETOS_PATH', '/data/boletos')
-    total_faturas = Decimal('0')    
-    # Dicionário para cachear os rateios já buscados, otimizando a consulta.
+
+    # 1) Buscar valores no FinanceiroUsina (1 query + map)
+    identificadores = [f.identificador for f in faturas if f.identificador]
+
+    valores_map = {}
+    if identificadores:
+        # Pega registros de receita cujo texto começa com "Fatura <identificador>"
+        # e monta um dicionário {identificador: valor}
+        receitas = (FinanceiroUsina.query
+                    .filter(FinanceiroUsina.tipo == 'receita')
+                    .filter(FinanceiroUsina.descricao.like('Fatura %'))
+                    .all())
+
+        # Mapeia pela string do identificador dentro da descrição
+        # Ex: "Fatura U5: 1-02-2026 - Fulano | ..."
+        for r in receitas:
+            desc = (r.descricao or "")
+            # tenta achar um dos identificadores dentro da descrição
+            # (como identificador é único, isso funciona bem)
+            for ident in identificadores:
+                if f"Fatura {ident}" in desc:
+                    valores_map[ident] = Decimal(str(r.valor or 0))
+                    break
+
+    # 2) Mantém rateio_vigente só pra mostrar o código_rateio na coluna ID (seu template usa)
     rateio_cache = {}
 
+    total_faturas = Decimal('0')
+
     for fatura in faturas:
-        # 1) verifica se tem boleto
+        # tem boleto?
         nome_arquivo = f"boleto_{fatura.id}.pdf"
         fatura.tem_boleto = os.path.exists(os.path.join(BOLETOS_PATH, nome_arquivo))
 
-        # 2) define a usina base da fatura
+        # rateio vigente (pra coluna ID)
         usina_id_base = fatura.usina_id or (fatura.cliente.usina_id if fatura.cliente else None)
 
-        # 3) data_base = último dia da competência
         try:
             _, last_day = monthrange(fatura.ano_referencia, fatura.mes_referencia)
             data_base = date(fatura.ano_referencia, fatura.mes_referencia, last_day)
@@ -1491,30 +1682,25 @@ def listar_faturas():
         rateio = None
         if data_base and usina_id_base:
             cache_key = (fatura.cliente_id, usina_id_base, fatura.ano_referencia, fatura.mes_referencia)
-
             if cache_key in rateio_cache:
                 rateio = rateio_cache[cache_key]
             else:
-                # 3a) tenta achar rateio vigente NAQUELA USINA para a competência da fatura
                 rateio = Rateio.query.filter(
                     Rateio.cliente_id == fatura.cliente_id,
                     Rateio.usina_id == usina_id_base,
                     Rateio.data_inicio <= data_base
                 ).order_by(
-                    Rateio.data_inicio.desc(),  # mais recente
-                    Rateio.ativo.desc(),        # ativo primeiro
-                    Rateio.id.desc()            # desempate
+                    Rateio.data_inicio.desc(),
+                    Rateio.ativo.desc(),
+                    Rateio.id.desc()
                 ).first()
 
                 if not rateio:
-                    # Fallback: competência ANTES do primeiro rateio.
-                    # Nesse caso usamos o rateio MAIS ANTIGO (primeiro contrato),
-                    # ignorando se está ativo ou não.
                     rateio = Rateio.query.filter(
                         Rateio.cliente_id == fatura.cliente_id,
                         Rateio.usina_id == usina_id_base
                     ).order_by(
-                        Rateio.data_inicio.asc(),  # mais antigo primeiro
+                        Rateio.data_inicio.asc(),
                         Rateio.id.asc()
                     ).first()
 
@@ -1522,37 +1708,20 @@ def listar_faturas():
 
         fatura.rateio_vigente = rateio
 
-        # 4) cálculo do valor_final_boleto
-        tarifa_cliente = Decimal(str(rateio.tarifa_kwh)) if rateio else Decimal('0')
-        consumo_usina = Decimal(str(fatura.consumo_usina or 0))
+        # VALOR BOLETO = FinanceiroUsina.valor (sem cálculo)
+        valor_fin = valores_map.get(fatura.identificador, Decimal('0'))
+        fatura.valor_final_boleto = valor_fin
+        total_faturas += valor_fin
 
-        valor_usina_bruto = consumo_usina * tarifa_cliente
-
-        # TUSD Fio B
-        usina_obj = getattr(fatura.cliente, 'usina', None)
-        tusd_ativo = bool(getattr(usina_obj, 'tusd_fio_b', False)) if usina_obj else False
-        custo_tusd = Decimal(str(getattr(fatura, 'custo_tusd_fio_b', 0) or 0))
-
-        if tusd_ativo:
-            valor_usina_liquido = valor_usina_bruto - custo_tusd
-            if valor_usina_liquido < Decimal('0'):
-                valor_usina_liquido = Decimal('0')
-        else:
-            valor_usina_liquido = valor_usina_bruto
-
-        fatura.valor_final_boleto = valor_usina_liquido
-        total_faturas += valor_usina_liquido
-        
-    # Filtro final de existência de boleto (mantido)
+    # Filtro final "com boleto"
     if com_boleto == '1':
         faturas = [f for f in faturas if f.tem_boleto]
     elif com_boleto == '0':
         faturas = [f for f in faturas if not f.tem_boleto]
-        
-    # Recalcula o total após o filtro (se aplicado)
-    if com_boleto:
-        total_faturas = sum(f.valor_final_boleto for f in faturas)
 
+    # Recalcula total após filtro (se aplicado)
+    if com_boleto:
+        total_faturas = sum((f.valor_final_boleto or Decimal('0')) for f in faturas)
 
     return render_template(
         'listar_faturas.html',
@@ -1568,7 +1737,7 @@ def listar_faturas():
         email_enviado=email_enviado,
         qtd_sem_fatura=qtd_sem_fatura,
         clientes_sem_fatura=clientes_sem_fatura,
-        total_faturas=total_faturas 
+        total_faturas=total_faturas
     )
 
 @app.route('/editar_fatura/<int:id>', methods=['GET', 'POST'])
@@ -1826,49 +1995,96 @@ def relatorio_fatura(fatura_id):
     else:
         data_base = date(2025, 8, 4)
 
+    # --- Rateio vigente para a data da fatura ---
     rateio = Rateio.query.filter(
         Rateio.cliente_id == cliente.id,
         Rateio.usina_id == usina.id,
         Rateio.data_inicio <= data_base
     ).order_by(
-        Rateio.data_inicio.desc(),  # 1º Critério: Data mais recente
-        Rateio.ativo.desc(),        # 2º Critério (Desempate): Ativo=True (1) vem antes de Ativo=False (0)
-        Rateio.id.desc()            # 3º Critério (Desempate Final): ID mais recente, para garantir ordem consistente
+        Rateio.data_inicio.desc(),
+        Rateio.ativo.desc(),
+        Rateio.id.desc()
     ).first()
 
-    tarifa_cliente = Decimal(str(rateio.tarifa_kwh)) if rateio else Decimal('0')
+    def _dec(v, default="1.00"):
+        try:
+            if v is None:
+                return Decimal(default)
+            return Decimal(str(v))
+        except Exception:
+            return Decimal(default)
+
+    def calcular_tarifa_cliente(rateio_obj, fatura_obj):
+        """
+        Retorna tarifa cliente (Decimal) aplicada nesta fatura.
+        - Se usar_tarifa_neoenergia=True:
+            base = fatura.tarifa_neoenergia (preferencial)
+            fallback = rateio.tarifa_kwh
+            fallback final = 1.00
+            aplica desconto_percentual (ou 0)
+        - Se False:
+            usa rateio.tarifa_kwh (fallback 1.00)
+        """
+        if not rateio_obj:
+            return Decimal("0.00")
+
+        usar_neo = bool(getattr(rateio_obj, "usar_tarifa_neoenergia", False))
+        desconto_pct = float(getattr(rateio_obj, "desconto_percentual", 0) or 0.0)
+
+        if usar_neo:
+            tarifa_base = getattr(fatura_obj, "tarifa_neoenergia", None)
+
+            if tarifa_base is None:
+                tarifa_base = getattr(rateio_obj, "tarifa_kwh", None)
+
+            if tarifa_base is None:
+                tarifa_base = 1.00
+
+            tarifa_base_dec = _dec(tarifa_base, default="1.00")
+            fator = (Decimal("1.00") - (Decimal(str(desconto_pct)) / Decimal("100.00")))
+            return (tarifa_base_dec * fator).quantize(Decimal("0.0000001"), rounding=ROUND_HALF_UP)
+
+        # modo fixo
+        return _dec(getattr(rateio_obj, "tarifa_kwh", None), default="1.00").quantize(
+            Decimal("0.0000001"), rounding=ROUND_HALF_UP
+        )
+
+    # Tarifa do cliente aplicada na fatura atual
+    tarifa_cliente = calcular_tarifa_cliente(rateio, fatura)
 
     # --- Cálculos principais ---
     valor_usina_bruto = consumo_usina * tarifa_cliente
 
-    # ✅ regra TUSD Fio B na fatura atual
+    # regra TUSD Fio B na fatura atual
     tusd_ativo_atual = bool(getattr(usina, 'tusd_fio_b', False))
-    custo_tusd_atual = Decimal(str(getattr(fatura, 'custo_tusd_fio_b', 0) or 0))
+    custo_tusd_atual = _dec(getattr(fatura, 'custo_tusd_fio_b', 0) or 0, default="0.00").quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
     if tusd_ativo_atual:
-        valor_usina_liquido = valor_usina_bruto - custo_tusd_atual
+        valor_usina_liquido = (valor_usina_bruto - custo_tusd_atual)
         if valor_usina_liquido < Decimal('0'):
             valor_usina_liquido = Decimal('0')
     else:
         valor_usina_liquido = valor_usina_bruto
 
-    # usa valor_usina_liquido no "com_desconto"
     com_desconto = valor_conta + valor_usina_liquido
     sem_desconto = (consumo_usina * tarifa_neoenergia_aplicada) + valor_conta - custo_tusd_atual
     economia = sem_desconto - com_desconto
 
-    # Economia acumulada (aplica mesma regra por fatura/usina)
+    # ECONOMIA ACUMULADA (corrigida)
     faturas_anteriores = FaturaMensal.query.filter(
         FaturaMensal.cliente_id == cliente.id,
         FaturaMensal.id != fatura.id,
         (FaturaMensal.ano_referencia < fatura.ano_referencia) |
         ((FaturaMensal.ano_referencia == fatura.ano_referencia) &
-         (FaturaMensal.mes_referencia < fatura.mes_referencia))
+        (FaturaMensal.mes_referencia < fatura.mes_referencia))
     ).all()
 
     economia_total = Decimal('0')
+
     for f in faturas_anteriores:
         try:
-            tarifa_base_ant = Decimal(str(f.tarifa_neoenergia))
+            # tarifa neoenergia aplicada (sua regra original)
+            tarifa_base_ant = _dec(getattr(f, "tarifa_neoenergia", None), default="0.00")
             if f.icms == 0:
                 tarifa_aplicada_ant = tarifa_base_ant * Decimal('1.2625')
             elif f.icms == 20:
@@ -1876,26 +2092,42 @@ def relatorio_fatura(fatura_id):
             else:
                 tarifa_aplicada_ant = tarifa_base_ant * Decimal('1.1023232323')
 
-            consumo_usina_ant = Decimal(str(f.consumo_usina))
-            valor_conta_ant   = Decimal(str(f.valor_conta_neoenergia))
+            consumo_usina_ant = _dec(getattr(f, "consumo_usina", 0) or 0, default="0.00")
+            valor_conta_ant   = _dec(getattr(f, "valor_conta_neoenergia", 0) or 0, default="0.00")
 
-            # tarifa do cliente permanece a mesma (sua lógica original)
-            valor_usina_ant_bruto = consumo_usina_ant * tarifa_cliente
-
-            # ✅ regra TUSD por fatura: usa a usina daquela fatura
-            usina_ant = getattr(f.cliente, 'usina', None)
-            tusd_ativo_ant = bool(getattr(usina_ant, 'tusd_fio_b', False)) if usina_ant else False
-            custo_tusd_ant = Decimal(str(getattr(f, 'custo_tusd_fio_b', 0) or 0))
-
-            if tusd_ativo_ant:
-                valor_usina_ant_liq = valor_usina_ant_bruto - custo_tusd_ant
-                if valor_usina_ant_liq < Decimal('0'):
-                    valor_usina_ant_liq = Decimal('0')
+            # pega rateio vigente PARA AQUELA fatura (pode mudar no tempo)
+            if f.data_cadastro:
+                data_base_ant = f.data_cadastro.date()
             else:
-                valor_usina_ant_liq = valor_usina_ant_bruto
+                data_base_ant = date(f.ano_referencia, f.mes_referencia, 1)
+
+            rateio_ant = Rateio.query.filter(
+                Rateio.cliente_id == cliente.id,
+                Rateio.usina_id == usina.id,
+                Rateio.data_inicio <= data_base_ant
+            ).order_by(
+                Rateio.data_inicio.desc(),
+                Rateio.ativo.desc(),
+                Rateio.id.desc()
+            ).first()
+
+            tarifa_cliente_ant = calcular_tarifa_cliente(rateio_ant, f)
+
+            valor_usina_ant_bruto = (consumo_usina_ant * tarifa_cliente_ant)
+
+            # regra TUSD por fatura (usa o campo custo_tusd_fio_b da própria fatura)
+            tusd_ativo_ant = bool(getattr(usina, 'tusd_fio_b', False))
+            custo_tusd_ant = _dec(getattr(f, 'custo_tusd_fio_b', 0) or 0, default="0.00").quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+            if not tusd_ativo_ant:
+                custo_tusd_ant = Decimal('0.00')
+
+            valor_usina_ant_liq = valor_usina_ant_bruto - custo_tusd_ant
+            if valor_usina_ant_liq < Decimal('0'):
+                valor_usina_ant_liq = Decimal('0')
 
             com_desconto_ant = valor_conta_ant + valor_usina_ant_liq
-            sem_desconto_ant = (consumo_usina_ant * tarifa_aplicada_ant) + valor_conta_ant
+            sem_desconto_ant = (consumo_usina_ant * tarifa_aplicada_ant) + valor_conta_ant - custo_tusd_ant
 
             economia_total += (sem_desconto_ant - com_desconto_ant)
 
@@ -1908,7 +2140,7 @@ def relatorio_fatura(fatura_id):
 
     economia_acumulada = economia + economia_total + economia_extra_total
 
-    # ✅ Cálculo da geração no período (somente para consumo instantâneo)
+    # Cálculo da geração no período (somente para consumo instantâneo)
     geracao_periodo = None
     if cliente.consumo_instantaneo:
         geracao_periodo = db.session.query(db.func.sum(Geracao.energia_kwh)).filter(

@@ -17,7 +17,16 @@
             <li><strong>Usina:</strong> {{ rateio.usina.nome }}</li>
             <li><strong>Cliente:</strong> {{ rateio.cliente.nome }}</li>
             <li><strong>Percentual:</strong> {{ rateio.percentual }}%</li>
-            <li><strong>Tarifa Atual:</strong> R$ {{ rateio.tarifa_kwh }}</li>
+            <li>
+                <strong>Tarifa Atual:</strong>
+                R$ {{ rateio.tarifa_kwh }}
+                {% if rateio.usar_tarifa_neoenergia %}
+                    <span class="badge bg-info text-dark ms-2">Neoenergia</span>
+                    <span class="badge bg-secondary ms-1">Desc: {{ rateio.desconto_percentual or 0 }}%</span>
+                {% else %}
+                    <span class="badge bg-secondary ms-2">Fixa</span>
+                {% endif %}
+            </li>
             <li><strong>Data de Início:</strong> {{ rateio.data_inicio.strftime('%d/%m/%Y') if rateio.data_inicio else 'Não definida' }}</li>
         </ul>
     </div>
@@ -26,7 +35,7 @@
     <form method="POST">
         <div class="mb-3">
             <label for="usina_id" class="form-label">Usina</label>
-            <select class="form-select" id="usina_id" name="usina_id" required>
+            <select class="form-select" id="usina_id" name="usina_id" required onchange="carregarTarifaNeoenergia()">
                 {% for usina in usinas %}
                     <option value="{{ usina.id }}" {% if usina.id == rateio.usina_id %}selected{% endif %}>{{ usina.nome }}</option>
                 {% endfor %}
@@ -35,7 +44,7 @@
 
         <div class="mb-3">
             <label for="cliente_id" class="form-label">Cliente</label>
-            <select class="form-select" id="cliente_id" name="cliente_id" required>
+            <select class="form-select" id="cliente_id" name="cliente_id" required onchange="carregarTarifaNeoenergia()">
                 {% for cliente in clientes %}
                     <option value="{{ cliente.id }}" {% if cliente.id == rateio.cliente_id %}selected{% endif %}>{{ cliente.nome }}</option>
                 {% endfor %}
@@ -48,10 +57,55 @@
                    value="{{ rateio.percentual }}" required>
         </div>
 
+        <!-- MODO DE TARIFA -->
         <div class="mb-3">
-            <label for="tarifa_kwh" class="form-label">Nova Tarifa por kWh (R$)</label>
+            <label class="form-label">Modo de Tarifa</label>
+            <div class="d-flex gap-3 flex-wrap">
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="modo_tarifa" id="modo_fixo" value="fixo"
+                           {% if not rateio.usar_tarifa_neoenergia %}checked{% endif %}
+                           onchange="toggleModoTarifa()">
+                    <label class="form-check-label" for="modo_fixo">Tarifa fixa (digitar)</label>
+                </div>
+
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="modo_tarifa" id="modo_neo" value="neo"
+                           {% if rateio.usar_tarifa_neoenergia %}checked{% endif %}
+                           onchange="toggleModoTarifa()">
+                    <label class="form-check-label" for="modo_neo">Tarifa = Neoenergia com desconto</label>
+                </div>
+            </div>
+        </div>
+
+        <!-- TARIFA BASE (sempre disponível como fallback) -->
+        <div class="mb-3" id="bloco_tarifa_base">
+            <label for="tarifa_kwh" class="form-label">Tarifa base por kWh (R$)</label>
             <input type="number" step="0.0000001" class="form-control" id="tarifa_kwh" name="tarifa_kwh"
-                   value="{{ rateio.tarifa_kwh }}" required>
+                   value="{{ rateio.tarifa_kwh }}">
+            <div class="form-text">
+                No modo Neoenergia: usada como fallback se não existir fatura anterior. Se nem isso existir, usa 1.00.
+            </div>
+        </div>
+
+        <!-- BLOCO NEO -->
+        <div class="mb-3 {% if not rateio.usar_tarifa_neoenergia %}d-none{% endif %}" id="bloco_tarifa_neo">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Tarifa Neoenergia (última fatura)</label>
+                    <input type="text" class="form-control" id="tarifa_neoenergia" readonly value="—">
+                </div>
+
+                <div class="col-md-4">
+                    <label for="desconto_percentual" class="form-label">Desconto (%)</label>
+                    <input type="number" step="0.01" class="form-control" id="desconto_percentual" name="desconto_percentual"
+                           value="{{ rateio.desconto_percentual or 15 }}">
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Tarifa calculada (prévia)</label>
+                    <input type="text" class="form-control" id="tarifa_calculada" readonly value="—">
+                </div>
+            </div>
         </div>
 
         <div class="text-center mt-3">
@@ -60,4 +114,63 @@
         </div>
     </form>
 </div>
+
+<script>
+let tarifaNeo = null;
+
+function toggleModoTarifa() {
+    const modoNeo = document.getElementById('modo_neo').checked;
+    document.getElementById('bloco_tarifa_neo').classList.toggle('d-none', !modoNeo);
+
+    if (modoNeo) {
+        carregarTarifaNeoenergia();
+    } else {
+        tarifaNeo = null;
+        document.getElementById('tarifa_neoenergia').value = '—';
+        document.getElementById('tarifa_calculada').value = '—';
+    }
+}
+
+function carregarTarifaNeoenergia() {
+    if (!document.getElementById('modo_neo').checked) return;
+
+    const usinaId = document.getElementById("usina_id").value;
+    const clienteId = document.getElementById("cliente_id").value;
+    if (!usinaId || !clienteId) return;
+
+    fetch(`/api/tarifa_neoenergia?usina_id=${encodeURIComponent(usinaId)}&cliente_id=${encodeURIComponent(clienteId)}`)
+        .then(r => r.json())
+        .then(resp => {
+            if (!resp || resp.ok !== true) return;
+
+            tarifaNeo = resp.tarifa_neoenergia;
+            document.getElementById('tarifa_neoenergia').value =
+                (tarifaNeo === null || tarifaNeo === undefined) ? 'Sem fatura' : Number(tarifaNeo).toFixed(7);
+
+            recalcularTarifa();
+        })
+        .catch(() => {});
+}
+
+function recalcularTarifa() {
+    if (!document.getElementById('modo_neo').checked) return;
+
+    const descPct = parseFloat(document.getElementById('desconto_percentual').value || '0');
+    const tarifaBaseDigitada = parseFloat(document.getElementById('tarifa_kwh').value || '0');
+
+    // prévia: se tem neoenergia usa ela, senão usa a digitada, senão 1
+    let base = (tarifaNeo !== null && tarifaNeo !== undefined) ? Number(tarifaNeo)
+             : (!isNaN(tarifaBaseDigitada) && tarifaBaseDigitada > 0 ? tarifaBaseDigitada : 1.00);
+
+    const calculada = base * (1 - (descPct / 100));
+    document.getElementById('tarifa_calculada').value = calculada.toFixed(7);
+}
+
+document.getElementById('desconto_percentual')?.addEventListener('input', recalcularTarifa);
+document.getElementById('tarifa_kwh')?.addEventListener('input', recalcularTarifa);
+
+// inicializa
+toggleModoTarifa();
+</script>
+
 {% endblock %}
