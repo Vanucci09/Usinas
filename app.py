@@ -1270,56 +1270,64 @@ def editar_rateio(id):
         desconto_percentual = request.form.get('desconto_percentual', type=float)
         tarifa_kwh_form = request.form.get('tarifa_kwh', type=float)
 
-        # Desativa o rateio antigo
-        rateio_antigo.ativo = False
+        try:
+            # 1) DESATIVA TODOS os rateios ativos desse cliente/usina
+            (Rateio.query
+                .filter(
+                    Rateio.usina_id == usina_id,
+                    Rateio.cliente_id == cliente_id,
+                    Rateio.ativo.is_(True)
+                )
+                .update({"ativo": False}, synchronize_session=False)
+            )
 
-        # -------- calcula tarifa_kwh (NUNCA NULL) --------
-        if usar_tarifa_neoenergia:
-            desconto = float(desconto_percentual or 0.0)
+            # também desativa explicitamente o rateio_antigo por garantia
+            rateio_antigo.ativo = False
 
-            # tenta fatura mais recente
-            fatura = (FaturaMensal.query
-                      .filter_by(usina_id=usina_id, cliente_id=cliente_id)
-                      .order_by(desc(FaturaMensal.ano_referencia), desc(FaturaMensal.mes_referencia))
-                      .first())
+            # 2) calcula tarifa_kwh (NUNCA NULL)
+            if usar_tarifa_neoenergia:
+                desconto = float(desconto_percentual or 0.0)
 
-            if fatura and fatura.tarifa_neoenergia is not None:
-                tarifa_base = float(fatura.tarifa_neoenergia)
-            elif tarifa_kwh_form is not None and float(tarifa_kwh_form) > 0:
-                tarifa_base = float(tarifa_kwh_form)
+                fatura = (FaturaMensal.query
+                          .filter_by(usina_id=usina_id, cliente_id=cliente_id)
+                          .order_by(desc(FaturaMensal.ano_referencia), desc(FaturaMensal.mes_referencia))
+                          .first())
+
+                if fatura and fatura.tarifa_neoenergia is not None:
+                    tarifa_base = float(fatura.tarifa_neoenergia)
+                elif tarifa_kwh_form is not None and float(tarifa_kwh_form) > 0:
+                    tarifa_base = float(tarifa_kwh_form)
+                else:
+                    tarifa_base = 1.00
+
+                tarifa_kwh = tarifa_base * (1 - (desconto / 100.0))
             else:
-                tarifa_base = 1.00
+                tarifa_kwh = float(tarifa_kwh_form) if tarifa_kwh_form is not None else 1.00
+                desconto_percentual = None
 
-            tarifa_kwh = tarifa_base * (1 - (desconto / 100.0))
+            # 3) cria o novo rateio (mantém codigo_rateio do antigo)
+            novo_rateio = Rateio(
+                usina_id=usina_id,
+                cliente_id=cliente_id,
+                percentual=percentual,
+                tarifa_kwh=tarifa_kwh,
+                usar_tarifa_neoenergia=usar_tarifa_neoenergia,
+                desconto_percentual=desconto_percentual,
+                codigo_rateio=rateio_antigo.codigo_rateio,
+                data_inicio=date.today(),
+                ativo=True
+            )
 
-        else:
-            # modo fixo (fallback final: 1.00 se vier vazio)
-            tarifa_kwh = float(tarifa_kwh_form) if tarifa_kwh_form is not None else 1.00
-            desconto_percentual = None
+            db.session.add(novo_rateio)
+            db.session.commit()
+            return redirect(url_for('listar_rateios'))
 
-        # Cria um novo com os dados atualizados (mantém o mesmo código_rateio)
-        novo_rateio = Rateio(
-            usina_id=usina_id,
-            cliente_id=cliente_id,
-            percentual=percentual,
-            tarifa_kwh=tarifa_kwh,
-            usar_tarifa_neoenergia=usar_tarifa_neoenergia,
-            desconto_percentual=desconto_percentual,
-            codigo_rateio=rateio_antigo.codigo_rateio,
-            data_inicio=date.today(),
-            ativo=True
-        )
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Erro ao editar rateio: {str(e)}", "danger")
+            return redirect(url_for('editar_rateio', id=id))
 
-        db.session.add(novo_rateio)
-        db.session.commit()
-        return redirect(url_for('listar_rateios'))
-
-    return render_template(
-        'editar_rateio.html',
-        rateio=rateio_antigo,
-        usinas=usinas,
-        clientes=clientes
-    )
+    return render_template('editar_rateio.html', rateio=rateio_antigo, usinas=usinas, clientes=clientes)
 
 @app.route('/excluir_rateio/<int:id>', methods=['POST'])
 @login_required
