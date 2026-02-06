@@ -1,24 +1,34 @@
-<h3>Olá, {{ cliente.nome }}.</h3>
+<h3>Prezado(a) {{ cliente.nome }},</h3>
 
 <p>
-Identificamos uma <strong>pendência de pagamento</strong> referente à fatura de
+Até o presente momento, não identificamos o pagamento da fatura referente a
 <strong>{{ "%02d"|format(fatura.mes_referencia) }}/{{ fatura.ano_referencia }}</strong>.
 </p>
 
-<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 20px 0;">
+<p>
+Informamos que o título ficará sujeito a protesto após
+<strong>8 (oito) dias</strong> do vencimento.
+</p>
+
+<p>
+Caso o pagamento já tenha sido efetuado, solicitamos, por gentileza, o envio do
+comprovante para que possamos proceder com a devida baixa em nosso sistema.
+</p>
+
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 22px 0;">
   <tr>
-    <td align="center" bgcolor="#dc3545" style="border-radius: 6px;">
+    <td align="center" style="border-radius: 6px;">
       <a href="{{ link_relatorio }}"
          target="_blank"
          style="
             display: inline-block;
-            padding: 12px 20px;
+            padding: 12px 22px;
             font-size: 14px;
             color: #ffffff;
             text-decoration: none;
-            font-weight: bold;
+            font-weight: 600;
             border-radius: 6px;
-            background-color: #007BFF;
+            background-color: #0d6efd;
          ">
         Visualizar Fatura
       </a>
@@ -26,8 +36,8 @@ Identificamos uma <strong>pendência de pagamento</strong> referente à fatura d
   </tr>
 </table>
 
-<p style="margin-top: 18px;">
-Caso já tenha realizado o pagamento, por favor desconsidere esta mensagem.
+<p>
+Permanecemos à disposição para quaisquer esclarecimentos.
 </p>
 
 <hr>

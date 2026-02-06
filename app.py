@@ -4532,7 +4532,7 @@ def imagem_para_base64(caminho):
 def atualizar_pagamento(id):
     financeiro = FinanceiroUsina.query.get_or_404(id)
     data_str = request.form.get('data_pagamento')
-    juros_str = request.form.get('juros')  # Novo campo
+    juros_str = request.form.get('juros')
 
     try:
         # Se for uma despesa já paga, bloqueia alteração
