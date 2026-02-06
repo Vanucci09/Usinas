@@ -1,0 +1,37 @@
+<h3>Olá, {{ cliente.nome }}.</h3>
+
+<p>
+Identificamos uma <strong>pendência de pagamento</strong> referente à fatura de
+<strong>{{ "%02d"|format(fatura.mes_referencia) }}/{{ fatura.ano_referencia }}</strong>.
+</p>
+
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 20px 0;">
+  <tr>
+    <td align="center" bgcolor="#dc3545" style="border-radius: 6px;">
+      <a href="{{ link_relatorio }}"
+         target="_blank"
+         style="
+            display: inline-block;
+            padding: 12px 20px;
+            font-size: 14px;
+            color: #ffffff;
+            text-decoration: none;
+            font-weight: bold;
+            border-radius: 6px;
+            background-color: #007BFF;
+         ">
+        Visualizar Fatura
+      </a>
+    </td>
+  </tr>
+</table>
+
+<p style="margin-top: 18px;">
+Caso já tenha realizado o pagamento, por favor desconsidere esta mensagem.
+</p>
+
+<hr>
+
+<p style="font-size: 12px; color: #999;">
+CGR Energia
+</p>

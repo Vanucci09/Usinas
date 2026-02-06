@@ -198,6 +198,8 @@ class FaturaMensal(db.Model):
     injetado = db.Column(db.Float, nullable=False)
     valor_conta_neoenergia = db.Column(db.Float, nullable=False)
     identificador = db.Column(db.String, unique=True, nullable=False)
+    email_pendencia_enviado = db.Column(db.Boolean, default=False)
+    email_pendencia_enviado_em = db.Column(db.DateTime, nullable=True)
     email_enviado = db.Column(db.Boolean, default=False)
     energia_injetada_real = db.Column(db.Float, default=0.0)
     custo_tusd_fio_b = db.Column(Numeric(12, 2), nullable=True, default=None)
@@ -1434,7 +1436,7 @@ def faturamento():
             energia_injetada_real = limpar_valor(request.form.get('energia_injetada_real', '0'))
             consumo_instantaneo = 0.0
 
-            # ✅ custo TUSD Fio B: pega do form se a usina usa TUSD Fio B; senão 0
+            # custo TUSD Fio B: pega do form se a usina usa TUSD Fio B; senão 0
             custo_tusd_fio_b_form = request.form.get('custo_tusd_fio_b')  # string tipo "322,82"
             custo_tusd_fio_b = limpar_valor(custo_tusd_fio_b_form) if (usina and usina.tusd_fio_b) else 0.0
 
@@ -1488,9 +1490,7 @@ def faturamento():
                     # Base de consumo para receita (igual ao que você usa pra salvar na Fatura)
                     consumo_base_receita = injetado_total if (cliente and cliente.consumo_instantaneo) else consumo_usina
 
-                    # -----------------------------
                     # TARIFA DO CLIENTE (APLICADA)
-                    # -----------------------------
                     def _dec(v, default="1.00"):
                         try:
                             if v is None:
@@ -1524,25 +1524,19 @@ def faturamento():
                             Decimal("0.0000001"), rounding=ROUND_HALF_UP
                         )
 
-                    # -----------------------------
                     # RECEITA BRUTA
-                    # -----------------------------
                     receita_bruta = (
                         Decimal(str(consumo_base_receita)) * tarifa_cliente_aplicada
                     ).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
-                    # -----------------------------
                     # TUSD Fio B (se aplicável)
-                    # -----------------------------
                     tusd_dec = Decimal(str(custo_tusd_fio_b)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
                     # se a usina NÃO é TUSD Fio B, garante 0
                     if not (usina and usina.tusd_fio_b):
                         tusd_dec = Decimal('0.00')
 
-                    # -----------------------------
                     # RECEITA LÍQUIDA
-                    # -----------------------------
                     receita_liquida = receita_bruta - tusd_dec
                     if receita_liquida < Decimal('0.00'):
                         receita_liquida = Decimal('0.00')
@@ -1599,6 +1593,13 @@ def listar_faturas():
     cliente_id = request.args.get('cliente_id', type=int)
     com_boleto = request.args.get('com_boleto')
 
+    # DEFAULT: mês/ano atual se não vier filtro
+    hoje = date.today()
+    if not mes:
+        mes = hoje.month
+    if not ano:
+        ano = hoje.year
+
     query = FaturaMensal.query.join(Cliente).join(Usina)
 
     # Filtros
@@ -1606,10 +1607,10 @@ def listar_faturas():
         query = query.filter(Usina.id == usina_id)
     if cliente_id:
         query = query.filter(FaturaMensal.cliente_id == cliente_id)
-    if mes:
-        query = query.filter(FaturaMensal.mes_referencia == mes)
-    if ano:
-        query = query.filter(FaturaMensal.ano_referencia == ano)
+
+    # Sempre filtra por mês/ano (agora sempre tem)
+    query = query.filter(FaturaMensal.mes_referencia == mes)
+    query = query.filter(FaturaMensal.ano_referencia == ano)
 
     faturas = query.order_by(
         FaturaMensal.ano_referencia.desc(),
@@ -1619,58 +1620,64 @@ def listar_faturas():
     # Dados auxiliares
     usinas = Usina.query.all()
     clientes = Cliente.query.all()
-    anos = sorted({f.ano_referencia for f in FaturaMensal.query.all()}, reverse=True)
 
-    # Clientes sem fatura (mantido)
+    # ANOS (sem carregar todas as faturas)
+    anos = [
+        a[0] for a in db.session.query(FaturaMensal.ano_referencia)
+        .distinct()
+        .order_by(FaturaMensal.ano_referencia.desc())
+        .all()
+        if a[0] is not None
+    ]
+
+    # Clientes sem fatura
     qtd_sem_fatura = None
     clientes_sem_fatura = []
 
-    if mes and ano:
-        clientes_q = Cliente.query.filter(Cliente.ativo.is_(True))
-        if usina_id:
-            clientes_q = clientes_q.filter(Cliente.usina_id == usina_id)
-        if cliente_id:
-            clientes_q = clientes_q.filter(Cliente.id == cliente_id)
+    clientes_q = Cliente.query.filter(Cliente.ativo.is_(True))
+    if usina_id:
+        clientes_q = clientes_q.filter(Cliente.usina_id == usina_id)
+    if cliente_id:
+        clientes_q = clientes_q.filter(Cliente.id == cliente_id)
 
-        fatura_existe = db.session.query(FaturaMensal.id).filter(
-            FaturaMensal.cliente_id == Cliente.id,
-            FaturaMensal.mes_referencia == mes,
-            FaturaMensal.ano_referencia == ano
-        ).exists()
+    fatura_existe = db.session.query(FaturaMensal.id).filter(
+        FaturaMensal.cliente_id == Cliente.id,
+        FaturaMensal.mes_referencia == mes,
+        FaturaMensal.ano_referencia == ano
+    ).exists()
 
-        sem_fatura_q = clientes_q.filter(~fatura_existe)
-        qtd_sem_fatura = sem_fatura_q.count()
-        clientes_sem_fatura = sem_fatura_q.order_by(Cliente.nome).all()
+    sem_fatura_q = clientes_q.filter(~fatura_existe)
+    qtd_sem_fatura = sem_fatura_q.count()
+    clientes_sem_fatura = sem_fatura_q.order_by(Cliente.nome).all()
 
     # Caminho dos boletos
     BOLETOS_PATH = os.getenv('BOLETOS_PATH', '/data/boletos')
 
-    # 1) Buscar valores no FinanceiroUsina (1 query + map)
+    # 1) Buscar valores no FinanceiroUsina (mais leve)
     identificadores = [f.identificador for f in faturas if f.identificador]
 
     valores_map = {}
     if identificadores:
-        # Pega registros de receita cujo texto começa com "Fatura <identificador>"
-        # e monta um dicionário {identificador: valor}
+        # monta OR: descricao contém "Fatura {ident}"
+        filtros_or = [FinanceiroUsina.descricao.contains(f"Fatura {ident}") for ident in identificadores]
+
         receitas = (FinanceiroUsina.query
                     .filter(FinanceiroUsina.tipo == 'receita')
                     .filter(FinanceiroUsina.descricao.like('Fatura %'))
+                    .filter(or_(*filtros_or))
                     .all())
 
-        # Mapeia pela string do identificador dentro da descrição
-        # Ex: "Fatura U5: 1-02-2026 - Fulano | ..."
+        # monta map {identificador: valor}
+        # (identificador é único, então bate 1x)
         for r in receitas:
             desc = (r.descricao or "")
-            # tenta achar um dos identificadores dentro da descrição
-            # (como identificador é único, isso funciona bem)
             for ident in identificadores:
                 if f"Fatura {ident}" in desc:
                     valores_map[ident] = Decimal(str(r.valor or 0))
                     break
 
-    # 2) Mantém rateio_vigente só pra mostrar o código_rateio na coluna ID (seu template usa)
+    # 2) Rateio vigente (cache)
     rateio_cache = {}
-
     total_faturas = Decimal('0')
 
     for fatura in faturas:
@@ -1716,7 +1723,7 @@ def listar_faturas():
 
         fatura.rateio_vigente = rateio
 
-        # VALOR BOLETO = FinanceiroUsina.valor (sem cálculo)
+        # VALOR BOLETO = FinanceiroUsina.valor
         valor_fin = valores_map.get(fatura.identificador, Decimal('0'))
         fatura.valor_final_boleto = valor_fin
         total_faturas += valor_fin
@@ -4435,6 +4442,74 @@ def enviar_email(fatura_id):
         fatura.email_enviado = True
         db.session.commit()
         flash('E-mail enviado com sucesso!', 'success')
+    except Exception as e:
+        flash(f'Erro ao enviar e-mail: {e}', 'danger')
+
+    return redirect(url_for(
+        'listar_faturas',
+        usina_id=request.args.get('usina_id'),
+        cliente_id=request.args.get('cliente_id'),
+        mes=request.args.get('mes'),
+        ano=request.args.get('ano'),
+        com_boleto=request.args.get('com_boleto'),
+        email_enviado=1
+    ))
+    
+@app.route('/enviar_email_atraso/<int:fatura_id>')
+@login_required
+def enviar_email_atraso(fatura_id):
+    fatura = FaturaMensal.query.get_or_404(fatura_id)
+    cliente = Cliente.query.get_or_404(fatura.cliente_id)
+
+    rateio = Rateio.query.filter_by(
+        cliente_id=cliente.id,
+        usina_id=cliente.usina_id
+    ).first()
+
+    link_relatorio = url_for(
+        'relatorio_fatura',
+        fatura_id=fatura.id,
+        _external=True
+    )
+
+    html = render_template(
+        'email_fatura_atraso.html',
+        cliente=cliente,
+        fatura=fatura,
+        rateio=rateio,
+        link_relatorio=link_relatorio
+    )
+
+    recipients = []
+    if cliente.email:
+        recipients.append(cliente.email)
+
+    if cliente.email_cc:
+        cc_emails = [
+            e.strip() for e in cliente.email_cc.split(',')
+            if e.strip()
+        ]
+        recipients.extend(cc_emails)
+
+    if not recipients:
+        flash('Cliente sem e-mail cadastrado.', 'warning')
+        return redirect(url_for('listar_faturas', **request.args))
+
+    msg = Message(
+        subject=f'⚠️ Pendência de Pagamento - {fatura.mes_referencia:02d}/{fatura.ano_referencia}',
+        recipients=recipients,
+        html=html
+    )
+
+    try:
+        mail.send(msg)
+
+        # MARCA SOMENTE O EMAIL DE PENDÊNCIA
+        fatura.email_pendencia_enviado = True
+        fatura.email_pendencia_enviado_em = datetime.utcnow()
+
+        db.session.commit()
+        flash('E-mail de cobrança enviado com sucesso!', 'success')
     except Exception as e:
         flash(f'Erro ao enviar e-mail: {e}', 'danger')
 

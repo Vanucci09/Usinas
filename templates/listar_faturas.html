@@ -207,6 +207,25 @@
                                     <span class="text-success ms-1 fw-bold">&#10004;</span>
                                 {% endif %}
                             </a>
+
+                            <a href="{{ url_for(
+                                    'enviar_email_atraso',
+                                    fatura_id=fatura.id,
+                                    usina_id=usina_id,
+                                    cliente_id=cliente_id,
+                                    mes=mes,
+                                    ano=ano,
+                                    com_boleto=com_boleto
+                                ) }}"
+                            class="btn btn-sm btn-outline-danger"
+                            title="Enviar e-mail de cobrança"
+                            onclick="return confirm('Enviar e-mail de cobrança para este cliente?');">
+                                <i class="bi bi-envelope-exclamation-fill"></i>
+                                {% if fatura.email_pendencia_enviado %}
+                                    <span class="text-success ms-1 fw-bold">&#10004;</span>
+                                {% endif %}
+                            </a>
+
                         </div>
                     </td>
                 </tr>
