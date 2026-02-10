@@ -4,11 +4,13 @@
 
 {% block content %}
 <div class="container mt-5 mb-5 p-4 bg-white shadow rounded">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="text-primary">Receitas Avulsas</h2>
-        <div>
-            <a href="{{ url_for('index') }}?aba=financeiro" class="btn btn-secondary">Voltar</a>
-                
+
+    <!-- Cabeçalho -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <h2 class="text-primary mb-0">Receitas Avulsas</h2>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('index') }}?aba=financeiro" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Voltar
             </a>
             <a href="{{ url_for('receita_avulsa') }}" class="btn btn-success">
                 <i class="bi bi-plus-circle"></i> Nova Receita
@@ -18,12 +20,15 @@
 
     <!-- Filtros -->
     <form method="GET" class="row g-3 mb-4">
+
         <div class="col-md-3">
             <label class="form-label">Usina</label>
             <select name="usina_id" class="form-select">
                 <option value="">Todas</option>
                 {% for usina in usinas %}
-                    <option value="{{ usina.id }}" {% if usina_id == usina.id %}selected{% endif %}>{{ usina.nome }}</option>
+                    <option value="{{ usina.id }}" {% if usina_id == usina.id %}selected{% endif %}>
+                        {{ usina.nome }}
+                    </option>
                 {% endfor %}
             </select>
         </div>
@@ -38,74 +43,111 @@
             <input type="date" name="data_fim" class="form-control" value="{{ data_fim }}">
         </div>
 
+        <div class="col-md-3">
+            <label class="form-label">Nome (descrição / credor)</label>
+            <input type="text" name="nome" class="form-control" value="{{ nome or '' }}" placeholder="Ex: manutenção, João">
+        </div>
+
+        <div class="col-md-3">
+            <label class="form-label">Valor (R$)</label>
+            <input type="text" name="valor" class="form-control" value="{{ valor or '' }}" placeholder="Ex: 1.234,56">
+        </div>
+
         <div class="col-md-3 d-flex align-items-end">
             <button type="submit" class="btn btn-primary w-100">
                 <i class="bi bi-search"></i> Filtrar
             </button>
         </div>
+
     </form>
 
+    <!-- Tabela -->
     {% if receitas %}
-    <table class="table table-bordered table-striped">
-        <thead class="table-light">
-            <tr>
-                <th>Data</th>
-                <th>Usina</th>
-                <th>Descrição</th>
-                <th>Valor (R$)</th>
-                <th>Credor</th>
-                <th>Referência</th>
-                <th style="width: 150px;">Ações</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for receita in receitas %}
-            <tr>
-                <td>{{ receita.data.strftime('%d/%m/%Y') }}</td>
-                <td>{{ receita.usina.nome }}</td>
-                <td>{{ receita.descricao }}</td>
-                <td>{{ (receita.valor | formato_brasileiro) }}</td>
-                <td>{{ receita.credor.nome if receita.credor else '' }}</td>
-                <td>
-                    {% if receita.referencia_mes and receita.referencia_ano %}
-                        {{ '%02d/%d'|format(receita.referencia_mes, receita.referencia_ano) }}
-                    {% endif %}
-                </td>
-                <td class="d-flex gap-2">
-                    <a href="{{ url_for('editar_receita_avulsa', id=receita.id) }}" class="btn btn-sm btn-outline-primary">
-                        <i class="bi bi-pencil-square"></i>
-                    </a>
-                    <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalExcluir{{ receita.id }}">
-                        <i class="bi bi-trash"></i>
-                    </button>
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Data</th>
+                    <th>Usina</th>
+                    <th>Descrição</th>
+                    <th class="text-end">Valor (R$)</th>
+                    <th>Credor</th>
+                    <th>Referência</th>
+                    <th style="width: 140px;">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for receita in receitas %}
+                <tr>
+                    <td>{{ receita.data.strftime('%d/%m/%Y') }}</td>
+                    <td>{{ receita.usina.nome }}</td>
+                    <td>{{ receita.descricao }}</td>
+                    <td class="text-end fw-semibold">
+                        {{ receita.valor | formato_brasileiro }}
+                    </td>
+                    <td>{{ receita.credor.nome if receita.credor else '' }}</td>
+                    <td>
+                        {% if receita.referencia_mes and receita.referencia_ano %}
+                            {{ '%02d/%d'|format(receita.referencia_mes, receita.referencia_ano) }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td class="d-flex gap-2">
+                        <a href="{{ url_for('editar_receita_avulsa', id=receita.id) }}"
+                           class="btn btn-sm btn-outline-primary"
+                           title="Editar">
+                            <i class="bi bi-pencil-square"></i>
+                        </a>
 
-                    <!-- Modal de Confirmação -->
-                    <div class="modal fade" id="modalExcluir{{ receita.id }}" tabindex="-1" aria-labelledby="modalExcluirLabel{{ receita.id }}" aria-hidden="true">
-                      <div class="modal-dialog">
-                        <div class="modal-content">
-                          <div class="modal-header">
-                            <h5 class="modal-title" id="modalExcluirLabel{{ receita.id }}">Confirmar Exclusão</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-                          </div>
-                          <div class="modal-body">
-                            Tem certeza que deseja excluir a receita "<strong>{{ receita.descricao }}</strong>" do dia {{ receita.data.strftime('%d/%m/%Y') }}?
-                          </div>
-                          <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                            <form method="POST" action="{{ url_for('excluir_receita_avulsa', id=receita.id) }}">
-                                <button type="submit" class="btn btn-danger">Excluir</button>
-                            </form>
-                          </div>
+                        <button type="button"
+                                class="btn btn-sm btn-outline-danger"
+                                data-bs-toggle="modal"
+                                data-bs-target="#modalExcluir{{ receita.id }}"
+                                title="Excluir">
+                            <i class="bi bi-trash"></i>
+                        </button>
+
+                        <!-- Modal Excluir -->
+                        <div class="modal fade"
+                             id="modalExcluir{{ receita.id }}"
+                             tabindex="-1"
+                             aria-hidden="true">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Confirmar Exclusão</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        Tem certeza que deseja excluir a receita
+                                        <strong>{{ receita.descricao }}</strong>
+                                        do dia {{ receita.data.strftime('%d/%m/%Y') }}?
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                            Cancelar
+                                        </button>
+                                        <form method="POST"
+                                              action="{{ url_for('excluir_receita_avulsa', id=receita.id) }}">
+                                            <button type="submit" class="btn btn-danger">
+                                                Excluir
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                      </div>
-                    </div>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                        <!-- /Modal -->
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
     {% else %}
-        <p class="text-muted">Nenhuma receita encontrada.</p>
+        <p class="text-muted text-center mb-0">Nenhuma receita encontrada para o período.</p>
     {% endif %}
+
 </div>
 {% endblock %}

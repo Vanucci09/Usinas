@@ -7456,20 +7456,62 @@ def receitas_avulsas():
         return "Acesso negado", 403
 
     usinas = Usina.query.order_by(Usina.nome).all()
+
     usina_id = request.args.get('usina_id', type=int)
     data_inicio = request.args.get('data_inicio')
     data_fim = request.args.get('data_fim')
+    nome = request.args.get('nome', type=str)
+    valor = request.args.get('valor', type=str)
 
-    # 👉 Agora traz TODAS as receitas, inclusive de fatura (sem excluir nada)
+    # Padrão: mês atual (se usuário entrar sem filtros de data)
+    if not data_inicio and not data_fim:
+        hoje = date.today()
+        data_inicio = date(hoje.year, hoje.month, 1).isoformat()
+
+        # fim = último dia do mês atual
+        if hoje.month == 12:
+            data_fim = date(hoje.year + 1, 1, 1).isoformat()
+        else:
+            data_fim = date(hoje.year, hoje.month + 1, 1).isoformat()
+
+        # Observação: usando <= data_fim pode incluir o 1º dia do mês seguinte.
+        # Por isso, abaixo eu uso < data_fim (mais correto).
+
     query = FinanceiroUsina.query.filter(FinanceiroUsina.tipo == 'receita')
 
     # Filtros opcionais
     if usina_id:
         query = query.filter(FinanceiroUsina.usina_id == usina_id)
+
     if data_inicio:
         query = query.filter(FinanceiroUsina.data >= data_inicio)
+
     if data_fim:
-        query = query.filter(FinanceiroUsina.data <= data_fim)
+        # se data_fim foi setado como 1º dia do próximo mês, use < para pegar só o mês atual
+        query = query.filter(FinanceiroUsina.data < data_fim)
+
+    # Filtro por nome (descrição OU credor)
+    if nome:
+        nome_like = f"%{nome.strip()}%"
+        query = query.outerjoin(FinanceiroUsina.credor).filter(
+            or_(
+                FinanceiroUsina.descricao.ilike(nome_like),
+                Credor.nome.ilike(nome_like)
+            )
+        )
+
+    # Filtro por valor (comparação exata)
+    # Aceita "1234,56" ou "1234.56" ou "R$ 1.234,56"
+    if valor:
+        v = (valor.replace("R$", "")
+                 .replace(".", "")
+                 .replace(",", ".")
+                 .strip())
+        try:
+            valor_float = float(v)
+            query = query.filter(FinanceiroUsina.valor == valor_float)
+        except ValueError:
+            pass  # se vier lixo, ignora o filtro
 
     receitas = query.order_by(FinanceiroUsina.data.desc()).all()
 
@@ -7479,7 +7521,9 @@ def receitas_avulsas():
         usinas=usinas,
         usina_id=usina_id,
         data_inicio=data_inicio,
-        data_fim=data_fim
+        data_fim=data_fim,
+        nome=nome,
+        valor=valor
     )
 
 @app.route('/excluir_receita_avulsa/<int:id>', methods=['POST'])
