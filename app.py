@@ -204,6 +204,8 @@ class FaturaMensal(db.Model):
     energia_injetada_real = db.Column(db.Float, default=0.0)
     custo_tusd_fio_b = db.Column(Numeric(12, 2), nullable=True, default=None)
     whatsapp_enviado = db.Column(db.Boolean, default=False)
+    whatsapp_pendencia_enviado = db.Column(db.Boolean, default=False)
+    whatsapp_pendencia_enviado_em = db.Column(db.DateTime, nullable=True)
     usina_id = db.Column(db.Integer, db.ForeignKey('usinas.id'))
     data_cadastro = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     
@@ -4413,6 +4415,46 @@ def enviar_whatsapp(fatura_id):
     db.session.commit()
 
     # Monta URL do WhatsApp
+    wa_url = f"https://wa.me/{telefone_clean}?text={quote_plus(mensagem)}"
+    return redirect(wa_url)
+
+@app.route('/faturas/<int:fatura_id>/whatsapp_atraso', methods=['GET'])
+@login_required
+def enviar_whatsapp_atraso(fatura_id):
+    fatura = FaturaMensal.query.get_or_404(fatura_id)
+
+    if not fatura.cliente or not fatura.cliente.telefone:
+        flash('Cliente sem telefone cadastrado para WhatsApp.', 'warning')
+        return redirect(url_for('listar_faturas'))
+
+    telefone_clean = (
+        fatura.cliente.telefone
+        .replace(' ', '')
+        .replace('-', '')
+        .replace('(', '')
+        .replace(')', '')
+        .replace('+', '')
+    )
+
+    link_relatorio = url_for('relatorio_fatura', fatura_id=fatura.id, _external=True)
+
+    competencia = f"{fatura.mes_referencia:02d}/{fatura.ano_referencia}"
+
+    mensagem = (
+        f"Olá, {fatura.cliente.nome}! Tudo bem?\n\n"
+        f"Verificamos que a fatura referente à competência {competencia} "
+        f"(ID: {fatura.identificador}) encontra-se em aberto.\n\n"
+        f"Você pode acessar o relatório completo aqui:\n"
+        f"{link_relatorio}\n\n"
+        f"Caso o pagamento já tenha sido realizado, por favor desconsidere esta mensagem.\n"
+        f"Obrigado!"
+    )
+
+    # Marca como enviado (cobrança)
+    fatura.whatsapp_pendencia_enviado = True
+    fatura.whatsapp_pendencia_enviado_em = datetime.utcnow()
+    db.session.commit()
+
     wa_url = f"https://wa.me/{telefone_clean}?text={quote_plus(mensagem)}"
     return redirect(wa_url)
 
