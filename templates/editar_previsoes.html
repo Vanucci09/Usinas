@@ -3,118 +3,287 @@
 {% block content %}
 
 <div class="container my-5">
-    <div class="bg-white p-4 rounded shadow-sm">
-        <h2 class="text-center text-primary mb-4">Editar Usina - {{ usina.nome }}</h2>
+  <div class="bg-white p-4 rounded shadow-sm">
 
-        <!-- Formulário de seleção de ano -->
-        <form method="GET" class="row g-3 align-items-end mb-4">
-            <div class="col-auto">
-                <label for="ano" class="form-label">Selecionar Ano:</label>
-                <input type="number" id="ano" name="ano" value="{{ ano }}" class="form-control">
-            </div>
-            <div class="col-auto">
-                <button type="submit" class="btn btn-outline-primary">Carregar</button>
-            </div>
-        </form>
+    <h2 class="text-center text-primary mb-4">
+      Editar Usina - {{ usina.nome }}
+    </h2>
 
-        <!-- Formulário principal -->
-        <form method="POST" enctype="multipart/form-data" class="row g-3">
-            <div class="col-md-6">
-                <label for="cc" class="form-label">Código CC:</label>
-                <input type="text" name="cc" id="cc" class="form-control" value="{{ usina.cc }}" required>
-            </div>
+    <!-- Seleção de ano -->
+    <form method="GET" class="row g-3 align-items-end mb-4">
+      <div class="col-auto">
+        <label for="ano" class="form-label">Selecionar Ano:</label>
+        <input type="number" id="ano" name="ano" value="{{ ano }}" class="form-control">
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-outline-primary">Carregar</button>
+      </div>
+    </form>
 
-            <div class="col-md-6">
-                <label for="nome" class="form-label">Nome da Usina:</label>
-                <input type="text" name="nome" id="nome" class="form-control" value="{{ usina.nome }}" required>
-            </div>
+    <!-- FORM PRINCIPAL -->
+    <form method="POST" enctype="multipart/form-data" class="row g-3">
 
-            <div class="col-md-4">
-                <label for="potencia_kw" class="form-label">Potência da Usina (kW):</label>
-                <input type="number" step="0.01" name="potencia_kw" id="potencia_kw" class="form-control" value="{{ usina.potencia_kw }}">
-            </div>
+      <!-- DADOS GERAIS -->
+      <div class="col-md-6">
+        <label class="form-label">Código CC:</label>
+        <input type="text" name="cc" class="form-control" value="{{ usina.cc }}" required>
+      </div>
 
-            <div class="col-md-4">
-                <label for="data_ligacao" class="form-label">Data de Ligação:</label>
-                <input type="date" name="data_ligacao" id="data_ligacao" class="form-control"
-                       value="{{ usina.data_ligacao.strftime('%Y-%m-%d') if usina.data_ligacao }}">
-            </div>
+      <div class="col-md-6">
+        <label class="form-label">Nome da Usina:</label>
+        <input type="text" name="nome" class="form-control" value="{{ usina.nome }}" required>
+      </div>
 
-            <div class="col-md-4">
-                <label for="valor_investido" class="form-label">Valor Investido (R$):</label>
-                <input type="number" step="0.01" name="valor_investido" id="valor_investido" class="form-control"
-                       value="{{ usina.valor_investido }}">
-            </div>
+      <div class="col-md-4">
+        <label class="form-label">Potência (kW):</label>
+        <input type="number" step="0.01" name="potencia_kw"
+               class="form-control" value="{{ usina.potencia_kw }}">
+      </div>
 
-            <div class="mb-3">
-                <label for="saldo_kwh" class="form-label">Saldo Atual da Usina (kWh)</label>
-                <input type="text" class="form-control" id="saldo_kwh" name="saldo_kwh"
-                    value="{{ usina.saldo_kwh or '' }}" placeholder="Ex: 1200.50">
-            </div>
+      <div class="col-md-4">
+        <label class="form-label">Data de Ligação:</label>
+        <input type="date" name="data_ligacao"
+               class="form-control"
+               value="{{ usina.data_ligacao.strftime('%Y-%m-%d') if usina.data_ligacao }}">
+      </div>
 
-            <div class="col-md-12 mt-2">
-                <!-- TUSD Fio B -->
-                <input type="hidden" name="tusd_fio_b" value="0">
-                <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="checkbox" id="tusd_fio_b" name="tusd_fio_b" value="1"
-                        {% if usina.tusd_fio_b %}checked{% endif %}>
-                    <label class="form-check-label" for="tusd_fio_b">TUSD Fio B</label>
-                </div>
+      <div class="col-md-4">
+        <label class="form-label">Valor Investido (R$):</label>
+        <input type="number" step="0.01" name="valor_investido"
+               class="form-control"
+               value="{{ usina.valor_investido }}">
+      </div>
 
-                <!-- Boleto próprio -->
-                <input type="hidden" name="boleto_proprio" value="0">
-                <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="checkbox" id="boleto_proprio" name="boleto_proprio" value="1"
-                        {% if usina.boleto_proprio %}checked{% endif %}>
-                    <label class="form-check-label" for="boleto_proprio">Boleto próprio?</label>
-                </div>
-            </div>
+      <div class="col-12">
+        <label class="form-label">Saldo Atual (kWh)</label>
+        <input type="text" name="saldo_kwh"
+               class="form-control"
+               value="{{ usina.saldo_kwh or '' }}">
+      </div>
 
-            <!-- Logo atual -->
-            {% if usina.logo_url %}
-                <div class="col-md-6">
-                    <label class="form-label">Logo atual:</label><br>
-                    <img src="{{ url_for('servir_logo', nome_arquivo=usina.logo_url) if env == 'production' else url_for('static', filename='logos/' + usina.logo_url) }}"
-                         alt="Logo da Usina"
-                         class="img-fluid mt-1 border rounded"
-                         style="max-height: 100px; object-fit: contain;">
-                </div>
-            {% endif %}
-
-            <!-- Upload nova logo -->
-            <div class="col-md-6">
-                <label for="logo" class="form-label">Nova logo (opcional):</label>
-                <input type="file" name="logo" id="logo" accept="image/*" class="form-control">
-            </div>
-
-            <!-- Previsões mensais -->
-            <div class="col-12 mt-3">
-                <label class="form-label">Previsão Mensal por Mês (kWh):</label>
-                <div class="row g-3">
-                    {% set meses = [
-                        'Janeiro', 'Fevereiro', 'Março', 'Abril',
-                        'Maio', 'Junho', 'Julho', 'Agosto',
-                        'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-                    ] %}
-                    {% for i in range(12) %}
-                        <div class="col-md-4">
-                            <label for="previsao_{{ i+1 }}" class="form-label">{{ meses[i] }}</label>
-                            <input type="number" step="0.01" name="previsoes[{{ i+1 }}]" id="previsao_{{ i+1 }}"
-                                   class="form-control" value="{{ previsoes.get(i+1, '') }}">
-                        </div>
-                    {% endfor %}
-                </div>
-            </div>
-
-            <div class="col-12 text-center mt-4">
-                <button type="submit" class="btn btn-primary px-4">Salvar Alterações</button>
-            </div>
-        </form>
-
-        <div class="text-center mt-4">
-            <a href="/" class="btn btn-outline-secondary me-2">Início</a>
-            <a href="/usinas" class="btn btn-outline-primary">Lista de Usinas</a>
+      <div class="col-12 mt-2">
+        <input type="hidden" name="tusd_fio_b" value="0">
+        <div class="form-check form-check-inline">
+          <input type="checkbox" name="tusd_fio_b" value="1"
+                 class="form-check-input"
+                 {% if usina.tusd_fio_b %}checked{% endif %}>
+          <label class="form-check-label">TUSD Fio B</label>
         </div>
+
+        <input type="hidden" name="boleto_proprio" value="0">
+        <div class="form-check form-check-inline">
+          <input type="checkbox" name="boleto_proprio" value="1"
+                 class="form-check-input"
+                 {% if usina.boleto_proprio %}checked{% endif %}>
+          <label class="form-check-label">Boleto Próprio</label>
+        </div>
+      </div>
+
+      <!-- LOGO -->
+      {% if usina.logo_url %}
+      <div class="col-md-6">
+        <label class="form-label">Logo Atual:</label><br>
+        <img src="{{ url_for('servir_logo', nome_arquivo=usina.logo_url) if env == 'production'
+                     else url_for('static', filename='logos/' + usina.logo_url) }}"
+             class="img-fluid border rounded"
+             style="max-height:100px;">
+      </div>
+      {% endif %}
+
+      <div class="col-md-6">
+        <label class="form-label">Nova Logo (opcional):</label>
+        <input type="file" name="logo" class="form-control">
+      </div>
+
+      <!-- PREVISÕES -->
+      <div class="col-12 mt-4">
+        <label class="form-label">Previsão Mensal (kWh)</label>
+        <div class="row g-3">
+          {% set meses = [
+            'Jan','Fev','Mar','Abr','Mai','Jun',
+            'Jul','Ago','Set','Out','Nov','Dez'
+          ] %}
+          {% for i in range(12) %}
+          <div class="col-md-4">
+            <label class="form-label">{{ meses[i] }}</label>
+            <input type="number" step="0.01"
+                   name="previsoes[{{ i+1 }}]"
+                   class="form-control"
+                   value="{{ previsoes.get(i+1, '') }}">
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- CONFIGURAÇÃO DA FICHA -->
+      <div class="col-12 mt-5">
+        <hr>
+        <h5 class="text-primary">Configuração da Ficha de Compensação</h5>
+        <small class="text-muted">Percentuais de 0 a 1 (ex: 0.37 = 37%).</small>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">DPI (Padrão)</label>
+        <input type="number" name="ficha_dpi_padrao"
+               class="form-control"
+               value="{{ usina.ficha_dpi_padrao }}">
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">DPI (Boleto)</label>
+        <input type="number" name="ficha_dpi_boleto"
+               class="form-control"
+               value="{{ usina.ficha_dpi_boleto }}">
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Página (Padrão)</label>
+        <select name="ficha_page_select_padrao" class="form-select">
+            <option value="first"
+                {% if usina.ficha_page_select_padrao == 'first' %}selected{% endif %}>
+                Primeira Página
+            </option>
+
+            <option value="last"
+                {% if usina.ficha_page_select_padrao == 'last' %}selected{% endif %}>
+                Última Página
+            </option>
+
+            <option value="0"
+                {% if usina.ficha_page_select_padrao == '0' %}selected{% endif %}>
+                Página 1
+            </option>
+
+            <option value="1"
+                {% if usina.ficha_page_select_padrao == '1' %}selected{% endif %}>
+                Página 2
+            </option>
+
+            <option value="2"
+                {% if usina.ficha_page_select_padrao == '2' %}selected{% endif %}>
+                Página 3
+            </option>
+
+            <option value="-1"
+                {% if usina.ficha_page_select_padrao == '-1' %}selected{% endif %}>
+                Última (index -1)
+            </option>
+        </select>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Página (Boleto)</label>
+        <select name="ficha_page_select_boleto" class="form-select">
+            <option value="first"
+                {% if usina.ficha_page_select_boleto == 'first' %}selected{% endif %}>
+                Primeira Página
+            </option>
+
+            <option value="last"
+                {% if usina.ficha_page_select_boleto == 'last' %}selected{% endif %}>
+                Última Página
+            </option>
+
+            <option value="0"
+                {% if usina.ficha_page_select_boleto == '0' %}selected{% endif %}>
+                Página 1
+            </option>
+
+            <option value="1"
+                {% if usina.ficha_page_select_boleto == '1' %}selected{% endif %}>
+                Página 2
+            </option>
+
+            <option value="2"
+                {% if usina.ficha_page_select_boleto == '2' %}selected{% endif %}>
+                Página 3
+            </option>
+
+            <option value="-1"
+                {% if usina.ficha_page_select_boleto == '-1' %}selected{% endif %}>
+                Última (index -1)
+            </option>
+        </select>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Top % (Padrão)</label>
+        <input type="number" step="0.001"
+               name="ficha_crop_padrao_top"
+               class="form-control"
+               value="{{ usina.ficha_crop_padrao_top }}">
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Bottom % (Padrão)</label>
+        <input type="number" step="0.001"
+               name="ficha_crop_padrao_bottom"
+               class="form-control"
+               value="{{ usina.ficha_crop_padrao_bottom }}">
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Top % (Boleto)</label>
+        <input type="number" step="0.001"
+               name="ficha_crop_boleto_top"
+               class="form-control"
+               value="{{ usina.ficha_crop_boleto_top }}">
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Bottom % (Boleto)</label>
+        <input type="number" step="0.001"
+               name="ficha_crop_boleto_bottom"
+               class="form-control"
+               value="{{ usina.ficha_crop_boleto_bottom }}">
+      </div>
+
+      <!-- TESTE DE FICHA -->
+      <div class="col-12 mt-4">
+        <hr>
+        <h5 class="text-primary">Testar Recorte</h5>
+
+        <div class="mb-3">
+          <label class="form-label">PDF para Teste</label>
+          <input type="file" name="pdf_teste"
+                 accept="application/pdf"
+                 class="form-control">
+        </div>
+      </div>
+
+      <!-- BOTÕES -->
+      <div class="col-12 text-center mt-4">
+        <button type="submit"
+                class="btn btn-primary px-4">
+          Salvar Alterações
+        </button>
+
+        <button type="submit"
+                formaction="{{ url_for('testar_ficha_usina', usina_id=usina.id, ano=ano) }}"
+                formmethod="POST"
+                formenctype="multipart/form-data"
+                class="btn btn-outline-primary px-4 ms-2">
+          Salvar e Gerar Preview
+        </button>
+      </div>
+
+    </form>
+
+    <!-- PREVIEW -->
+    {% if preview_url %}
+    <div class="mt-5 text-center">
+      <h5 class="text-success">Preview do Recorte</h5>
+      <img src="{{ preview_url }}?v={{ preview_cache_bust }}"
+           class="img-fluid border rounded mt-3"
+           style="max-height:500px;">
     </div>
+    {% endif %}
+
+    <div class="text-center mt-4">
+      <a href="/usinas" class="btn btn-outline-secondary">Voltar</a>
+    </div>
+
+  </div>
 </div>
+
 {% endblock %}

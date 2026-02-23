@@ -3,96 +3,174 @@
 {% block content %}
 <body class="bg-light">
 
-    <div class="container my-5">
-        <div class="bg-white p-4 rounded shadow-sm">
-            <h2 class="text-center text-primary mb-4">Cadastrar Nova Usina</h2>
+<div class="container my-5">
+    <div class="bg-white p-4 rounded shadow-sm">
 
-            <form method="POST" enctype="multipart/form-data">
-                <div class="row g-3">
+        <h2 class="text-center text-primary mb-4">Cadastrar Nova Usina</h2>
 
-                    <div class="col-md-6">
-                        <label for="cc" class="form-label">Código CC:</label>
-                        <input type="text" name="cc" id="cc" class="form-control" required>
+        <form method="POST" enctype="multipart/form-data">
+            <div class="row g-3">
+
+                <!-- DADOS PRINCIPAIS -->
+                <div class="col-md-6">
+                    <label for="cc" class="form-label">Código CC:</label>
+                    <input type="text" name="cc" id="cc" class="form-control" required>
+                </div>
+
+                <div class="col-md-6">
+                    <label for="nome" class="form-label">Nome da Usina:</label>
+                    <input type="text" name="nome" id="nome" class="form-control" required>
+                </div>
+
+                <div class="col-md-4">
+                    <label for="potencia" class="form-label">Potência da Usina (kW):</label>
+                    <input type="number" step="0.01" name="potencia" id="potencia" class="form-control" required>
+                </div>
+
+                <div class="col-md-12 mt-3">
+                    <div class="form-check form-check-inline">
+                        <input type="hidden" name="tusd_fio_b" value="0">
+                        <input class="form-check-input" type="checkbox" id="tusd_fio_b" name="tusd_fio_b" value="1">
+                        <label class="form-check-label" for="tusd_fio_b">TUSD Fio B</label>
                     </div>
 
-                    <div class="col-md-6">
-                        <label for="nome" class="form-label">Nome da Usina:</label>
-                        <input type="text" name="nome" id="nome" class="form-control" required>
-                    </div>
-
-                    <div class="col-md-4">
-                        <label for="potencia" class="form-label">Potência da Usina (kW):</label>
-                        <input type="number" step="0.01" name="potencia" id="potencia" class="form-control" required>
-                    </div>
-
-                    <div class="col-md-12 mt-3">
-                        <div class="form-check form-check-inline">
-                            <input type="hidden" name="tusd_fio_b" value="0">
-                            <input class="form-check-input" type="checkbox" id="tusd_fio_b" name="tusd_fio_b" value="1">
-                            <label class="form-check-label" for="tusd_fio_b">TUSD Fio B</label>
-                        </div>
-
-                        <div class="form-check form-check-inline">
-                            <input type="hidden" name="boleto_proprio" value="0">
-                            <input class="form-check-input" type="checkbox" id="boleto_proprio" name="boleto_proprio" value="1">
-                            <label class="form-check-label" for="boleto_proprio">Boleto próprio?</label>
-                        </div>
-                        </div>
-
-                    <div class="mb-3">
-                        <label for="saldo_kwh" class="form-label">Saldo Atual (kWh)</label>
-                        <input type="text" class="form-control" id="saldo_kwh" name="saldo_kwh" placeholder="Ex: 1500.75">
-                    </div>
-
-                    <div class="col-md-4">
-                        <label for="data_ligacao" class="form-label">Data de Ligação:</label>
-                        <input type="date" name="data_ligacao" id="data_ligacao" class="form-control" required>
-                    </div>
-
-                    <div class="col-md-4">
-                        <label for="valor_investido" class="form-label">Valor Investido (R$):</label>
-                        <input type="number" step="0.01" name="valor_investido" id="valor_investido" class="form-control" required>
-                    </div>
-
-                    <div class="col-md-12">
-                        <label for="logo" class="form-label">Logo da Usina (imagem):</label>
-                        <input type="file" name="logo" id="logo" accept="image/*" class="form-control">
-                    </div>
-
-                    <div class="col-12">
-                        <label class="form-label">Previsão Mensal por Mês (kWh):</label>
-                        <div class="row g-2">
-                            {% set meses = [
-                                'Janeiro', 'Fevereiro', 'Março', 'Abril',
-                                'Maio', 'Junho', 'Julho', 'Agosto',
-                                'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-                            ] %}
-                            {% for i in range(12) %}
-                                <div class="col-md-4">
-                                    <label for="previsao_{{ i + 1 }}" class="form-label">{{ meses[i] }}</label>
-                                    <input type="number" step="0.01" name="previsoes[{{ i + 1 }}]" id="previsao_{{ i + 1 }}" class="form-control">
-                                </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-
-                    <div class="col-12 text-center mt-4">
-                        <button type="submit" class="btn btn-primary px-4">Cadastrar Usina</button>
+                    <div class="form-check form-check-inline">
+                        <input type="hidden" name="boleto_proprio" value="0">
+                        <input class="form-check-input" type="checkbox" id="boleto_proprio" name="boleto_proprio" value="1">
+                        <label class="form-check-label" for="boleto_proprio">Boleto próprio?</label>
                     </div>
                 </div>
-            </form>
 
-            <div class="text-center mt-4">
-                {% if usina and usina.logo_url %}
-                    <img src="{{ url_for('servir_logo', nome_arquivo=usina.logo_url) if env == 'production' else url_for('static', filename='logos/' + usina.logo_url) }}" style="max-height: 100px;">
-                {% endif %}
-                <div class="mt-3">
-                    <a href="/" class="btn btn-outline-secondary me-2">Voltar</a>
-                    <a href="/usinas" class="btn btn-outline-primary me-2">Usinas Cadastradas</a>
-                    <a href="/listar_geracoes" class="btn btn-outline-success">Editar Geração</a>
+                <div class="col-md-6">
+                    <label for="saldo_kwh" class="form-label">Saldo Atual (kWh)</label>
+                    <input type="text" class="form-control" id="saldo_kwh" name="saldo_kwh" placeholder="Ex: 1500.75">
                 </div>
+
+                <div class="col-md-3">
+                    <label for="data_ligacao" class="form-label">Data de Ligação:</label>
+                    <input type="date" name="data_ligacao" id="data_ligacao" class="form-control" required>
+                </div>
+
+                <div class="col-md-3">
+                    <label for="valor_investido" class="form-label">Valor Investido (R$):</label>
+                    <input type="number" step="0.01" name="valor_investido" id="valor_investido" class="form-control" required>
+                </div>
+
+                <div class="col-md-12">
+                    <label for="logo" class="form-label">Logo da Usina (imagem):</label>
+                    <input type="file" name="logo" id="logo" accept="image/*" class="form-control">
+                </div>
+
+                <!-- PREVISÕES MENSAIS -->
+                <div class="col-12 mt-4">
+                    <label class="form-label fw-bold">Previsão Mensal por Mês (kWh):</label>
+                    <div class="row g-2">
+                        {% set meses = [
+                            'Janeiro','Fevereiro','Março','Abril',
+                            'Maio','Junho','Julho','Agosto',
+                            'Setembro','Outubro','Novembro','Dezembro'
+                        ] %}
+                        {% for i in range(12) %}
+                        <div class="col-md-4">
+                            <label class="form-label">{{ meses[i] }}</label>
+                            <input type="number" step="0.01"
+                                   name="previsoes[{{ i + 1 }}]"
+                                   class="form-control">
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- CONFIGURAÇÃO FICHA DE COMPENSAÇÃO -->
+                <div class="col-12 mt-5">
+                    <hr>
+                    <h5 class="text-primary mb-3">Configuração da Ficha de Compensação</h5>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">DPI (Padrão)</label>
+                    <input type="number" name="ficha_dpi_padrao" class="form-control" value="300">
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">DPI (Boleto Próprio)</label>
+                    <input type="number" name="ficha_dpi_boleto" class="form-control" value="300">
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Página (Padrão)</label>
+                    <select name="ficha_page_select_padrao" class="form-select">
+                        <option value="last" selected>Última Página</option>
+                        <option value="first">Primeira Página</option>
+                        <option value="0">Página 1 (Índice 0)</option>
+                        <option value="-1">Última (Índice -1)</option>
+                    </select>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Página (Boleto Próprio)</label>
+                    <select name="ficha_page_select_boleto" class="form-select">
+                        <option value="first" selected>Primeira Página</option>
+                        <option value="last">Última Página</option>
+                        <option value="0">Página 1 (Índice 0)</option>
+                        <option value="-1">Última (Índice -1)</option>
+                    </select>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Top % (Padrão)</label>
+                    <input type="number" step="0.001"
+                           name="ficha_crop_padrao_top"
+                           class="form-control" value="0.37">
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Bottom % (Padrão)</label>
+                    <input type="number" step="0.001"
+                           name="ficha_crop_padrao_bottom"
+                           class="form-control" value="0.75">
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Top % (Boleto Próprio)</label>
+                    <input type="number" step="0.001"
+                           name="ficha_crop_boleto_top"
+                           class="form-control" value="0.608">
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Bottom % (Boleto Próprio)</label>
+                    <input type="number" step="0.001"
+                           name="ficha_crop_boleto_bottom"
+                           class="form-control" value="0.99">
+                </div>
+
+                <!-- BOTÃO -->
+                <div class="col-12 text-center mt-4">
+                    <button type="submit" class="btn btn-primary px-5">
+                        Cadastrar Usina
+                    </button>
+                </div>
+
             </div>
+        </form>
 
+        <!-- RODAPÉ -->
+        <div class="text-center mt-4">
+            {% if usina and usina.logo_url %}
+                <img src="{{ url_for('servir_logo', nome_arquivo=usina.logo_url) if env == 'production'
+                    else url_for('static', filename='logos/' + usina.logo_url) }}"
+                     style="max-height: 100px;">
+            {% endif %}
+
+            <div class="mt-3">
+                <a href="/" class="btn btn-outline-secondary me-2">Voltar</a>
+                <a href="/usinas" class="btn btn-outline-primary me-2">Usinas Cadastradas</a>
+                <a href="/listar_geracoes" class="btn btn-outline-success">Editar Geração</a>
+            </div>
         </div>
+
     </div>
+</div>
+
 {% endblock %}

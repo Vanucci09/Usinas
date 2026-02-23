@@ -99,6 +99,19 @@ class Usina(db.Model):
     sungrow_ps_id = db.Column(db.String(32), unique=True, nullable=True)
     tusd_fio_b = db.Column(db.Boolean, nullable=False, default=False)
     boleto_proprio = db.Column(db.Boolean, nullable=False, default=False)
+    ficha_dpi_padrao = db.Column(db.Integer, nullable=False, default=300)
+    ficha_dpi_boleto = db.Column(db.Integer, nullable=False, default=300)
+
+    # percentuais (0.0 a 1.0)
+    ficha_crop_padrao_top = db.Column(db.Float, nullable=False, default=0.37)
+    ficha_crop_padrao_bottom = db.Column(db.Float, nullable=False, default=0.75)
+
+    ficha_crop_boleto_top = db.Column(db.Float, nullable=False, default=0.608)
+    ficha_crop_boleto_bottom = db.Column(db.Float, nullable=False, default=0.99)
+
+    # página: 'first' | 'last' | 0..n-1 | -1 etc (string para flexibilidade)
+    ficha_page_select_padrao = db.Column(db.String(10), nullable=False, default='last')
+    ficha_page_select_boleto = db.Column(db.String(10), nullable=False, default='first')
     
     rateios = db.relationship('Rateio', backref='usina', cascade="all, delete-orphan")
     geracoes = db.relationship('Geracao', backref='usina', cascade="all, delete-orphan")
@@ -2170,18 +2183,23 @@ def relatorio_fatura(fatura_id):
     # Ficha de compensação
     pasta_boletos = '/data/boletos'
     pdf_path = os.path.join(pasta_boletos, f"boleto_{fatura.id}.pdf")
-    ficha_compensacao_img = f"ficha_compensacao_{fatura.id}.png"
-    ficha_path = os.path.join('static', ficha_compensacao_img)
+
+    ficha_filename = f"ficha_compensacao_{fatura.id}.png"
+    ficha_path = os.path.join('static', ficha_filename)
 
     ficha_compensacao_data_uri = None
+
     if os.path.exists(pdf_path):
-        ficha_compensacao_img = extrair_ficha_compensacao(
-        pdf_path,
-        ficha_path,
-        boleto_proprio=bool(getattr(usina, 'boleto_proprio', False)),
-        page_select='first' if getattr(usina, 'boleto_proprio', False) else 'last'
-    )
-        if ficha_compensacao_img and os.path.exists(ficha_path):
+        # agora usa config da usina salva no banco (page_select, dpi, crops)
+        extrair_ficha_compensacao(
+            usina_id=usina.id,
+            pdf_path=pdf_path,
+            output_path=ficha_path,
+            boleto_proprio=None  # usa usina.boleto_proprio por padrão
+            # se quiser forçar por fatura no futuro, passa True/False aqui
+        )
+
+        if os.path.exists(ficha_path):
             ficha_base64 = imagem_para_base64(ficha_path)
             ficha_compensacao_data_uri = f"data:image/png;base64,{ficha_base64}"
 
@@ -2237,64 +2255,107 @@ def relatorio_fatura(fatura_id):
         bootstrap_path=bootstrap_path
     )
     
+def resolve_page_select(page_select_str, page_count):
+    """
+    page_select_str: 'first' | 'last' | '0' | '-1'
+    Retorna índice 0-based válido.
+    """
+    v = (page_select_str or "last").strip().lower()
+
+    if v == "first":
+        return 0
+    if v == "last":
+        return page_count - 1
+
+    try:
+        idx = int(v)
+        if idx < 0:
+            idx = page_count + idx  # -1 => última página
+        return max(0, min(idx, page_count - 1))
+    except Exception:
+        return page_count - 1
+    
 def extrair_ficha_compensacao(
+    usina_id,
     pdf_path,
     output_path='static/ficha_compensacao.png',
-    boleto_proprio=False,
-    page_select=None,                 # 'first' | 'last' | int | None
-    dpi_padrao=300,
-    dpi_boleto=300,
-    crop_padrao=(0.37, 0.75),         # topo/bottom (% da altura) - PDF “normal”
-    crop_boleto=(0.608, 0.99)          # topo/bottom para boleto próprio (ajuste se precisar)
+    boleto_proprio=None
 ):
     """
-    Recorta a ficha de compensação.
-    - Se boleto_proprio=True, usa recorte alternativo e, por padrão, pega a 1ª página.
-    - page_select: 'first' | 'last' | int (0-based) | None (usa heurística padrão).
+    Recorta a ficha usando exclusivamente as configurações salvas na usina.
+    Sem fallback automático.
     """
+
+    usina = Usina.query.get_or_404(usina_id)
+
+    # Define se é boleto próprio ou não
+    if boleto_proprio is None:
+        boleto_proprio = bool(usina.boleto_proprio)
+
+    # ===== CONFIG DA USINA =====
+    if boleto_proprio:
+        dpi = usina.ficha_dpi_boleto
+        top_pct = usina.ficha_crop_boleto_top
+        bottom_pct = usina.ficha_crop_boleto_bottom
+        page_select = usina.ficha_page_select_boleto
+    else:
+        dpi = usina.ficha_dpi_padrao
+        top_pct = usina.ficha_crop_padrao_top
+        bottom_pct = usina.ficha_crop_padrao_bottom
+        page_select = usina.ficha_page_select_padrao
+
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 
-    # Resolve página
     with fitz.open(pdf_path) as doc:
         n = doc.page_count
-        # Se o chamador não especificar, usamos: boleto próprio -> primeira; senão -> última
-        if page_select is None:
-            page_select = 'first' if boleto_proprio else 'last'
 
-        if isinstance(page_select, int):
-            idx = page_select if page_select >= 0 else n + page_select
-        elif str(page_select).lower() == 'first':
+        # ===== Resolve página =====
+        if page_select == 'first':
             idx = 0
+        elif page_select == 'last':
+            idx = n - 1
         else:
-            idx = n - 1  # 'last' default
+            try:
+                idx = int(page_select)
+                if idx < 0:
+                    idx = n + idx
+            except Exception:
+                idx = n - 1  # apenas evita crash
 
         idx = max(0, min(idx, n - 1))
 
-        # DPI e crop de acordo com o tipo de boleto
-        dpi = dpi_boleto if boleto_proprio else dpi_padrao
-        top_pct, bot_pct = crop_boleto if boleto_proprio else crop_padrao
-
-        # Renderiza página escolhida
         page = doc.load_page(idx)
         pix = page.get_pixmap(dpi=dpi)
 
-        tmp_path = os.path.join('static', f"temp_page_{uuid.uuid4().hex}.png")
+        tmp_path = os.path.join(
+            os.path.dirname(output_path),
+            f"temp_{uuid.uuid4().hex}.png"
+        )
         pix.save(tmp_path)
 
-    # Recorte
+    # ===== RECORTE =====
     img = Image.open(tmp_path)
     w, h = img.size
+
     top = int(h * float(top_pct))
-    bottom = int(h * float(bot_pct))
-    if bottom <= top:  # fallback seguro
-        top, bottom = int(h * 0.37), int(h * 0.75)
+    bottom = int(h * float(bottom_pct))
+
+    # Apenas evita erro fatal se bottom <= top
+    if bottom <= top:
+        bottom = top + 1
 
     ficha = img.crop((0, top, w, bottom))
     ficha.save(output_path)
 
-    # Debug + limpeza
-    print(f"[FICHA] boleto_proprio={boleto_proprio} page={idx+1} dpi={dpi} "
-          f"img={w}x{h} crop=({top_pct*100:.1f}%..{bot_pct*100:.1f}%) out={output_path}")
+    print(
+        f"[FICHA] usina={usina.id} "
+        f"boleto_proprio={boleto_proprio} "
+        f"dpi={dpi} "
+        f"page={idx+1} "
+        f"crop=({top_pct*100:.1f}%..{bottom_pct*100:.1f}%) "
+        f"out={output_path}"
+    )
+
     try:
         os.remove(tmp_path)
     except Exception:
@@ -2688,20 +2749,161 @@ def salvar_pdf_temp():
     arquivo.save(caminho)
     return "OK"
 
+@app.route('/usinas/<int:usina_id>/testar_ficha', methods=['POST'])
+@login_required
+def testar_ficha_usina(usina_id):
+    usina = Usina.query.get_or_404(usina_id)
+    ano = request.args.get('ano', date.today().year, type=int)
+
+    # helpers
+    def to_int(val, default):
+        try:
+            if val is None or str(val).strip() == "":
+                return int(default)
+            return int(str(val).strip())
+        except Exception:
+            return int(default)
+
+    def to_float(val, default):
+        try:
+            if val is None or str(val).strip() == "":
+                return float(default)
+            return float(str(val).replace(',', '.').strip())
+        except Exception:
+            return float(default)
+
+    def to_page_select(val, default):
+        v = (val or "").strip().lower()
+        if v in ("first", "last"):
+            return v
+        try:
+            int(v)
+            return v
+        except Exception:
+            return str(default)
+
+    # ✅ SALVA CONFIG DA FICHA (SEM VALIDAR / SEM RESET)
+    try:
+        usina.ficha_dpi_padrao = to_int(request.form.get('ficha_dpi_padrao'), usina.ficha_dpi_padrao or 300)
+        usina.ficha_dpi_boleto = to_int(request.form.get('ficha_dpi_boleto'), usina.ficha_dpi_boleto or 300)
+
+        usina.ficha_page_select_padrao = to_page_select(
+            request.form.get('ficha_page_select_padrao'),
+            usina.ficha_page_select_padrao or 'last'
+        )
+        usina.ficha_page_select_boleto = to_page_select(
+            request.form.get('ficha_page_select_boleto'),
+            usina.ficha_page_select_boleto or 'first'
+        )
+
+        usina.ficha_crop_padrao_top = to_float(request.form.get('ficha_crop_padrao_top'), usina.ficha_crop_padrao_top or 0.37)
+        usina.ficha_crop_padrao_bottom = to_float(request.form.get('ficha_crop_padrao_bottom'), usina.ficha_crop_padrao_bottom or 0.75)
+
+        usina.ficha_crop_boleto_top = to_float(request.form.get('ficha_crop_boleto_top'), usina.ficha_crop_boleto_top or 0.608)
+        usina.ficha_crop_boleto_bottom = to_float(request.form.get('ficha_crop_boleto_bottom'), usina.ficha_crop_boleto_bottom or 0.99)
+
+        db.session.commit()
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao salvar config da ficha: {e}', 'danger')
+        return redirect(url_for('editar_previsoes', usina_id=usina.id, ano=ano) + "#teste-ficha")
+
+    # ✅ Agora gera preview (usa os valores do banco)
+    arquivo = request.files.get('pdf_teste')
+    if not arquivo or not arquivo.filename:
+        flash('Envie um PDF para testar o recorte.', 'warning')
+        return redirect(url_for('editar_previsoes', usina_id=usina.id, ano=ano) + "#teste-ficha")
+
+    tmp_dir = os.path.join('static', 'tmp_fichas')
+    os.makedirs(tmp_dir, exist_ok=True)
+
+    ext = os.path.splitext(secure_filename(arquivo.filename))[1].lower()
+    if ext != ".pdf":
+        flash('Arquivo inválido. Envie um PDF.', 'danger')
+        return redirect(url_for('editar_previsoes', usina_id=usina.id, ano=ano) + "#teste-ficha")
+
+    pdf_tmp = os.path.join(tmp_dir, f"teste_{usina.id}_{uuid.uuid4().hex}.pdf")
+    arquivo.save(pdf_tmp)
+
+    preview_name = f"preview_ficha_{usina.id}_{uuid.uuid4().hex}.png"
+    preview_path = os.path.join(tmp_dir, preview_name)
+
+    try:
+        extrair_ficha_compensacao(
+            usina_id=usina.id,
+            pdf_path=pdf_tmp,
+            output_path=preview_path,
+            boleto_proprio=None
+        )
+
+        if not os.path.exists(preview_path):
+            flash('Não consegui gerar o recorte. Verifique o PDF.', 'danger')
+            return redirect(url_for('editar_previsoes', usina_id=usina.id, ano=ano) + "#teste-ficha")
+
+        flash('Config salva e preview gerado!', 'success')
+
+    except Exception as e:
+        flash(f'Erro ao gerar recorte: {e}', 'danger')
+        return redirect(url_for('editar_previsoes', usina_id=usina.id, ano=ano) + "#teste-ficha")
+
+    finally:
+        try:
+            os.remove(pdf_tmp)
+        except Exception:
+            pass
+
+    return redirect(url_for('editar_previsoes', usina_id=usina.id, ano=ano, preview=preview_name) + "#teste-ficha")
+
 @app.route('/editar_previsoes/<int:usina_id>', methods=['GET', 'POST'])
 @login_required
 def editar_previsoes(usina_id):
     usina = Usina.query.get_or_404(usina_id)
     ano = request.args.get('ano', date.today().year, type=int)
 
+    # preview gerado pela rota de teste
+    preview = request.args.get('preview', default=None, type=str)
+    preview_url = None
+    if preview:
+        # arquivo salvo em static/tmp_fichas/<preview>
+        preview_url = url_for('static', filename=f"tmp_fichas/{preview}")
+
     if request.method == 'POST':
         try:
+            # Helpers
+            def to_int(val, default):
+                try:
+                    if val is None or str(val).strip() == "":
+                        return int(default)
+                    return int(str(val).strip())
+                except Exception:
+                    return int(default)
+
+            def to_float(val, default):
+                try:
+                    if val is None or str(val).strip() == "":
+                        return float(default)
+                    return float(str(val).replace(',', '.').strip())
+                except Exception:
+                    return float(default)
+
+            def to_page_select(val, default):
+                v = (val or "").strip().lower()
+                if v in ("first", "last"):
+                    return v
+                try:
+                    int(v)   # aceita "0", "-1"
+                    return v
+                except Exception:
+                    return str(default)
+
             # Dados gerais da usina
             usina.cc = request.form.get('cc')
             usina.nome = request.form.get('nome')
 
             potencia = request.form.get('potencia_kw')
-            usina.potencia_kw = float(potencia.replace(',', '.')) if potencia else usina.potencia_kw
+            if potencia is not None and str(potencia).strip() != "":
+                usina.potencia_kw = float(str(potencia).replace(',', '.'))
 
             data_ligacao_str = request.form.get('data_ligacao')
             if data_ligacao_str:
@@ -2709,38 +2911,56 @@ def editar_previsoes(usina_id):
 
             valor_investido_str = request.form.get('valor_investido')
             if valor_investido_str:
-                usina.valor_investido = float(valor_investido_str.replace(',', '.'))
-                
+                usina.valor_investido = float(str(valor_investido_str).replace(',', '.'))
+
             saldo_kwh_str = request.form.get('saldo_kwh')
-            if saldo_kwh_str:
-                usina.saldo_kwh = float(saldo_kwh_str.replace(',', '.'))
-                
-            # novo campo: TUSD Fio B
-            # Se usar hidden (0) + checkbox (1), getlist retornará ['0'] ou ['0','1'].
+            if saldo_kwh_str is not None and str(saldo_kwh_str).strip() != "":
+                usina.saldo_kwh = float(str(saldo_kwh_str).replace(',', '.'))
+
+            # checkboxes hidden+checkbox
             tusd_vals = request.form.getlist('tusd_fio_b')
             if tusd_vals:
                 last_val = str(tusd_vals[-1]).strip().lower()
                 usina.tusd_fio_b = last_val in ('1', 'true', 'on', 'sim')
-                
+
             boleto_vals = request.form.getlist('boleto_proprio')
             if boleto_vals:
                 last_val = str(boleto_vals[-1]).strip().lower()
                 usina.boleto_proprio = last_val in ('1', 'true', 'on', 'sim')
 
+            # Configuração da ficha
+            usina.ficha_dpi_padrao = to_int(request.form.get('ficha_dpi_padrao'), usina.ficha_dpi_padrao or 300)
+            usina.ficha_dpi_boleto = to_int(request.form.get('ficha_dpi_boleto'), usina.ficha_dpi_boleto or 300)
+
+            usina.ficha_page_select_padrao = to_page_select(
+                request.form.get('ficha_page_select_padrao'),
+                usina.ficha_page_select_padrao or 'last'
+            )
+            usina.ficha_page_select_boleto = to_page_select(
+                request.form.get('ficha_page_select_boleto'),
+                usina.ficha_page_select_boleto or 'first'
+            )
+
+            usina.ficha_crop_padrao_top = to_float(request.form.get('ficha_crop_padrao_top'), usina.ficha_crop_padrao_top or 0.37)
+            usina.ficha_crop_padrao_bottom = to_float(request.form.get('ficha_crop_padrao_bottom'), usina.ficha_crop_padrao_bottom or 0.75)
+
+            usina.ficha_crop_boleto_top = to_float(request.form.get('ficha_crop_boleto_top'), usina.ficha_crop_boleto_top or 0.608)
+            usina.ficha_crop_boleto_bottom = to_float(request.form.get('ficha_crop_boleto_bottom'), usina.ficha_crop_boleto_bottom or 0.99)
+
             # Atualiza previsões mensais
             for mes in range(1, 13):
                 campo = f'previsoes[{mes}]'
                 valor = request.form.get(campo)
-                if valor:
+                if valor is not None and str(valor).strip() != "":
                     previsao = PrevisaoMensal.query.filter_by(usina_id=usina.id, ano=ano, mes=mes).first()
                     if not previsao:
                         previsao = PrevisaoMensal(usina_id=usina.id, ano=ano, mes=mes)
                         db.session.add(previsao)
-                    previsao.previsao_kwh = float(valor.replace(',', '.'))
+                    previsao.previsao_kwh = float(str(valor).replace(',', '.'))
 
             # Upload da nova logo
             logo = request.files.get('logo')
-            if logo and logo.filename != '':
+            if logo and logo.filename:
                 filename = secure_filename(logo.filename)
                 ext = os.path.splitext(filename)[1]
                 unique_filename = f"{uuid.uuid4().hex}{ext}"
@@ -2754,14 +2974,20 @@ def editar_previsoes(usina_id):
                 usina.logo_url = unique_filename
 
             db.session.commit()
+            print("=== DEBUG USINA ===", usina.id)
+            print("form ficha_dpi_padrao:", request.form.get("ficha_dpi_padrao"))
+            print("form ficha_crop_padrao_top:", request.form.get("ficha_crop_padrao_top"))
+            print("form ficha_page_select_padrao:", request.form.get("ficha_page_select_padrao"))
+            print("form ALL KEYS:", list(request.form.keys()))            
             flash('Usina atualizada com sucesso!', 'success')
             return redirect(url_for('editar_previsoes', usina_id=usina.id, ano=ano))
 
         except Exception as e:
+            db.session.rollback()
             flash(f'Erro ao atualizar: {e}', 'danger')
             return redirect(request.url)
 
-    # Preenche os valores existentes no formulário
+    # Preenche previsões no formulário
     previsoes = {
         p.mes: p.previsao_kwh
         for p in PrevisaoMensal.query.filter_by(usina_id=usina.id, ano=ano).all()
@@ -2772,7 +2998,9 @@ def editar_previsoes(usina_id):
         usina=usina,
         previsoes=previsoes,
         ano=ano,
-        env=os.getenv('FLASK_ENV')
+        env=os.getenv('FLASK_ENV'),
+        preview_url=preview_url,
+        preview_cache_bust=str(uuid.uuid4())
     )
 
 @app.route('/usinas')
