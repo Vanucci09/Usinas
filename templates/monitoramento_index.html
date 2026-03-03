@@ -16,17 +16,17 @@
         <span class="me-2">{{ u.nome }}</span>
         <div class="d-flex flex-wrap gap-2">
           <a class="btn btn-sm btn-outline-success"
-             href="{{ url_for('cadastrar_inversor_usina', usina_id=u.id) }}">
-            Cadastrar inversor
+            href="{{ url_for('painel_inversores_usina', usina_id=u.id) }}">
+            Inversores + Gerações
           </a>
           <a class="btn btn-sm btn-outline-secondary"
              href="{{ url_for('analise_diaria', usina_id=u.id) }}">
             Análise diária
           </a>
           <a class="btn btn-sm btn-outline-primary"
-             href="{{ url_for('inserir_geracao_inversor', usina_id=u.id) }}">
-            Inserir geração
-          </a>          
+            href="{{ url_for('painel_inversores_usina', usina_id=u.id) }}">
+            Inversores + Gerações
+          </a>    
           <a class="btn btn-sm btn-primary"
              href="{{ url_for('monitoramento_usina', usina_id=u.id) }}">
             Abrir monitoramento

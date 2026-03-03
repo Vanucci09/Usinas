@@ -3,15 +3,20 @@
 {% block title %}Monitoramento – {{ usina.nome }}{% endblock %}
 
 {% block content %}
-{# --- Helper de formatação BR (milhares com ponto, decimal com vírgula) --- #}
-{% macro fmt_kwh(v, casas=3) -%}
+{% macro fmt(v, casas=2) -%}
   {%- if v is not none -%}
     {{ ('{:,.%df}' % casas).format(v).replace(',', 'X').replace('.', ',').replace('X', '.') }}
   {%- else -%}-{% endif -%}
 {%- endmacro %}
 
 <div class="container mt-4">
-  <h2 class="mb-3 text-primary">Monitoramento – {{ usina.nome }}</h2>
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0 text-primary">Monitoramento – {{ usina.nome }}</h2>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary" href="{{ url_for('monitoramento_index') }}">← Voltar</a>
+    </div>
+  </div>
 
   {# Mensagens flash #}
   {% with messages = get_flashed_messages(with_categories=true) %}
@@ -24,282 +29,315 @@
     {% endif %}
   {% endwith %}
 
-  {# ===================== TABELA NO TOPO (ISOLADA) ===================== #}
-  <form class="row g-3 align-items-end mb-3" method="get">
-    {# preserva a visão e demais filtros do restante da página #}
-    <input type="hidden" name="view" value="{{ view }}">
-    <input type="hidden" name="data" value="{{ data_ref.strftime('%Y-%m-%d') }}">
-    <input type="hidden" name="data_ini" value="{{ data_ini.strftime('%Y-%m-%d') if data_ini }}">
-    <input type="hidden" name="data_fim" value="{{ data_fim.strftime('%Y-%m-%d') if data_fim }}">
-    {% for sn in inv_sns %}
-      <input type="hidden" name="inv" value="{{ sn }}">
-    {% endfor %}
-
-    <div class="col-md-3">
-      <label class="form-label">Dia (tabela)</label>
+  {# -------------------- FORM: dia da tela -------------------- #}
+  <form class="row g-2 align-items-end mb-3" method="get" action="{{ url_for('monitoramento_usina', usina_id=usina.id) }}">
+    <div class="col-auto">
+      <label class="form-label mb-1">Dia (tabela)</label>
       <input type="date" name="data_tab" value="{{ data_tab_ref.strftime('%Y-%m-%d') }}" class="form-control">
     </div>
-    <div class="col-md-3 d-flex gap-2">
-      <button type="submit" class="btn btn-primary">Aplicar</button>
+    <div class="col-auto d-flex gap-2">
+      <button class="btn btn-outline-primary">Aplicar</button>
       <a class="btn btn-outline-secondary" href="{{ url_for('monitoramento_usina', usina_id=usina.id) }}">Hoje</a>
-    </div>
-    <div class="col-md-6 text-md-end">
-      <small class="text-muted">Índice calculado com base apenas nos registros do dia da tabela.</small>
     </div>
   </form>
 
-  {# Card do Índice % #}
-  <div class="row g-3 mb-2">
-    <div class="col-md-4">
-      <div class="card shadow-sm">
+  {# -------------------- LINHA 1: CARDS DO TOPO -------------------- #}
+  <div class="row g-3 mb-3">
+
+    <div class="col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-primary text-white fw-semibold">UFV {{ usina.nome }}</div>
         <div class="card-body">
-          <div class="d-flex justify-content-between align-items-center">
-            <div class="fw-semibold">Índice da usina no dia</div>
-            <div class="fs-4">{{ '%.1f'|format(indice_usina_pct) }}%</div>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>DATA</th>
+                  <th>MÊS</th>
+                  <th>GERAÇÃO ESPERADA (kWh)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="fw-semibold">{{ data_tab_ref.strftime('%d/%m/%Y') }}</td>
+                  <td>{{ data_tab_ref.month }}</td>
+                  <td class="fw-semibold">{{ fmt(previsto_dia, 2) }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-          <div class="progress mt-2" style="height:10px;">
-            <div class="progress-bar" role="progressbar"
-                 style="width: {{ indice_usina_pct|round(1) }}%;"
-                 aria-valuenow="{{ indice_usina_pct|round(1) }}" aria-valuemin="0" aria-valuemax="100"></div>
-          </div>
-          <small class="text-muted">Pondera desempenho relativo, potência e status (online/comunicando).</small>
+          <small class="text-muted d-block mt-2">
+            Previsão diária = previsão mensal / dias do mês.
+          </small>
         </div>
       </div>
     </div>
+
+    <div class="col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-primary text-white fw-semibold">RESUMO EXECUTIVO DO DIA</div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th class="text-center">STATUS DA USINA</th>
+                  <th class="text-center">PERFORMANCE DO DIA</th>
+                  <th class="text-center">PERDA TOTAL ESTIMADA</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="text-center">
+                    {% if status_usina_ok %}
+                      <span class="badge bg-success fs-6">OK</span>
+                    {% else %}
+                      <span class="badge bg-danger fs-6">ALERTA</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-center fw-semibold fs-5">
+                    {{ fmt(performance_pct, 2) }}%
+                  </td>
+                  <td class="text-center fw-semibold fs-5">
+                    {{ fmt(perda_pct, 2) }}%
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
-  {# Tabela (ordenada por eToday desc para ranking) #}
-  <div class="table-responsive mb-4">
-    <table class="table table-hover align-middle">
-      <thead class="table-light">
-        <tr>
-          <th style="width:70px">#</th>
-          <th>Serial</th>
-          <th>Potência (kW)</th>
-          <th>Data</th>
-          <th>eToday (kWh)</th>
-          <th>Online</th>
-          <th>Comunicando</th>
-          <th>Mensagem</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for r in registros_tab_sorted %}
-          {% set row_class =
-              'table-success' if r.online and r.comunicando else
-              ('table-warning' if r.comunicando and not r.online else
-              ('table-danger' if not r.comunicando else '')) %}
-          <tr class="{{ row_class }}">
-            <td class="fw-semibold">
-              {{ loop.index }}
-              {% if r.id not in latest_ids %}
-                <span class="badge bg-light text-muted border ms-1">antigo</span>
-              {% endif %}
-            </td>
-            <td class="fw-semibold">{{ r.inverter_sn }}</td>
-            <td>{{ fmt_kwh(r.potencia_kw, 3) if r.potencia_kw is not none else '-' }}</td>
-            <td>{{ r.data.strftime('%d/%m/%Y') }}</td>
+  {# -------------------- LINHA 2: TABELA + GRÁFICOS -------------------- #}
+  <div class="row g-3">
 
-            {# eToday só no snapshot mais recente por SN #}
-            <td>
-              {% if r.id in latest_ids %}
-                {% set e = latest_etoday_por_sn.get(r.inverter_sn) %}
-                {{ fmt_kwh(e, 3) if e is not none else '-' }}
+    <div class="col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white fw-semibold">RESUMO POR INVERSORES POR DIA</div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-sm table-striped align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>Inversor</th>
+                  <th class="text-end">Potência (kW)</th>
+                  <th class="text-end">Geração (kWh)</th>
+                  <th class="text-end">Operação</th>
+                  <th class="text-end">Ft. de Capacidade</th>
+                  <th class="text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% set soma_pot = 0 %}
+                {% set soma_real = 0 %}
+                {% for r in resumo_inversores %}
+                  {% set soma_pot = soma_pot + (r.pot_kw or 0) %}
+                  {% set soma_real = soma_real + (r.real_kwh or 0) %}
+                  <tr>
+                    <td class="fw-semibold">
+                      {{ r.nome or r.sn }}
+                    </td>
+                    <td class="text-end">{{ fmt(r.pot_kw, 2) }}</td>
+                    <td class="text-end">{{ fmt(r.real_kwh, 2) }}</td>
+                    <td class="text-end">{{ fmt(r.operacao_pct, 2) }}%</td>
+                    <td class="text-end">{{ fmt(r.ft_cap_pct, 2) }}%</td>
+                    <td class="text-center">
+                      {% if r.status_ok %}
+                        <span class="badge bg-success">Rotina</span>
+                      {% else %}
+                        <span class="badge bg-danger">Atenção</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card shadow-sm mb-3">
+        <div class="card-header bg-primary text-white fw-semibold">ANÁLISE GERAÇÃO DO DIA</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <div class="fw-semibold">Por inversor</div>
+            <canvas id="chartInv"></canvas>
+          </div>
+
+          <hr>
+
+          <div class="row g-3 align-items-center">
+            <div class="col-md-6">
+              <div class="fw-semibold">Geração do Dia</div>
+              <div class="fs-4 fw-bold">{{ fmt(geracao_total_dia, 1) }} kWh</div>
+
+              {% set dif = (geracao_total_dia - previsto_dia) %}
+              {% if previsto_dia > 0 %}
+                <div class="small {% if dif >= 0 %}text-success{% else %}text-danger{% endif %}">
+                  {% if dif >= 0 %}↑{% else %}↓{% endif %} {{ fmt(dif|abs, 2) }} kWh
+                </div>
               {% else %}
-                -
+                <div class="small text-muted">Sem previsão cadastrada para o mês.</div>
               {% endif %}
-            </td>
 
-            <td>
-              {% if r.online %}<span class="badge bg-success">Online</span>
-              {% else %}<span class="badge bg-secondary">Offline</span>{% endif %}
-            </td>
-            <td>
-              {% if r.comunicando %}<span class="badge bg-info text-dark">OK</span>
-              {% else %}<span class="badge bg-danger">Falha</span>{% endif %}
-            </td>
-            <td>{{ r.mensagem_erro or '-' }}</td>
-          </tr>
-        {% else %}
-          <tr><td colspan="8" class="text-center text-muted py-4">Nenhum registro encontrado.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+              <div class="mt-2 text-muted small">
+                Observações<br>
+                <span class="text-muted">N/A</span>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <canvas id="chartTotal"></canvas>
+            </div>
+          </div>
 
-  {# ===================== RESTANTE DA PÁGINA (cards, filtros, gráficos) ===================== #}
-
-  <!-- Filtros básicos (visão + data para a listagem/visão abaixo) -->
-  <form class="row g-3 align-items-end mb-4" method="get">
-    <div class="col-md-3">
-      <label class="form-label">Visão</label>
-      <select name="view" class="form-select">
-        <option value="ultimos" {{ 'selected' if view=='ultimos' else '' }}>Últimos por inversor</option>
-        <option value="diario"  {{ 'selected' if view=='diario'  else '' }}>Diário (por data)</option>
-      </select>
-    </div>
-    <div class="col-md-3">
-      <label class="form-label">Data</label>
-      <input type="date" name="data" value="{{ data_ref.strftime('%Y-%m-%d') }}" class="form-control">
-    </div>
-    <div class="col-md-3">
-      <button type="submit" class="btn btn-outline-primary">Aplicar</button>
-      <a class="btn btn-outline-secondary" href="{{ url_for('monitoramento_usina', usina_id=usina.id) }}">Hoje</a>
-    </div>
-    {# preserva dia da tabela ao reaplicar filtros gerais #}
-    <input type="hidden" name="data_tab" value="{{ data_tab_ref.strftime('%Y-%m-%d') }}">
-    {% for sn in inv_sns %}
-      <input type="hidden" name="inv" value="{{ sn }}">
-    {% endfor %}
-    <input type="hidden" name="data_ini" value="{{ data_ini.strftime('%Y-%m-%d') if data_ini }}">
-    <input type="hidden" name="data_fim" value="{{ data_fim.strftime('%Y-%m-%d') if data_fim }}">
-  </form>
-
-  <!-- Cards de métricas rápidas -->
-  <div class="row g-3 mb-4">
-    <div class="col-md-3">
-      <div class="card shadow-sm"><div class="card-body text-center">
-        <div class="fs-1">{{ total }}</div>
-        <div class="text-muted">Inversores cadastrados</div>
-      </div></div>
-    </div>
-    <div class="col-md-3">
-      <div class="card shadow-sm"><div class="card-body text-center">
-        <div class="fs-1">{{ online_cnt }}</div>
-        <div class="text-success">Online</div>
-      </div></div>
-    </div>
-    <div class="col-md-3">
-      <div class="card shadow-sm"><div class="card-body text-center">
-        <div class="fs-1">{{ comunicando_cnt }}</div>
-        <div class="text-info">Comunicando</div>
-      </div></div>
-    </div>
-  </div>
-
-  <!-- Filtros extras para gráficos/comparação -->
-  <form class="row g-3 align-items-end mb-4" method="get">
-    <input type="hidden" name="view" value="{{ view }}">
-    <input type="hidden" name="data" value="{{ data_ref.strftime('%Y-%m-%d') }}">
-    <input type="hidden" name="data_tab" value="{{ data_tab_ref.strftime('%Y-%m-%d') }}">
-    <div class="col-md-3">
-      <label class="form-label">Período – Início</label>
-      <input type="date" name="data_ini" value="{{ data_ini.strftime('%Y-%m-%d') if data_ini }}" class="form-control">
-    </div>
-    <div class="col-md-3">
-      <label class="form-label">Período – Fim</label>
-      <input type="date" name="data_fim" value="{{ data_fim.strftime('%Y-%m-%d') if data_fim }}" class="form-control">
-    </div>
-    <div class="col-md-4">
-      <label class="form-label">Inversores (comparação)</label>
-      <select name="inv" class="form-select" multiple size="6">
-        {% for inv in inversores %}
-          <option value="{{ inv.inverter_sn }}" {% if inv.inverter_sn in inv_sns %}selected{% endif %}>
-            {{ inv.inverter_sn }}{% if inv.nome %} – {{ inv.nome }}{% endif %}
-          </option>
-        {% endfor %}
-      </select>
-      <small class="text-muted">Segure Ctrl/Cmd para selecionar vários.</small>
-    </div>
-    <div class="col-md-2">
-      <button type="submit" class="btn btn-primary w-100">Aplicar</button>
-    </div>
-  </form>
-
-  <!-- KPIs do período selecionado -->
-  <div class="row g-3 mb-4">
-    <div class="col-md-3">
-      <div class="card shadow-sm"><div class="card-body text-center">
-        <div class="fs-3">{{ kpi_periodo.dias }}</div>
-        <div class="text-muted">Dias no período</div>
-      </div></div>
-    </div>
-    <div class="col-md-3">
-      <div class="card shadow-sm"><div class="card-body text-center">
-        <div class="fs-3">{{ fmt_kwh(kpi_periodo.total_periodo_kwh, 3) }}</div>
-        <div class="text-muted">Total gerado (kWh)</div>
-      </div></div>
-    </div>
-    <div class="col-md-6">
-      <div class="card shadow-sm"><div class="card-body text-center">
-        <div class="fs-5">
-          Melhor no período:
-          {% if kpi_periodo.melhor_sn %}
-            <span class="fw-semibold">{{ kpi_periodo.melhor_sn }}</span>
-            ({{ fmt_kwh(kpi_periodo.melhor_total_kwh, 3) }} kWh)
-          {% else %}—{% endif %}
         </div>
-      </div></div>
+      </div>
+    </div>
+
+  </div>
+
+  {# -------------------- CADASTRO RÁPIDO + MONITORAMENTO (topo do seu print) -------------------- #}
+  <div class="row g-3 mt-1">
+    <div class="col-lg-12">
+      <div class="card shadow-sm mb-3">
+        <div class="card-header">Cadastro rápido de inversor</div>
+        <div class="card-body">
+          <form method="post" class="row g-3">
+            <input type="hidden" name="action" value="cad_inversor">
+            <input type="hidden" name="data_tab" value="{{ data_tab_ref.strftime('%Y-%m-%d') }}">
+
+            <div class="col-md-4">
+              <label class="form-label">Serial (SN) *</label>
+              <input type="text" name="inverter_sn" class="form-control" placeholder="Ex.: 1016030..." required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Nome (opcional)</label>
+              <input type="text" name="nome" class="form-control" placeholder="Ex.: INV1">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Potência (kW) (opcional)</label>
+              <input type="text" name="potencia_kw" class="form-control" placeholder="Ex.: 93,1">
+            </div>
+            <div class="col-12 d-flex justify-content-end">
+              <button class="btn btn-primary">Salvar inversor</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="card shadow-sm">
+        <div class="card-header">Lançar monitoramento (1 por dia por inversor)</div>
+        <div class="card-body">
+          <form method="post" class="row g-3">
+            <input type="hidden" name="action" value="salvar_monitoramento">
+            <input type="hidden" name="data_tab" value="{{ data_tab_ref.strftime('%Y-%m-%d') }}">
+
+            <div class="col-md-3">
+              <label class="form-label">Data</label>
+              <input type="date" name="data" class="form-control" value="{{ data_tab_ref.strftime('%Y-%m-%d') }}">
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label">Inversor *</label>
+              <select name="inverter_sn" class="form-select" required>
+                <option value="">Selecione...</option>
+                {% for inv in inversores %}
+                  <option value="{{ inv.inverter_sn }}">{{ inv.inverter_sn }}{% if inv.nome %} – {{ inv.nome }}{% endif %}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="col-md-2">
+              <label class="form-label">eToday (kWh)</label>
+              <input type="text" name="etoday" class="form-control" placeholder="Ex.: 650,300">
+            </div>
+
+            <div class="col-md-1">
+              <label class="form-label d-block">Online</label>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" name="online">
+              </div>
+            </div>
+
+            <div class="col-md-2">
+              <label class="form-label d-block">Comunicando</label>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" name="comunicando">
+              </div>
+            </div>
+
+            <div class="col-12">
+              <label class="form-label">Mensagem (opcional)</label>
+              <input type="text" name="mensagem_erro" class="form-control" placeholder="Ex.: falha de comunicação / alarme / etc">
+            </div>
+
+            <div class="col-12 d-flex justify-content-end">
+              <button class="btn btn-primary">Salvar monitoramento</button>
+            </div>
+
+          </form>
+        </div>
+      </div>
+
     </div>
   </div>
 
-  <!-- GRÁFICOS -->
-  <div class="row g-4 mb-4">
-    <div class="col-lg-8">
-      <div class="card shadow-sm">
-        <div class="card-header">eToday por dia (comparação)</div>
-        <div class="card-body"><canvas id="chartLine"></canvas></div>
-      </div>
-    </div>
-    <div class="col-lg-4">
-      <div class="card shadow-sm">
-        <div class="card-header">Top por geração total (kWh)</div>
-        <div class="card-body"><canvas id="chartBarTop"></canvas></div>
-      </div>
-    </div>
-    <div class="col-lg-6">
-      <div class="card shadow-sm">
-        <div class="card-header">Radar de métricas (média, pico, total)</div>
-        <div class="card-body"><canvas id="chartRadar"></canvas></div>
-      </div>
-    </div>
-    <div class="col-lg-6">
-      <div class="card shadow-sm">
-        <div class="card-header">Potência (kW) × Média diária (kWh)</div>
-        <div class="card-body"><canvas id="chartScatter"></canvas></div>
-      </div>
-    </div>
-  </div>
 </div>
 
-{# === SCRIPTS (Chart.js) === #}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-  // Dados do servidor p/ gráficos
-  const LABELS = {{ chart_labels|tojson }};
-  const SERIES = {{ chart_series|tojson }};
-  const TOP_LABELS = {{ top_labels|tojson }};
-  const TOP_DATA = {{ top_data|tojson }};
-  const RADAR_LABELS = {{ radar_labels|tojson }};
-  const RADAR_SERIES = {{ radar_series|tojson }};
-  const SCATTER_POINTS = {{ scatter_points|tojson }};
+  // --------- Gráfico por inversor (Real x Perda) ----------
+  const INV_LABELS = {{ chart_inv_labels|tojson }};
+  const INV_REAL = {{ chart_inv_real|tojson }};
+  const INV_PERDA = {{ chart_inv_perda|tojson }};
 
-  function makeColor(i){ const r=(137*i)%255,g=(97*i)%255,b=(197*i)%255; return `rgba(${r}, ${g}, ${b}, 0.8)`; }
-
-  // Linha
-  const dsLine = SERIES.map((s,i)=>({label:s.label,data:s.data,tension:0.25,fill:false,borderColor:makeColor(i),backgroundColor:makeColor(i),pointRadius:2}));
-  new Chart(document.getElementById('chartLine'),{
-    type:'line',
-    data:{labels:LABELS,datasets:dsLine},
-    options:{interaction:{mode:'index',intersect:false},plugins:{legend:{position:'bottom'}},scales:{y:{title:{display:true,text:'kWh (eToday)'}},x:{title:{display:true,text:'Dia'}}}}
+  new Chart(document.getElementById('chartInv'), {
+    type: 'bar',
+    data: {
+      labels: INV_LABELS,
+      datasets: [
+        { label: 'Geração Real (kWh)', data: INV_REAL },
+        { label: 'Perda (kWh)', data: INV_PERDA }
+      ]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      plugins: {
+        legend: { position: 'top' }
+      },
+      scales: {
+        x: { beginAtZero: true, title: { display: true, text: 'kWh' } }
+      }
+    }
   });
 
-  // Barras
-  new Chart(document.getElementById('chartBarTop'),{
-    type:'bar',
-    data:{labels:TOP_LABELS,datasets:[{label:'Total no período (kWh)',data:TOP_DATA}]},
-    options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,title:{display:true,text:'kWh'}}}}
-  });
+  // --------- Gráfico total (Real x Prevista) ----------
+  const TOTAL_LABELS = {{ chart_total_labels|tojson }};
+  const TOTAL_VALUES = {{ chart_total_values|tojson }};
 
-  // Radar
-  const dsRadar = RADAR_SERIES.map((s,i)=>({label:s.label,data:s.data,backgroundColor:makeColor(i).replace('0.8','0.2'),borderColor:makeColor(i)}));
-  new Chart(document.getElementById('chartRadar'),{type:'radar',data:{labels:RADAR_LABELS,datasets:dsRadar},options:{elements:{line:{borderWidth:2}},plugins:{legend:{position:'bottom'}}}});
-
-  // Scatter
-  new Chart(document.getElementById('chartScatter'),{
-    type:'scatter',
-    data:{datasets:[{label:'Inversores',data:SCATTER_POINTS,parsing:{xAxisKey:'x',yAxisKey:'y'},showLine:false,pointRadius:4}]},
-    options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:(ctx)=>{const p=ctx.raw; return `${p.label}: Pot ${p.x} kW • Média ${Number(p.y).toFixed(3)} kWh/d`;}}}},scales:{x:{title:{display:true,text:'Potência (kW)'}},y:{title:{display:true,text:'Média diária (kWh)'}}}}
+  new Chart(document.getElementById('chartTotal'), {
+    type: 'bar',
+    data: {
+      labels: TOTAL_LABELS,
+      datasets: [
+        { label: 'kWh', data: TOTAL_VALUES }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false }
+      },
+      scales: {
+        y: { beginAtZero: true }
+      }
+    }
   });
 </script>
 {% endblock %}

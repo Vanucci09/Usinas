@@ -135,6 +135,10 @@ class Geracao(db.Model):
     data = db.Column(db.Date, nullable=False)
     energia_kwh = db.Column(db.Float)
     
+    __table_args__ = (
+        db.UniqueConstraint('usina_id', 'data', name='uq_geracao_usina_data'),
+    )
+    
 class GeracaoInversor(db.Model):
     __tablename__ = 'geracoes_inversores'
     id = db.Column(db.Integer, primary_key=True)
@@ -8554,7 +8558,7 @@ def deye():
 
     return render_template("deye.html", estacoes=estacoes)
 
-@app.route('/monitoramento/usina/<int:usina_id>', methods=['GET', 'POST'])
+@app.route('/monitoramento/usina/<int:usina_id>', methods=['GET', 'POST'], endpoint='monitoramento_usina')
 @login_required
 def monitoramento_usina(usina_id):
     usina = Usina.query.get_or_404(usina_id)
@@ -8568,90 +8572,120 @@ def monitoramento_usina(usina_id):
         except ValueError:
             return fallback
 
-    def _to_float(v):
-        if v is None or str(v).strip() == '':
+    def _to_float_br(v):
+        """Aceita '650,300' / '93,1' / '93.1' """
+        if v is None:
             return None
+        s = str(v).strip()
+        if not s:
+            return None
+        s = s.replace('.', '').replace(',', '.') if (',' in s and s.count(',') == 1) else s.replace(',', '.')
         try:
-            return float(str(v).replace(',', '.'))
+            return float(s)
         except ValueError:
             return None
 
     def _norm_sn_py(sn: str) -> str:
-        # Upper + remove -, _ e espaço
-        s = (sn or '').strip().upper()
-        return s.replace('-', '').replace('_', '').replace(' ', '')
+        return (sn or '').strip().upper().replace(' ', '').replace('-', '').replace('_', '')
 
     def _norm_sn_sql(col):
-        # Postgres: UPPER(regexp_replace(trim(col), '[-_ ]', '', 'g'))
-        return func.upper(func.regexp_replace(func.trim(col), '[-_ ]', '', 'g'))
+        # compatível com SQLite/Postgres: remove espaço, hífen, underscore e UPPER
+        return func.upper(
+            func.replace(
+                func.replace(
+                    func.replace(func.trim(col), ' ', ''),
+                '-', ''),
+            '_', '')
+        )
 
-    # --------------------- Inversores ativos ---------------------
+    # Datas (tela) 
+    # Dia da tabela (dashboard do dia)
+    data_tab_ref = _parse_date(request.values.get('data_tab'), date.today())
+
+    # Inversores ativos
     inversores = (InversorCadastrado.query
                   .filter_by(usina_id=usina_id, ativo=True)
                   .order_by(InversorCadastrado.nome.asc().nullslast(),
                             InversorCadastrado.inverter_sn.asc())
                   .all())
 
-    # --------------------- POST ---------------------
+    pot_por_sn = {i.inverter_sn: (float(i.potencia_kw) if i.potencia_kw is not None else None) for i in inversores}
+
+    # POST (2 ações) 
     if request.method == 'POST':
         action = request.form.get('action')
 
-        # 1) Cadastro/atualização rápida do inversor
+        # 1) Cadastro rápido do inversor (nesta tela)
         if action == 'cad_inversor':
-            inverter_sn_raw = (request.form.get('inverter_sn') or '')
-            inverter_sn = _norm_sn_py(inverter_sn_raw)
-            nome = (request.form.get('nome') or '').strip()
-            potencia_kw = _to_float(request.form.get('potencia_kw'))
+            sn_raw = request.form.get('inverter_sn') or ''
+            inverter_sn = _norm_sn_py(sn_raw)
+            nome = (request.form.get('nome') or '').strip() or None
+            potencia_kw = _to_float_br(request.form.get('potencia_kw'))
 
             if not inverter_sn:
-                flash('Informe o Serial (inverter_sn).', 'warning')
-                return redirect(url_for('monitoramento_usina', usina_id=usina_id))
+                flash('Informe o Serial (SN).', 'warning')
+                return redirect(url_for('monitoramento_usina', usina_id=usina_id, data_tab=data_tab_ref.strftime('%Y-%m-%d')))
 
             inv = (InversorCadastrado.query
                    .filter_by(usina_id=usina_id, inverter_sn=inverter_sn)
                    .first())
+
             if not inv:
                 inv = InversorCadastrado(
                     usina_id=usina_id,
                     inverter_sn=inverter_sn,
-                    nome=nome or None,
+                    nome=nome,
                     potencia_kw=potencia_kw,
                     ativo=True
                 )
                 db.session.add(inv)
+                db.session.flush()  # pega inv.id
             else:
-                inv.nome = nome or inv.nome
+                inv.nome = nome if nome is not None else inv.nome
                 if potencia_kw is not None:
                     inv.potencia_kw = potencia_kw
                 inv.ativo = True
+                db.session.flush()
 
-            # Vinculação retroativa por SN normalizado
+            # Vincula retroativamente gerações por SN normalizado
             norm_val = _norm_sn_py(inverter_sn)
             (GeracaoInversor.query
              .filter(
                  GeracaoInversor.usina_id == usina_id,
-                 _norm_sn_sql(GeracaoInversor.inverter_sn) == _norm_sn_sql(literal(norm_val)),
-                 or_(GeracaoInversor.inversor_id.is_(None),
-                     GeracaoInversor.inversor_id != inv.id)
+                 _norm_sn_sql(GeracaoInversor.inverter_sn) == _norm_sn_sql(func.trim(norm_val)),
              )
-             .update({'inversor_id': inv.id,
-                      'inverter_sn': inverter_sn}, synchronize_session=False))
+             .update({'inversor_id': inv.id, 'inverter_sn': inverter_sn},
+                     synchronize_session=False))
+
+            # Se esse inversor não existir em geracoes_inversores no dia, cria uma linha (etoday None)
+            exists_gi = (GeracaoInversor.query
+                         .filter_by(usina_id=usina_id, inverter_sn=inverter_sn, data=data_tab_ref)
+                         .first())
+            if not exists_gi:
+                db.session.add(GeracaoInversor(
+                    usina_id=usina_id,
+                    inverter_sn=inverter_sn,
+                    data=data_tab_ref,
+                    etoday=None,
+                    etotal=None,
+                    inversor_id=inv.id
+                ))
 
             db.session.commit()
-            flash('Inversor cadastrado/atualizado e gerações vinculadas por SN.', 'success')
-            return redirect(url_for('monitoramento_usina', usina_id=usina_id))
+            flash('Inversor salvo e gerações vinculadas por SN.', 'success')
+            return redirect(url_for('monitoramento_usina', usina_id=usina_id, data_tab=data_tab_ref.strftime('%Y-%m-%d')))
 
-        # 2) Lançamento diário do monitoramento (um registro por dia por SN nesta tela)
+        # 2) Lançar monitoramento do dia (status + opcionalmente espelha etoday em GeracaoInversor)
         if action == 'salvar_monitoramento':
             raw_sn = (request.form.get('inverter_sn') or '').strip()
             if not raw_sn:
-                flash('Selecione um inversor cadastrado.', 'warning')
-                return redirect(url_for('monitoramento_usina', usina_id=usina_id))
+                flash('Selecione um inversor.', 'warning')
+                return redirect(url_for('monitoramento_usina', usina_id=usina_id, data_tab=data_tab_ref.strftime('%Y-%m-%d')))
 
             inverter_sn = _norm_sn_py(raw_sn)
-            data_ref = _parse_date(request.form.get('data'), date.today())
+            data_ref = _parse_date(request.form.get('data'), data_tab_ref) or data_tab_ref
 
-            etoday = _to_float(request.form.get('etoday'))
+            etoday = _to_float_br(request.form.get('etoday'))
             online = request.form.get('online') == 'on'
             comunicando = request.form.get('comunicando') == 'on'
             mensagem_erro = (request.form.get('mensagem_erro') or '').strip() or None
@@ -8660,14 +8694,12 @@ def monitoramento_usina(usina_id):
                    .filter_by(usina_id=usina_id, inverter_sn=inverter_sn, ativo=True)
                    .first())
 
-            # UPSERT Monitoramento (1/dia por SN nesta tela)
+            # 1 por dia por inversor (upsert)
             reg = (Monitoramento.query
                    .filter_by(usina_id=usina_id, inverter_sn=inverter_sn, data=data_ref)
                    .first())
             if not reg:
-                reg = Monitoramento(usina_id=usina_id,
-                                    inverter_sn=inverter_sn,
-                                    data=data_ref)
+                reg = Monitoramento(usina_id=usina_id, inverter_sn=inverter_sn, data=data_ref)
                 db.session.add(reg)
 
             reg.etoday = etoday
@@ -8675,245 +8707,149 @@ def monitoramento_usina(usina_id):
             reg.comunicando = comunicando
             reg.mensagem_erro = mensagem_erro
             if inv and inv.potencia_kw is not None:
-                reg.potencia_kw = inv.potencia_kw
+                reg.potencia_kw = float(inv.potencia_kw)
 
-            # Vincular/espelhar em GeracaoInversor
+            # Espelha/garante em GeracaoInversor (tabela oficial de geração)
             gi = (GeracaoInversor.query
                   .filter_by(usina_id=usina_id, inverter_sn=inverter_sn, data=data_ref)
                   .first())
-            if gi is None:
-                gi = GeracaoInversor(
-                    usina_id=usina_id,
-                    inverter_sn=inverter_sn,
-                    data=data_ref,
-                    etoday=etoday
-                )
+            if not gi:
+                gi = GeracaoInversor(usina_id=usina_id, inverter_sn=inverter_sn, data=data_ref)
                 db.session.add(gi)
-            else:
-                if etoday is not None:
-                    gi.etoday = etoday
 
+            if etoday is not None:
+                gi.etoday = etoday
             if inv:
                 gi.inversor_id = inv.id
-                norm_val = _norm_sn_py(inverter_sn)
-                (GeracaoInversor.query
-                 .filter(
-                     GeracaoInversor.usina_id == usina_id,
-                     _norm_sn_sql(GeracaoInversor.inverter_sn) == _norm_sn_sql(literal(norm_val)),
-                     or_(GeracaoInversor.inversor_id.is_(None),
-                         GeracaoInversor.inversor_id != inv.id)
-                 )
-                 .update({'inversor_id': inv.id,
-                          'inverter_sn': inverter_sn}, synchronize_session=False))
 
             db.session.commit()
-            flash('Monitoramento salvo e gerações vinculadas por SN.', 'success')
+            flash('Monitoramento salvo. (Geração foi refletida em geracoes_inversores.)', 'success')
+            return redirect(url_for('monitoramento_usina', usina_id=usina_id, data_tab=data_tab_ref.strftime('%Y-%m-%d')))
 
-            # preserva filtros principais no redirect
-            return redirect(url_for('monitoramento_usina',
-                                    usina_id=usina_id,
-                                    view=request.args.get('view', 'ultimos'),
-                                    data=request.args.get('data', ''),
-                                    data_tab=request.args.get('data_tab', ''),
-                                    data_ini=request.args.get('data_ini', ''),
-                                    data_fim=request.args.get('data_fim', '')))
+    # PREVISÃO (dia)
+    prev_row = (PrevisaoMensal.query
+                .filter_by(usina_id=usina_id, ano=data_tab_ref.year, mes=data_tab_ref.month)
+                .first())
+    previsto_mensal = float(prev_row.previsao_kwh) if prev_row else 0.0
+    dias_mes = calendar.monthrange(data_tab_ref.year, data_tab_ref.month)[1]
+    previsto_dia = (previsto_mensal / dias_mes) if dias_mes else 0.0
 
-    # --------------------- GET: filtros/visões ---------------------
-    view = request.args.get('view', 'ultimos')  # 'ultimos' | 'diario'
-    data_ref = _parse_date(request.args.get('data'), date.today())
-
-    # TABELA do topo (filtro independente)
-    data_tab_ref = _parse_date(request.args.get('data_tab'), date.today())
-
-    # Registros do topo (do dia específico) - mais recente primeiro por SN
-    registros_tab = (Monitoramento.query
-        .filter(Monitoramento.usina_id == usina_id,
-                Monitoramento.data == data_tab_ref)
-        .order_by(Monitoramento.inverter_sn.asc(),
-                  Monitoramento.id.desc())  # último inserido primeiro
-        .all())
-
-    # Histórico e mais recente por SN (em memória)
-    historico_por_sn = {}
-    latest_por_sn = {}
-    for r in registros_tab:
-        historico_por_sn.setdefault(r.inverter_sn, []).append(r)
-        if r.inverter_sn not in latest_por_sn:
-            latest_por_sn[r.inverter_sn] = r  # já é o mais recente nessa ordenação
-
-    # ========= MAIS RECENTE por SN NO DIA (via subselect max(id)) =========
-    sub_ult_por_id = (db.session.query(
-                        Monitoramento.inverter_sn.label('sn'),
-                        func.max(Monitoramento.id).label('max_id')
-                     )
-                     .filter(Monitoramento.usina_id == usina_id,
-                             Monitoramento.data == data_tab_ref)
-                     .group_by(Monitoramento.inverter_sn)
-                     .subquery())
-
-    latest_rows = (db.session.query(Monitoramento.id, Monitoramento.inverter_sn)
-                   .join(sub_ult_por_id,
-                         and_(Monitoramento.inverter_sn == sub_ult_por_id.c.sn,
-                              Monitoramento.id == sub_ult_por_id.c.max_id))
-                   .filter(Monitoramento.usina_id == usina_id,
-                           Monitoramento.data == data_tab_ref)
+    # GERAÇÃO REAL do dia (GeracaoInversor)
+    gi_dia_rows = (db.session.query(
+                        GeracaoInversor.inverter_sn.label('sn'),
+                        func.sum(GeracaoInversor.etoday).label('etoday_sum')
+                   )
+                   .filter(
+                        GeracaoInversor.usina_id == usina_id,
+                        GeracaoInversor.data == data_tab_ref
+                   )
+                   .group_by(GeracaoInversor.inverter_sn)
                    .all())
 
-    # IDs atuais (1 por SN)
-    latest_ids = {row.id for row in latest_rows}
-    
-    # Pega, para cada SN, o primeiro etoday não-nulo do dia (ordem: mais recente -> mais antigo)
-    latest_etoday_por_sn = {}
-    for sn, lst in historico_por_sn.items():  # lst já está em ordem decrescente (id desc)
-        val = next((x.etoday for x in lst if x.etoday is not None), None)
-        latest_etoday_por_sn[sn] = val
+    # Normaliza SN para cruzar com cadastro
+    gi_por_norm = {_norm_sn_py(sn): float(v or 0.0) for sn, v in gi_dia_rows if sn}
+    # valores por SN do cadastro
+    real_por_inv = {}
+    for inv in inversores:
+        real_por_inv[inv.inverter_sn] = gi_por_norm.get(_norm_sn_py(inv.inverter_sn), 0.0)
 
-    # --- ordenação: primeiro os "atuais", depois os "antigos" ---
-    atuais = [r for r in registros_tab if r.id in latest_ids]
-    antigos = [r for r in registros_tab if r.id not in latest_ids]
+    geracao_total_dia = round(sum(real_por_inv.values()), 3)
 
-    # dentro de cada grupo, ordena por eToday (desc), depois None
-    atuais_sorted = sorted(atuais, key=lambda r: (r.etoday is None, -(r.etoday or 0.0)))
-    antigos_sorted = sorted(antigos, key=lambda r: (r.etoday is None, -(r.etoday or 0.0)))
+    # STATUS do dia (Monitoramento - último por SN)
+    # Pega último registro por SN no dia (max(id))
+    sub_last = (db.session.query(
+                    Monitoramento.inverter_sn.label('sn'),
+                    func.max(Monitoramento.id).label('max_id')
+               )
+               .filter(Monitoramento.usina_id == usina_id,
+                       Monitoramento.data == data_tab_ref)
+               .group_by(Monitoramento.inverter_sn)
+               .subquery())
 
-    registros_tab_sorted = atuais_sorted + antigos_sorted
+    last_regs = (db.session.query(Monitoramento)
+                 .join(sub_last, and_(
+                     Monitoramento.inverter_sn == sub_last.c.sn,
+                     Monitoramento.id == sub_last.c.max_id
+                 ))
+                 .filter(Monitoramento.usina_id == usina_id,
+                         Monitoramento.data == data_tab_ref)
+                 .all())
 
-    # --- índice da usina no dia (apenas snapshots atuais por SN) ---
-    peso_com, peso_onl, peso_prod = 0.40, 0.40, 0.20
-    atuais = [r for r in registros_tab if r.id in latest_ids]
-    n = len(atuais)
-    score_sum = 0.0
-    for r in atuais:
-        etoday_eff = latest_etoday_por_sn.get(r.inverter_sn)  # <- usa o valor efetivo do dia
-        s  = peso_com * (1.0 if bool(getattr(r, 'comunicando', False)) else 0.0)
-        s += peso_onl  * (1.0 if bool(getattr(r, 'online', False))       else 0.0)
-        s += peso_prod * (1.0 if ((etoday_eff or 0.0) > 0) else 0.0)
-        score_sum += s
-    indice_usina_pct = round(100.0 * (score_sum / n), 1) if n else 0.0
+    status_por_norm = {_norm_sn_py(r.inverter_sn): r for r in last_regs}
 
-    # Visão "diário" ou "últimos" (cards + tabela principal)
-    if view == 'diario':
-        registros = (Monitoramento.query
-                     .filter(Monitoramento.usina_id == usina_id,
-                             Monitoramento.data == data_ref)
-                     .order_by(Monitoramento.inverter_sn.asc())
-                     .all())
-    else:
-        sub_ult = (db.session.query(
-                        Monitoramento.inverter_sn,
-                        func.max(Monitoramento.data).label('max_data')
-                   )
-                   .filter(Monitoramento.usina_id == usina_id)
-                   .group_by(Monitoramento.inverter_sn)
-                   .subquery())
-        registros = (db.session.query(Monitoramento)
-                     .join(sub_ult, and_(
-                         Monitoramento.inverter_sn == sub_ult.c.inverter_sn,
-                         Monitoramento.data == sub_ult.c.max_data
-                     ))
-                     .filter(Monitoramento.usina_id == usina_id)
-                     .order_by(Monitoramento.inverter_sn.asc())
-                     .all())
+    # RESUMO por inversor (tabela do print)
+    soma_pot = sum((pot_por_sn.get(inv.inverter_sn) or 0.0) for inv in inversores) or 0.0
 
-    total = len(inversores)
-    online_cnt = sum(1 for r in registros if bool(getattr(r, 'online', False)))
-    comunicando_cnt = sum(1 for r in registros if bool(getattr(r, 'comunicando', False)))
+    resumo_inversores = []
+    for inv in inversores:
+        sn = inv.inverter_sn
+        pot = pot_por_sn.get(sn) or 0.0
+        real = float(real_por_inv.get(sn, 0.0) or 0.0)
 
-    # --------------------- Gráficos / Comparação ---------------------
-    data_ini = _parse_date(request.args.get('data_ini'), data_ref)
-    data_fim = _parse_date(request.args.get('data_fim'), data_ref)
-    if data_ini > data_fim:
-        data_ini, data_fim = data_fim, data_ini
+        # rateia previsto por potência
+        previsto_inv = (previsto_dia * (pot / soma_pot)) if soma_pot > 0 else 0.0
 
-    inv_sns = request.args.getlist('inv')
-    if not inv_sns:
-        inv_sns = [i.inverter_sn for i in inversores]
+        operacao_pct = (real / previsto_inv * 100.0) if previsto_inv > 0 else 0.0
 
-    def daterange(d1, d2):
-        cur = d1
-        while cur <= d2:
-            yield cur
-            cur += timedelta(days=1)
+        # fator de capacidade (assumindo 24h)
+        ft_cap_pct = (real / (pot * 24.0) * 100.0) if pot > 0 else 0.0
 
-    labels_datas = [d for d in daterange(data_ini, data_fim)]
-    labels_fmt = [d.strftime('%d/%m') for d in labels_datas]
+        st = status_por_norm.get(_norm_sn_py(sn))
+        ok = True if (st and bool(getattr(st, 'online', False)) and bool(getattr(st, 'comunicando', False))) else False
 
-    mon_periodo = []
-    if inv_sns:
-        mon_periodo = (Monitoramento.query
-                       .filter(Monitoramento.usina_id == usina_id,
-                               Monitoramento.data >= data_ini,
-                               Monitoramento.data <= data_fim,
-                               Monitoramento.inverter_sn.in_(inv_sns))
-                       .order_by(Monitoramento.inverter_sn.asc(), Monitoramento.data.asc())
-                       .all())
+        resumo_inversores.append({
+            "sn": sn,
+            "nome": inv.nome,
+            "pot_kw": pot,
+            "real_kwh": real,
+            "prev_kwh": previsto_inv,
+            "perda_kwh": max(previsto_inv - real, 0.0),
+            "operacao_pct": operacao_pct,
+            "ft_cap_pct": ft_cap_pct,
+            "status_ok": ok,
+            "mensagem": (st.mensagem_erro if st and st.mensagem_erro else None)
+        })
 
-    mapa = defaultdict(dict)  # {sn: {date: etoday}}
-    pot_por_sn = {i.inverter_sn: (i.potencia_kw or None) for i in inversores}
-    for r in mon_periodo:
-        mapa[r.inverter_sn][r.data] = float(r.etoday or 0.0)
+    # total/performance/perda
+    performance_pct = (geracao_total_dia / previsto_dia * 100.0) if previsto_dia > 0 else 0.0
+    perda_kwh = max(previsto_dia - geracao_total_dia, 0.0)
+    perda_pct = (perda_kwh / previsto_dia * 100.0) if previsto_dia > 0 else 0.0
 
-    chart_series, cumul_por_sn, media_por_sn, max_por_sn = [], {}, {}, {}
-    for sn in inv_sns:
-        valores = [mapa[sn].get(d, 0.0) for d in labels_datas]
-        cumul = sum(valores)
-        cumul_por_sn[sn] = cumul
-        media_por_sn[sn] = (cumul / len(labels_datas)) if labels_datas else 0.0
-        max_por_sn[sn] = max(valores) if valores else 0.0
-        chart_series.append({"label": sn, "data": valores})
+    # status da usina (OK se todos ok quando há inversores)
+    status_usina_ok = all(x["status_ok"] for x in resumo_inversores) if resumo_inversores else True
 
-    top_ordenado = sorted(cumul_por_sn.items(), key=lambda x: x[1], reverse=True)
-    top_labels = [sn for sn, _ in top_ordenado]
-    top_data = [val for _, val in top_ordenado]
+    # Dados para os gráficos (Chart.js)
+    chart_inv_labels = [((x["nome"] or x["sn"])[:18] + '…') if len((x["nome"] or x["sn"])) > 18 else (x["nome"] or x["sn"])
+                        for x in resumo_inversores]
+    chart_inv_real = [round(x["real_kwh"], 3) for x in resumo_inversores]
+    chart_inv_perda = [round(x["perda_kwh"], 3) for x in resumo_inversores]
 
-    radar_labels = ['Média (kWh/dia)', 'Máximo diário (kWh)', 'Geração total (kWh)']
-    radar_series = [{"label": sn,
-                     "data": [media_por_sn.get(sn, 0.0),
-                              max_por_sn.get(sn, 0.0),
-                              cumul_por_sn.get(sn, 0.0)]}
-                    for sn in inv_sns]
+    chart_total_labels = ["Geração Total (kWh)", "Geração Prevista (kWh)"]
+    chart_total_values = [round(geracao_total_dia, 3), round(previsto_dia, 3)]
 
-    scatter_points = []
-    for sn in inv_sns:
-        pot = pot_por_sn.get(sn)
-        if pot is not None:
-            scatter_points.append({"x": float(pot),
-                                   "y": float(media_por_sn.get(sn, 0.0)),
-                                   "label": sn})
+    return render_template(
+        'monitoramento_usina.html',
+        usina=usina,
+        data_tab_ref=data_tab_ref,
+        inversores=inversores,
 
-    kpi_periodo = {
-        "dias": len(labels_datas),
-        "total_periodo_kwh": round(sum(top_data), 3) if top_data else 0.0,
-        "melhor_sn": top_labels[0] if top_labels else None,
-        "melhor_total_kwh": round(top_data[0], 3) if top_data else 0.0
-    }
+        # cards topo
+        previsto_dia=previsto_dia,
+        geracao_total_dia=geracao_total_dia,
+        performance_pct=performance_pct,
+        perda_pct=perda_pct,
+        status_usina_ok=status_usina_ok,
 
-    return render_template('monitoramento_usina.html',
-                           usina=usina,
-                           # tabela do topo
-                           registros_tab=registros_tab,
-                           registros_tab_sorted=registros_tab_sorted,
-                           data_tab_ref=data_tab_ref,
-                           latest_ids=latest_ids,              # usado no HTML (mostrar eToday só no mais recente)
-                           latest_etoday_por_sn=latest_etoday_por_sn,
-                           indice_usina_pct=indice_usina_pct,
-                           # visão/cards
-                           registros=registros,
-                           inversores=inversores,
-                           view=view,
-                           data_ref=data_ref,
-                           total=total,
-                           online_cnt=online_cnt,
-                           comunicando_cnt=comunicando_cnt,
-                           # gráficos/comparação
-                           data_ini=data_ini, data_fim=data_fim,
-                           inv_sns=inv_sns,
-                           chart_labels=labels_fmt,
-                           chart_series=chart_series,
-                           top_labels=top_labels, top_data=top_data,
-                           radar_labels=radar_labels, radar_series=radar_series,
-                           scatter_points=scatter_points,
-                           kpi_periodo=kpi_periodo)
+        # tabela
+        resumo_inversores=resumo_inversores,
+
+        # charts
+        chart_inv_labels=chart_inv_labels,
+        chart_inv_real=chart_inv_real,
+        chart_inv_perda=chart_inv_perda,
+        chart_total_labels=chart_total_labels,
+        chart_total_values=chart_total_values
+    )
     
 @app.route('/monitoramento')
 @login_required
@@ -8921,60 +8857,12 @@ def monitoramento_index():
     usinas = Usina.query.order_by(Usina.nome).all()
     return render_template('monitoramento_index.html', usinas=usinas)
 
-@app.route('/usinas/<int:usina_id>/inversores/novo', methods=['GET', 'POST'], endpoint='cadastrar_inversor_usina')
+@app.route('/usinas/<int:usina_id>/inversores/painel', methods=['GET'], endpoint='painel_inversores_usina')
 @login_required
-def cadastrar_inversor_usina(usina_id):
+def painel_inversores_usina(usina_id):
     usina = Usina.query.get_or_404(usina_id)
 
-    import re
-    def _to_float_br_local(v):
-        if v is None:
-            return None
-        s = str(v).strip()
-        if s == '':
-            return None
-        if ',' in s:
-            s = re.sub(r'\.(?=\d{3}(?:\D|$))', '', s)
-            s = s.replace(',', '.')
-        try:
-            return float(s)
-        except ValueError:
-            return None
-
-    if request.method == 'POST':
-        inverter_sn = (request.form.get('inverter_sn') or '').strip()
-        nome = (request.form.get('nome') or '').strip()
-        potencia_kw = _to_float_br_local(request.form.get('potencia_kw'))
-
-        if not inverter_sn:
-            flash('Informe o Serial (inverter_sn).', 'warning')
-            return _render_inversor_cadastrar(usina, form_data=request.form)
-
-        existente = (InversorCadastrado.query
-                     .filter_by(usina_id=usina.id, inverter_sn=inverter_sn)
-                     .first())
-        if existente:
-            flash('Já existe um inversor com este serial nesta usina.', 'danger')
-            return _render_inversor_cadastrar(usina, form_data=request.form)
-
-        inv = InversorCadastrado(
-            usina_id=usina.id,
-            inverter_sn=inverter_sn,
-            nome=nome or None,
-            potencia_kw=potencia_kw,
-            ativo=True
-        )
-        db.session.add(inv)
-        db.session.commit()
-        flash('Inversor cadastrado com sucesso!', 'success')
-        return redirect(url_for('cadastrar_inversor_usina', usina_id=usina.id))
-
-    # GET
-    return _render_inversor_cadastrar(usina, form_data={})
-
-
-def _render_inversor_cadastrar(usina, form_data):
-    # lista de inversores
+    # ---------- inversores ----------
     inversores = (InversorCadastrado.query
                   .filter_by(usina_id=usina.id)
                   .order_by(InversorCadastrado.ativo.desc(),
@@ -8982,340 +8870,365 @@ def _render_inversor_cadastrar(usina, form_data):
                             InversorCadastrado.inverter_sn.asc())
                   .all())
 
-    # contagem de gerações SEM vínculo por SN (desta usina)
-    rows = (db.session.query(GeracaoInversor.inverter_sn,
-                             func.count(GeracaoInversor.id))
-            .filter(GeracaoInversor.usina_id == usina.id,
-                    GeracaoInversor.inversor_id.is_(None))
-            .group_by(GeracaoInversor.inverter_sn)
-            .all())
-    contagem_sem_vinculo = {sn: qtd for sn, qtd in rows}
+    # ---------- filtros de geração ----------
+    def _parse_date(s):
+        if not s:
+            return None
+        try:
+            return datetime.strptime(s, '%Y-%m-%d').date()
+        except ValueError:
+            return None
 
-    # serials existentes em geracoes SEM vinculo (para a seção extra)
-    sn_sem_vinculo = sorted(contagem_sem_vinculo.keys())
+    data_ini = _parse_date(request.args.get('data_ini'))
+    data_fim = _parse_date(request.args.get('data_fim'))
+    inversor_id = request.args.get('inversor_id', type=int)
 
-    return render_template('inversor_cadastrar.html',
-                           usina=usina,
-                           form_data=form_data,
-                           inversores=inversores,
-                           contagem_sem_vinculo=contagem_sem_vinculo,
-                           sn_sem_vinculo=sn_sem_vinculo)
+    # default: hoje
+    if not data_ini and not data_fim:
+        data_ini = date.today()
+        data_fim = date.today()
+    else:
+        if data_ini and not data_fim:
+            data_fim = data_ini
+        if data_fim and not data_ini:
+            data_ini = data_fim
 
+    q = (GeracaoInversor.query
+         .filter(GeracaoInversor.usina_id == usina.id,
+                 GeracaoInversor.data >= data_ini,
+                 GeracaoInversor.data <= data_fim))
 
-# 2) Vincular TODAS as gerações (dessa usina) cujo SN == SN do inversor escolhido
-@app.post('/usinas/<int:usina_id>/inversores/<int:inv_id>/vincular-por-sn')
-@login_required
-def vincular_geracoes_por_sn(usina_id, inv_id):
-    usina = Usina.query.get_or_404(usina_id)
-    inv = InversorCadastrado.query.filter_by(id=inv_id, usina_id=usina.id).first_or_404()
+    if inversor_id:
+        q = q.filter(GeracaoInversor.inversor_id == inversor_id)
 
-    # normaliza SN do cadastro
-    sn_oficial = (inv.inverter_sn or '').strip()
-    if not sn_oficial:
-        flash('Serial do inversor inválido.', 'danger')
-        return redirect(url_for('cadastrar_inversor_usina', usina_id=usina.id))
+    geracoes = (q.order_by(GeracaoInversor.data.asc(),
+                           GeracaoInversor.inverter_sn.asc())
+                .all())
 
-    # Atualiza TODAS as gerações da usina cujo SN "pareça" com o oficial
-    # (TRIM/UPPER) e também onde já há vínculo diferente.
-    atualizadas = (GeracaoInversor.query
+    soma_etoday = sum((g.etoday or 0.0) for g in geracoes)
+
+    return render_template(
+        'inversores_painel.html',
+        usina=usina,
+        inversores=inversores,
+        geracoes=geracoes,
+        data_ini=data_ini,
+        data_fim=data_fim,
+        inversor_id=inversor_id,
+        soma_etoday=soma_etoday
+    )
+
+def _to_float_br(v):
+    if v is None:
+        return None
+    s = str(v).strip()
+    if not s:
+        return None
+    if ',' in s:
+        s = re.sub(r'\.(?=\d{3}(?:\D|$))', '', s)
+        s = s.replace(',', '.')
+    try:
+        return float(s)
+    except ValueError:
+        return None
+    
+def _parse_date(s):
+    if not s:
+        return None
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+def _daterange(di, df):
+    d = di
+    while d <= df:
+        yield d
+        d += timedelta(days=1)
+        
+def atualizar_geracao_total_dia(usina_id: int, dia: date) -> float:
+    total = (
+        db.session.query(func.coalesce(func.sum(GeracaoInversor.etoday), 0.0))
         .filter(
-            GeracaoInversor.usina_id == usina.id,
-            or_(
-                func.upper(func.trim(GeracaoInversor.inverter_sn)) == func.upper(func.trim(sn_oficial)),
-                # opcional: trate variações comuns (troca de -/_/espaços)
-                func.upper(func.replace(func.replace(func.trim(GeracaoInversor.inverter_sn), '-', ''), '_', ''))
-                   == func.upper(func.replace(func.replace(sn_oficial.strip(), '-', ''), '_', ''))
-            )
+            GeracaoInversor.usina_id == usina_id,
+            GeracaoInversor.data == dia
         )
-        .update({
-            GeracaoInversor.inversor_id: inv.id,
-            # espelha o SN "oficial" para manter consistência
-            GeracaoInversor.inverter_sn: sn_oficial
-        }, synchronize_session=False))
+        .scalar()
+    ) or 0.0
 
-    db.session.commit()
-    flash(f'Vinculadas {atualizadas} gerações ao inversor {sn_oficial}.', 'success')
-    return redirect(url_for('cadastrar_inversor_usina', usina_id=usina.id))
+    g_dia = Geracao.query.filter_by(usina_id=usina_id, data=dia).first()
+    if not g_dia:
+        g_dia = Geracao(usina_id=usina_id, data=dia, energia_kwh=float(total))
+        db.session.add(g_dia)
+    else:
+        g_dia.energia_kwh = float(total)
 
-
-@app.post('/usinas/<int:usina_id>/inversores/auto-vincular-por-sn')
+    return float(total)
+        
+@app.route('/usinas/<int:usina_id>/inversores/criar_painel', methods=['POST'], endpoint='criar_inversor_painel')
 @login_required
-def auto_vincular_por_sn(usina_id):
+def criar_inversor_painel(usina_id):
     usina = Usina.query.get_or_404(usina_id)
-    inversores = InversorCadastrado.query.filter_by(usina_id=usina.id).all()
 
-    total = 0
+    inverter_sn = (request.form.get('inverter_sn') or '').strip()
+    nome = (request.form.get('nome') or '').strip() or None
+    potencia_kw = _to_float_br(request.form.get('potencia_kw'))
+    ativo = True if request.form.get('ativo') == '1' else False
+
+    if not inverter_sn:
+        flash('Informe o Serial (inverter_sn).', 'warning')
+        return redirect(url_for('painel_inversores_usina', usina_id=usina.id, **request.args))
+
+    existe = (InversorCadastrado.query
+              .filter_by(usina_id=usina.id, inverter_sn=inverter_sn)
+              .first())
+    if existe:
+        flash('Já existe um inversor com este SN nesta usina.', 'danger')
+        return redirect(url_for('painel_inversores_usina', usina_id=usina.id, **request.args))
+
+    inv = InversorCadastrado(
+        usina_id=usina.id,
+        inverter_sn=inverter_sn,
+        nome=nome,
+        potencia_kw=potencia_kw,
+        ativo=ativo
+    )
+    db.session.add(inv)
+    db.session.commit()
+
+    flash('Inversor criado no painel!', 'success')
+    return redirect(url_for('painel_inversores_usina', usina_id=usina.id, **request.args))
+
+
+@app.route('/usinas/<int:usina_id>/inversores/auto_vincular_sn', methods=['POST'], endpoint='auto_vincular_por_sn_painel')
+@login_required
+def auto_vincular_por_sn_painel(usina_id):
+    usina = Usina.query.get_or_404(usina_id)
+
+    # período vindo do filtro do painel (ou default hoje)
+    di = _parse_date(request.form.get('data_ini')) or date.today()
+    df = _parse_date(request.form.get('data_fim')) or di
+
+    inversores = (InversorCadastrado.query
+                  .filter_by(usina_id=usina.id)
+                  .all())
+
+    # ✅ Só inversores ATIVOS entram aqui
+    sn_to_inv = {}
     for inv in inversores:
-        sn_oficial = (inv.inverter_sn or '').strip()
-        if not sn_oficial:
+        if not inv.ativo:
             continue
+        if inv.inverter_sn:
+            sn_to_inv[inv.inverter_sn.strip()] = inv
 
-        qtd = (GeracaoInversor.query
+    # 1) VINCULAR (somente no período selecionado e somente para inversores ativos)
+    total_vinculados = 0
+    for sn_norm, inv in sn_to_inv.items():
+        updated = (GeracaoInversor.query
+                   .filter(
+                       GeracaoInversor.usina_id == usina.id,
+                       GeracaoInversor.data >= di,
+                       GeracaoInversor.data <= df,
+                       GeracaoInversor.inversor_id.is_(None),
+                       func.trim(GeracaoInversor.inverter_sn) == sn_norm
+                   )
+                   .update({GeracaoInversor.inversor_id: inv.id},
+                           synchronize_session=False))
+        total_vinculados += int(updated or 0)
+
+    # 2) CRIAR FALTANTES (ativos apenas) — NÃO cria em datas futuras
+    hoje = date.today()
+    df_criacao = min(df, hoje)
+
+    total_criados = 0
+    novos = []
+
+    if di <= df_criacao:
+        # não cria se já existir (SN,data) no período, mesmo que esteja sem vínculo
+        existentes_sn_data = set(
+            db.session.query(
+                func.trim(GeracaoInversor.inverter_sn).label("sn"),
+                GeracaoInversor.data
+            )
             .filter(
                 GeracaoInversor.usina_id == usina.id,
-                or_(
-                    func.upper(func.trim(GeracaoInversor.inverter_sn)) == func.upper(func.trim(sn_oficial)),
-                    func.upper(func.replace(func.replace(func.trim(GeracaoInversor.inverter_sn), '-', ''), '_', ''))
-                       == func.upper(func.replace(func.replace(sn_oficial, '-', ''), '_', ''))
-                )
+                GeracaoInversor.data >= di,
+                GeracaoInversor.data <= df_criacao
             )
-            .update({
-                GeracaoInversor.inversor_id: inv.id,
-                GeracaoInversor.inverter_sn: sn_oficial
-            }, synchronize_session=False))
-        total += (qtd or 0)
-
-    db.session.commit()
-    flash(f'Auto-vinculação concluída. {total} gerações vinculadas por SN.', 'success')
-    return redirect(url_for('cadastrar_inversor_usina', usina_id=usina.id))
-
-
-@app.post('/usinas/<int:usina_id>/inversores/<int:inv_id>/desvincular-por-sn')
-@login_required
-def desvincular_geracoes_por_sn(usina_id, inv_id):
-    usina = Usina.query.get_or_404(usina_id)
-    inv = InversorCadastrado.query.filter_by(id=inv_id, usina_id=usina.id).first_or_404()
-
-    sn_oficial = (inv.inverter_sn or '').strip()
-    atualizadas = (GeracaoInversor.query
-        .filter(
-            GeracaoInversor.usina_id == usina.id,
-            func.upper(func.trim(GeracaoInversor.inverter_sn)) == func.upper(func.trim(sn_oficial)),
-            GeracaoInversor.inversor_id == inv.id
+            .all()
         )
-        .update({GeracaoInversor.inversor_id: None}, synchronize_session=False))
+
+        for sn_norm, inv in sn_to_inv.items():
+            for d in _daterange(di, df_criacao):
+                if (sn_norm, d) in existentes_sn_data:
+                    continue
+                novos.append(GeracaoInversor(
+                    usina_id=usina.id,
+                    inversor_id=inv.id,
+                    inverter_sn=inv.inverter_sn.strip(),
+                    data=d,
+                    etoday=0.0,
+                    etotal=None
+                ))
+                total_criados += 1
+
+        if novos:
+            db.session.add_all(novos)
 
     db.session.commit()
-    flash(f'Desvinculadas {atualizadas} gerações do inversor {sn_oficial}.', 'warning')
-    return redirect(url_for('cadastrar_inversor_usina', usina_id=usina.id))
-    
-@app.route('/usinas/<int:usina_id>/inversores/<int:inv_id>/editar', methods=['GET', 'POST'], endpoint='editar_inversor_usina')
+
+    # mensagem mais clara quando houver corte por data futura
+    msg_futuro = ''
+    if df > hoje:
+        msg_futuro = f' (criação limitada até {hoje.strftime("%d/%m/%Y")})'
+
+    flash(
+        f'Auto-vínculo por SN: {total_vinculados} vinculado(s). '
+        f'Faltantes criados no período (ativos apenas): {total_criados}{msg_futuro}.',
+        'success'
+    )
+
+    return redirect(url_for(
+        'painel_inversores_usina',
+        usina_id=usina.id,
+        data_ini=di.strftime('%Y-%m-%d'),
+        data_fim=df.strftime('%Y-%m-%d'),
+        inversor_id=request.args.get('inversor_id') or ''
+    ))
+
+@app.route('/usinas/<int:usina_id>/inversores/<int:inv_id>/atualizar', methods=['POST'], endpoint='atualizar_inversor_usina')
 @login_required
-def editar_inversor_usina(usina_id, inv_id):
-    usina = Usina.query.get_or_404(usina_id)
+def atualizar_inversor_usina(usina_id, inv_id):
     inv = InversorCadastrado.query.filter_by(id=inv_id, usina_id=usina_id).first_or_404()
 
-    def _to_float_br_local(v):
-        if v is None: return None
-        s = str(v).strip()
-        if not s: return None
-        if ',' in s:
-            s = re.sub(r'\.(?=\d{3}(?:\D|$))', '', s)
-            s = s.replace(',', '.')
-        try: return float(s)
-        except ValueError: return None
+    inv.nome = (request.form.get('nome') or '').strip() or None
+    inv.potencia_kw = _to_float_br(request.form.get('potencia_kw'))
+    inv.ativo = True if request.form.get('ativo') == '1' else False
 
-    if request.method == 'POST':
-        inv.nome = (request.form.get('nome') or '').strip() or None
-        inv.potencia_kw = _to_float_br_local(request.form.get('potencia_kw'))
-        # Serial não editado aqui para não “descolar” dos monitoramentos existentes
-        db.session.commit()
-        flash('Inversor atualizado!', 'success')
-        return redirect(url_for('cadastrar_inversor_usina', usina_id=usina.id))
-
-    form_data = {
-        'inverter_sn': inv.inverter_sn,
-        'nome': inv.nome or '',
-        'potencia_kw': f"{inv.potencia_kw:.3f}".replace('.', ',') if inv.potencia_kw is not None else ''
-    }
-    return render_template('inversor_editar.html', usina=usina, inv=inv, form_data=form_data)
-
-@app.route('/usinas/<int:usina_id>/inversores/<int:inv_id>/status', methods=['POST'], endpoint='alterar_status_inversor_usina')
-@login_required
-def alterar_status_inversor_usina(usina_id, inv_id):
-    inv = InversorCadastrado.query.filter_by(id=inv_id, usina_id=usina_id).first_or_404()
-    inv.ativo = not inv.ativo
     db.session.commit()
-    flash('Status alterado!', 'success')
-    return redirect(url_for('cadastrar_inversor_usina', usina_id=usina_id))
+    flash('Inversor atualizado!', 'success')
+    return redirect(url_for('painel_inversores_usina', usina_id=usina_id, **request.args))
 
-@app.route('/usinas/<int:usina_id>/inversores/<int:inv_id>/excluir', methods=['POST'], endpoint='excluir_inversor_usina')
+
+@app.route('/usinas/<int:usina_id>/inversores/<int:inv_id>/excluir', methods=['POST'], endpoint='excluir_inversor_usina_painel')
 @login_required
-def excluir_inversor_usina(usina_id, inv_id):
+def excluir_inversor_usina_painel(usina_id, inv_id):
     inv = InversorCadastrado.query.filter_by(id=inv_id, usina_id=usina_id).first_or_404()
     db.session.delete(inv)
     db.session.commit()
     flash('Inversor excluído!', 'success')
-    return redirect(url_for('cadastrar_inversor_usina', usina_id=usina_id))
+    return redirect(url_for('painel_inversores_usina', usina_id=usina_id, **request.args))
 
-@app.route('/usinas/<int:usina_id>/geracao', methods=['GET', 'POST'], endpoint='inserir_geracao_inversor')
+@app.route('/usinas/<int:usina_id>/geracoes_inversores/salvar', methods=['POST'], endpoint='salvar_geracao_inversor')
 @login_required
-def inserir_geracao_inversor(usina_id):
+def salvar_geracao_inversor(usina_id):
     usina = Usina.query.get_or_404(usina_id)
 
-    # inversores (use ativo=True se quiser restringir)
-    inversores = (InversorCadastrado.query
-                  .filter_by(usina_id=usina_id)
-                  .order_by(InversorCadastrado.nome.asc().nullslast(),
-                            InversorCadastrado.inverter_sn.asc())
-                  .all())
-    pot_por_sn = {inv.inverter_sn: (inv.potencia_kw or None) for inv in inversores}
+    geracao_id = request.form.get('geracao_id', type=int)  # se vier, é edição
+    inversor_id = request.form.get('inversor_id', type=int)
+    data_str = (request.form.get('data') or '').strip()
 
-    # helper número BR -> float
-    def _to_float_br_local(v):
-        if v is None: return None
-        s = str(v).strip()
-        if not s: return None
-        if ',' in s:
-            s = re.sub(r'\.(?=\d{3}(?:\D|$))', '', s)
-            s = s.replace(',', '.')
-        try: return float(s)
-        except ValueError: return None
+    try:
+        data_ref = datetime.strptime(data_str, '%Y-%m-%d').date()
+    except ValueError:
+        flash('Data inválida.', 'warning')
+        return redirect(url_for('painel_inversores_usina', usina_id=usina.id, **request.args))
 
-    # ----------------------- POST: lançamento manual (um dia) -----------------------
-    if request.method == 'POST':
-        data_str = request.form.get('data') or ''
-        try:
-            data_ref = datetime.strptime(data_str, '%Y-%m-%d').date() if data_str else date.today()
-        except ValueError:
-            data_ref = date.today()
+    if not inversor_id:
+        flash('Selecione um inversor.', 'warning')
+        return redirect(url_for('painel_inversores_usina', usina_id=usina.id, **request.args))
 
-        inverter_sn = (request.form.get('inverter_sn') or '').strip()
-        if not inverter_sn:
-            flash('Selecione um inversor.', 'warning')
-            return redirect(url_for('inserir_geracao_inversor', usina_id=usina_id, data=data_ref.strftime('%Y-%m-%d')))
+    inv = InversorCadastrado.query.filter_by(id=inversor_id, usina_id=usina.id).first()
+    if not inv:
+        flash('Inversor não encontrado.', 'danger')
+        return redirect(url_for('painel_inversores_usina', usina_id=usina.id, **request.args))
 
-        etoday = _to_float_br_local(request.form.get('etoday'))
-        if etoday is None:
-            flash('Informe um valor válido para eToday.', 'warning')
-            return redirect(url_for('inserir_geracao_inversor', usina_id=usina_id, data=data_ref.strftime('%Y-%m-%d')))
+    etoday = _to_float_br(request.form.get('etoday'))
+    if etoday is None:
+        flash('Informe um eToday válido.', 'warning')
+        return redirect(url_for('painel_inversores_usina', usina_id=usina.id, **request.args))
 
-        # upsert por (usina, inversor, data)
-        reg = (Monitoramento.query
-               .filter_by(usina_id=usina_id, inverter_sn=inverter_sn, data=data_ref)
-               .first())
-        if not reg:
-            reg = Monitoramento(usina_id=usina_id, inverter_sn=inverter_sn, data=data_ref)
-            db.session.add(reg)
-        reg.etoday = etoday
+    etotal = _to_float_br(request.form.get('etotal'))  # opcional
 
-        pot = pot_por_sn.get(inverter_sn)
-        if pot is not None:
-            reg.potencia_kw = pot
+    dia_antigo = None  # pra cobrir edição mudando data
 
-        db.session.commit()
-        flash('Geração salva com sucesso!', 'success')
-        return redirect(url_for('inserir_geracao_inversor', usina_id=usina_id, data=data_ref.strftime('%Y-%m-%d')))
+    try:
+        if geracao_id:
+            g = GeracaoInversor.query.filter_by(id=geracao_id, usina_id=usina.id).first_or_404()
 
-    # ----------------------- GET: filtros -----------------------
-    data_str = request.args.get('data') or ''
-    data_ini_str = request.args.get('data_ini') or ''
-    data_fim_str = request.args.get('data_fim') or ''
+            # guarda dia antigo antes de alterar
+            dia_antigo = g.data
 
-    data_ref = None
-    data_ini = None
-    data_fim = None
+            # mantém coerência com inversor selecionado
+            g.inversor_id = inv.id
+            g.inverter_sn = inv.inverter_sn
+            g.data = data_ref
+            g.etoday = etoday
+            g.etotal = etotal
 
-    if data_str:
-        try:
-            data_ref = datetime.strptime(data_str, '%Y-%m-%d').date()
-        except ValueError:
-            data_ref = date.today()
-    else:
-        if data_ini_str:
-            try: data_ini = datetime.strptime(data_ini_str, '%Y-%m-%d').date()
-            except ValueError: data_ini = None
-        if data_fim_str:
-            try: data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
-            except ValueError: data_fim = None
-        if data_ini and not data_fim: data_fim = data_ini
-        if data_fim and not data_ini: data_ini = data_fim
-    if not data_ref and not (data_ini and data_fim):
-        data_ref = date.today()
+            flash('Geração atualizada!', 'success')
 
-    # ----------------------- SYNC inline (apenas com vínculo) -----------------------
-    if hasattr(GeracaoInversor, 'inversor_id'):
-        if data_ref:
-            di, df = data_ref, data_ref
         else:
-            di, df = data_ini, data_fim
+            # evita duplicar: upsert lógico por (usina_id, inversor_id, data)
+            g = (GeracaoInversor.query
+                 .filter_by(usina_id=usina.id, inversor_id=inv.id, data=data_ref)
+                 .first())
 
-        # agrega por (data, SN) apenas gerações VINCULADAS
-        gi_rows = (db.session.query(
-                        GeracaoInversor.data.label('data'),
-                        GeracaoInversor.inverter_sn.label('sn'),
-                        func.sum(GeracaoInversor.etoday).label('etoday_sum')
-                   )
-                   .filter(
-                        GeracaoInversor.usina_id == usina_id,
-                        GeracaoInversor.inversor_id.isnot(None),
-                        GeracaoInversor.data >= di,
-                        GeracaoInversor.data <= df
-                   )
-                   .group_by(GeracaoInversor.data, GeracaoInversor.inverter_sn)
-                   .all())
+            if not g:
+                g = GeracaoInversor(
+                    usina_id=usina.id,
+                    inversor_id=inv.id,
+                    inverter_sn=inv.inverter_sn,
+                    data=data_ref
+                )
+                db.session.add(g)
 
-        count_updates = 0
-        for row in gi_rows:
-            d = row.data
-            sn = (row.sn or '').strip()
-            if not sn:
-                continue
+            g.etoday = etoday
+            g.etotal = etotal
 
-            reg = (Monitoramento.query
-                   .filter_by(usina_id=usina_id, inverter_sn=sn, data=d)
-                   .first())
-            if not reg:
-                reg = Monitoramento(usina_id=usina_id, inverter_sn=sn, data=d)
-                db.session.add(reg)
+            flash('Geração salva!', 'success')
 
-            reg.etoday = float(row.etoday_sum or 0.0)
+        # Atualiza o total diário na tabela Geracao
+        atualizar_geracao_total_dia(usina.id, data_ref)
 
-            pot = pot_por_sn.get(sn)
-            if pot is not None:
-                reg.potencia_kw = pot
-
-            count_updates += 1
-
-        if count_updates:
-            if di == df:
-                flash(f'Sincronizados {count_updates} registro(s) vinculados em {di.strftime("%d/%m/%Y")}.', 'info')
-            else:
-                flash(f'Sincronizados {count_updates} registro(s) vinculados de {di.strftime("%d/%m/%Y")} a {df.strftime("%d/%m/%Y")}.', 'info')
+        # se mudou a data na edição, atualiza também o dia antigo
+        if dia_antigo and dia_antigo != data_ref:
+            atualizar_geracao_total_dia(usina.id, dia_antigo)
 
         db.session.commit()
 
-    # monta a lista para exibição
-    if data_ref:
-        registros_dia = (Monitoramento.query
-                         .filter(Monitoramento.usina_id == usina_id,
-                                 Monitoramento.data == data_ref)
-                         .order_by(Monitoramento.inverter_sn.asc())
-                         .all())
-        cadastrados_cnt = len(inversores)
-        registrados_cnt = len({r.inverter_sn for r in registros_dia})
-        soma_etoday = sum((r.etoday or 0.0) for r in registros_dia)
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao salvar geração: {e}', 'danger')
 
-        return render_template('geracao_inversor.html',
-                               usina=usina,
-                               data_ref=data_ref,
-                               data_ini=None, data_fim=None,
-                               inversores=inversores,
-                               registros_dia=registros_dia,
-                               cadastrados_cnt=cadastrados_cnt,
-                               registrados_cnt=registrados_cnt,
-                               soma_etoday=soma_etoday)
-    else:
-        registros_periodo = (Monitoramento.query
-                             .filter(Monitoramento.usina_id == usina_id,
-                                     Monitoramento.data >= data_ini,
-                                     Monitoramento.data <= data_fim)
-                             .order_by(Monitoramento.data.asc(),
-                                       Monitoramento.inverter_sn.asc())
-                             .all())
-        cadastrados_cnt = len(inversores)
-        registrados_cnt = len({(r.data, r.inverter_sn) for r in registros_periodo})
-        soma_etoday = sum((r.etoday or 0.0) for r in registros_periodo)
+    return redirect(url_for('painel_inversores_usina', usina_id=usina.id, **request.args))
 
-        return render_template('geracao_inversor.html',
-                               usina=usina,
-                               data_ref=None,
-                               data_ini=data_ini, data_fim=data_fim,
-                               inversores=inversores,
-                               registros_dia=registros_periodo,
-                               cadastrados_cnt=cadastrados_cnt,
-                               registrados_cnt=registrados_cnt,
-                               soma_etoday=soma_etoday)
+@app.route(
+    '/usinas/<int:usina_id>/geracoes_inversores/<int:geracao_id>/excluir',
+    methods=['POST'],
+    endpoint='excluir_geracao_inversor'
+)
+@login_required
+def excluir_geracao_inversor(usina_id, geracao_id):
+    usina = Usina.query.get_or_404(usina_id)
+    g = GeracaoInversor.query.filter_by(id=geracao_id, usina_id=usina.id).first_or_404()
+
+    dia_ref = g.data  # guarda o dia antes de excluir
+
+    try:
+        db.session.delete(g)
+
+        # 🔥 Recalcula o total do dia após exclusão
+        atualizar_geracao_total_dia(usina.id, dia_ref)
+
+        db.session.commit()
+        flash('Geração excluída e total diário atualizado!', 'success')
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao excluir geração: {e}', 'danger')
+
+    return redirect(url_for('painel_inversores_usina', usina_id=usina.id, **request.args))
 
 @app.route('/usinas/<int:usina_id>/analise-diaria', methods=['GET', 'POST'], endpoint='analise_diaria')
 @login_required

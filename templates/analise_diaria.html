@@ -10,7 +10,10 @@
     <h2 class="mb-0 text-primary">Análise Diária – {{ usina.nome }}</h2>
     <div class="d-flex gap-2">
       <a class="btn btn-outline-secondary" href="{{ url_for('monitoramento_index') }}">← Voltar ao Monitoramento</a>
-      <a class="btn btn-outline-success" href="{{ url_for('cadastrar_inversor_usina', usina_id=usina.id) }}">Cadastrar Inversor</a>
+      <a class="btn btn-outline-success"
+        href="{{ url_for('cadastrar_inversor', usina_id=usina.id) }}">
+        Cadastrar Inversor
+      </a>
     </div>
   </div>
 

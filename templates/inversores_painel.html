@@ -1,0 +1,452 @@
+{% extends 'base.html' %}
+{% block title %}Painel de Inversores – {{ usina.nome }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4 mb-5">
+
+  <!-- Cabeçalho -->
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+      <h2 class="mb-0 text-primary">Painel de Inversores – {{ usina.nome }}</h2>
+      <div class="text-muted small">
+      </div>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary" href="{{ url_for('monitoramento_index') }}">
+        ← Voltar
+      </a>
+    </div>
+  </div>
+
+  <!-- Flash -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="mb-3">
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} mb-2">{{ message|safe }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <!-- ============================
+       INVERSORES CADASTRADOS
+       ============================ -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div>
+        <span class="fw-semibold">Inversores cadastrados</span>
+      </div>
+
+      <div class="d-flex gap-2">
+        <!-- Auto-vincular + criar faltantes no período -->
+        <form method="post"
+              action="{{ url_for('auto_vincular_por_sn_painel', usina_id=usina.id, **request.args) }}"
+              class="m-0">
+          <input type="hidden" name="data_ini" value="{{ data_ini.strftime('%Y-%m-%d') }}">
+          <input type="hidden" name="data_fim" value="{{ data_fim.strftime('%Y-%m-%d') }}">
+          <button class="btn btn-outline-success">
+            Auto-vincular por SN
+          </button>
+        </form>
+
+        <!-- Criar inversor no painel -->
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNovoInversor">
+          + Novo inversor
+        </button>
+      </div>
+    </div>
+
+    <div class="card-body p-0">
+      {% if inversores %}
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Serial (SN)</th>
+                <th>Nome</th>
+                <th>Potência (kW)</th>
+                <th>Status</th>
+                <th class="text-end">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for inv in inversores %}
+              <tr>
+                <td class="fw-semibold">{{ inv.inverter_sn }}</td>
+                <td>{{ inv.nome or '-' }}</td>
+                <td>
+                  {% if inv.potencia_kw is not none %}
+                    {{ '%.1f'|format(inv.potencia_kw)|replace('.', ',') }}
+                  {% else %}-{% endif %}
+                </td>
+                <td>
+                  {% if inv.ativo %}
+                    <span class="badge bg-success">Ativo</span>
+                  {% else %}
+                    <span class="badge bg-secondary">Inativo</span>
+                  {% endif %}
+                </td>
+                <td class="text-end">
+                  <button
+                    class="btn btn-sm btn-outline-primary"
+                    data-bs-toggle="modal"
+                    data-bs-target="#modalEditarInversor"
+                    data-inv-id="{{ inv.id }}"
+                    data-inv-sn="{{ inv.inverter_sn }}"
+                    data-inv-nome="{{ inv.nome or '' }}"
+                    data-inv-pot="{{ ('%.3f'|format(inv.potencia_kw)).replace('.', ',') if inv.potencia_kw is not none else '' }}"
+                    data-inv-ativo="{{ '1' if inv.ativo else '0' }}"
+                  >
+                    Editar
+                  </button>
+
+                  <form method="post"
+                        action="{{ url_for('excluir_inversor_usina_painel', usina_id=usina.id, inv_id=inv.id, **request.args) }}"
+                        class="d-inline"
+                        onsubmit="return confirm('Excluir o inversor {{ inv.inverter_sn }}?');">
+                    <button class="btn btn-sm btn-outline-danger">Excluir</button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="p-3 text-muted">Nenhum inversor cadastrado.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ============================
+       FILTROS DE GERAÇÕES
+       ============================ -->
+  <div class="card shadow-sm mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <span class="fw-semibold">Gerações dos inversores</span>
+    </div>
+
+    <div class="card-body">
+
+      <form method="get" class="row g-3 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label">Data inicial</label>
+          <input type="date" name="data_ini" class="form-control" value="{{ data_ini.strftime('%Y-%m-%d') }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Data final</label>
+          <input type="date" name="data_fim" class="form-control" value="{{ data_fim.strftime('%Y-%m-%d') }}">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Inversor</label>
+          <select name="inversor_id" class="form-select">
+            <option value="">Todos</option>
+            {% for inv in inversores %}
+              <option value="{{ inv.id }}" {% if inversor_id == inv.id %}selected{% endif %}>
+                {{ inv.nome or inv.inverter_sn }} ({{ inv.inverter_sn }})
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2 d-flex gap-2">
+          <button class="btn btn-primary w-100">Filtrar</button>
+          <a class="btn btn-outline-secondary w-100" href="{{ url_for('painel_inversores_usina', usina_id=usina.id) }}">Limpar</a>
+        </div>
+      </form>
+
+      <hr>
+
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div class="text-muted small">
+          Período: <b>{{ data_ini.strftime('%d/%m/%Y') }}</b> a <b>{{ data_fim.strftime('%d/%m/%Y') }}</b>
+          {% if inversor_id %} • filtro por inversor{% endif %}
+        </div>
+
+        <div class="d-flex gap-2 align-items-center">
+          <span class="badge bg-light text-dark border">
+            Soma Total: <b>{{ "{:,.2f}".format(soma_etoday).replace(",", "X").replace(".", ",").replace("X", ".") }}</b> kWh
+          </span>
+
+          <button class="btn btn-success"
+                  data-bs-toggle="modal"
+                  data-bs-target="#modalGeracao"
+                  data-mode="create"
+                  data-data="{{ data_ini.strftime('%Y-%m-%d') }}">
+            + Lançar geração
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================
+       TABELA DE GERAÇÕES
+       ============================ -->
+  <div class="card shadow-sm">
+    <div class="card-body p-0">
+      {% if geracoes %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Data</th>
+              <th>SN</th>
+              <th>Inversor</th>
+              <th class="text-end">Total (kWh)</th>
+              <th class="text-end">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for g in geracoes %}
+            <tr>
+              <td>{{ g.data.strftime('%d/%m/%Y') }}</td>
+              <td class="fw-semibold">{{ g.inverter_sn }}</td>
+              <td>
+                {% if g.inversor %}
+                  {{ g.inversor.nome or g.inversor.inverter_sn }}
+                {% else %}
+                  <span class="text-warning">Sem vínculo</span>
+                {% endif %}
+              </td>
+              <td class="text-end">{{ '%.2f'|format(g.etoday or 0)|replace('.', ',') }}</td>
+              <td class="text-end">
+                <button
+                  class="btn btn-sm btn-outline-primary"
+                  data-bs-toggle="modal"
+                  data-bs-target="#modalGeracao"
+                  data-mode="edit"
+                  data-geracao-id="{{ g.id }}"
+                  data-inversor-id="{{ g.inversor_id or '' }}"
+                  data-data="{{ g.data.strftime('%Y-%m-%d') }}"
+                  data-etoday="{{ ('%.1f'|format(g.etoday)).replace('.', ',') if g.etoday is not none else '' }}"
+                  data-etotal="{{ ('%.1f'|format(g.etotal)).replace('.', ',') if g.etotal is not none else '' }}"
+                >
+                  Editar
+                </button>
+
+                <form method="post"
+                      action="{{ url_for('excluir_geracao_inversor', usina_id=usina.id, geracao_id=g.id, **request.args) }}"
+                      class="d-inline"
+                      onsubmit="return confirm('Excluir geração de {{ g.data.strftime('%d/%m/%Y') }} do SN {{ g.inverter_sn }}?');">
+                  <button class="btn btn-sm btn-outline-danger">Excluir</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+        <div class="p-3 text-muted">Nenhuma geração no período selecionado.</div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<!-- ============================
+     MODAL: NOVO INVERSOR
+     ============================ -->
+<div class="modal fade" id="modalNovoInversor" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('criar_inversor_painel', usina_id=usina.id, **request.args) }}">
+        <div class="modal-header">
+          <h5 class="modal-title">Novo inversor</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Serial (SN) *</label>
+              <input class="form-control" name="inverter_sn" required placeholder="Ex.: 1016030232010033">
+            </div>
+            <div class="col-md-5">
+              <label class="form-label">Nome</label>
+              <input class="form-control" name="nome" placeholder="Ex.: Inversor 01 - Telhado A">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Potência (kW)</label>
+              <input class="form-control" name="potencia_kw" placeholder="Ex.: 5,000">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Ativo</label>
+              <select class="form-select" name="ativo">
+                <option value="1" selected>Ativo</option>
+                <option value="0">Inativo</option>
+              </select>
+            </div>
+            <div class="col-md-12">
+              <div class="alert alert-info mb-0 small">
+                Depois de criar, clique em <b>Auto-vincular por SN</b> para vincular gerações existentes e criar faltantes no período filtrado.
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancelar</button>
+          <button class="btn btn-success">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ============================
+     MODAL: EDITAR INVERSOR
+     ============================ -->
+<div class="modal fade" id="modalEditarInversor" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <form method="post" id="formEditarInversor">
+        <div class="modal-header">
+          <h5 class="modal-title">Editar inversor</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Serial (SN)</label>
+              <input type="text" class="form-control" id="inv_sn" disabled>
+              <div class="form-text">SN não editável aqui.</div>
+            </div>
+            <div class="col-md-5">
+              <label class="form-label">Nome</label>
+              <input type="text" class="form-control" name="nome" id="inv_nome">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Potência (kW)</label>
+              <input type="text" class="form-control" name="potencia_kw" id="inv_pot" placeholder="Ex.: 5,000">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Ativo</label>
+              <select class="form-select" name="ativo" id="inv_ativo">
+                <option value="1">Ativo</option>
+                <option value="0">Inativo</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancelar</button>
+          <button class="btn btn-primary">Salvar alterações</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ============================
+     MODAL: CRIAR/EDITAR GERAÇÃO
+     ============================ -->
+<div class="modal fade" id="modalGeracao" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <form method="post"
+            action="{{ url_for('salvar_geracao_inversor', usina_id=usina.id, **request.args) }}"
+            id="formGeracao">
+        <input type="hidden" name="geracao_id" id="geracao_id">
+        <div class="modal-header">
+          <h5 class="modal-title" id="geracaoModalTitle">Lançar geração</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Data</label>
+              <input type="date" class="form-control" name="data" id="g_data" required>
+            </div>
+
+            <div class="col-md-8">
+              <label class="form-label">Inversor</label>
+              <select class="form-select" name="inversor_id" id="g_inversor_id" required>
+                <option value="">Selecione...</option>
+                {% for inv in inversores %}
+                  <option value="{{ inv.id }}">
+                    {{ inv.nome or inv.inverter_sn }} ({{ inv.inverter_sn }})
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label">eToday (kWh)</label>
+              <input type="text" class="form-control" name="etoday" id="g_etoday" placeholder="Ex.: 12,345" required>
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label">eTotal (opcional)</label>
+              <input type="text" class="form-control" name="etotal" id="g_etotal" placeholder="Ex.: 12345,678">
+            </div>
+
+            <div class="col-md-12">
+              <div class="alert alert-info mb-0 small">
+                Dica: se já existir registro para <b>(inversor, data)</b>, o sistema atualiza (upsert).
+              </div>
+            </div>
+
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancelar</button>
+          <button class="btn btn-success" id="btnSalvarGeracao">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Modal: Editar inversor
+  const modalInv = document.getElementById('modalEditarInversor');
+  modalInv?.addEventListener('show.bs.modal', function (event) {
+    const btn = event.relatedTarget;
+    const invId = btn.getAttribute('data-inv-id');
+    const sn = btn.getAttribute('data-inv-sn');
+    const nome = btn.getAttribute('data-inv-nome') || '';
+    const pot = btn.getAttribute('data-inv-pot') || '';
+    const ativo = btn.getAttribute('data-inv-ativo') || '1';
+
+    document.getElementById('inv_sn').value = sn;
+    document.getElementById('inv_nome').value = nome;
+    document.getElementById('inv_pot').value = pot;
+    document.getElementById('inv_ativo').value = ativo;
+
+    const form = document.getElementById('formEditarInversor');
+    // monta /usinas/<usina_id>/inversores/<inv_id>/atualizar mantendo args
+    const base = "{{ url_for('atualizar_inversor_usina', usina_id=usina.id, inv_id=0) }}";
+    form.action = base.replace('/0/atualizar', '/' + invId + '/atualizar') + window.location.search;
+  });
+
+  // Modal: Criar/Editar geração
+  const modalG = document.getElementById('modalGeracao');
+  modalG?.addEventListener('show.bs.modal', function (event) {
+    const btn = event.relatedTarget;
+
+    const mode = btn.getAttribute('data-mode') || 'create';
+    const geracaoId = btn.getAttribute('data-geracao-id') || '';
+    const inversorId = btn.getAttribute('data-inversor-id') || '';
+    const dataVal = btn.getAttribute('data-data') || '';
+    const etoday = btn.getAttribute('data-etoday') || '';
+    const etotal = btn.getAttribute('data-etotal') || '';
+
+    document.getElementById('geracaoModalTitle').textContent = (mode === 'edit') ? 'Editar geração' : 'Lançar geração';
+    document.getElementById('btnSalvarGeracao').textContent = (mode === 'edit') ? 'Salvar alterações' : 'Salvar';
+
+    document.getElementById('geracao_id').value = (mode === 'edit') ? geracaoId : '';
+    document.getElementById('g_data').value = dataVal;
+    document.getElementById('g_etoday').value = etoday;
+    document.getElementById('g_etotal').value = etotal;
+
+    const selectInv = document.getElementById('g_inversor_id');
+    if (mode === 'edit') {
+      selectInv.value = inversorId;
+    } else {
+      const filtroAtual = "{{ inversor_id or '' }}";
+      if (filtroAtual) selectInv.value = filtroAtual;
+    }
+  });
+</script>
+{% endblock %}
