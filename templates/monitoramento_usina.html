@@ -29,10 +29,10 @@
     {% endif %}
   {% endwith %}
 
-  {# -------------------- FORM: dia da tela -------------------- #}
+  {# Filtro do dia #}
   <form class="row g-2 align-items-end mb-3" method="get" action="{{ url_for('monitoramento_usina', usina_id=usina.id) }}">
     <div class="col-auto">
-      <label class="form-label mb-1">Dia (tabela)</label>
+      <label class="form-label mb-1">Dia</label>
       <input type="date" name="data_tab" value="{{ data_tab_ref.strftime('%Y-%m-%d') }}" class="form-control">
     </div>
     <div class="col-auto d-flex gap-2">
@@ -41,7 +41,7 @@
     </div>
   </form>
 
-  {# -------------------- LINHA 1: CARDS DO TOPO -------------------- #}
+  {# Linha 1: Cards topo #}
   <div class="row g-3 mb-3">
 
     <div class="col-lg-6">
@@ -105,13 +105,16 @@
               </tbody>
             </table>
           </div>
+          <small class="text-muted d-block mt-2">
+            Performance = (Geração Total / Geração Esperada do dia). Perda = (Esperada - Real), quando Real &lt; Esperada.
+          </small>
         </div>
       </div>
     </div>
 
   </div>
 
-  {# -------------------- LINHA 2: TABELA + GRÁFICOS -------------------- #}
+  {# Linha 2: Tabela + Gráficos #}
   <div class="row g-3">
 
     <div class="col-lg-6">
@@ -131,14 +134,15 @@
                 </tr>
               </thead>
               <tbody>
-                {% set soma_pot = 0 %}
-                {% set soma_real = 0 %}
                 {% for r in resumo_inversores %}
-                  {% set soma_pot = soma_pot + (r.pot_kw or 0) %}
-                  {% set soma_real = soma_real + (r.real_kwh or 0) %}
                   <tr>
                     <td class="fw-semibold">
                       {{ r.nome or r.sn }}
+                      {% if r.observacoes %}
+                        <div class="small text-muted" style="max-width: 340px;">
+                          <span class="fw-semibold">Obs:</span> {{ r.observacoes }}
+                        </div>
+                      {% endif %}
                     </td>
                     <td class="text-end">{{ fmt(r.pot_kw, 2) }}</td>
                     <td class="text-end">{{ fmt(r.real_kwh, 2) }}</td>
@@ -153,9 +157,18 @@
                     </td>
                   </tr>
                 {% endfor %}
+                <tr class="fw-semibold">
+                  <td>TOTAL</td>
+                  <td class="text-end">{{ fmt(soma_pot, 2) }}</td>
+                  <td class="text-end">{{ fmt(soma_real, 2) }}</td>
+                  <td class="text-end">—</td>
+                  <td class="text-end">—</td>
+                  <td class="text-center">—</td>
+                </tr>
               </tbody>
             </table>
           </div>
+
         </div>
       </div>
     </div>
@@ -164,6 +177,7 @@
       <div class="card shadow-sm mb-3">
         <div class="card-header bg-primary text-white fw-semibold">ANÁLISE GERAÇÃO DO DIA</div>
         <div class="card-body">
+
           <div class="mb-3">
             <div class="fw-semibold">Por inversor</div>
             <canvas id="chartInv"></canvas>
@@ -185,9 +199,21 @@
                 <div class="small text-muted">Sem previsão cadastrada para o mês.</div>
               {% endif %}
 
+              {# Observações gerais do dia: concatena as observações dos inversores #}
+              {% set obs_list = [] %}
+              {% for r in resumo_inversores %}
+                {% if r.observacoes %}
+                  {% set _ = obs_list.append((r.nome or r.sn) ~ ': ' ~ r.observacoes) %}
+                {% endif %}
+              {% endfor %}
+
               <div class="mt-2 text-muted small">
                 Observações<br>
-                <span class="text-muted">N/A</span>
+                {% if obs_list|length > 0 %}
+                  <span class="text-muted">{{ obs_list|join(' • ') }}</span>
+                {% else %}
+                  <span class="text-muted">N/A</span>
+                {% endif %}
               </div>
             </div>
             <div class="col-md-6">
@@ -201,123 +227,50 @@
 
   </div>
 
-  {# -------------------- CADASTRO RÁPIDO + MONITORAMENTO (topo do seu print) -------------------- #}
-  <div class="row g-3 mt-1">
-    <div class="col-lg-12">
-      <div class="card shadow-sm mb-3">
-        <div class="card-header">Cadastro rápido de inversor</div>
-        <div class="card-body">
-          <form method="post" class="row g-3">
-            <input type="hidden" name="action" value="cad_inversor">
-            <input type="hidden" name="data_tab" value="{{ data_tab_ref.strftime('%Y-%m-%d') }}">
-
-            <div class="col-md-4">
-              <label class="form-label">Serial (SN) *</label>
-              <input type="text" name="inverter_sn" class="form-control" placeholder="Ex.: 1016030..." required>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Nome (opcional)</label>
-              <input type="text" name="nome" class="form-control" placeholder="Ex.: INV1">
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Potência (kW) (opcional)</label>
-              <input type="text" name="potencia_kw" class="form-control" placeholder="Ex.: 93,1">
-            </div>
-            <div class="col-12 d-flex justify-content-end">
-              <button class="btn btn-primary">Salvar inversor</button>
-            </div>
-          </form>
-        </div>
-      </div>
-
-      <div class="card shadow-sm">
-        <div class="card-header">Lançar monitoramento (1 por dia por inversor)</div>
-        <div class="card-body">
-          <form method="post" class="row g-3">
-            <input type="hidden" name="action" value="salvar_monitoramento">
-            <input type="hidden" name="data_tab" value="{{ data_tab_ref.strftime('%Y-%m-%d') }}">
-
-            <div class="col-md-3">
-              <label class="form-label">Data</label>
-              <input type="date" name="data" class="form-control" value="{{ data_tab_ref.strftime('%Y-%m-%d') }}">
-            </div>
-
-            <div class="col-md-4">
-              <label class="form-label">Inversor *</label>
-              <select name="inverter_sn" class="form-select" required>
-                <option value="">Selecione...</option>
-                {% for inv in inversores %}
-                  <option value="{{ inv.inverter_sn }}">{{ inv.inverter_sn }}{% if inv.nome %} – {{ inv.nome }}{% endif %}</option>
-                {% endfor %}
-              </select>
-            </div>
-
-            <div class="col-md-2">
-              <label class="form-label">eToday (kWh)</label>
-              <input type="text" name="etoday" class="form-control" placeholder="Ex.: 650,300">
-            </div>
-
-            <div class="col-md-1">
-              <label class="form-label d-block">Online</label>
-              <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" name="online">
-              </div>
-            </div>
-
-            <div class="col-md-2">
-              <label class="form-label d-block">Comunicando</label>
-              <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" name="comunicando">
-              </div>
-            </div>
-
-            <div class="col-12">
-              <label class="form-label">Mensagem (opcional)</label>
-              <input type="text" name="mensagem_erro" class="form-control" placeholder="Ex.: falha de comunicação / alarme / etc">
-            </div>
-
-            <div class="col-12 d-flex justify-content-end">
-              <button class="btn btn-primary">Salvar monitoramento</button>
-            </div>
-
-          </form>
-        </div>
-      </div>
-
-    </div>
-  </div>
-
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-  // --------- Gráfico por inversor (Real x Perda) ----------
+  // Gráfico por inversor (Real x Perda)
   const INV_LABELS = {{ chart_inv_labels|tojson }};
   const INV_REAL = {{ chart_inv_real|tojson }};
   const INV_PERDA = {{ chart_inv_perda|tojson }};
 
   new Chart(document.getElementById('chartInv'), {
-    type: 'bar',
-    data: {
-      labels: INV_LABELS,
-      datasets: [
-        { label: 'Geração Real (kWh)', data: INV_REAL },
-        { label: 'Perda (kWh)', data: INV_PERDA }
-      ]
-    },
-    options: {
-      indexAxis: 'y',
-      responsive: true,
-      plugins: {
-        legend: { position: 'top' }
+  type: 'bar',
+  data: {
+    labels: INV_LABELS,
+    datasets: [
+      {
+        label: 'Geração Real (kWh)',
+        data: INV_REAL,
+        stack: 'kwh'
       },
-      scales: {
-        x: { beginAtZero: true, title: { display: true, text: 'kWh' } }
+      {
+        label: 'Perda (kWh)',
+        data: INV_PERDA,
+        stack: 'kwh'
+      }
+    ]
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true,
+    plugins: { legend: { position: 'top' } },
+    scales: {
+      x: {
+        beginAtZero: true,
+        stacked: true,
+        title: { display: true, text: 'kWh' }
+      },
+      y: {
+        stacked: true
       }
     }
-  });
+  }
+});
 
-  // --------- Gráfico total (Real x Prevista) ----------
+  // Gráfico total (Real x Prevista)
   const TOTAL_LABELS = {{ chart_total_labels|tojson }};
   const TOTAL_VALUES = {{ chart_total_values|tojson }};
 
@@ -325,18 +278,12 @@
     type: 'bar',
     data: {
       labels: TOTAL_LABELS,
-      datasets: [
-        { label: 'kWh', data: TOTAL_VALUES }
-      ]
+      datasets: [{ label: 'kWh', data: TOTAL_VALUES }]
     },
     options: {
       responsive: true,
-      plugins: {
-        legend: { display: false }
-      },
-      scales: {
-        y: { beginAtZero: true }
-      }
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true } }
     }
   });
 </script>
