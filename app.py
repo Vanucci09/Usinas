@@ -8563,7 +8563,9 @@ def deye():
 def monitoramento_usina(usina_id):
     usina = Usina.query.get_or_404(usina_id)
 
-    # Helpers 
+    # ---------------------------
+    # Helpers
+    # ---------------------------
     def _parse_date(s, fallback=None):
         if not s:
             return fallback
@@ -8574,16 +8576,6 @@ def monitoramento_usina(usina_id):
 
     def _norm_sn_py(sn: str) -> str:
         return (sn or '').strip().upper().replace(' ', '').replace('-', '').replace('_', '')
-
-    def _norm_sn_sql(col):
-        # compatível com SQLite
-        return func.upper(
-            func.replace(
-                func.replace(
-                    func.replace(func.trim(col), ' ', ''),
-                '-', ''),
-            '_', '')
-        )
 
     # Dia selecionado
     data_tab_ref = _parse_date(request.args.get('data_tab'), date.today())
@@ -8602,15 +8594,19 @@ def monitoramento_usina(usina_id):
 
     max_pot = max((pot_por_sn.get(i.inverter_sn, 0.0) for i in inversores), default=0.0)
 
-    # Previsão do mês (para cards)
+    # ---------------------------
+    # PREVISÃO (mês/dia)
+    # ---------------------------
     prev_row = (PrevisaoMensal.query
                 .filter_by(usina_id=usina_id, ano=data_tab_ref.year, mes=data_tab_ref.month)
                 .first())
-    previsto_mensal = float(prev_row.previsao_kwh) if prev_row else 0.0
+    previsto_mensal = float(prev_row.previsao_kwh) if (prev_row and prev_row.previsao_kwh) else 0.0
     dias_mes = calendar.monthrange(data_tab_ref.year, data_tab_ref.month)[1]
     previsto_dia = (previsto_mensal / dias_mes) if dias_mes else 0.0
 
-    # Geração REAL do dia (geracoes_inversores)
+    # ---------------------------
+    # GERAÇÃO REAL DO DIA (por inversor)
+    # ---------------------------
     gi_dia_rows = (db.session.query(
                         GeracaoInversor.inverter_sn.label('sn'),
                         func.sum(GeracaoInversor.etoday).label('etoday_sum')
@@ -8630,7 +8626,9 @@ def monitoramento_usina(usina_id):
 
     geracao_total_dia = round(sum(real_por_sn.values()), 3)
 
-    # Último monitoramento do dia (observações)
+    # ---------------------------
+    # ÚLTIMO MONITORAMENTO DO DIA (observações)
+    # ---------------------------
     sub_last = (db.session.query(
                     Monitoramento.inverter_sn.label('sn'),
                     func.max(Monitoramento.id).label('max_id')
@@ -8651,7 +8649,9 @@ def monitoramento_usina(usina_id):
 
     mon_por_norm = {_norm_sn_py(r.inverter_sn): r for r in last_regs}
 
-    # Referência: MELHOR geração entre inversores de MAIOR potência
+    # ---------------------------
+    # REFERÊNCIA: melhor geração entre inversores de maior potência
+    # ---------------------------
     tol = 1e-6
     sn_max_pot = [
         inv.inverter_sn for inv in inversores
@@ -8663,7 +8663,9 @@ def monitoramento_usina(usina_id):
     else:
         ref_real = max((real_por_sn.get(inv.inverter_sn, 0.0) for inv in inversores), default=0.0)
 
-    # Tabela resumo
+    # ---------------------------
+    # TABELA RESUMO (dia)
+    # ---------------------------
     resumo_inversores = []
     soma_pot = 0.0
     soma_real = 0.0
@@ -8675,17 +8677,10 @@ def monitoramento_usina(usina_id):
         soma_pot += pot
         soma_real += real
 
-        # Ft. Capacidade = potência relativa ao maior
         ft_cap_pct = (pot / max_pot * 100.0) if max_pot > 0 else 0.0
-
-        # Esperado kWh do dia (para perda e regra dos 5% do status)
         esperado_kwh = (ref_real * (pot / max_pot)) if max_pot > 0 else 0.0
-
-        # - Se real == ref_real * (pot/max_pot) => operação == ft_cap_pct
         operacao_pct = (real / ref_real * 100.0) if ref_real > 0 else 0.0
 
-        # Status verde se estiver >= 95% do "esperado" (baseado na potência)
-        # (equivalente a: operacao >= 0.95 * ft_cap_pct)
         status_ok = (real >= 0.95 * esperado_kwh) if esperado_kwh > 0 else (real > 0)
 
         mon = mon_por_norm.get(_norm_sn_py(sn))
@@ -8697,32 +8692,158 @@ def monitoramento_usina(usina_id):
             "pot_kw": pot,
             "real_kwh": real,
             "esperado_kwh": esperado_kwh,
-            "perda_kwh": max(esperado_kwh - real, 0.0), 
+            "perda_kwh": max(esperado_kwh - real, 0.0),
             "operacao_pct": operacao_pct,
             "ft_cap_pct": ft_cap_pct,
             "status_ok": status_ok,
             "observacoes": obs
         })
 
-    # Ordena por geração real desc
     resumo_inversores.sort(key=lambda x: x["real_kwh"], reverse=True)
 
-    # Resumo executivo 
+    # ---------------------------
+    # RESUMO EXECUTIVO (dia)
+    # ---------------------------
     performance_pct = (geracao_total_dia / previsto_dia * 100.0) if previsto_dia > 0 else 0.0
-    perda_kwh_total = max(previsto_dia - geracao_total_dia, 0.0) 
+    perda_kwh_total = max(previsto_dia - geracao_total_dia, 0.0)
     perda_pct = (perda_kwh_total / previsto_dia * 100.0) if previsto_dia > 0 else 0.0
-
     status_usina_ok = all(x["status_ok"] for x in resumo_inversores) if resumo_inversores else True
 
-    # Charts 
+    # ---------------------------
+    # CHARTS DO DIA (já existiam)
+    # ---------------------------
     chart_inv_labels = [(x["nome"] or x["sn"]) for x in resumo_inversores]
     chart_inv_real = [round(x["real_kwh"], 3) for x in resumo_inversores]
-
-    # Perda em vermelho: o que deixou de ser gerado no dia (esperado - real)
     chart_inv_perda = [round(x["perda_kwh"], 3) for x in resumo_inversores]
 
     chart_total_labels = ["Geração Total (kWh)", "Geração Prevista (kWh)"]
     chart_total_values = [round(geracao_total_dia, 3), round(previsto_dia, 3)]
+
+    # ==========================================================
+    # SÉRIES POR INVERSOR (MÊS e ÚLTIMOS 7 DIAS) COM SELEÇÃO
+    # ==========================================================
+    def _previsto_dia_total(d: date) -> float:
+        row = (PrevisaoMensal.query
+               .filter_by(usina_id=usina_id, ano=d.year, mes=d.month)
+               .first())
+        if not row or not row.previsao_kwh:
+            return 0.0
+        dm = calendar.monthrange(d.year, d.month)[1]
+        return float(row.previsao_kwh) / dm if dm else 0.0
+
+    # label e potência por SN normalizado
+    sn_to_label = {}
+    sn_to_pot = {}
+    for inv in inversores:
+        snn = _norm_sn_py(inv.inverter_sn)
+        sn_to_label[snn] = (inv.nome or inv.inverter_sn)
+        sn_to_pot[snn] = float(pot_por_sn.get(inv.inverter_sn, 0.0) or 0.0)
+
+    soma_pot_total = sum(sn_to_pot.values()) or 0.0
+
+    # --------- MÊS (diário) ----------
+    data_ini_mes = date(data_tab_ref.year, data_tab_ref.month, 1)
+    data_fim_mes = date(data_tab_ref.year, data_tab_ref.month,
+                        calendar.monthrange(data_tab_ref.year, data_tab_ref.month)[1])
+    dias_mes_lista = [date(data_ini_mes.year, data_ini_mes.month, d)
+                      for d in range(1, data_fim_mes.day + 1)]
+    chart_mes_labels = [d.strftime("%d/%m") for d in dias_mes_lista]
+
+    gi_mes_rows = (db.session.query(
+                        GeracaoInversor.data.label("d"),
+                        GeracaoInversor.inverter_sn.label("sn"),
+                        func.sum(GeracaoInversor.etoday).label("kwh")
+                   )
+                   .filter(GeracaoInversor.usina_id == usina_id,
+                           GeracaoInversor.data >= data_ini_mes,
+                           GeracaoInversor.data <= data_fim_mes)
+                   .group_by(GeracaoInversor.data, GeracaoInversor.inverter_sn)
+                   .all())
+
+    real_mes_map = defaultdict(float)
+    for r in gi_mes_rows:
+        if not r.sn:
+            continue
+        real_mes_map[(r.d, _norm_sn_py(r.sn))] += float(r.kwh or 0.0)
+
+    series_mes_por_inv = {}
+    for snn, label in sn_to_label.items():
+        pot = sn_to_pot.get(snn, 0.0)
+        prev_share = (pot / soma_pot_total) if soma_pot_total > 0 else 0.0
+
+        real_arr = []
+        prev_arr = []
+        for d in dias_mes_lista:
+            real_arr.append(round(real_mes_map.get((d, snn), 0.0), 3))
+            prev_arr.append(round(_previsto_dia_total(d) * prev_share, 3))
+
+        series_mes_por_inv[label] = {"real": real_arr, "prev": prev_arr}
+
+    # --------- ÚLTIMOS 7 DIAS ----------
+    dias_7 = [data_tab_ref - timedelta(days=i) for i in range(6, -1, -1)]
+    chart_7d_labels = [d.strftime("%d/%m") for d in dias_7]
+
+    gi_7_rows_inv = (db.session.query(
+                        GeracaoInversor.data.label("d"),
+                        GeracaoInversor.inverter_sn.label("sn"),
+                        func.sum(GeracaoInversor.etoday).label("kwh")
+                     )
+                     .filter(GeracaoInversor.usina_id == usina_id,
+                             GeracaoInversor.data >= dias_7[0],
+                             GeracaoInversor.data <= dias_7[-1])
+                     .group_by(GeracaoInversor.data, GeracaoInversor.inverter_sn)
+                     .all())
+
+    real_7_map = defaultdict(float)
+    for r in gi_7_rows_inv:
+        if not r.sn:
+            continue
+        real_7_map[(r.d, _norm_sn_py(r.sn))] += float(r.kwh or 0.0)
+
+    series_7d_por_inv = {}
+    for snn, label in sn_to_label.items():
+        pot = sn_to_pot.get(snn, 0.0)
+        prev_share = (pot / soma_pot_total) if soma_pot_total > 0 else 0.0
+
+        real_arr = []
+        prev_arr = []
+        for d in dias_7:
+            real_arr.append(round(real_7_map.get((d, snn), 0.0), 3))
+            prev_arr.append(round(_previsto_dia_total(d) * prev_share, 3))
+
+        series_7d_por_inv[label] = {"real": real_arr, "prev": prev_arr}
+
+    # seleção padrão: TOP 3 por geração no mês
+    top_mes = sorted(
+        ((label, sum(v["real"])) for label, v in series_mes_por_inv.items()),
+        key=lambda x: x[1], reverse=True
+    )
+    default_selected_invs = [x[0] for x in top_mes[:3]]
+
+    # ==========================================================
+    # RANKINGS DO MÊS (Yield e Geração) – usa o total do mês por inversor
+    # ==========================================================
+    # total mensal por inversor (kWh)
+    kwh_mes_por_label = {label: sum(v["real"]) for label, v in series_mes_por_inv.items()}
+
+    # ranking geração
+    rank_ger = sorted(kwh_mes_por_label.items(), key=lambda x: x[1], reverse=True)
+
+    chart_rank_ger_labels = [name for name, _ in rank_ger]
+    chart_rank_ger_values = [round(val, 2) for _, val in rank_ger]
+
+    # ranking yield (kWh / kW)
+    yield_list = []
+    for inv in inversores:
+        label = inv.nome or inv.inverter_sn
+        pot = float(inv.potencia_kw or 0.0)
+        kwh = float(kwh_mes_por_label.get(label, 0.0) or 0.0)
+        yld = (kwh / pot) if pot > 0 else 0.0
+        yield_list.append((label, yld))
+
+    yield_list.sort(key=lambda x: x[1], reverse=True)
+    chart_rank_yield_labels = [name for name, _ in yield_list]
+    chart_rank_yield_values = [round(val, 2) for _, val in yield_list]
 
     return render_template(
         'monitoramento_usina.html',
@@ -8743,7 +8864,20 @@ def monitoramento_usina(usina_id):
         chart_inv_real=chart_inv_real,
         chart_inv_perda=chart_inv_perda,
         chart_total_labels=chart_total_labels,
-        chart_total_values=chart_total_values
+        chart_total_values=chart_total_values,
+
+        # seleção + séries por inversor
+        chart_mes_labels=chart_mes_labels,
+        series_mes_por_inv=series_mes_por_inv,
+        chart_7d_labels=chart_7d_labels,
+        series_7d_por_inv=series_7d_por_inv,
+        default_selected_invs=default_selected_invs,
+
+        # rankings
+        chart_rank_yield_labels=chart_rank_yield_labels,
+        chart_rank_yield_values=chart_rank_yield_values,
+        chart_rank_ger_labels=chart_rank_ger_labels,
+        chart_rank_ger_values=chart_rank_ger_values
     )
     
 @app.route('/monitoramento')

@@ -60,7 +60,7 @@
               <tbody>
                 <tr>
                   <td class="fw-semibold">{{ data_tab_ref.strftime('%d/%m/%Y') }}</td>
-                  <td>{{ data_tab_ref.month }}</td>
+                  <td>{{ "%02d"|format(data_tab_ref.month) }}/{{ data_tab_ref.year }}</td>
                   <td class="fw-semibold">{{ fmt(previsto_dia, 2) }}</td>
                 </tr>
               </tbody>
@@ -174,6 +174,7 @@
     </div>
 
     <div class="col-lg-6">
+
       <div class="card shadow-sm mb-3">
         <div class="card-header bg-primary text-white fw-semibold">ANÁLISE GERAÇÃO DO DIA</div>
         <div class="card-body">
@@ -199,7 +200,6 @@
                 <div class="small text-muted">Sem previsão cadastrada para o mês.</div>
               {% endif %}
 
-              {# Observações gerais do dia: concatena as observações dos inversores #}
               {% set obs_list = [] %}
               {% for r in resumo_inversores %}
                 {% if r.observacoes %}
@@ -223,6 +223,96 @@
 
         </div>
       </div>
+
+      {# =========================================================
+         NOVO: Gráficos por INVERSOR com seleção múltipla
+         ========================================================= #}
+      <div class="card shadow-sm mb-3">
+        <div class="card-header bg-primary text-white fw-semibold">
+          ANÁLISE POR INVERSOR (Selecione 1 ou mais)
+        </div>
+
+        <div class="card-body">
+
+          <div class="row g-2 align-items-end mb-3">
+            <div class="col-md-8">
+              <label class="form-label mb-1 fw-semibold">Inversores</label>
+
+              <select id="invSelect" class="form-select" multiple size="6">
+                {% for label in series_mes_por_inv.keys()|list|sort %}
+                  <option value="{{ label }}"
+                    {% if default_selected_invs is defined and label in default_selected_invs %}selected{% endif %}
+                  >
+                    {{ label }}
+                  </option>
+                {% endfor %}
+              </select>
+
+              <div class="text-muted small mt-1">
+                Dica: segure <b>Ctrl</b> (Windows) para selecionar vários.
+              </div>
+            </div>
+
+            <div class="col-md-4 d-flex gap-2">
+              <button type="button" class="btn btn-outline-primary w-50" id="btnSelAll">Selecionar todos</button>
+              <button type="button" class="btn btn-outline-secondary w-50" id="btnClear">Limpar</button>
+            </div>
+          </div>
+
+          <div class="border rounded p-3 mb-3">
+            <div class="fw-semibold mb-2">Produção Acumulada do Mês — Real x Previsto (por inversor)</div>
+            <div style="height: 340px;">
+              <canvas id="chartAcumInv"></canvas>
+            </div>
+            <small class="text-muted d-block mt-2">
+              Previsto por inversor distribuído proporcionalmente à potência (kW) do inversor.
+            </small>
+          </div>
+
+          <div class="border rounded p-3">
+            <div class="fw-semibold mb-2">Últimos 7 dias — Real x Previsto (por inversor)</div>
+            <div style="height: 320px;">
+              <canvas id="chart7dInv"></canvas>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      {# ================================
+         RANKINGS (ajustado)
+         ================================ #}
+      <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white fw-semibold">
+          RANKINGS DO MÊS ({{ "%02d"|format(data_tab_ref.month) }}/{{ data_tab_ref.year }})
+        </div>
+        <div class="card-body">
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="fw-semibold mb-2">Ranking por Yield Mensal (kWh/kWp)</div>
+              <div style="height: 380px;">
+                <canvas id="chartRankYield"></canvas>
+              </div>
+              <small class="text-muted d-block mt-2">
+                Yield mensal = kWh do mês / potência (kWp) do inversor.
+              </small>
+            </div>
+
+            <div class="col-md-6">
+              <div class="fw-semibold mb-2">Ranking por Geração Mensal (kWh)</div>
+              <div style="height: 380px;">
+                <canvas id="chartRankGeracao"></canvas>
+              </div>
+              <small class="text-muted d-block mt-2">
+                Ordenado do inversor com maior geração no mês para o menor.
+              </small>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
     </div>
 
   </div>
@@ -231,46 +321,32 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-  // Gráfico por inversor (Real x Perda)
+  // DIA - Real x Perda por inversor
   const INV_LABELS = {{ chart_inv_labels|tojson }};
   const INV_REAL = {{ chart_inv_real|tojson }};
   const INV_PERDA = {{ chart_inv_perda|tojson }};
 
   new Chart(document.getElementById('chartInv'), {
-  type: 'bar',
-  data: {
-    labels: INV_LABELS,
-    datasets: [
-      {
-        label: 'Geração Real (kWh)',
-        data: INV_REAL,
-        stack: 'kwh'
-      },
-      {
-        label: 'Perda (kWh)',
-        data: INV_PERDA,
-        stack: 'kwh'
-      }
-    ]
-  },
-  options: {
-    indexAxis: 'y',
-    responsive: true,
-    plugins: { legend: { position: 'top' } },
-    scales: {
-      x: {
-        beginAtZero: true,
-        stacked: true,
-        title: { display: true, text: 'kWh' }
-      },
-      y: {
-        stacked: true
+    type: 'bar',
+    data: {
+      labels: INV_LABELS,
+      datasets: [
+        { label: 'Geração Real (kWh)', data: INV_REAL, stack: 'kwh' },
+        { label: 'Perda (kWh)', data: INV_PERDA, stack: 'kwh' }
+      ]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      plugins: { legend: { position: 'top' } },
+      scales: {
+        x: { beginAtZero: true, stacked: true, title: { display: true, text: 'kWh' } },
+        y: { stacked: true }
       }
     }
-  }
-});
+  });
 
-  // Gráfico total (Real x Prevista)
+  // DIA - Total Real x Previsto
   const TOTAL_LABELS = {{ chart_total_labels|tojson }};
   const TOTAL_VALUES = {{ chart_total_values|tojson }};
 
@@ -286,5 +362,151 @@
       scales: { y: { beginAtZero: true } }
     }
   });
+
+  // =====================================================
+  // NOVO: GRÁFICOS POR INVERSOR (MÊS acumulado e 7 dias)
+  // =====================================================
+  const MES_LABELS = {{ chart_mes_labels|default([])|tojson }};
+  const SERIES_MES = {{ series_mes_por_inv|default({})|tojson }};
+
+  const D7_LABELS  = {{ chart_7d_labels|default([])|tojson }};
+  const SERIES_7D  = {{ series_7d_por_inv|default({})|tojson }};
+
+  function getSelectedInverters() {
+    const sel = document.getElementById('invSelect');
+    return Array.from(sel.selectedOptions).map(o => o.value);
+  }
+
+  function cumulative(arr) {
+    let s = 0;
+    return arr.map(v => (s += (Number(v) || 0)));
+  }
+
+  function buildDatasets(selected, seriesMap, mode) {
+    const datasets = [];
+    selected.forEach((label) => {
+      const obj = seriesMap[label];
+      if (!obj) return;
+
+      const real = (mode === 'cum') ? cumulative(obj.real) : obj.real;
+      const prev = (mode === 'cum') ? cumulative(obj.prev) : obj.prev;
+
+      datasets.push({
+        label: `${label} — Real`,
+        data: real,
+        tension: 0.25,
+        borderWidth: 2,
+        pointRadius: 2
+      });
+
+      datasets.push({
+        label: `${label} — Prev`,
+        data: prev,
+        tension: 0.25,
+        borderWidth: 2,
+        borderDash: [6, 6],
+        pointRadius: 0
+      });
+    });
+    return datasets;
+  }
+
+  let chartAcumInv = null;
+  let chart7dInv = null;
+
+  function renderChartsInv() {
+    const selected = getSelectedInverters();
+
+    const acumDatasets = buildDatasets(selected, SERIES_MES, 'cum');
+    const d7Datasets   = buildDatasets(selected, SERIES_7D, 'daily');
+
+    if (chartAcumInv) chartAcumInv.destroy();
+    chartAcumInv = new Chart(document.getElementById('chartAcumInv'), {
+      type: 'line',
+      data: { labels: MES_LABELS, datasets: acumDatasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top' },
+          tooltip: { mode: 'index', intersect: false }
+        },
+        interaction: { mode: 'index', intersect: false },
+        scales: { y: { beginAtZero: true } }
+      }
+    });
+
+    if (chart7dInv) chart7dInv.destroy();
+    chart7dInv = new Chart(document.getElementById('chart7dInv'), {
+      type: 'line',
+      data: { labels: D7_LABELS, datasets: d7Datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top' },
+          tooltip: { mode: 'index', intersect: false }
+        },
+        interaction: { mode: 'index', intersect: false },
+        scales: { y: { beginAtZero: true } }
+      }
+    });
+  }
+
+  document.getElementById('invSelect').addEventListener('change', renderChartsInv);
+
+  document.getElementById('btnSelAll').addEventListener('click', () => {
+    const sel = document.getElementById('invSelect');
+    Array.from(sel.options).forEach(o => o.selected = true);
+    renderChartsInv();
+  });
+
+  document.getElementById('btnClear').addEventListener('click', () => {
+    const sel = document.getElementById('invSelect');
+    Array.from(sel.options).forEach(o => o.selected = false);
+    renderChartsInv();
+  });
+
+  renderChartsInv();
+
+  // ==========================
+  // Rankings (Yield e Geração)
+  // ==========================
+  const RANK_YIELD_LABELS = {{ chart_rank_yield_labels|default([])|tojson }};
+  const RANK_YIELD_VALUES = {{ chart_rank_yield_values|default([])|tojson }};
+
+  const RANK_GER_LABELS = {{ chart_rank_ger_labels|default([])|tojson }};
+  const RANK_GER_VALUES = {{ chart_rank_ger_values|default([])|tojson }};
+
+  new Chart(document.getElementById('chartRankYield'), {
+    type: 'bar',
+    data: { labels: RANK_YIELD_LABELS, datasets: [{ label: 'kWh/kWp', data: RANK_YIELD_VALUES }] },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { beginAtZero: true, title: { display: true, text: 'kWh/kWp' } },
+        y: { ticks: { autoSkip: false, font: { size: 12 } } }
+      }
+    }
+  });
+
+  new Chart(document.getElementById('chartRankGeracao'), {
+    type: 'bar',
+    data: { labels: RANK_GER_LABELS, datasets: [{ label: 'kWh', data: RANK_GER_VALUES }] },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { beginAtZero: true, title: { display: true, text: 'kWh' } },
+        y: { ticks: { autoSkip: false, font: { size: 12 } } }
+      }
+    }
+  });
+
 </script>
 {% endblock %}
