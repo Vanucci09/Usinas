@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+
+{% block title %}Comercial{% endblock %}
+
+{% block content %}
+<div class="container mt-5 mb-5 p-4 bg-white shadow rounded">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="text-primary">Equipes Comerciais</h2>
+        <div>
+            <a href="{{ url_for('index') }}?aba=comercial" class="btn btn-secondary">Voltar</a>
+            <a href="{{ url_for('cadastrar_comercial') }}" class="btn btn-success">
+                <i class="bi bi-plus-circle"></i> Novo Comercial
+            </a>
+        </div>
+    </div>
+
+    <form method="GET" class="row g-3 mb-4">
+        <div class="col-md-4">
+            <label class="form-label">Empresa</label>
+            <select name="empresa_id" class="form-select">
+                <option value="">Todas</option>
+                {% for empresa in empresas %}
+                    <option value="{{ empresa.id }}" {% if empresa_id == empresa.id %}selected{% endif %}>
+                        {{ empresa.nome }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="col-md-4">
+            <label class="form-label">Situação</label>
+            <select name="ativo" class="form-select">
+                <option value="">Todos</option>
+                <option value="1" {% if ativo == '1' %}selected{% endif %}>Ativo</option>
+                <option value="0" {% if ativo == '0' %}selected{% endif %}>Inativo</option>
+            </select>
+        </div>
+
+        <div class="col-md-4">
+            <label class="form-label">Busca</label>
+            <input type="text" name="busca" class="form-control" value="{{ busca }}" placeholder="Nome ou descrição">
+        </div>
+
+        <div class="col-12 d-flex gap-2">
+            <button type="submit" class="btn btn-primary">Filtrar</button>
+            <a href="{{ url_for('listar_comerciais') }}" class="btn btn-outline-secondary">Limpar</a>
+        </div>
+    </form>
+
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>ID</th>
+                    <th>Empresa</th>
+                    <th>Nome</th>
+                    <th>Descrição</th>
+                    <th>Status</th>
+                    <th width="220">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for comercial in comerciais %}
+                <tr>
+                    <td>{{ comercial.id }}</td>
+                    <td>{{ comercial.empresa.nome }}</td>
+                    <td>{{ comercial.nome }}</td>
+                    <td>{{ comercial.descricao or '-' }}</td>
+                    <td>
+                        {% if comercial.ativo %}
+                            <span class="badge bg-success">Ativo</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Inativo</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('visualizar_comercial', comercial_id=comercial.id) }}" class="btn btn-sm btn-outline-info">Ver</a>
+                        <a href="{{ url_for('editar_comercial', comercial_id=comercial.id) }}" class="btn btn-sm btn-outline-primary">Editar</a>
+                        <form method="POST" action="{{ url_for('excluir_comercial', comercial_id=comercial.id) }}" class="d-inline" onsubmit="return confirm('Deseja excluir este comercial?');">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Excluir</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted">Nenhum registro encontrado.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -114,6 +114,41 @@
         </div>
         </div>
 
+        <!-- Comercial -->
+        <div class="accordion-item">
+            <h2 class="accordion-header" id="headingComercial">
+                <button
+                class="accordion-button {% if request.args.get('aba') == 'comercial' %}{% else %}collapsed{% endif %}"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#collapseComercial"
+                aria-expanded="{% if request.args.get('aba') == 'comercial' %}true{% else %}false{% endif %}"
+                aria-controls="collapseComercial">
+                🛒 Comercial
+                </button>
+            </h2>
+
+            <div id="collapseComercial"
+                class="accordion-collapse collapse {% if request.args.get('aba') == 'comercial' %}show{% endif %}"
+                aria-labelledby="headingComercial"
+                data-bs-parent="#accordionGrupos">
+                <div class="accordion-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <a href="{{ url_for('listar_comerciais') }}" class="btn btn-outline-primary w-100">
+                                Equipes Comerciais
+                            </a>
+                        </div>
+                        <div class="col-md-4">
+                            <a href="{{ url_for('listar_vendedores') }}" class="btn btn-outline-primary w-100">
+                                Vendedores
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Consórcios -->
         <div class="accordion-item">
             <h2 class="accordion-header" id="headingConsorcios">

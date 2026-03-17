@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+
+{% block title %}Visualizar Vendedor{% endblock %}
+
+{% block content %}
+<div class="container mt-5 mb-5">
+    <div class="card shadow rounded p-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h3 class="text-primary mb-0">Detalhes do Vendedor</h3>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('editar_vendedor', vendedor_id=vendedor.id) }}" class="btn btn-primary">Editar</a>
+                <a href="{{ url_for('listar_vendedores') }}" class="btn btn-secondary">Voltar</a>
+            </div>
+        </div>
+
+        <div class="row g-3">
+            <div class="col-md-6"><strong>ID:</strong> {{ vendedor.id }}</div>
+            <div class="col-md-6"><strong>Empresa:</strong> {{ vendedor.empresa.nome }}</div>
+            <div class="col-md-6"><strong>Comercial:</strong> {{ vendedor.comercial.nome if vendedor.comercial else '-' }}</div>
+            <div class="col-md-6"><strong>Nome:</strong> {{ vendedor.nome }}</div>
+            <div class="col-md-6"><strong>Telefone:</strong> {{ vendedor.telefone or '-' }}</div>
+            <div class="col-md-6"><strong>Email:</strong> {{ vendedor.email or '-' }}</div>
+            <div class="col-md-6"><strong>CPF:</strong> {{ vendedor.cpf or '-' }}</div>
+            <div class="col-md-6"><strong>Comissão:</strong> {{ vendedor.comissao_percentual or 0 }}%</div>
+            <div class="col-md-6">
+                <strong>Status:</strong>
+                {% if vendedor.ativo %}
+                    <span class="badge bg-success">Ativo</span>
+                {% else %}
+                    <span class="badge bg-secondary">Inativo</span>
+                {% endif %}
+            </div>
+            <div class="col-12"><strong>Observações:</strong> {{ vendedor.observacoes or '-' }}</div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -455,6 +455,9 @@ class Empresa(db.Model):
     caixas = db.relationship('CaixaBanco', backref='empresa', cascade="all, delete-orphan")
     clientes_operacionais = db.relationship('ClienteOperacional', backref='empresa', cascade="all, delete-orphan")
     centros_custos = db.relationship('CentroCusto', backref='empresa', cascade="all, delete-orphan")
+    
+    comerciais = db.relationship('Comercial', backref='empresa', cascade="all, delete-orphan")
+    vendedores = db.relationship('Vendedor', backref='empresa', cascade="all, delete-orphan")
 
 class FinanceiroEmpresa(db.Model):
     __tablename__ = 'financeiro_empresa'
@@ -542,7 +545,6 @@ class ClienteOperacional(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     empresa_id = db.Column(db.Integer, db.ForeignKey('empresas.id'), nullable=False)
-
     nome = db.Column(db.String(255), nullable=False)
     cpf_cnpj = db.Column(db.String(20), nullable=True)  # pode ser único por empresa, ver constraint abaixo
     endereco = db.Column(db.String(255), nullable=True)
@@ -602,6 +604,43 @@ class PlanoFinanceiro(db.Model):
     ativo = db.Column(db.Boolean, nullable=False, default=True)
     criado_em = db.Column(db.DateTime(timezone=True), server_default=func.now())
     atualizado_em = db.Column(db.DateTime(timezone=True), onupdate=func.now())
+    
+class Comercial(db.Model):
+    __tablename__ = 'comercial'
+
+    id = db.Column(db.Integer, primary_key=True)
+    empresa_id = db.Column(db.Integer, db.ForeignKey('empresas.id'), nullable=False)
+    nome = db.Column(db.String(150), nullable=False)
+    descricao = db.Column(db.String(255), nullable=True)
+    ativo = db.Column(db.Boolean, default=True, nullable=False)
+    criado_em = db.Column(db.DateTime, server_default=db.func.now())
+
+    # Relacionamentos
+    vendedores = db.relationship(
+        'Vendedor',
+        backref='comercial',
+        lazy=True,
+        cascade='all, delete-orphan'
+    )
+
+
+class Vendedor(db.Model):
+    __tablename__ = 'vendedores'
+
+    id = db.Column(db.Integer, primary_key=True)
+    empresa_id = db.Column(db.Integer, db.ForeignKey('empresas.id'), nullable=False)
+    comercial_id = db.Column(db.Integer, db.ForeignKey('comercial.id'), nullable=True)
+    nome = db.Column(db.String(150), nullable=False)
+    telefone = db.Column(db.String(30), nullable=True)
+    email = db.Column(db.String(120), nullable=True)
+    cpf = db.Column(db.String(20), nullable=True, unique=False)
+    comissao_percentual = db.Column(db.Numeric(10, 2), nullable=True, default=0)
+    ativo = db.Column(db.Boolean, default=True, nullable=False)
+    observacoes = db.Column(db.Text, nullable=True)
+    criado_em = db.Column(db.DateTime, server_default=db.func.now())
+
+    def __repr__(self):
+        return f'<Vendedor {self.nome}>'
     
 class Usuario(db.Model, UserMixin):
     __tablename__ = 'usuarios'
@@ -8473,7 +8512,6 @@ def listar_injecoes_mensais():
         ano=ano,
     )
 
-
 @app.route("/injecoes_mensais/<int:item_id>/editar", methods=["GET", "POST"])
 @login_required
 def editar_injecao_mensal(item_id):
@@ -8526,7 +8564,7 @@ def excluir_injecao_mensal(item_id):
     
 @app.route("/deye")
 def deye():
-    # --- Config ---
+    # Config
     URL_BASE = "https://us1-developer.deyecloud.com"
     APP_ID   = os.getenv("DEYE_APP_ID", "202507084069006")
     APP_CHAVE = os.getenv("DEYE_APP_SECRET", "c5e239738a63d1c614e6603f8246a66b")
@@ -8536,12 +8574,12 @@ def deye():
     def sha256_texto(txt: str) -> str:
         return hashlib.sha256(txt.encode("utf-8")).hexdigest()
 
-    # --- Token pessoal ---
+    # Token pessoal
     corpo = {"appSecret": APP_CHAVE, "email": USUARIO, "password": sha256_texto(SENHA)}
     resp = requests.post(f"{URL_BASE}/v1.0/account/token?appId={APP_ID}", json=corpo, timeout=30).json()
     token = resp.get("accessToken")
 
-    # --- Buscar ID da empresa (se existir) ---
+    # Buscar ID da empresa (se existir)
     info = requests.post(f"{URL_BASE}/v1.0/account/info", json={}, headers={"Authorization": f"bearer {token}"}, timeout=30).json()
     orgs = info.get("orgInfoList") or []
     if orgs:
@@ -8550,7 +8588,7 @@ def deye():
         resp = requests.post(f"{URL_BASE}/v1.0/account/token?appId={APP_ID}", json=corpo, timeout=30).json()
         token = resp.get("accessToken")
 
-    # --- Listar estações ---
+    # Listar estações
     dados = requests.post(f"{URL_BASE}/v1.0/station/list",
                           json={"page": 1, "size": 20},
                           headers={"Authorization": f"bearer {token}"}, timeout=30).json()
@@ -8563,9 +8601,7 @@ def deye():
 def monitoramento_usina(usina_id):
     usina = Usina.query.get_or_404(usina_id)
 
-    # ---------------------------
     # Helpers
-    # ---------------------------
     def _parse_date(s, fallback=None):
         if not s:
             return fallback
@@ -8594,9 +8630,7 @@ def monitoramento_usina(usina_id):
 
     max_pot = max((pot_por_sn.get(i.inverter_sn, 0.0) for i in inversores), default=0.0)
 
-    # ---------------------------
     # PREVISÃO (mês/dia)
-    # ---------------------------
     prev_row = (PrevisaoMensal.query
                 .filter_by(usina_id=usina_id, ano=data_tab_ref.year, mes=data_tab_ref.month)
                 .first())
@@ -8604,9 +8638,7 @@ def monitoramento_usina(usina_id):
     dias_mes = calendar.monthrange(data_tab_ref.year, data_tab_ref.month)[1]
     previsto_dia = (previsto_mensal / dias_mes) if dias_mes else 0.0
 
-    # ---------------------------
     # GERAÇÃO REAL DO DIA (por inversor)
-    # ---------------------------
     gi_dia_rows = (db.session.query(
                         GeracaoInversor.inverter_sn.label('sn'),
                         func.sum(GeracaoInversor.etoday).label('etoday_sum')
@@ -8626,9 +8658,7 @@ def monitoramento_usina(usina_id):
 
     geracao_total_dia = round(sum(real_por_sn.values()), 3)
 
-    # ---------------------------
     # ÚLTIMO MONITORAMENTO DO DIA (observações)
-    # ---------------------------
     sub_last = (db.session.query(
                     Monitoramento.inverter_sn.label('sn'),
                     func.max(Monitoramento.id).label('max_id')
@@ -8649,9 +8679,7 @@ def monitoramento_usina(usina_id):
 
     mon_por_norm = {_norm_sn_py(r.inverter_sn): r for r in last_regs}
 
-    # ---------------------------
     # REFERÊNCIA: melhor geração entre inversores de maior potência
-    # ---------------------------
     tol = 1e-6
     sn_max_pot = [
         inv.inverter_sn for inv in inversores
@@ -8663,9 +8691,7 @@ def monitoramento_usina(usina_id):
     else:
         ref_real = max((real_por_sn.get(inv.inverter_sn, 0.0) for inv in inversores), default=0.0)
 
-    # ---------------------------
     # TABELA RESUMO (dia)
-    # ---------------------------
     resumo_inversores = []
     soma_pot = 0.0
     soma_real = 0.0
@@ -8701,17 +8727,13 @@ def monitoramento_usina(usina_id):
 
     resumo_inversores.sort(key=lambda x: x["real_kwh"], reverse=True)
 
-    # ---------------------------
     # RESUMO EXECUTIVO (dia)
-    # ---------------------------
     performance_pct = (geracao_total_dia / previsto_dia * 100.0) if previsto_dia > 0 else 0.0
     perda_kwh_total = max(previsto_dia - geracao_total_dia, 0.0)
     perda_pct = (perda_kwh_total / previsto_dia * 100.0) if previsto_dia > 0 else 0.0
     status_usina_ok = all(x["status_ok"] for x in resumo_inversores) if resumo_inversores else True
 
-    # ---------------------------
     # CHARTS DO DIA (já existiam)
-    # ---------------------------
     chart_inv_labels = [(x["nome"] or x["sn"]) for x in resumo_inversores]
     chart_inv_real = [round(x["real_kwh"], 3) for x in resumo_inversores]
     chart_inv_perda = [round(x["perda_kwh"], 3) for x in resumo_inversores]
@@ -8719,9 +8741,7 @@ def monitoramento_usina(usina_id):
     chart_total_labels = ["Geração Total (kWh)", "Geração Prevista (kWh)"]
     chart_total_values = [round(geracao_total_dia, 3), round(previsto_dia, 3)]
 
-    # ==========================================================
     # SÉRIES POR INVERSOR (MÊS e ÚLTIMOS 7 DIAS) COM SELEÇÃO
-    # ==========================================================
     def _previsto_dia_total(d: date) -> float:
         row = (PrevisaoMensal.query
                .filter_by(usina_id=usina_id, ano=d.year, mes=d.month)
@@ -8741,7 +8761,7 @@ def monitoramento_usina(usina_id):
 
     soma_pot_total = sum(sn_to_pot.values()) or 0.0
 
-    # --------- MÊS (diário) ----------
+    # MÊS (diário)
     data_ini_mes = date(data_tab_ref.year, data_tab_ref.month, 1)
     data_fim_mes = date(data_tab_ref.year, data_tab_ref.month,
                         calendar.monthrange(data_tab_ref.year, data_tab_ref.month)[1])
@@ -8779,7 +8799,7 @@ def monitoramento_usina(usina_id):
 
         series_mes_por_inv[label] = {"real": real_arr, "prev": prev_arr}
 
-    # --------- ÚLTIMOS 7 DIAS ----------
+    # ÚLTIMOS 7 DIAS
     dias_7 = [data_tab_ref - timedelta(days=i) for i in range(6, -1, -1)]
     chart_7d_labels = [d.strftime("%d/%m") for d in dias_7]
 
@@ -8820,9 +8840,7 @@ def monitoramento_usina(usina_id):
     )
     default_selected_invs = [x[0] for x in top_mes[:3]]
 
-    # ==========================================================
     # RANKINGS DO MÊS (Yield e Geração) – usa o total do mês por inversor
-    # ==========================================================
     # total mensal por inversor (kWh)
     kwh_mes_por_label = {label: sum(v["real"]) for label, v in series_mes_por_inv.items()}
 
@@ -8891,7 +8909,7 @@ def monitoramento_index():
 def painel_inversores_usina(usina_id):
     usina = Usina.query.get_or_404(usina_id)
 
-    # ---------- inversores ----------
+    # inversores
     inversores = (InversorCadastrado.query
                   .filter_by(usina_id=usina.id)
                   .order_by(InversorCadastrado.ativo.desc(),
@@ -8899,7 +8917,7 @@ def painel_inversores_usina(usina_id):
                             InversorCadastrado.inverter_sn.asc())
                   .all())
 
-    # ---------- filtros de geração ----------
+    # filtros de geração
     def _parse_date(s):
         if not s:
             return None
@@ -10833,7 +10851,6 @@ def empresa_conta_bancaria_editar(conta_id):
 
     return render_template('empresa_conta_bancaria_editar.html', conta=conta, empresas=empresas)
 
-
 # EXCLUIR CONTA BANCÁRIA (impede exclusão se houver movimentos)
 @app.route('/empresa/conta_bancaria/<int:conta_id>/excluir', methods=['POST'], endpoint='empresa_conta_bancaria_excluir')
 @login_required
@@ -10862,6 +10879,317 @@ def empresa_conta_bancaria_excluir(conta_id):
         flash('Erro ao excluir a conta.', 'danger')
 
     return redirect(url_for('empresa_contas_listar'))
+
+@app.route('/comercial')
+@login_required
+def listar_comerciais():
+    empresa_id = request.args.get('empresa_id', type=int)
+    busca = request.args.get('busca', '', type=str).strip()
+    ativo = request.args.get('ativo', '', type=str)
+
+    empresas = Empresa.query.order_by(Empresa.nome).all()
+
+    query = Comercial.query.join(Empresa)
+
+    if empresa_id:
+        query = query.filter(Comercial.empresa_id == empresa_id)
+
+    if busca:
+        query = query.filter(
+            or_(
+                Comercial.nome.ilike(f'%{busca}%'),
+                Comercial.descricao.ilike(f'%{busca}%'),
+                Empresa.nome.ilike(f'%{busca}%')
+            )
+        )
+
+    if ativo == '1':
+        query = query.filter(Comercial.ativo.is_(True))
+    elif ativo == '0':
+        query = query.filter(Comercial.ativo.is_(False))
+
+    comerciais = query.order_by(Empresa.nome, Comercial.nome).all()
+
+    return render_template(
+        'listar_comercial.html',
+        comerciais=comerciais,
+        empresas=empresas,
+        empresa_id=empresa_id,
+        busca=busca,
+        ativo=ativo
+    )
+
+@app.route('/comercial/novo', methods=['GET', 'POST'])
+@login_required
+def cadastrar_comercial():
+    empresas = Empresa.query.order_by(Empresa.nome).all()
+
+    if request.method == 'POST':
+        try:
+            empresa_id = request.form.get('empresa_id', type=int)
+            nome = request.form.get('nome', '').strip()
+            descricao = request.form.get('descricao', '').strip()
+            ativo = True if request.form.get('ativo') == 'on' else False
+
+            if not empresa_id:
+                flash('Selecione uma empresa.', 'warning')
+                return render_template('comercial_form.html', empresas=empresas, comercial=None)
+
+            if not nome:
+                flash('Informe o nome do comercial.', 'warning')
+                return render_template('comercial_form.html', empresas=empresas, comercial=None)
+
+            novo = Comercial(
+                empresa_id=empresa_id,
+                nome=nome,
+                descricao=descricao if descricao else None,
+                ativo=ativo
+            )
+
+            db.session.add(novo)
+            db.session.commit()
+            flash('Comercial cadastrado com sucesso.', 'success')
+            return redirect(url_for('listar_comerciais'))
+
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erro ao cadastrar comercial: {e}', 'danger')
+
+    return render_template('comercial_form.html', empresas=empresas, comercial=None)
+
+@app.route('/comercial/<int:comercial_id>')
+@login_required
+def visualizar_comercial(comercial_id):
+    comercial = Comercial.query.get_or_404(comercial_id)
+
+    vendedores = Vendedor.query.filter_by(comercial_id=comercial.id).order_by(Vendedor.nome).all()
+
+    return render_template(
+        'visualizar_comercial.html',
+        comercial=comercial,
+        vendedores=vendedores
+    )
+
+@app.route('/comercial/<int:comercial_id>/editar', methods=['GET', 'POST'])
+@login_required
+def editar_comercial(comercial_id):
+    comercial = Comercial.query.get_or_404(comercial_id)
+    empresas = Empresa.query.order_by(Empresa.nome).all()
+
+    if request.method == 'POST':
+        try:
+            empresa_id = request.form.get('empresa_id', type=int)
+            nome = request.form.get('nome', '').strip()
+            descricao = request.form.get('descricao', '').strip()
+            ativo = True if request.form.get('ativo') == 'on' else False
+
+            if not empresa_id:
+                flash('Selecione uma empresa.', 'warning')
+                return render_template('comercial_form.html', empresas=empresas, comercial=comercial)
+
+            if not nome:
+                flash('Informe o nome do comercial.', 'warning')
+                return render_template('comercial_form.html', empresas=empresas, comercial=comercial)
+
+            comercial.empresa_id = empresa_id
+            comercial.nome = nome
+            comercial.descricao = descricao if descricao else None
+            comercial.ativo = ativo
+
+            db.session.commit()
+            flash('Comercial atualizado com sucesso.', 'success')
+            return redirect(url_for('listar_comerciais'))
+
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erro ao editar comercial: {e}', 'danger')
+
+    return render_template('comercial_form.html', empresas=empresas, comercial=comercial)
+
+
+@app.route('/comercial/<int:comercial_id>/excluir', methods=['POST'])
+@login_required
+def excluir_comercial(comercial_id):
+    comercial = Comercial.query.get_or_404(comercial_id)
+
+    try:
+        db.session.delete(comercial)
+        db.session.commit()
+        flash('Comercial excluído com sucesso.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao excluir comercial: {e}', 'danger')
+
+    return redirect(url_for('listar_comerciais'))
+
+@app.route('/vendedores')
+@login_required
+def listar_vendedores():
+    empresa_id = request.args.get('empresa_id', type=int)
+    comercial_id = request.args.get('comercial_id', type=int)
+    busca = request.args.get('busca', '', type=str).strip()
+    ativo = request.args.get('ativo', '', type=str)
+
+    empresas = Empresa.query.order_by(Empresa.nome).all()
+    comerciais = Comercial.query.order_by(Comercial.nome).all()
+
+    query = Vendedor.query.join(Empresa).outerjoin(Comercial)
+
+    if empresa_id:
+        query = query.filter(Vendedor.empresa_id == empresa_id)
+
+    if comercial_id:
+        query = query.filter(Vendedor.comercial_id == comercial_id)
+
+    if busca:
+        query = query.filter(
+            or_(
+                Vendedor.nome.ilike(f'%{busca}%'),
+                Vendedor.email.ilike(f'%{busca}%'),
+                Vendedor.telefone.ilike(f'%{busca}%'),
+                Empresa.nome.ilike(f'%{busca}%')
+            )
+        )
+
+    if ativo == '1':
+        query = query.filter(Vendedor.ativo.is_(True))
+    elif ativo == '0':
+        query = query.filter(Vendedor.ativo.is_(False))
+
+    vendedores = query.order_by(Empresa.nome, Vendedor.nome).all()
+
+    return render_template(
+        'listar_vendedores.html',
+        vendedores=vendedores,
+        empresas=empresas,
+        comerciais=comerciais,
+        empresa_id=empresa_id,
+        comercial_id=comercial_id,
+        busca=busca,
+        ativo=ativo
+    )
+
+@app.route('/vendedores/novo', methods=['GET', 'POST'])
+@login_required
+def cadastrar_vendedor():
+    empresas = Empresa.query.order_by(Empresa.nome).all()
+    comerciais = Comercial.query.order_by(Comercial.nome).all()
+
+    if request.method == 'POST':
+        try:
+            empresa_id = request.form.get('empresa_id', type=int)
+            comercial_id = request.form.get('comercial_id', type=int)
+            nome = request.form.get('nome', '').strip()
+            telefone = request.form.get('telefone', '').strip()
+            email = request.form.get('email', '').strip()
+            cpf = request.form.get('cpf', '').strip()
+            observacoes = request.form.get('observacoes', '').strip()
+            ativo = True if request.form.get('ativo') == 'on' else False
+
+            comissao_str = request.form.get('comissao_percentual', '').strip()
+            comissao_percentual = Decimal(comissao_str.replace(',', '.')) if comissao_str else Decimal('0.00')
+
+            if not empresa_id:
+                flash('Selecione uma empresa.', 'warning')
+                return render_template('vendedores_form.html', vendedor=None, empresas=empresas, comerciais=comerciais)
+
+            if not nome:
+                flash('Informe o nome do vendedor.', 'warning')
+                return render_template('vendedores_form.html', vendedor=None, empresas=empresas, comerciais=comerciais)
+
+            vendedor = Vendedor(
+                empresa_id=empresa_id,
+                comercial_id=comercial_id if comercial_id else None,
+                nome=nome,
+                telefone=telefone if telefone else None,
+                email=email if email else None,
+                cpf=cpf if cpf else None,
+                comissao_percentual=comissao_percentual,
+                observacoes=observacoes if observacoes else None,
+                ativo=ativo
+            )
+
+            db.session.add(vendedor)
+            db.session.commit()
+            flash('Vendedor cadastrado com sucesso.', 'success')
+            return redirect(url_for('listar_vendedores'))
+
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erro ao cadastrar vendedor: {e}', 'danger')
+
+    return render_template('vendedores_form.html', vendedor=None, empresas=empresas, comerciais=comerciais)
+
+@app.route('/vendedores/<int:vendedor_id>')
+@login_required
+def visualizar_vendedor(vendedor_id):
+    vendedor = Vendedor.query.get_or_404(vendedor_id)
+    return render_template('visualizar_vendedores.html', vendedor=vendedor)
+
+@app.route('/vendedores/<int:vendedor_id>/editar', methods=['GET', 'POST'])
+@login_required
+def editar_vendedor(vendedor_id):
+    vendedor = Vendedor.query.get_or_404(vendedor_id)
+    empresas = Empresa.query.order_by(Empresa.nome).all()
+    comerciais = Comercial.query.order_by(Comercial.nome).all()
+
+    if request.method == 'POST':
+        try:
+            empresa_id = request.form.get('empresa_id', type=int)
+            comercial_id = request.form.get('comercial_id', type=int)
+            nome = request.form.get('nome', '').strip()
+            telefone = request.form.get('telefone', '').strip()
+            email = request.form.get('email', '').strip()
+            cpf = request.form.get('cpf', '').strip()
+            observacoes = request.form.get('observacoes', '').strip()
+            ativo = True if request.form.get('ativo') == 'on' else False
+
+            comissao_str = request.form.get('comissao_percentual', '').strip()
+            comissao_percentual = Decimal(comissao_str.replace(',', '.')) if comissao_str else Decimal('0.00')
+
+            if not empresa_id:
+                flash('Selecione uma empresa.', 'warning')
+                return render_template('vendedores_form.html', vendedor=vendedor, empresas=empresas, comerciais=comerciais)
+
+            if not nome:
+                flash('Informe o nome do vendedor.', 'warning')
+                return render_template('vendedores_form.html', vendedor=vendedor, empresas=empresas, comerciais=comerciais)
+
+            vendedor.empresa_id = empresa_id
+            vendedor.comercial_id = comercial_id if comercial_id else None
+            vendedor.nome = nome
+            vendedor.telefone = telefone if telefone else None
+            vendedor.email = email if email else None
+            vendedor.cpf = cpf if cpf else None
+            vendedor.comissao_percentual = comissao_percentual
+            vendedor.observacoes = observacoes if observacoes else None
+            vendedor.ativo = ativo
+
+            db.session.commit()
+            flash('Vendedor atualizado com sucesso.', 'success')
+            return redirect(url_for('listar_vendedores'))
+
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erro ao editar vendedor: {e}', 'danger')
+
+    return render_template('vendedores_form.html', vendedor=vendedor, empresas=empresas, comerciais=comerciais)
+
+
+@app.route('/vendedores/<int:vendedor_id>/excluir', methods=['POST'])
+@login_required
+def excluir_vendedor(vendedor_id):
+    vendedor = Vendedor.query.get_or_404(vendedor_id)
+
+    try:
+        db.session.delete(vendedor)
+        db.session.commit()
+        flash('Vendedor excluído com sucesso.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao excluir vendedor: {e}', 'danger')
+
+    return redirect(url_for('listar_vendedores'))
 
 
 if __name__ == "__main__":

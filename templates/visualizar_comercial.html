@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+
+{% block title %}Visualizar Comercial{% endblock %}
+
+{% block content %}
+<div class="container mt-5 mb-5">
+    <div class="card shadow rounded p-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h3 class="text-primary mb-0">Detalhes do Comercial</h3>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('editar_comercial', comercial_id=comercial.id) }}" class="btn btn-primary">Editar</a>
+                <a href="{{ url_for('listar_comerciais') }}" class="btn btn-secondary">Voltar</a>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-4">
+            <div class="col-md-6"><strong>ID:</strong> {{ comercial.id }}</div>
+            <div class="col-md-6"><strong>Empresa:</strong> {{ comercial.empresa.nome }}</div>
+            <div class="col-md-6"><strong>Nome:</strong> {{ comercial.nome }}</div>
+            <div class="col-md-6">
+                <strong>Status:</strong>
+                {% if comercial.ativo %}
+                    <span class="badge bg-success">Ativo</span>
+                {% else %}
+                    <span class="badge bg-secondary">Inativo</span>
+                {% endif %}
+            </div>
+            <div class="col-12"><strong>Descrição:</strong> {{ comercial.descricao or '-' }}</div>
+        </div>
+
+        <hr>
+
+        <h5 class="text-primary mb-3">Vendedores vinculados</h5>
+
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Nome</th>
+                        <th>Telefone</th>
+                        <th>Email</th>
+                        <th>Comissão</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for vendedor in vendedores %}
+                    <tr>
+                        <td>{{ vendedor.nome }}</td>
+                        <td>{{ vendedor.telefone or '-' }}</td>
+                        <td>{{ vendedor.email or '-' }}</td>
+                        <td>{{ vendedor.comissao_percentual or 0 }}%</td>
+                        <td>
+                            {% if vendedor.ativo %}
+                                <span class="badge bg-success">Ativo</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Inativo</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center text-muted">Nenhum vendedor vinculado.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
