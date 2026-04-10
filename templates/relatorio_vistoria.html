@@ -164,6 +164,17 @@
                             {% endfor %}
                         </ul>
                     </div>
+                    <div class="section-block">
+                    <div class="section-title text-uppercase">Observações Gerais</div>
+
+                    <ul class="ps-3 mb-0">
+                        {% for l in (vistoria.observacoes or '').split('\n') if l.strip() %}
+                        <li class="small mb-1">{{ l }}</li>
+                        {% else %}
+                        <li class="small italic">Nenhuma observação registrada.</li>
+                        {% endfor %}
+                    </ul>
+                </div>
                 </div>
             </div>
 
