@@ -404,42 +404,104 @@
             <p>Fica desde já eleito, com exclusão de qualquer outro, por mais privilegiado que seja, o Foro da Circunscrição Judiciária de Brasília - DF, para quaisquer ações ou medidas judiciais referentes a este Contrato.</p>
             E por estarem justas e contratadas, assinam o presente instrumento na presença de duas testemunhas abaixo, de forma digital;</p>
 
-        <br>
-        <p>Brasília, ______ de ________________ de 2026.</p>
+        <div style="page-break-before: always;"></div>
 
-        <div class="row assinatura-box text-center">
-            <div class="col-6 mb-5">
-                <div class="linha-assinatura mx-auto"></div>
-                <strong>CONTRATADA</strong><br>CGR ENERGIA E ENGENHARIA LTDA
-            </div>
-            <div class="col-6 mb-5">
-                <div class="linha-assinatura mx-auto"></div>
-                <strong>CONTRATANTE</strong><br>{{ centro.cliente.nome if centro and centro.cliente else 'NOME DO CLIENTE' }}
-            </div>
-            <div class="col-6 mb-4">
-                <div class="linha-assinatura mx-auto"></div>
-                <strong>TESTEMUNHA 1</strong><br>RICARDO DE PINHO RIBEIRO
-            </div>
-            <div class="col-6 mb-4">
-                <div class="linha-assinatura mx-auto"></div>
-                <strong>TESTEMUNHA 2</strong><br>NUZA KAROLINA DE OLIVEIRA ARAUJO
-            </div>
-            <div class="col-6">
-                <div class="linha-assinatura mx-auto"></div>
-                <strong>Consultor de Vendas</strong><br>FELIPE CACHO
-            </div>
-            <div class="col-6">
-                <div class="linha-assinatura mx-auto"></div>
-                <strong>Gerente de Vendas</strong><br>LUIZ PORTILHO
-            </div>
-        </div>
+        <h4>ANEXO I – RELATÓRIO DE VISTORIA TÉCNICA</h4>
 
-        <div class="text-center mt-5 no-print">
-            <hr>
-            <button class="btn btn-dark btn-lg px-5 shadow-sm" onclick="window.print()">
-                <i class="bi bi-printer"></i> Gerar Documento para Assinatura
-            </button>
+<p><strong>Cliente:</strong> {{ centro.nome }}</p>
+<p><strong>Endereço:</strong> {{ centro.endereco }}</p>
+<p><strong>Data da vistoria:</strong> 
+    {{ vistoria.data_cadastro.strftime('%d/%m/%Y') if vistoria.data_cadastro else '-' }}
+</p>
+
+<h5>DADOS TÉCNICOS</h5>
+
+<p><strong>Padrão:</strong> {{ vistoria.padrao_entrada or '-' }}</p>
+<p><strong>Condição:</strong> {{ vistoria.condicao_padrao or '-' }}</p>
+<p><strong>Medidor:</strong> {{ vistoria.modelo_relogio or '-' }}</p>
+<p><strong>Número:</strong> {{ vistoria.numero_relogio or '-' }}</p>
+<p><strong>Disjuntor:</strong> {{ vistoria.disjuntor_amperagem or '-' }} A</p>
+<p><strong>Bitola:</strong> {{ vistoria.bitola_condutor or '-' }} mm²</p>
+<p><strong>Aterramento:</strong> {{ 'Sim' if vistoria.aterramento else 'Não' }}</p>
+
+<h5>INFORMAÇÕES DE CAMPO</h5>
+
+<p><strong>Elétrica:</strong><br>
+{{ vistoria.info_eletrica or '-' }}
+</p>
+
+<p><strong>Estrutural:</strong><br>
+{{ vistoria.info_estrutural or '-' }}
+</p>
+
+<p><strong>Modificações:</strong><br>
+{{ vistoria.modificacoes_cliente or '-' }}
+</p>
+
+<p><strong>Observações:</strong><br>
+{{ vistoria.observacoes or '-' }}
+</p>
+
+<h5>EVIDÊNCIAS FOTOGRÁFICAS</h5>
+
+{% for tipo in ['externa','interna','telhado','extra'] %}
+    {% set fotos_tipo = vistoria.fotos | selectattr("tipo", "equalto", tipo) | list %}
+    
+    {% if fotos_tipo %}
+        <p><strong>
+        {% if tipo == 'externa' %}Fachada / Área Externa
+        {% elif tipo == 'interna' %}Padrão / Quadro Elétrico
+        {% elif tipo == 'telhado' %}Telhado
+        {% else %}Outros{% endif %}
+        </strong></p>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px;">
+            {% for foto in fotos_tipo %}
+                <div style="width: 48%; page-break-inside: avoid;">
+                    <img src="{{ url_for('media_logos', filename=foto.caminho) }}"
+                         style="width: 100%; border: 1px solid #000;">
+                </div>
+            {% endfor %}
         </div>
+    {% endif %}
+{% endfor %}
+
+<br>
+
+<p>Brasília, ______ de ________________ de {{ ano_atual }}.</p>
+
+<div class="row assinatura-box text-center">
+    <div class="col-6 mb-5">
+        <div class="linha-assinatura mx-auto"></div>
+        <strong>CONTRATADA</strong><br>CGR ENERGIA E ENGENHARIA LTDA
     </div>
+    <div class="col-6 mb-5">
+        <div class="linha-assinatura mx-auto"></div>
+        <strong>CONTRATANTE</strong><br>
+        {{ centro.cliente.nome if centro and centro.cliente else 'NOME DO CLIENTE' }}
+    </div>
+    <div class="col-6 mb-4">
+        <div class="linha-assinatura mx-auto"></div>
+        <strong>TESTEMUNHA 1</strong><br>RICARDO DE PINHO RIBEIRO
+    </div>
+    <div class="col-6 mb-4">
+        <div class="linha-assinatura mx-auto"></div>
+        <strong>TESTEMUNHA 2</strong><br>NUZA KAROLINA DE OLIVEIRA ARAUJO
+    </div>
+    <div class="col-6">
+        <div class="linha-assinatura mx-auto"></div>
+        <strong>Consultor de Vendas</strong><br>FELIPE CACHO
+    </div>
+    <div class="col-6">
+        <div class="linha-assinatura mx-auto"></div>
+        <strong>Gerente de Vendas</strong><br>LUIZ PORTILHO
+    </div>
+</div>
+
+<div class="text-center mt-5 no-print">
+    <hr>
+    <button class="btn btn-dark btn-lg px-5 shadow-sm" onclick="window.print()">
+        <i class="bi bi-printer"></i> Gerar Documento para Assinatura
+    </button>
 </div>
 {% endblock %}

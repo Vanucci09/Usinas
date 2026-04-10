@@ -185,7 +185,7 @@
                             <div class="photo-report-grid">
                                 {% for foto in fotos_tipo %}
                                 <div class="photo-report-item">
-                                    <img src="/static/logos/{{ foto.caminho }}">
+                                    <img src="{{ url_for('media_logos', filename=foto.caminho) }}">
                                 </div>
                                 {% endfor %}
                             </div>

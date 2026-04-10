@@ -13064,6 +13064,7 @@ def salvar_dados_tecnicos(vistoria_id):
     v.disjuntor_amperagem = request.form.get('disjuntor')
     v.bitola_condutor = request.form.get('bitola')
     v.padrao_coletivo = request.form.get('padrao_coletivo') == 'true'
+    v.observacoes = request.form.get('observacoes')
 
     v.info_eletrica = request.form.get('info_eletrica')
     v.info_estrutural = request.form.get('info_estrutural')
