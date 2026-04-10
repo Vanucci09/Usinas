@@ -170,4 +170,29 @@
     </a>
   </div>
 </div>
+<script>
+function uploadDocs(ccId){
+
+  const form = document.getElementById(`formUpload${ccId}`);
+  const formData = new FormData(form);
+
+  fetch(`/centros_custos/${ccId}/upload_documentos`, {
+    method: 'POST',
+    body: formData
+  })
+  .then(r => r.json())
+  .then(data => {
+    if(data.sucesso){
+      alert('Arquivo enviado com sucesso!');
+      location.reload(); // 🔥 recarrega para mostrar na lista
+    } else {
+      alert('Erro ao enviar arquivo');
+    }
+  })
+  .catch(() => {
+    alert('Erro na requisição');
+  });
+
+}
+</script>
 {% endblock %}

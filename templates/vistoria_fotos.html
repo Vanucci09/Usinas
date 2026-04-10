@@ -156,7 +156,7 @@
             <div class="photo-grid" id="grid-{{tipo}}">
                 {% for foto in vistoria.fotos if foto.tipo == tipo %}
                 <div class="photo-item">
-                    <img src="/static/logos/{{ foto.caminho }}" class="shadow-sm">
+                    <img src="{{ url_for('media_logos', filename=foto.caminho) }}" class="shadow-sm">
                     <button onclick="delFoto({{ foto.id }}, this)" class="btn-delete">✕</button>
                 </div>
                 {% endfor %}
@@ -210,7 +210,7 @@ function uploadFoto(input, tipo) {
                 const ts = new Date().getTime();
                 placeholder.classList.remove('opacity-50');
                 placeholder.innerHTML = `
-                    <img src="/static/logos/${data.caminho}?t=${ts}" class="shadow-sm">
+                    <img src="/media/logos/${data.caminho}?t=${ts}" class="shadow-sm">
                     <button onclick="delFoto(${data.foto_id}, this)" class="btn-delete">✕</button>`;
             } else { placeholder.remove(); }
         });

@@ -10795,6 +10795,42 @@ def cadastrar_centro_custo():
         'cadastrar_centro_custo.html',
         empresas=empresas
     )
+    
+@app.route('/centros_custos/<int:cc_id>/upload_documentos', methods=['POST'])
+@login_required
+def upload_documentos_cc(cc_id):
+
+    cc = CentroCusto.query.get_or_404(cc_id)
+
+    arquivos = request.files.getlist('documentos')
+
+    caminho_base = os.getenv(
+        'DOCUMENTOS_PATH',
+        os.path.join(current_app.root_path, 'static', 'documentos')
+    )
+
+    os.makedirs(caminho_base, exist_ok=True)
+
+    for arquivo in arquivos:
+        if arquivo and arquivo.filename:
+            nome_original = secure_filename(arquivo.filename)
+            ext = os.path.splitext(nome_original)[1]
+            nome_unico = f"{uuid.uuid4().hex}{ext}"
+
+            caminho = os.path.join(caminho_base, nome_unico)
+            arquivo.save(caminho)
+
+            doc = DocumentoCentroCusto(
+                centro_custo_id=cc.id,
+                nome_arquivo=nome_original,
+                caminho=nome_unico
+            )
+
+            db.session.add(doc)
+
+    db.session.commit()
+
+    return jsonify({"sucesso": True})
 
 @app.route('/centros_custos')
 @login_required
@@ -10943,6 +10979,14 @@ def media_documentos(filename):
     pasta = os.getenv(
         'DOCUMENTOS_PATH',
         os.path.join(current_app.root_path, 'static', 'documentos')
+    )
+    return send_from_directory(pasta, filename)
+
+@app.route('/media/logos/<filename>')
+def media_logos(filename):
+    pasta = os.getenv(
+        'LOGOS_PATH',
+        os.path.join(current_app.root_path, 'static', 'logos')
     )
     return send_from_directory(pasta, filename)
 
