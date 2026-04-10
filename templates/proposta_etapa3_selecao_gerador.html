@@ -1,0 +1,160 @@
+{% extends 'base.html' %}
+
+{% block title %}Seleção de Gerador{% endblock %}
+
+{% block content %}
+{% macro moeda_br(valor) -%}
+    R$ {{ "{:,.2f}".format(valor).replace(",", "X").replace(".", ",").replace("X", ".") }}
+{%- endmacro %}
+
+<div class="container mt-4">
+    <div class="card shadow-sm border-0">
+        <div class="card-body">
+            <h2 class="text-primary mb-4">Gerador de Proposta - Etapa 3</h2>
+            <h5 class="mb-4 text-secondary">Kits por Fornecedor</h5>
+
+            <form method="POST">
+                <input type="hidden" name="acao" value="">
+
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Tipo de Inversor</label>
+                        <select name="tipo_inversor" class="form-select" required>
+                            <option value="">Selecione</option>
+                            <option value="string"
+                                {% if tipo_inversor_selecionado == 'string' %}selected{% endif %}>
+                                String
+                            </option>
+                            <option value="microinversor"
+                                {% if tipo_inversor_selecionado == 'microinversor' %}selected{% endif %}>
+                                Microinversor
+                            </option>
+                        </select>
+                            <option value="">Selecione</option>
+                            {% for item in inversores %}
+                                <option value="{{ item.id }}"
+                                    {% if inversor_id_selecionado == item.id or (not inversor_id_selecionado and proposta and proposta.fabricante_inversor_id == item.id) %}selected{% endif %}>
+                                    {{ item.nome }} - {{ item.potencia_inversor }} kW - {{ item.tipo_inversor }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Valor do Frete</label>
+                        <input type="text" name="valor_frete" class="form-control"
+                               value="{{ valor_frete_digitado if valor_frete_digitado is defined else (proposta.valor_frete if proposta and proposta.valor_frete is not none else '') }}">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Fase</label>
+                        <select name="fase_inversor" class="form-select">
+                            <option value="">Selecione</option>
+                            <option value="Monofásico" {% if fase_inversor_selecionada == 'Monofásico' or (not fase_inversor_selecionada and proposta and proposta.fase_inversor == 'Monofásico') %}selected{% endif %}>Monofásico</option>
+                            <option value="Bifásico" {% if fase_inversor_selecionada == 'Bifásico' or (not fase_inversor_selecionada and proposta and proposta.fase_inversor == 'Bifásico') %}selected{% endif %}>Bifásico</option>
+                            <option value="Trifásico" {% if fase_inversor_selecionada == 'Trifásico' or (not fase_inversor_selecionada and proposta and proposta.fase_inversor == 'Trifásico') %}selected{% endif %}>Trifásico</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Tensão</label>
+                        <select name="tensao_inversor" class="form-select">
+                            <option value="">Selecione</option>
+                            <option value="127/220V" {% if tensao_inversor_selecionada == '127/220V' or (not tensao_inversor_selecionada and proposta and proposta.tensao_inversor == '127/220V') %}selected{% endif %}>127/220V</option>
+                            <option value="220/380V" {% if tensao_inversor_selecionada == '220/380V' or (not tensao_inversor_selecionada and proposta and proposta.tensao_inversor == '220/380V') %}selected{% endif %}>220/380V</option>
+                            <option value="380V" {% if tensao_inversor_selecionada == '380V' or (not tensao_inversor_selecionada and proposta and proposta.tensao_inversor == '380V') %}selected{% endif %}>380V</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-12">
+                        <label class="form-label">Observações</label>
+                        <textarea name="observacoes" class="form-control" rows="4">{{ observacoes_digitadas if observacoes_digitadas is defined else (proposta.observacoes if proposta and proposta.observacoes else '') }}</textarea>
+                    </div>
+                </div>
+
+                {% if kits_recomendados %}
+                <div class="mt-4">
+                    {% for kit in kits_recomendados %}
+                    <div class="card border-success shadow-sm mb-3">
+                        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                            <span>{{ kit.fornecedor.nome }}</span>
+                            <div class="form-check m-0">
+                                <input class="form-check-input" type="radio" name="fornecedor_escolhido_id"
+                                       value="{{ kit.fornecedor.id }}" id="kit_{{ kit.fornecedor.id }}"
+                                       {% if loop.first %}checked{% endif %}>
+                                <label class="form-check-label text-white" for="kit_{{ kit.fornecedor.id }}">
+                                    Selecionar
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <div><strong>Módulo:</strong> {{ kit.modulo.fabricante }} - {{ kit.modulo.modelo }}</div>
+                                    <div><strong>Potência do módulo:</strong> {{ "%.2f"|format(kit.modulo.potencia_wp) }} Wp</div>
+                                    <div><strong>Quantidade de módulos:</strong> {{ kit.qtd_modulos }}</div>
+                                    <div><strong>Potência total dos módulos:</strong> {{ "%.2f"|format(kit.potencia_total_modulos) }} kWp</div>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <div><strong>Inversor:</strong> {{ kit.inversor.nome }}</div>
+                                    <div><strong>Tipo:</strong> {{ kit.inversor.tipo_inversor }}</div>
+                                    <div><strong>Potência unitária:</strong> {{ "%.2f"|format(kit.inversor.potencia_inversor) }} kW</div>
+                                    <div><strong>Quantidade de inversores:</strong> {{ kit.qtd_inversores }}</div>
+                                    <div><strong>Potência total dos inversores:</strong> {{ "%.2f"|format(kit.potencia_total_inversores) }} kW</div>
+                                </div>
+
+                                <div class="col-md-4"><strong>Base do cálculo:</strong> {{ "%.2f"|format(kit.energia_base) }} kWh/mês</div>
+                                <div class="col-md-4"><strong>Potência sugerida:</strong> {{ "%.2f"|format(kit.potencia_necessaria_kwp) }} kWp</div>
+                                <div class="col-md-4"><strong>Geração estimada:</strong> {{ "%.2f"|format(kit.geracao_estimada) }} kWh/mês</div>
+
+                                <div class="col-md-4"><strong>Área estimada:</strong> {{ "%.2f"|format(kit.area_total) }} m²</div>
+
+                                <div class="col-md-12"><hr></div>
+
+                                <div class="col-md-4"><strong>Valor módulos:</strong> {{ moeda_br(kit.valor_modulos) }}</div>
+                                <div class="col-md-4"><strong>Valor inversores:</strong> {{ moeda_br(kit.valor_inversores) }}</div>
+                                <div class="col-md-4"><strong>Frete:</strong> {{ moeda_br(kit.valor_frete) }}</div>
+                                <div class="col-md-4"><strong>Projeto:</strong> {{ moeda_br(kit.valor_projeto) }}</div>
+                                <div class="col-md-4"><strong>Instalação:</strong> {{ moeda_br(kit.valor_instalacao) }}</div>
+                                <div class="col-md-4"><strong>Restante material:</strong> {{ moeda_br(kit.valor_restante_material) }}</div>
+                                <div class="col-md-4"><strong>Extras:</strong> {{ moeda_br(kit.valor_extras) }}</div>
+                                <div class="col-md-4"><strong>Comissão vendedor:</strong> {{ moeda_br(kit.valor_comissao_vendedor) }}</div>
+                                <div class="col-md-4"><strong>Imposto material:</strong> {{ moeda_br(kit.valor_imposto_material) }}</div>
+                                <div class="col-md-4"><strong>Imposto serviço:</strong> {{ moeda_br(kit.valor_imposto_servico) }}</div>
+                                <div class="col-md-6"><strong>BDI:</strong> {{ moeda_br(kit.valor_bdi) }}</div>
+                                <div class="col-md-6 text-end">
+                                    <h4 class="text-success mb-0">
+                                        Valor total: {{ moeda_br(kit.valor_total_final) }}
+                                    </h4>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div class="mt-4 d-flex justify-content-between">
+                    <a href="{{ url_for('editar_proposta_etapa2', proposta_id=proposta.id) }}" class="btn btn-outline-secondary">
+                        Voltar
+                    </a>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary" onclick="this.form.acao.value='buscar_kits'">
+                            Buscar Kits Recomendados
+                        </button>
+
+                        {% if kits_recomendados %}
+                        <button type="submit" class="btn btn-success" onclick="this.form.acao.value='confirmar_kit'">
+                            Confirmar e Gerar Proposta
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

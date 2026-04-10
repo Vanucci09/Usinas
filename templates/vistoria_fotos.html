@@ -1,0 +1,262 @@
+{% extends 'base.html' %}
+
+{% block title %}Vistoria Técnica - {{ centro.nome }}{% endblock %}
+
+{% block content %}
+<style>
+    :root { --primary-color: #0d6efd; --success-color: #198754; }
+    
+    .card { border: none; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 1.5rem; }
+    .section-header { border-left: 4px solid var(--primary-color); padding-left: 12px; margin-bottom: 1rem; font-weight: bold; color: #444; }
+    
+    /* Grid de Fotos Moderno */
+    .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 12px; }
+    .photo-item { position: relative; aspect-ratio: 1 / 1; }
+    .photo-item img { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; border: 1px solid #eee; }
+    
+    .btn-delete { 
+        position: absolute; top: -8px; right: -8px; background: #dc3545; color: white; 
+        border: none; border-radius: 50%; width: 26px; height: 26px; font-size: 14px;
+        display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+
+    .upload-label { 
+        aspect-ratio: 1 / 1; display: flex; flex-direction: column; align-items: center; 
+        justify-content: center; border: 2px dashed #cbd5e0; border-radius: 12px; 
+        cursor: pointer; background: #f8fafc; color: #64748b; transition: 0.3s;
+    }
+    .upload-label:hover { border-color: var(--primary-color); background: #f1f5f9; color: var(--primary-color); }
+    
+    /* Feedback de Salvamento */
+    .save-feedback { position: fixed; bottom: 20px; right: 20px; z-index: 1000; display: none; }
+</style>
+
+<div class="container mt-4 mb-5 pb-5">
+    
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold mb-0">🛠️ Vistoria Técnica</h3>
+        <div id="statusBadge" class="badge p-2 px-3 text-uppercase rounded-pill {% if vistoria.status == 'aprovada' %}bg-success{% elif vistoria.status == 'reprovada' %}bg-danger{% else %}bg-secondary{% endif %}">
+            {{ vistoria.status or 'pendente' }}
+        </div>
+    </div>
+
+    <div class="card bg-primary text-white shadow-lg mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h5 class="mb-1 fw-bold">{{ centro.nome }}</h5>
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-geo-alt-fill me-2"></i>
+                        <p class="mb-0 opacity-75 small text-truncate" style="max-width: 200px;">
+                            {{ centro.endereco }}
+                        </p>
+                    </div>
+                </div>
+                
+                {% if proposta.latitude and proposta.longitude %}
+                    <a href="https://www.google.com/maps/search/?api=1&query={{ proposta.latitude }},{{ proposta.longitude }}" 
+                       target="_blank" class="btn btn-light btn-sm rounded-pill shadow-sm px-3 fw-bold">
+                        <i class="bi bi-map"></i> MAPA
+                    </a>
+                {% else %}
+                    <a href="https://www.google.com/maps/search/?api=1&query={{ centro.endereco | replace(' ', '+') }}" 
+                       target="_blank" class="btn btn-light btn-sm rounded-pill shadow-sm px-3 fw-bold">
+                        <i class="bi bi-search"></i> ROTA
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-2 mb-4">
+        <div class="col-6">
+            <button class="btn btn-outline-success w-100 py-3 rounded-4 fw-bold" onclick="setStatus('aprovada')">
+                <i class="bi bi-check-circle"></i> APROVAR
+            </button>
+        </div>
+        <div class="col-6">
+            <button class="btn btn-outline-danger w-100 py-3 rounded-4 fw-bold" onclick="setStatus('reprovada')">
+                <i class="bi bi-x-circle"></i> REPROVAR
+            </button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="section-header">Padrão de Entrada</div>
+            <div class="row g-2">
+                <div class="col-md-6">
+                    <label class="small text-muted">Tipo de Padrão</label>
+                    <input class="form-control form-control-lg" id="padrao" value="{{ vistoria.padrao_entrada or '' }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="small text-muted">Condição Geral</label>
+                    <input class="form-control form-control-lg" id="condicao" value="{{ vistoria.condicao_padrao or '' }}">
+                </div>
+                <div class="col-6">
+                    <label class="small text-muted">Modelo Medidor</label>
+                    <input class="form-control" id="modelo" value="{{ vistoria.modelo_relogio or '' }}">
+                </div>
+                <div class="col-6">
+                    <label class="small text-muted">Número Medidor</label>
+                    <input class="form-control" id="numero" value="{{ vistoria.numero_relogio or '' }}">
+                </div>
+                <div class="col-6">
+                    <label class="small text-muted">Disjuntor (A)</label>
+                    <input class="form-control" id="disjuntor" value="{{ vistoria.disjuntor_amperagem or '' }}">
+                </div>
+                <div class="col-6">
+                    <label class="small text-muted">Bitola Cabo (mm²)</label>
+                    <input class="form-control" id="bitola" value="{{ vistoria.bitola_condutor or '' }}">
+                </div>
+                <div class="col-md-6 mt-3">
+                    <select id="aterramento" class="form-select form-select-lg">
+                        <option value="true" {% if vistoria.aterramento %}selected{% endif %}>✅ Aterramento Existente</option>
+                        <option value="false" {% if vistoria.aterramento==False %}selected{% endif %}>❌ Sem Aterramento</option>
+                    </select>
+                </div>
+                <div class="col-md-6 mt-3">
+                    <select id="coletivo" class="form-select form-select-lg">
+                        <option value="false" {% if vistoria.padrao_coletivo==False %}selected{% endif %}>👤 Padrão Individual</option>
+                        <option value="true" {% if vistoria.padrao_coletivo %}selected{% endif %}>👥 Padrão Coletivo</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="section-header">Informações de Campo</div>
+            
+            <label class="fw-bold small mt-2">⚡ Parte Elétrica</label>
+            <textarea id="eletrica" class="form-control bg-light border-0 mb-3" rows="3">{{ vistoria.info_eletrica or '' }}</textarea>
+
+            <label class="fw-bold small mt-2">🏗️ Parte Estrutural / Telhado</label>
+            <textarea id="estrutura" class="form-control bg-light border-0 mb-3" rows="3">{{ vistoria.info_estrutural or '' }}</textarea>
+
+            <label class="fw-bold small mt-2">🔧 Modificações Necessárias</label>
+            <textarea id="mod" class="form-control bg-light border-0 mb-3" rows="3">{{ vistoria.modificacoes_cliente or '' }}</textarea>
+
+            <label class="fw-bold small mt-2">📝 Observações Administrativas</label>
+            <textarea id="observacoes" class="form-control border-warning bg-light" rows="2">{{ vistoria.observacoes or '' }}</textarea>
+
+            <button onclick="salvarTudo()" class="btn btn-primary w-100 mt-4 py-3 rounded-pill fw-bold shadow">
+                <i class="bi bi-cloud-upload"></i> SALVAR DADOS TÉCNICOS
+            </button>
+        </div>
+    </div>
+
+    <h5 class="fw-bold mb-3 mt-5">📸 Registro Fotográfico</h5>
+    
+    {% macro bloco(tipo, titulo, icon) %}
+    <div class="card mb-3 border-0 shadow-sm">
+        <div class="card-body">
+            <h6 class="fw-bold mb-3 small text-uppercase"><i class="bi {{icon}} text-primary me-2"></i>{{ titulo }}</h6>
+            <div class="photo-grid" id="grid-{{tipo}}">
+                {% for foto in vistoria.fotos if foto.tipo == tipo %}
+                <div class="photo-item">
+                    <img src="/static/logos/{{ foto.caminho }}" class="shadow-sm">
+                    <button onclick="delFoto({{ foto.id }}, this)" class="btn-delete">✕</button>
+                </div>
+                {% endfor %}
+                <label class="upload-label">
+                    <input type="file" hidden multiple onchange="uploadFoto(this,'{{ tipo }}')" accept="image/*" capture="environment">
+                    <i class="bi bi-camera-fill fs-4"></i>
+                    <span style="font-size: 10px;">ADD</span>
+                </label>
+            </div>
+        </div>
+    </div>
+    {% endmacro %}
+
+    {{ bloco('externa', 'Fachada e Área Externa', 'bi-tree') }}
+    {{ bloco('interna', 'Padrão e Quadro Elétrico', 'bi-lightning-charge') }}
+    {{ bloco('telhado', 'Telhado e Estrutura', 'bi-house') }}
+    {{ bloco('extra', 'Outros Registros', 'bi-plus-circle') }}
+
+    <div class="mt-5">
+        <a href="{{ url_for('relatorio_vistoria', vistoria_id=vistoria.id) }}" class="btn btn-success btn-lg w-100 py-3 rounded-pill shadow">
+            <i class="bi bi-file-earmark-check"></i> FINALIZAR E VER RELATÓRIO
+        </a>
+    </div>
+
+</div>
+
+<div id="saveToast" class="save-feedback badge bg-dark p-3 rounded-pill shadow-lg">
+    ✅ Dados salvos com sucesso!
+</div>
+
+<script>
+const vid = {{ vistoria.id }};
+
+function uploadFoto(input, tipo) {
+    const grid = document.getElementById(`grid-${tipo}`);
+    
+    [...input.files].forEach(file => {
+        let fd = new FormData();
+        fd.append('foto', file);
+        fd.append('tipo', tipo);
+
+        const placeholder = document.createElement('div');
+        placeholder.className = 'photo-item opacity-50';
+        placeholder.innerHTML = `<div class="w-100 h-100 bg-light rounded d-flex align-items-center justify-content-center border"><div class="spinner-border spinner-border-sm text-primary"></div></div>`;
+        grid.insertBefore(placeholder, grid.lastElementChild);
+
+        fetch(`/vistoria/${vid}/upload`, { method: 'POST', body: fd })
+        .then(res => res.json())
+        .then(data => {
+            if (data.sucesso) {
+                const ts = new Date().getTime();
+                placeholder.classList.remove('opacity-50');
+                placeholder.innerHTML = `
+                    <img src="/static/logos/${data.caminho}?t=${ts}" class="shadow-sm">
+                    <button onclick="delFoto(${data.foto_id}, this)" class="btn-delete">✕</button>`;
+            } else { placeholder.remove(); }
+        });
+    });
+    input.value = '';
+}
+
+function delFoto(fid, btn) {
+    if(!confirm("Excluir foto?")) return;
+    fetch(`/vistoria/foto/${fid}/delete`, { method: 'POST' })
+    .then(() => btn.parentElement.remove());
+}
+
+function setStatus(s) {
+    let fd = new FormData();
+    fd.append('status', s);
+    fetch(`/vistoria/${vid}/status`, { method: 'POST', body: fd })
+    .then(() => {
+        const badge = document.getElementById('statusBadge');
+        badge.innerText = s;
+        badge.className = `badge p-2 px-3 text-uppercase rounded-pill ${s === 'aprovada' ? 'bg-success' : 'bg-danger'}`;
+    });
+}
+
+function salvarTudo() {
+    let fd = new FormData();
+    fd.append('padrao_entrada', document.getElementById('padrao').value);
+    fd.append('condicao_padrao', document.getElementById('condicao').value);
+    fd.append('modelo_relogio', document.getElementById('modelo').value);
+    fd.append('numero_relogio', document.getElementById('numero').value);
+    fd.append('disjuntor', document.getElementById('disjuntor').value);
+    fd.append('bitola', document.getElementById('bitola').value);
+    fd.append('aterramento', document.getElementById('aterramento').value);
+    fd.append('padrao_coletivo', document.getElementById('coletivo').value);
+    fd.append('info_eletrica', document.getElementById('eletrica').value);
+    fd.append('info_estrutural', document.getElementById('estrutura').value);
+    fd.append('modificacoes', document.getElementById('mod').value);
+    fd.append('observacoes', document.getElementById('observacoes').value);
+
+    fetch(`/vistoria/${vid}/tecnico`, { method: 'POST', body: fd })
+    .then(() => {
+        const toast = document.getElementById('saveToast');
+        toast.style.display = 'block';
+        setTimeout(() => toast.style.display = 'none', 3000);
+    });
+}
+</script>
+
+{% endblock %}

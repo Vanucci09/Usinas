@@ -1,16 +1,21 @@
 {% extends 'base.html' %}
 {% block title %}Editar Centro de Custo{% endblock %}
+
 {% block content %}
 <div class="container mt-4">
   <h2 class="text-primary mb-3">Editar Centro de Custo</h2>
 
-  <form method="POST">
+  <!-- 🔥 IMPORTANTE -->
+  <form method="POST" enctype="multipart/form-data">
     <div class="row g-3">
+
       <div class="col-md-6">
         <label class="form-label">Empresa</label>
         <select name="empresa_id" id="empresa_id" class="form-select" required>
           {% for e in empresas %}
-            <option value="{{ e.id }}" {% if e.id == cc.empresa_id %}selected{% endif %}>{{ e.nome }}</option>
+          <option value="{{ e.id }}" {% if e.id == cc.empresa_id %}selected{% endif %}>
+            {{ e.nome }}
+          </option>
           {% endfor %}
         </select>
       </div>
@@ -18,7 +23,7 @@
       <div class="col-md-6">
         <label class="form-label">Cliente Operacional</label>
         <select name="cliente_id" id="cliente_id" class="form-select" required disabled>
-          <option value="">Carregando clientes...</option>
+          <option value="">Carregando...</option>
         </select>
       </div>
 
@@ -28,13 +33,13 @@
       </div>
 
       <div class="col-md-8">
-        <label class="form-label">Nome do Centro de Custo</label>
+        <label class="form-label">Nome</label>
         <input type="text" name="nome" class="form-control" value="{{ cc.nome }}" required>
       </div>
 
       <div class="col-md-4">
         <label class="form-label">CPF/CNPJ</label>
-        <input type="text" name="cpf_cnpj" class="form-control" value="{{ cc.cpf_cnpj or '' }}">
+        <input type="text" name="cpf_cnpj" id="cpf_cnpj" class="form-control" value="{{ cc.cpf_cnpj or '' }}">
       </div>
 
       <div class="col-md-8">
@@ -52,61 +57,145 @@
         <input type="email" name="email" class="form-control" value="{{ cc.email or '' }}">
       </div>
 
-      <div class="col-12 form-check mt-2">
-        <input class="form-check-input" type="checkbox" id="ativo" name="ativo" {% if cc.ativo %}checked{% endif %}>
-        <label class="form-check-label" for="ativo">Ativo</label>
+      <!-- 🔥 DOCUMENTOS -->
+      <div class="col-md-12 mt-4">
+        <hr>
+        <h5 class="text-secondary">Documentos</h5>
+
+        <!-- upload -->
+        <input type="file" name="documentos" multiple class="form-control mb-3">
+
+        <!-- lista -->
+        <div class="list-group">
+          {% for doc in cc.documentos %}
+          <div class="list-group-item d-flex justify-content-between align-items-center">
+
+            <a href="{{ url_for('media_documentos', filename=doc.caminho) }}" target="_blank">
+              {{ doc.nome_arquivo }}
+            </a>
+
+            <button type="button"
+                    class="btn btn-sm btn-danger"
+                    onclick="excluirDoc({{ doc.id }}, this)">
+              Excluir
+            </button>
+
+          </div>
+          {% else %}
+          <div class="text-muted">Nenhum documento anexado</div>
+          {% endfor %}
+        </div>
       </div>
+
+      <!-- 🔥 REPRESENTANTE -->
+      <div id="blocoRepresentante" class="mt-4 d-none">
+        <hr>
+        <h5 class="text-secondary">Representante</h5>
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <input type="text" name="representante_nome" id="rep_nome" class="form-control"
+                   placeholder="Nome" value="{{ cc.representante_nome or '' }}">
+          </div>
+
+          <div class="col-md-6">
+            <input type="text" name="representante_cpf" id="rep_cpf" class="form-control"
+                   placeholder="CPF" value="{{ cc.representante_cpf or '' }}">
+          </div>
+
+          <div class="col-md-6">
+            <input type="text" name="representante_telefone" id="rep_tel" class="form-control"
+                   placeholder="Telefone" value="{{ cc.representante_telefone or '' }}">
+          </div>
+
+          <div class="col-md-6">
+            <input type="email" name="representante_email" id="rep_email" class="form-control"
+                   placeholder="Email" value="{{ cc.representante_email or '' }}">
+          </div>
+
+          <div class="col-md-12">
+            <input type="text" name="representante_endereco" id="rep_end" class="form-control"
+                   placeholder="Endereço" value="{{ cc.representante_endereco or '' }}">
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 form-check mt-2">
+        <input class="form-check-input" type="checkbox" name="ativo" {% if cc.ativo %}checked{% endif %}>
+        <label class="form-check-label">Ativo</label>
+      </div>
+
     </div>
 
-    <div class="mt-4 d-flex gap-2">
-      <button type="submit" class="btn btn-success">Salvar Alterações</button>
+    <div class="mt-4">
+      <button class="btn btn-success">Salvar</button>
       <a href="{{ url_for('listar_centros_custos') }}" class="btn btn-secondary">Cancelar</a>
     </div>
   </form>
 </div>
 
-<!-- Script correto -->
+<!-- 🔥 JS EXCLUIR -->
+<script>
+function excluirDoc(id, btn){
+  if(!confirm('Excluir documento?')) return;
+
+  fetch(`/centros_custos/documento/${id}/excluir`, {
+    method: 'POST'
+  })
+  .then(r => r.json())
+  .then(() => {
+    btn.closest('.list-group-item').remove();
+  });
+}
+</script>
+
 <script>
 (async function () {
+
   const empresaSel = document.getElementById('empresa_id');
   const clienteSel = document.getElementById('cliente_id');
+  const cpfCnpj = document.getElementById('cpf_cnpj');
+
   const clienteAtual = "{{ cc.cliente_id }}";
 
-  async function carregaClientes(empresaId, selecionado = null) {
-    clienteSel.innerHTML = '<option value="">Carregando...</option>';
-    clienteSel.disabled = true;
+  const blocoRep = document.getElementById('blocoRepresentante');
+  const camposRep = ['rep_nome','rep_cpf','rep_tel','rep_email','rep_end'];
 
-    if (!empresaId) {
-      clienteSel.innerHTML = '<option value="">Selecione a empresa primeiro...</option>';
-      return;
-    }
+  function isCNPJ(valor) {
+    return valor.replace(/\D/g, '').length > 11;
+  }
 
-    try {
-      const resp = await fetch(`/api/empresas/${empresaId}/clientes`);
-      const data = await resp.json();
-
-      if (!Array.isArray(data) || data.length === 0) {
-        clienteSel.innerHTML = '<option value="">Nenhum cliente para esta empresa</option>';
-        return;
-      }
-
-      let html = '<option value="">Selecione...</option>';
-      for (const c of data) {
-        const sel = (selecionado && String(c.id) === String(selecionado)) ? ' selected' : '';
-        html += `<option value="${c.id}"${sel}>${c.nome}</option>`;
-      }
-      clienteSel.innerHTML = html;
-      clienteSel.disabled = false;
-    } catch (e) {
-      clienteSel.innerHTML = '<option value="">Erro ao carregar</option>';
+  function toggleRep() {
+    if (isCNPJ(cpfCnpj.value)) {
+      blocoRep.classList.remove('d-none');
+      camposRep.forEach(id => document.getElementById(id).required = true);
+    } else {
+      blocoRep.classList.add('d-none');
+      camposRep.forEach(id => document.getElementById(id).required = false);
     }
   }
 
-  // carrega no onload com a empresa atual e seleciona o cliente atual
-  await carregaClientes(empresaSel.value, clienteAtual);
+  cpfCnpj.addEventListener('input', toggleRep);
+  toggleRep();
 
-  // recarrega ao trocar empresa
+  async function carregaClientes(empresaId, selecionado=null) {
+    const resp = await fetch(`/api/empresas/${empresaId}/clientes`);
+    const data = await resp.json();
+
+    let html = '<option value="">Selecione...</option>';
+    data.forEach(c => {
+      const sel = String(c.id) === String(selecionado) ? 'selected' : '';
+      html += `<option value="${c.id}" ${sel}>${c.nome}</option>`;
+    });
+
+    clienteSel.innerHTML = html;
+    clienteSel.disabled = false;
+  }
+
+  await carregaClientes(empresaSel.value, clienteAtual);
   empresaSel.addEventListener('change', () => carregaClientes(empresaSel.value));
+
 })();
 </script>
+
 {% endblock %}

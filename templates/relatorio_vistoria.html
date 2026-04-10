@@ -1,0 +1,200 @@
+{% extends 'base.html' %}
+
+{% block title %}Relatório de Vistoria - {{ centro.nome }}{% endblock %}
+
+{% block content %}
+<style>
+    /* Estilos Gerais (Visualização no Navegador) */
+    .report-header { border-left: 5px solid #0d6efd; padding-left: 15px; }
+    .data-label { font-size: 0.75rem; text-transform: uppercase; color: #6c757d; font-weight: bold; display: block; margin-bottom: 2px; }
+    .data-value { font-weight: 500; color: #212529; }
+    .section-title { background: #f8f9fa; padding: 8px 12px; border-radius: 6px; font-size: 0.9rem; font-weight: bold; color: #0d6efd; margin-top: 20px; margin-bottom: 15px; }
+
+    .photo-report-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 15px;
+    }
+    .photo-report-item img {
+        width: 100%;
+        aspect-ratio: 4 / 3; /* Proporção fotográfica padrão */
+        object-fit: cover;
+        border-radius: 8px;
+        border: 1px solid #ddd;
+    }
+
+    /* --- AJUSTES DE IMPRESSÃO --- */
+    @media print {
+        /* Configurações de Página */
+        @page {
+            size: A4;
+            margin: 15mm; /* Margem de segurança para impressoras */
+        }
+
+        /* Esconder elementos desnecessários */
+        .btn-print, .nav, footer, .navbar, .sidebar { display: none !important; }
+
+        /* Reset de Containers */
+        body { background: white !important; color: black !important; margin: 0; padding: 0; }
+        .container { width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; }
+        .card { border: none !important; box-shadow: none !important; margin: 0 !important; padding: 0 !important; }
+        .card-body { padding: 0 !important; }
+
+        /* Quebras de Página Inteligentes */
+        .page-break { page-break-before: always; } /* Força nova página */
+        
+        .section-block { 
+            page-break-inside: avoid; /* Impede que uma seção seja cortada entre duas folhas */
+            margin-bottom: 20px;
+        }
+
+        /* Ajuste da Galeria na Impressão */
+        .photo-report-grid {
+            grid-template-columns: repeat(2, 1fr) !important; /* Apenas 2 fotos por linha no papel para ficarem grandes */
+            gap: 10px;
+        }
+        
+        .photo-report-item {
+            page-break-inside: avoid;
+            margin-bottom: 10px;
+        }
+
+        .data-value { color: black !important; }
+        .section-title { background: #eee !important; color: #0d6efd !important; -webkit-print-color-adjust: exact; }
+    }
+</style>
+
+<div class="container mt-4 mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4 btn-print">
+        <a href="{{ url_for('listar_propostas') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+        <button onclick="window.print()" class="btn btn-primary shadow">
+            <i class="bi bi-file-earmark-pdf"></i> Gerar PDF / Imprimir
+        </button>
+    </div>
+
+    <div class="card shadow-sm border-0 rounded-4">
+        <div class="card-body p-4 p-md-5">
+            
+            <div class="section-block">
+                <div class="row mb-4">
+                    <div class="col-8 report-header">
+                        <h2 class="fw-bold mb-1">Relatório de Vistoria Técnica</h2>
+                        <p class="text-muted mb-0">Sistema Fotovoltaico - Projeto Usinas</p>
+                    </div>
+                    <div class="col-4 text-end">
+                        <span class="badge {% if vistoria.status == 'finalizada' %}bg-success{% else %}bg-warning{% endif %} p-2 px-3 text-uppercase border">
+                            Status: {{ vistoria.status }}
+                        </span>
+                        <div class="small text-muted mt-2">Data: {{ vistoria.atualizado_em.strftime('%d/%m/%Y') if vistoria.atualizado_em else 'N/A' }}</div>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                <div class="row g-3 mb-4">
+                    <div class="col-6">
+                        <span class="data-label">Cliente / Centro de Custo</span>
+                        <div class="data-value fs-5">{{ centro.nome }}</div>
+                    </div>
+                    <div class="col-6">
+                        <span class="data-label">Endereço da Instalação</span>
+                        <div class="data-value">{{ centro.endereco or 'Não informado' }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-block">
+                <div class="section-title text-uppercase">Informações do Padrão de Entrada</div>
+                <div class="row g-4 mb-4">
+                    <div class="col-3">
+                        <span class="data-label">Tipo</span>
+                        <span class="data-value">{{ vistoria.padrao_entrada or '-' }}</span>
+                    </div>
+                    <div class="col-3">
+                        <span class="data-label">Condição</span>
+                        <span class="data-value">{{ vistoria.condicao_padrao or '-' }}</span>
+                    </div>
+                    <div class="col-3">
+                        <span class="data-label">Medidor</span>
+                        <span class="data-value">{{ vistoria.modelo_relogio or '-' }}</span>
+                    </div>
+                    <div class="col-3">
+                        <span class="data-label">Disjuntor</span>
+                        <span class="data-value">{{ vistoria.disjuntor_amperagem or '-' }}A</span>
+                    </div>
+                    <div class="col-3">
+                        <span class="data-label">Aterramento</span>
+                        <span class="data-value">{{ 'Possui' if vistoria.aterramento else 'Não Identificado' }}</span>
+                    </div>
+                    <div class="col-3">
+                        <span class="data-label">Bitola</span>
+                        <span class="data-value">{{ vistoria.bitola_condutor or '-' }} mm²</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-block">
+                <div class="row g-4">
+                    <div class="col-4">
+                        <div class="section-title text-uppercase">Elétrica</div>
+                        <ul class="ps-3 mb-0">
+                            {% for l in (vistoria.info_eletrica or '').split('\n') if l.strip() %}
+                            <li class="small mb-1">{{ l }}</li>
+                            {% else %} <li class="small italic">Nenhuma observação.</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    <div class="col-4">
+                        <div class="section-title text-uppercase">Estrutural</div>
+                        <ul class="ps-3 mb-0">
+                            {% for l in (vistoria.info_estrutural or '').split('\n') if l.strip() %}
+                            <li class="small mb-1">{{ l }}</li>
+                            {% else %} <li class="small italic">Nenhuma observação.</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    <div class="col-4">
+                        <div class="section-title text-uppercase">Modificações</div>
+                        <ul class="ps-3 mb-0">
+                            {% for l in (vistoria.modificacoes_cliente or '').split('\n') if l.strip() %}
+                            <li class="small mb-1">{{ l }}</li>
+                            {% else %} <li class="small italic">Nenhuma observação.</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="page-break"></div>
+
+            <div class="section-block">
+                <div class="section-title text-uppercase">Evidências Fotográficas</div>
+                
+                {% for tipo in ['externa','interna','telhado','extra'] %}
+                    {% set fotos_tipo = vistoria.fotos | selectattr("tipo", "equalto", tipo) | list %}
+                    {% if fotos_tipo %}
+                        <div class="section-block">
+                            <h6 class="mt-4 mb-3 text-muted fw-bold small text-uppercase" style="-webkit-print-color-adjust: exact;">
+                                {% if tipo == 'externa' %} Fachada / Área Externa
+                                {% elif tipo == 'interna' %} Padrão / Quadro Elétrico
+                                {% elif tipo == 'telhado' %} Estrutura do Telhado
+                                {% else %} Registros Complementares {% endif %}
+                            </h6>
+                            <div class="photo-report-grid">
+                                {% for foto in fotos_tipo %}
+                                <div class="photo-report-item">
+                                    <img src="/static/logos/{{ foto.caminho }}">
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}

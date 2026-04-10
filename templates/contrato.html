@@ -1,0 +1,445 @@
+{% extends 'base.html' %}
+
+{% block title %}Contrato {{ proposta.id }}{% endblock %}
+
+{% block content %}
+<style>
+    /* Estilos Visuais no Navegador */
+    .folha-contrato {
+        font-family: "Times New Roman", Times, serif;
+        font-size: 14px;
+        line-height: 1.4;
+        color: #000;
+        max-width: 850px;
+        margin: auto;
+        background: white;
+        padding: 40px 60px !important;
+        border: 1px solid #ddd;
+        text-align: justify;
+    }
+    .folha-contrato h4, .folha-contrato h5 {
+        font-family: Arial, sans-serif;
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+    .folha-contrato h4 { text-align: center; margin-bottom: 25px; font-size: 16px; }
+    .folha-contrato h5 { margin-top: 25px; font-size: 14px; border-bottom: 1px solid #000; }
+    
+    .table-contrato {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 15px 0;
+    }
+    .table-contrato th, .table-contrato td {
+        border: 1px solid #000;
+        padding: 4px 8px;
+        font-size: 13px;
+    }
+    .table-contrato th { background-color: #f2f2f2; text-align: left; }
+
+    .assinatura-box {
+        margin-top: 40px;
+        font-size: 12px;
+    }
+    .linha-assinatura {
+        border-top: 1px solid #000;
+        margin-top: 45px;
+        padding-top: 5px;
+        width: 90%;
+    }
+
+    /* --- AJUSTES PARA IMPRESSÃO --- */
+    @media print {
+        /* 1. Esconde TUDO que não é o contrato (navbar, botões, rodapés do sistema) */
+        nav, .navbar, .header, .footer, .btn, .no-print, button, #sidebar, .sidebar { 
+            display: none !important; 
+        }
+
+        /* 2. Reseta o layout para ocupar a folha inteira sem bordas do sistema */
+        body { 
+            background: white !important; 
+            margin: 0 !important; 
+            padding: 0 !important;
+        }
+
+        .container, .container-fluid { 
+            max-width: 100% !important; 
+            width: 100% !important; 
+            margin: 0 !important; 
+            padding: 0 !important;
+        }
+
+        .card {
+            border: none !important;
+            box-shadow: none !important;
+        }
+
+        /* 3. Estiliza a "Folha" para o papel A4 */
+        .folha-contrato {
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important; /* Deixa que o @page controle as margens */
+            margin: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+        }
+
+        /* 4. Define margens reais da impressora */
+        @page {
+            size: A4;
+            margin: 2cm; /* Margem padrão A4 */
+        }
+
+        /* 5. Evita quebra de elementos importantes no meio */
+        h4, h5, h6 { page-break-after: avoid; }
+        table { page-break-inside: auto; }
+        tr { page-break-inside: avoid; page-break-after: auto; }
+        .assinatura-box { 
+            page-break-inside: avoid; /* Garante que as assinaturas não fiquem divididas entre páginas */
+            margin-top: 50px; 
+        }
+        
+        /* Forçar cores de fundo (como o cinza da tabela) na impressão */
+        * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+    }
+</style>
+
+<div class="container mt-4 mb-5">
+    <div class="folha-contrato shadow-sm">
+        
+        <h4>INSTRUMENTO PARTICULAR DE CONTRATO DE VENDA DE SISTEMA DE GERAÇÃO FOTOVOLTAICA</h4>
+
+        <h5>INFORMAÇÕES ESPECÍFICAS</h5>
+
+        <p><strong>Nº Contrato:</strong> {{ proposta.id }}</p>
+
+        <p><strong>CONTRATADA:</strong> <strong>CGR ENERGIA E ENGENHARIA LTDA</strong>, pessoa jurídica, inscrita no CNPJ/MF sob nº 30.295.719/0001-68, com sede em SAAN Quadra 01 Lote 705, Zona Industrial – Cruzeiro - CEP: 70.632-100, Brasília/DF,
+        neste ato representada por <strong>BARBARA SANTANA RIOS</strong>, Brasileira, casada, Engenharia de Energia, Sócia, RG nº 3235957 – Órgão Emissor SSP- DF, CPF: 035.681.321-50, com endereço eletrônico: barbara@cgrenergia.com.br</p>
+
+        <p><strong>CONTRATANTE:</strong>
+
+        {% if centro.cpf_cnpj and centro.cpf_cnpj|length > 11 %}
+            
+            <strong>{{ centro.nome }}</strong>, pessoa jurídica, inscrita no CNPJ/MF sob nº {{ centro.cpf_cnpj }},
+            com sede em {{ centro.endereco }},
+            
+            {% if centro.representante_nome %}
+                neste ato representada por <strong>{{ centro.representante_nome }}</strong>,
+                pessoa física, brasileiro,
+                inscrita no CPF sob o nº {{ centro.representante_cpf }},
+                residente e domiciliada em {{ centro.representante_endereco }},
+                e-mail: {{ centro.representante_email }},
+                telefone: {{ centro.representante_telefone }}.
+            {% endif %}
+
+        {% else %}
+
+            {{ centro.nome }}, pessoa física,
+            inscrito no CPF sob o nº {{ centro.cpf_cnpj }},
+            residente e domiciliado em {{ centro.endereco }}.
+
+        {% endif %}
+
+        </p>
+
+        <p><strong>Potência do Sistema:</strong> {{ proposta.potencia_sugerida_kwp or '-' }} kWp</p>
+        <p><strong>Produção média/ano de energia:</strong> {{ proposta.geracao_estimada_kwh_mes or '-' }} kWh/mês</p>
+
+        <h5>MATERIAIS</h5>
+        <table class="table-contrato">
+            <thead>
+                <tr>
+                    <th>ITEM</th>
+                    <th>DESCRIÇÃO</th>
+                    <th>QTD.</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>I</td>
+                    <td>
+                        {% if proposta.modulo %}
+                            Módulos Fotovoltaicos {{ proposta.modulo.fabricante }} {{ proposta.modulo.modelo }}
+                            {{ "%.0f"|format(proposta.modulo.potencia_wp) }}W
+                        {% else %}
+                            Módulos Fotovoltaicos
+                        {% endif %}
+                    </td>
+                    <td>{{ proposta.quantidade_modulos or '-' }}</td>
+                </tr>
+
+                <tr>
+                    <td>II</td>
+                    <td>
+                        {% if proposta.fabricante_inversor %}
+                            {{ proposta.fabricante_inversor.nome }}
+
+                            {% if proposta.tipo_inversor %}
+                                {{ proposta.tipo_inversor | upper }}
+                            {% endif %}
+
+                            {% if proposta.fase_inversor %}
+                                {{ proposta.fase_inversor }}
+                            {% endif %}
+
+                            {% if proposta.tensao_inversor %}
+                                {{ proposta.tensao_inversor }}
+                            {% endif %}
+
+                            {{ "%.2f"|format(proposta.fabricante_inversor.potencia_inversor) }}kW
+
+                            {% if proposta.fabricante_inversor.quantidade_mppt %}
+                                (Mínimo de MPPTs: {{ proposta.fabricante_inversor.quantidade_mppt }})
+                            {% endif %}
+                        {% else %}
+                            Potência Total do(s) Inversor(es)
+                        {% endif %}
+                    </td>
+                    <td>{{ proposta.quantidade_inversores or '-' }}</td>
+                </tr>
+                <tr>
+                    <td>III</td>
+                    <td>Estrutura e suporte para instalação</td>
+                    <td>1</td>
+                </tr>
+                <tr>
+                    <td>IV</td>
+                    <td>Acessórios (Cabos, Stringbox, Conectores, Terminais e Disjuntores)</td>
+                    <td>1</td>
+                </tr>
+                <tr>
+                    <td>V</td>
+                    <td>Projeto e Instalação</td>
+                    <td>1</td>
+                </tr>
+            </tbody>
+        </table>
+        <p><small>** Reservado o direito da similaridade nos equipamentos conforme disponibilidade de mercado.</small></p>
+
+        <h5>LOCAL DA GERADORA E SUAS RECEBEDORAS</h5>
+        <table class="table-contrato">
+            <thead>
+                <tr>
+                    <th>UGUC</th>
+                    <th>Cód. Cliente</th>
+                    <th>Cód. Instalação</th>
+                    <th>Nº Medidor</th>
+                    <th>Endereço</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>G</td>
+                    <td>{{ proposta.codigo_cliente or '-' }}</td>
+                    <td>{{ proposta.codigo_instalacao or '-' }}</td>
+                    <td>{{ proposta.vistoria.numero_relogio or '-' }}</td>
+                    <td>{{ centro.endereco if centro else '-' }}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h5>CONDIÇÃO DE PAGAMENTO</h5>
+        <p><strong>Valor Total do sistema:</strong> R$ {{ "{:,.2f}".format(proposta.valor_estimado_proposta or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}</p>
+
+        {% if parcelas %}
+            {% for parcela in parcelas %}
+                <p>
+                    <strong>{{ parcela.descricao.split(' - ')[-1] }}:</strong> 
+                    R$ {{ "{:,.2f}".format(parcela.valor).replace(',', 'X').replace('.', ',').replace('X', '.') }} 
+                    - Vencimento: {{ parcela.data_vencimento.strftime('%d/%m/%Y') }}
+                </p>
+            {% endfor %}
+        {% else %}
+            <p><em>As condições de pagamento detalhadas serão definidas após a aprovação financeira.</em></p>
+        {% endif %}
+
+        <h5 class="mt-4">CLÁUSULAS CONTRATUAIS PADRÃO</h5>
+
+        <p><strong>1. DO OBJETO:</strong></p>
+        <p> 1.1. O presente Contrato compreende por objeto A VENDA DE SISTEMA DE GERAÇÃO FOTOVOLTAICA conforme potência declarada nas informações especificas,
+             em conformidade com as informações presentes na “PROPOSTA COMERCIAL” e de acordo com as condições pré-estabelecidas pela Concessionária Local, contemplando as seguintes atividades:</p>
+        <p>1.1.1. A elaboração de projeto para o acesso do Sistema de Geração Fotovoltaica à Concessionária Local;</p>
+        <p>1.1.2. O fornecimento dos componentes que englobam o Sistema de Geração Fotovoltaica vendido para a conversão de energia solar em eletricidade, conforme disposto na tabela da Cláusula 1.2 deste Contrato;</p>
+        <p>1.1.3. A instalação do Sistema de Geração Fotovoltaica no local de instalação indicado pela CONTRATANTE presente nas informações especificas  deste Contrato e conforme definido no Projeto;</p>
+        <p>1.1.4. A homologação da UGF que será conectada à rede da Concessionária Local.</p>
+        <p>1.2.	O sistema proposto tem potência para a produção de energia conforme informado na informação especifica, porém isso não garante que a geração média seja linear ou plena, pois a produção de energia depende dos fatores climáticos.</p>
+        <p>1.3.	A <strong>CGR ENERGIA</strong> não se responsabiliza por eventual aumento de consumo (kWh/mês) da <strong>CONTRATANTE</strong>.
+             Frisamos ainda que, no caso em tela, a geração será menor que a prevista pela <strong>CONTRATADA</strong> no momento da “PROPOSTA COMERCIAL”.</p>
+        <p>1.4.	Eventual solicitação de inclusão e/ou retirada de Unidade Consumidora do Sistema de Compensação, não indicada no momento desta contratação,
+             à <strong>CGR ENERGIA</strong>, será considerada serviço adicional, devendo a <strong>CONTRATANTE</strong> realizar o pagamento pelo serviço, conforme Tabela de Serviços da <strong>CGR ENERGIA</strong>.</p>
+
+        <p><strong>2. DAS RESPONSABILIDADES:</strong></p>
+        <p>2.1.	No âmbito deste Contrato, a <strong>CGR ENERGIA/CONTRATADA</strong> se responsabiliza a:</p>
+        <p>2.1.1. Elaborar e acompanhar a Solicitação do Orçamento de Conexão junto à Concessionária Local;</p>
+        <p>2.1.2. Elaborar Projeto Básico e Executivo de Sistema de Geração Fotovoltaico, através de memorial técnico descritivo, contendo o dimensionamento do sistema fotovoltaico e seu respectivo projeto de instalação, em conformidade com as exigências técnicas e normativas da Concessionária Local;</p>
+        <p>2.1.3. Emitir a Anotação de Responsabilidade Técnica (ART);</p>
+        <p>2.1.4. Instalar os equipamentos, inversores e módulos fotovoltaicos, bem como, todos os itens que compõe um sistema fotovoltaico conforme proposta.</p>
+        <p>2.1.5. Fornecer acesso ao sistema de monitoramento remoto da geração de energia solar do inversor, desde que haja acesso à internet no local do inversor.</p>
+        <p>2.1.6.	Excluem-se das obrigações da CONTRATADA, na forma da “PROPOSTA COMERCIAL” entabulada, os serviços referentes à: Elaboração de Projeto
+             de Subestação Elétrica de Transformação; Fornecimento e Execução de Subestação Elétrica de Transformação (Elétrico + Civil
++ QGBT); Execução de Cercamento e Fechamento do Local da Usina; e ainda Vigilância durante período das obras.</p>
+
+        <p><strong>3. DAS OBRIGAÇÕES DO CONTRATANTE:</strong></p>
+        <p>3.1.	<u>Sem prejuízo das demais disposições deste Contrato, são obrigações da <strong>CGR ENERGIA/CONTRATADA</u></strong>:</p>
+        <p>3.1.1. Assegurar à Potência Instalada dos Equipamentos do Sistema de Geração Fotovoltaica, conforme disponibilidade em mercado nacional e internacional;</p>
+        <p>3.1.2. Fornecer os equipamentos e executar a instalação dos itens contidos na proposta
+             e informações especificas deste contrato, conforme as normas da ABNT e NBR pertinentes ao sistema fotovoltaico;</p>
+        <p>3.1.3. Cumprir os prazos descritos neste contrato, quando de sua responsabilidade.</p>
+        <p>3.1.4. Monitorar a correta implantação do sistema, fazendo todo trâmite com a
+             Concessionária Local, a fim de garantir a correta injeção da energia produzida pelo sistema fotovoltaico;</p>
+        <p>3.1.5. Zelar pelas condições do imóvel da(s) Unidade(s) Consumidora(s), responsabilizando-se por eventuais
+             danos que o imóvel sofra (pintura, paredes, estrutura de telhados, vidros e lajes), desde que comprovados pelo Relatório Fotográfico, realizado na Vistoria Técnica de Validação;</p>
+        <p>3.1.6. Fornecer acompanhamento do parcelamento com extratos e informações, sempre que solicitado, conforme forma de pagamento presente na informações especificas deste Contrato;</p>
+        <p>3.1.7. Utilizar equipamentos adequados à realização dos serviços e pessoal qualificado,
+             assumindo plena e exclusiva responsabilidade por sua contratação, eximindo a CONTRATANTE de qualquer responsabilidade.</p>
+        <p>3.1.8. Executar as atividades necessárias à implantação do sistema de modo a não interferir desnecessária ou indevidamente com instalações ou serviços já existentes.</p>
+        <p>3.1.9. Fazer com que todo o pessoal sob sua responsabilidade, cumpra todas as normas disciplinares
+             e de segurança exigidas, fornecendo e fazendo com que todos utilizem corretamente os Equipamentos de Proteção Individuais pertinentes.</p>
+        <p>3.1.10. Prestar informação adequada e clara à <strong>CONTRATANTE</strong> sobre os produtos e serviços.</p>
+        <p>3.1.11. Caso haja a necessidade de interrupção do fornecimento de energia por motivo da instalação do SFV, tal interrupção será comunicada e acordada previamente com o <strong>CONTRATANTE</strong>.</p>
+        <p>3.2.	<u>Sem prejuízo das demais disposições deste Contrato, são obrigações da <strong>CONTRATANTE</strong></u>:</p>
+        <p>3.2.1. Efetuar os pagamentos a CGR ENERGIA, de forma tempestiva, nos termos deste Contrato.</p>
+        <p>3.2.2. Entregar, em tempo hábil, as informações e os documentos necessários para o cumprimento deste Contrato,
+             quais sejam, Procuração, Termo de Responsabilidade, entre outros documentos supervenientes que venham a ser solicitados.</p>
+        <p>3.2.3. Alterar a titularidade das contas de energia, única e exclusivamente, para o nome do CONTRATRANTE, ou se em nome de terceiro, indicar, por escrito,
+             no momento da contratação, o titular responsável e alterar a titularidade de todas as contas de energia para o nome deste, sempre que for o caso.</p>
+        <p>3.2.4. Solicitar junto à Concessionária Local o aumento de carga, quando necessário para a instalação do sistema.</p>
+        <p>3.2.5. Dar à <strong>CGR ENERGIA</strong> as condições necessárias para a execução do contrato, ou seja:
+            Liberar, em horário comercial, a entrada dos profissionais para a realização dos serviços necessários para o cumprimento deste Contrato, bem como,
+            para a verificação do sistema, em casos de falhas comunicadas pelo Monitoramento.</p>
+        <p>3.2.6. <strong>Promover acesso à internet contínua e ininterruptamente ao inversor durante toda a vigência deste Contrato, a fim de registrar as informações do sistema instalado.</strong></p>
+        <p>3.2.7. Providenciar a disponibilização dos pontos de energia e água potável durante a realização dos serviços.</p>
+        <p>3.2.8. Receber e armazenar os equipamentos entregues pela <strong>CGR ENERGIA</strong> de forma segura durante a etapa de instalação, zelando pela sua guarda e respondendo
+             por eventuais perdas e danos. Eventuais restrições implicarão em atrasos considerados de responsabilidade da <strong>CONTRATANTE</strong>.</p>
+        
+        <p><strong>4. DOS EQUIPAMENTOS, DO FUNCIONAMENTO E DA INSTALAÇÃO DO SISTEMA:</strong></p>
+        <p>4.1.	A <strong>CGR Energia</strong> realiza uma vistoria prévia e básica apenas para validar sua proposta, não tendo essa vistoria qualquer validação da concessionária local ou será valida como laudo.</p>
+        <p>4.2.	A implantação do sistema requer Vistoria de Instalação da Concessionária Local no imóvel da(s) Unidade(s) Geradora(s),
+             que em conformidade com a Regulamentação da Concessionária Local, indicará a existência, ou não, de pendências que impeçam sua conexão à rede.</p>
+        <p>4.3.	Eventuais obras e/ou reformas e/ou trocas para sanar as pendências apontadas na
+             Vistoria de Instalação são de responsabilidade da CONTRATANTE desde que as pendências não sejam relativas ao sistema fotovoltaico.</p>
+        <p>4.4.	A <strong>CGR ENERGIA</strong> não se responsabiliza pela execução de quaisquer obras exigidas pela Concessionária Local para regularização da Unidade Consumidora.</p>
+        <p>4.5.	Quando as exigências da Vistoria da Concessionária Local determinarem a execução de obras nas instalações do imóvel da <strong>CONTRATANTE</strong>,
+             esta permanece obrigada a realizar os pagamentos à <strong>CGR ENERGIA</strong>, em conformidade com o acordado na Cláusula 3. deste Contrato, sendo este o caso.</p>
+
+        <p><strong>5. DOS PRAZOS:</strong></p>
+        <p>5.1.	O cumprimento deste contrato iniciará na data de sua assinatura, devendo a <strong>CGR ENERGIA/CONTRATADA</strong> respeitar os prazos contidos no cronograma, conforme parágrafos seguintes.</p>
+        <p>5.2.	O Projeto Básico será protocolado na Concessionária Local para aprovação do ponto de conexão, apenas após o cumprimento, por parte da <strong>CONTRATANTE</strong>, das seguintes determinações:</P>
+        <p>5.2.1. <strong>Entrega das Procurações assinados pelo titular das Unidades Consumidoras</strong> (Contas de Energia), <strong>indicadas neste Contrato</strong>.</P>
+        <p>5.2.2. <strong>Troca de todos os titulares das Unidades Consumidoras</strong> (Contas de Energia), <strong>indicadas neste Contrato, para um único titular, em caso de autoconsumo remoto.</strong></P>
+        <p>5.2.3. <strong>Compensação do pagamento da parcela de entrada ou quitação, em caso de parcela única, em conta da CGR ENERGIA</strong>, exceto se ficar estipulado que o pagamento ocorrerá após a aprovação do projeto.</P>
+        <p>5.3.	Após o encaminhamento do Projeto Básico, a Concessionária Local detém prazo para emitir o Orçamento de Conexão, sendo de 15 dias: para conexão de unidades consumidoras com microgeração distribuída ou sem geração,
+             em tensão menor do que 69kV, em que não haja necessidade de realização de obras no sistema de distribuição ou de transmissão, apenas, quando necessário, a instalação do ramal de conexão; 30 dias: para conexão de
+              unidades consumidoras com microgeração distribuída ou sem geração, em tensão menor do que 69kV, em que haja necessidade de realização de obras no sistema de distribuição ou de transmissão; e 45 dias: para as demais conexões,
+               conforme Art. 64 da Resolução Normativa nº 1000/2021 da ANEEL. Não cabendo a responsabilização da <strong>CGR ENERGIA</strong> por atraso superveniente da Concessionária Local.</P>
+        <p>5.4.	Após a data da emissão do Orçamento de Conexão pela Concessionária Local, a <strong>CGR ENERGIA</strong> estima o prazo de 45 (quarenta e cinco) dias para fornecer e instalar os equipamentos.</P>
+        <p>5.5.	Após a instalação, a Concessionária local detém prazo de 7 (sete) dias para realizar a Vistoria das Instalações, contados da data de solicitação formal enviada pela <strong>CGR ENERGIA</strong> no dia útil seguinte a finalização das instalações.</P>
+        <p>5.6.	Após a Vistoria de Instalação, a Concessionária Local detém prazo de 5 (cinco) dias para realizar a Troca do Relógio.</P>
+        <p>5.7.	<strong>A CGR ENERGIA</strong> não se responsabiliza por atrasos nos prazos de etapas de competência da Concessionária Local (aprovação de Projeto, realização e aprovação de Vistoria de Instalação, aprovação de Aumento de Carga, entre outras competências).</P>
+        <p>5.8.	A <strong>CGR ENERGIA</strong> não se compromete a estabelecer prazos precisos para a implantação do sistema, pois trata-se de sistema conectado à rede da Concessionária Local. Desta forma, a <strong>CGR ENERGIA</strong> depende
+             do cumprimento dos prazos por parte da Concessionária Local, indicando, assim, prazos estimados para o cumprimento do contrato.</P>
+        <p>5.9.	No entanto, para efeito de prazo total, considerando o cumprimento das etapas de competência da Concessionária Legal no prazo legal, a <strong>CGR ENERGIA</strong> detém 120 (cento e vinte) dias corridos para executar a instalação de 
+            microgeração distribuída, e para minigeração distribuída detém prazo de 150 (cento e cinquenta) dias corridos, contados a partir do pagamento da entrada ou da quitação, se parcela única, ou da aprovação do Projeto Básico, conforme definido neste Contrato.</P>
+        <p>5.10. A <strong>CGR ENERGIA</strong> reserva-se ao direito de suspender a contagem dos prazos acordados no cronograma sempre que a <strong>CONTRATANTE</strong> deixar de cumprir com as obrigações pactuadas, incluindo atrasos na regularização das pendências apontadas pela
+             Concessionária Local, podendo a <strong>CONTRATANTE</strong> arcar com os custos extras incorridos.</P>
+        <p>5.11. O prazo de entrega poderá ser prorrogado quando ocorrer:</P>
+        <p>5.11.1. Caso fortuito, força maior ou dificuldades de acesso ao imóvel;</P>
+        <p>5.11.2. Surgimento de fatos técnicos imprevistos que impliquem na paralisação dos trabalhos ou na substituição de materiais por outros indisponíveis no mercado;</P>
+        <p>5.11.3. Interrupções no fornecimento de água ou energia elétrica por períodos superiores a duas horas por dia;</P>
+        <p>5.11.4. Descumprimento do prazo de fornecimento dos equipamentos por motivo de terceiros.</P>
+        <p>5.11.5. Descumprimento do prazo das etapas responsáveis pela Concessionária Local.</P>
+        <p>5.11.6. Alteração do projeto por parte da <strong>CONTRATANTE</strong>.</P>
+
+        <p><strong>6. DAS GARANTIAS:</strong></p>
+        <p>6.1.	A <strong>CGR ENERGIA</strong> garante à <strong>CONTRATANTE</strong> que o equipamento a ser fornecido atende ao descrito nas Especificações Técnicas quando operado dentro dos limites técnicos para os quais foi projetado e em estrito acordo com as instruções de operação específicas
+             fornecidas pela <strong>CGR ENERGIA e/ou FABRICANTE</strong>, ou, na ausência destas, de acordo com as práticas usuais vigentes na indústria para este tipo de equipamento.</p>
+        <p>6.2.	A <strong>CGR ENERGIA/CONTRATADA</strong> concede a garantia dos Serviços e Instalações realizados por prazo total de 1 (um) ano, contado a partir da ligação do sistema ou a partir da entrega do Relatório de Entrega, o que ocorrer primeiro.</p>
+        <p>6.3.	A garantia dos produtos, descritos na informações especificas deste Contrato, é oferecida pelos <strong>FABRICANTES e/ou REPRESENTANTES IMPORTADORES</strong>, desde que respeitadas as orientações e/ou condições presentes nos Manuais dos equipamentos,
+             sob o compromisso de realizar o reparo do produto caso este apresente algum defeito de fabricação. Desta forma, os prazos, contados a partir da emissão da nota fiscal, são:</p>
+        <p>6.3.1. De 20 (vinte) à 25 (vinte e cinco) anos para a eficiência dos módulos fotovoltaicos, considerando o decaimento natural de geração, próprio da tecnologia, de 3% (três por cento)
+             no primeiro ano e de até 0,8% por ano subsequente, além de 10 (dez) anos contra defeitos de fabricação.</p>
+        <p>6.3.2. De 05 (cinco) anos para os equipamentos de inversores em casos de defeitos de fabricação.</p>
+        <p>6.3.3. De 10 (dez) anos para equipamentos de micro inversores em caso de defeito de fabricação.</p>
+        <p>6.3.4. 10 (dez) anos para a estrutura de fixação contra corrosão e desgaste.</p>
+        <p>6.4.	A garantia supracitada, fornecida pelos <strong>FABRICANTES e/ou REPRESENTANTES IMPORTADORES</strong>, não cobre os custos de frete de envio e/ou reenvio dos Produtos para reparo ou análise nas instalações
+             da fabricante ou do representante importador, sendo de responsabilidade da <strong>CONTRATANTE</strong>. No entanto, nos casos em que forem comprovados defeitos de fabricação do Produto, as despesas de transporte de devolução serão pagas pelos <strong>FABRICANTES/IMPORTADOR</strong>.</p>
+        <p>6.5.	Os prazos das garantias previstos nas Cláusula 6.2. e 6.3. acima compreendem a garantia legal prevista no inciso II do artigo 26 do Código de Defesa do Consumidor e da garantia Contratual fornecida pela <strong>CGR ENERGIA</strong> e/ou pelos <strong>FABRICANTES</strong> e/ou <strong>IMPORTADORES FORNECEDORES</strong> dos equipamentos e componentes que compõem este Contrato.</p>
+        <p>6.6.	Como condição de validade de garantia é imprescindível a manutenção preventiva e corretiva do sistema e da estrutura através de uma empresa especializada, com técnicos capacitados. A <strong>CGR ENERGIA</strong> poderá solicitar a ART do responsável pela manutenção para validação de garantia de qualquer equipamento.</p>
+
+        <p><strong>7. DAS PENALIDADES:</strong></p>
+        <p>7.1.	Além dos valores devidos pelo inadimplemento de obrigações contratuais, a <strong>CONTRATANTE</strong>, arcará com todas as despesas, sejam elas extrajudiciais ou judiciais, bem como honorários profissionais, no importe de 10% (dez por cento) para resoluções extrajudiciais e havendo necessidade de demanda judicial no importe de 20% (vinte por cento),
+             despendidos pela <strong>CGR ENERGIA</strong> nas ações que forem propostas por força deste contrato, servindo os comprovantes de pagamento, como recebidos; guias de recolhimento, notas de débito, depósitos judiciais e notas fiscais, como comprovação do débito líquido, certo e exigível em favor da <strong>CGR ENERGIA</strong>;</p>
+        <p>7.2.	Configura atraso justificado para medidas de cobrança judicial o atraso de 15 (quinze) dias ou mais, consecutivos ou não.</p>
+        <p>7.3.	Fica o contratante advertido de que o atraso no pagamento das parcelas resultará na cobrança de multa de 2% (dois por cento) além de juros de 1% (um por cento) ao mês.</p>
+
+        <p><strong>8. DA RESCISÃO:</strong></p>
+        <p>8.1.	O presente contrato poderá ser rescindido no caso de inadimplemento de quaisquer obrigações ora estabelecidas, desde que a parte inadimplente não sane a pendência em até 15 (quinze) dias corridos, ficando este prazo vinculado ao prazo fornecido pela Concessionária Local ou Órgão Responsável, contados do recebimento da notificação por escrito
+             da outra parte, ou, ainda, no caso de inexecução total ou parcial deste contrato. A parte infratora ficará obrigada a pagar a multa equivalente a 10% (dez por cento) do valor total do contrato à outra parte, sem prejuízo das perdas e danos e lucros cessantes que a referida rescisão acarretar.</p>
+        <p>8.2.	Para o caso de rescisão por inadimplência no pagamento de uma ou mais parcelas, além das perdas e danos e lucros cessantes, arcará a <strong>CONTRATANTE</strong> com o pagamento dos juros, da correção monetária e da multa previstos neste Contrato.</p>
+        <p>8.3.	Eventual rescisão unilateral pela <strong>CONTRATANTE</strong>, excluída as hipóteses acima, deverá ser feita mediante notificação, por escrito, a qual em até 15 (quinze) dias será processada, arcando, nesta hipótese, com o pagamento da multa de 10% (dez por cento) do valor do contrato; todavia, caso o projeto ou o
+             fornecimento ou a instalação já tenham sido iniciados, além da multa ora estabelecida, a <strong>CONTRATANTE</strong> arcará com o pagamento do valor dos equipamentos e serviços já encomendados, fornecidos e/ou realizados, valor este a ser apurado pela <strong>CGR ENERGIA</strong>, que deverá compensar eventuais valores recebidos e encaminhar demonstrativo para a <strong>CONTRATANTE</strong>,
+              a qual deverá saldar referido débito no prazo de 10 (dez) dias corridos contados da data do recebimento do demonstrativo dos serviços e valores.</p>
+        <p>8.4.	Quaisquer das Partes poderá, a qualquer tempo, rescindir este instrumento no caso de pedido ou decretação de falência, pedido de recuperação judicial ou extrajudicial, sem prejuízo das perdas e danos e lucros cessantes que a referida rescisão acarretar.</p>
+        <p>8.5.	A rescisão poderá ocorrer, ainda, por mútuo acordo entre as partes e a qualquer tempo, caso em que não haverá encargo algum a nenhuma delas.</p>
+
+        <p><strong>9. DO CASO FORTUITO E FORÇA MAIOR:</strong></p>
+        <p>9.1.	A <strong>CGR ENERGIA/CONTRATADA</strong> não será responsabilizada pelo não cumprimento de suas obrigações quando motivado tal descumprimento por caso fortuito ou força maior, nos termos do artigo 393 do Código Civil Brasileiro, desde que tais ocorrências tenham influência direta e comprovada sobre a realização dos serviços e fornecimentos.</p>
+        <p>9.2.	O prazo para execução das obrigações contratuais, nos termos desta cláusula, será acrescido de tantos dias quanto durarem as consequências impeditivas da execução das respectivas obrigações da parte afetada pelo evento, desde que devidamente comprovada a necessidade de dilação do aludido prazo de execução das obrigações que efetivamente
+             tenham correlação com o caso fortuito ou força maior ocorridos.</p>
+        <p>9.3.	Na hipótese aludida nesta Cláusula, a CGR ENERGIA submeterá à <strong>CONTRATANTE</strong>, por escrito, todas as medidas que lhe parecerem oportunas, com vistas a reduzir ou eliminar as dificuldades encontradas, bem como os custos envolvidos.</p>
+        <p>9.4.	A <strong>CONTRATANTE</strong> deverá manifestar-se, por escrito, no prazo máximo de 10 (dez) dias, quanto à sua aprovação, recusa ou aceitação parcial, com seus custos correlatos.</p>
+
+        <p><strong>10. DO TÍTULO EXECUTIVO EXTRAJUDICIAL:</strong></p>
+        <p>10.1. A CONTRATANTE fica formalmente advertido de que o presente contrato é título executivo, na forma do art. 784, III, do NCPC.</p>
+
+        <p><strong>11. DO DIREITO DE IMAGEM:</strong></p>
+        <p>11.1. A <strong>CONTRATANTE</strong>, desde já, concede à <strong>CGR ENERGIA</strong> o direito de utilizar, a título gratuito, as imagens do Sistema de Geração Fotovoltaica instalada no imóvel para eventual veiculação na mídia, realização de campanhas, produção de materiais de marketing ou outras atividades correlatas.</p>
+
+        <p><strong>12. DAS DISPOSIÇÕES GERAIS:</strong></p>
+        <p>12.1. Todos os riscos de perdas ou danos dos equipamentos passarão à <strong>CONTRATANTE</strong> na data de ligação do sistema ou na entrega do Relatório de Entrega, o que ocorrer primeiro.</p>
+        <p>12.2. O presente contrato terá vigência a partir da sua assinatura pelas partes.
+            <p>Fica desde já eleito, com exclusão de qualquer outro, por mais privilegiado que seja, o Foro da Circunscrição Judiciária de Brasília - DF, para quaisquer ações ou medidas judiciais referentes a este Contrato.</p>
+            E por estarem justas e contratadas, assinam o presente instrumento na presença de duas testemunhas abaixo, de forma digital;</p>
+
+        <br>
+        <p>Brasília, ______ de ________________ de 2026.</p>
+
+        <div class="row assinatura-box text-center">
+            <div class="col-6 mb-5">
+                <div class="linha-assinatura mx-auto"></div>
+                <strong>CONTRATADA</strong><br>CGR ENERGIA E ENGENHARIA LTDA
+            </div>
+            <div class="col-6 mb-5">
+                <div class="linha-assinatura mx-auto"></div>
+                <strong>CONTRATANTE</strong><br>{{ centro.cliente.nome if centro and centro.cliente else 'NOME DO CLIENTE' }}
+            </div>
+            <div class="col-6 mb-4">
+                <div class="linha-assinatura mx-auto"></div>
+                <strong>TESTEMUNHA 1</strong><br>RICARDO DE PINHO RIBEIRO
+            </div>
+            <div class="col-6 mb-4">
+                <div class="linha-assinatura mx-auto"></div>
+                <strong>TESTEMUNHA 2</strong><br>NUZA KAROLINA DE OLIVEIRA ARAUJO
+            </div>
+            <div class="col-6">
+                <div class="linha-assinatura mx-auto"></div>
+                <strong>Consultor de Vendas</strong><br>FELIPE CACHO
+            </div>
+            <div class="col-6">
+                <div class="linha-assinatura mx-auto"></div>
+                <strong>Gerente de Vendas</strong><br>LUIZ PORTILHO
+            </div>
+        </div>
+
+        <div class="text-center mt-5 no-print">
+            <hr>
+            <button class="btn btn-dark btn-lg px-5 shadow-sm" onclick="window.print()">
+                <i class="bi bi-printer"></i> Gerar Documento para Assinatura
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}

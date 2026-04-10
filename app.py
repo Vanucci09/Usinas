@@ -1,24 +1,23 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify, make_response, send_file, flash, send_from_directory, abort, current_app
+from flask import Flask, render_template, request, redirect, url_for, jsonify, send_file, flash, send_from_directory, abort, current_app, make_response
 from datetime import date, datetime, timedelta
-import datetime as dt
 from calendar import monthrange
 import os, uuid, calendar, subprocess, threading
 import pandas as pd
 from werkzeug.utils import secure_filename
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-from sqlalchemy import Numeric, text, func, case, cast, or_, and_, literal, CheckConstraint, desc
+from sqlalchemy import Numeric, text, func, case, or_, and_, CheckConstraint, desc
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
-import fitz, tempfile, glob, platform
+import fitz, tempfile
 from PIL import Image
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
-import time, hashlib, json, hmac, requests, base64, atexit, math
+import time, hashlib, json, hmac, requests, atexit, math
 from email.utils import formatdate
 from apscheduler.schedulers.background import BackgroundScheduler
 from flask_mail import Mail, Message
-from urllib.parse import quote, parse_qs, urlparse, quote_plus
-import base64, shutil, logging
+from urllib.parse import urlparse, quote_plus, urljoin, parse_qs
+import base64, shutil
 from sqlalchemy.orm import joinedload
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -27,10 +26,8 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.service import Service
 from pathlib import Path
 from markupsafe import Markup
-from shutil import copyfile
 from collections import defaultdict
 from sqlalchemy import extract, tuple_, UniqueConstraint, Index
 from threading import Lock
@@ -39,7 +36,6 @@ from sqlalchemy.exc import IntegrityError
 from dateutil.relativedelta import relativedelta
 import re, unicodedata
 from sqlalchemy.dialects.postgresql import JSONB
-from urllib.parse import urljoin
 import traceback
 from zoneinfo import ZoneInfo
 
@@ -81,7 +77,7 @@ mail = Mail(app)
 
 @login_manager.user_loader
 def load_user(user_id):
-    return Usuario.query.get(int(user_id))
+    return db.session.get(Usuario, int(user_id))
 
 # Modelos
 class Usina(db.Model):
@@ -112,8 +108,6 @@ class Usina(db.Model):
     # página: 'first' | 'last' | 0..n-1 | -1 etc (string para flexibilidade)
     ficha_page_select_padrao = db.Column(db.String(10), nullable=False, default='last')
     ficha_page_select_boleto = db.Column(db.String(10), nullable=False, default='first')
-    
-    rateios = db.relationship('Rateio', backref='usina', cascade="all, delete-orphan")
     geracoes = db.relationship('Geracao', backref='usina', cascade="all, delete-orphan")
     
 class Inversor(db.Model):
@@ -468,7 +462,6 @@ class FinanceiroEmpresa(db.Model):
     tipo = db.Column(db.String(20), nullable=False)  # 'receita' ou 'despesa'
     descricao = db.Column(db.String(255), nullable=False)
     valor = db.Column(db.Numeric(12, 2), nullable=False)
-
     status = db.Column(db.String(20), nullable=False, default='pendente')  # pendente, pago, recebido
     data_vencimento = db.Column(db.Date)
     conta_id = db.Column(db.Integer, db.ForeignKey('caixas_bancos.id'), nullable=True)
@@ -494,7 +487,6 @@ class FinanceiroEmpresa(db.Model):
         nullable=True
     )
 
-    # NOVO: relationship (deixe explícito o foreign_keys para evitar ambiguidade)
     cliente_operacional = db.relationship(
         'ClienteOperacional',
         backref=db.backref('titulos', lazy='dynamic'),
@@ -557,9 +549,10 @@ class ClienteOperacional(db.Model):
     # Relacionamentos
     centros_custos = db.relationship(
         'CentroCusto',
-        backref='cliente_operacional',
+        backref=db.backref('cliente_operacional', overlaps="centros,cliente"),
         cascade="all, delete-orphan",
-        lazy='selectin'
+        lazy='selectin',
+        overlaps="centros,cliente,cliente_operacional" 
     )
 
     __table_args__ = (
@@ -574,18 +567,28 @@ class CentroCusto(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     empresa_id = db.Column(db.Integer, db.ForeignKey('empresas.id'), nullable=False)
     cliente_id = db.Column(db.Integer, db.ForeignKey('clientes_operacionais.id'), nullable=False)
-
     codigo = db.Column(db.String(50), nullable=False)   # Ex.: CC-001, 1001, etc.
     nome = db.Column(db.String(255), nullable=False)
-
     cpf_cnpj = db.Column(db.String(20), nullable=True)
     endereco = db.Column(db.String(255), nullable=True)
     telefone = db.Column(db.String(30), nullable=True)
     email = db.Column(db.String(120), nullable=True)
-
     ativo = db.Column(db.Boolean, nullable=False, default=True)
     criado_em = db.Column(db.DateTime(timezone=True), server_default=func.now())
     atualizado_em = db.Column(db.DateTime(timezone=True), onupdate=func.now())
+    
+    # Dados do representante (quando for CNPJ)
+    representante_nome = db.Column(db.String(255), nullable=True)
+    representante_cpf = db.Column(db.String(20), nullable=True)
+    representante_endereco = db.Column(db.String(255), nullable=True)
+    representante_telefone = db.Column(db.String(30), nullable=True)
+    representante_email = db.Column(db.String(120), nullable=True)
+        
+    cliente = db.relationship(
+        'ClienteOperacional', 
+        backref=db.backref('centros', overlaps="centros_custos,cliente_operacional"), 
+        overlaps="centros_custos,cliente_operacional"
+    )
 
     __table_args__ = (
         # Um mesmo código não se repete dentro da mesma empresa
@@ -593,7 +596,17 @@ class CentroCusto(db.Model):
         Index('ix_centros_custos_empresa_codigo', 'empresa_id', 'codigo'),
         Index('ix_centros_custos_empresa_cliente', 'empresa_id', 'cliente_id'),
     )
+    
+class DocumentoCentroCusto(db.Model):
+    __tablename__ = 'documentos_centro_custo'
 
+    id = db.Column(db.Integer, primary_key=True)
+    centro_custo_id = db.Column(db.Integer, db.ForeignKey('centros_custos.id'), nullable=False)
+    nome_arquivo = db.Column(db.String(255))
+    caminho = db.Column(db.String(255))
+    data_upload = db.Column(db.DateTime, default=datetime.utcnow)
+
+    centro = db.relationship('CentroCusto', backref='documentos')
 
 class PlanoFinanceiro(db.Model):
     __tablename__ = 'planos_financeiros'
@@ -623,7 +636,6 @@ class Comercial(db.Model):
         cascade='all, delete-orphan'
     )
 
-
 class Vendedor(db.Model):
     __tablename__ = 'vendedores'
 
@@ -641,6 +653,203 @@ class Vendedor(db.Model):
 
     def __repr__(self):
         return f'<Vendedor {self.nome}>'
+    
+class FornecedorKitModulo(db.Model):
+    __tablename__ = 'fornecedores_kits_modulos'
+
+    id = db.Column(db.Integer, primary_key=True)
+    fornecedor_kit_id = db.Column(db.Integer, db.ForeignKey('fornecedores_kits.id', ondelete='CASCADE'), nullable=False)
+    modulo_fotovoltaico_id = db.Column(db.Integer, db.ForeignKey('modulos_fotovoltaicos.id', ondelete='CASCADE'), nullable=False)
+
+    valor = db.Column(db.Numeric(12,2), nullable=True)  # 🔥 AQUI
+
+    fornecedor = db.relationship('FornecedorKit', backref=db.backref('vinculos_modulos', cascade='all, delete-orphan'))
+    modulo = db.relationship('ModuloFotovoltaico')
+
+    __table_args__ = (
+        db.UniqueConstraint('fornecedor_kit_id', 'modulo_fotovoltaico_id', name='uq_fkm'),
+    )
+    
+class FornecedorKitInversor(db.Model):
+    __tablename__ = 'fornecedores_kits_inversores'
+
+    id = db.Column(db.Integer, primary_key=True)
+    fornecedor_kit_id = db.Column(db.Integer, db.ForeignKey('fornecedores_kits.id', ondelete='CASCADE'), nullable=False)
+    fabricante_inversor_id = db.Column(db.Integer, db.ForeignKey('fabricantes_inversor.id', ondelete='CASCADE'), nullable=False)
+    valor = db.Column(db.Numeric(12,2), nullable=True)
+    fornecedor = db.relationship('FornecedorKit', backref=db.backref('vinculos_inversores', cascade='all, delete-orphan'))
+    inversor = db.relationship('FabricanteInversor')
+
+    __table_args__ = (
+        db.UniqueConstraint('fornecedor_kit_id', 'fabricante_inversor_id', name='uq_fki'),
+    )
+    
+class PropostaKitSolar(db.Model):
+    __tablename__ = 'propostas_kit_solar'
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    empresa_id = db.Column(db.Integer, db.ForeignKey('empresas.id'), nullable=False)
+    centro_custo_id = db.Column(db.Integer, db.ForeignKey('centros_custos.id'), nullable=False)
+    vendedor_id = db.Column(db.Integer, db.ForeignKey('vendedores.id'), nullable=False)
+    comercial_id = db.Column(db.Integer, db.ForeignKey('comercial.id'), nullable=True)
+
+    numero = db.Column(db.String(30), nullable=False, unique=True)
+    status = db.Column(db.String(30), nullable=False, default='em_edicao')
+
+    # ETAPA 1 - Conta de energia
+    grupo_tarifario = db.Column(db.String(20), nullable=True)
+    consumo_kwh = db.Column(db.Numeric(12, 2), nullable=True)
+    custo_disponibilidade = db.Column(db.Numeric(12, 2), nullable=True)
+    custo_iluminacao_publica = db.Column(db.Numeric(12, 2), nullable=True)
+    valor_total_conta = db.Column(db.Numeric(12, 2), nullable=True)
+    codigo_instalacao = db.Column(db.String(50), nullable=True)
+    codigo_cliente = db.Column(db.String(50), nullable=True)
+
+    concessionaria_id = db.Column(db.Integer, db.ForeignKey('concessionarias.id'), nullable=True)
+    valor_kwh = db.Column(db.Numeric(12, 6), nullable=True)
+    valor_tusd_fio_b = db.Column(db.Numeric(12, 6), nullable=True)
+    tipo_fase = db.Column(db.String(30), nullable=True)
+    tensao_rede = db.Column(db.String(30), nullable=True)
+
+    # ETAPA 2 - Local de instalação
+    latitude = db.Column(db.Numeric(10, 7), nullable=True)
+    longitude = db.Column(db.Numeric(10, 7), nullable=True)
+    endereco_instalacao = db.Column(db.String(255), nullable=True)
+    tipo_telhado = db.Column(db.String(50), nullable=True)
+
+    # ETAPA 3 - Seleção do gerador
+    fornecedor_id = db.Column(db.Integer, db.ForeignKey('fornecedores_kits.id'), nullable=True)
+    tipo_inversor = db.Column(db.String(50), nullable=True)  # string / microinversor / híbrido
+    modulo_id = db.Column(db.Integer, db.ForeignKey('modulos_fotovoltaicos.id'), nullable=True)
+    fabricante_inversor_id = db.Column(db.Integer, db.ForeignKey('fabricantes_inversor.id'), nullable=True)
+    fase_inversor = db.Column(db.String(30), nullable=True)
+    tensao_inversor = db.Column(db.String(30), nullable=True)
+
+    # Resumo técnico
+    potencia_sugerida_kwp = db.Column(db.Numeric(12, 2), nullable=True)
+    quantidade_modulos = db.Column(db.Integer, nullable=True)
+    quantidade_inversores = db.Column(db.Integer, nullable=True)
+    area_estimada_m2 = db.Column(db.Numeric(12, 2), nullable=True)
+    geracao_estimada_kwh_mes = db.Column(db.Numeric(12, 2), nullable=True)
+
+    # Resumo financeiro detalhado
+    valor_modulos = db.Column(db.Numeric(12, 2), nullable=True)
+    valor_inversores = db.Column(db.Numeric(12, 2), nullable=True)
+    valor_projeto = db.Column(db.Numeric(12, 2), nullable=True)
+    valor_instalacao = db.Column(db.Numeric(12, 2), nullable=True)
+    valor_restante_material = db.Column(db.Numeric(12, 2), nullable=True)
+    valor_extras = db.Column(db.Numeric(12, 2), nullable=True)
+    valor_comissao_vendedor = db.Column(db.Numeric(12, 2), nullable=True)
+    valor_imposto_material = db.Column(db.Numeric(12, 2), nullable=True)
+    valor_imposto_servico = db.Column(db.Numeric(12, 2), nullable=True)
+    valor_subtotal = db.Column(db.Numeric(12, 2), nullable=True)
+    valor_bdi = db.Column(db.Numeric(12, 2), nullable=True)
+    valor_estimado_proposta = db.Column(db.Numeric(12, 2), nullable=True)
+    valor_frete = db.Column(db.Numeric(12, 2), nullable=True)
+
+    observacoes = db.Column(db.Text, nullable=True)
+
+    criado_em = db.Column(db.DateTime(timezone=True), server_default=func.now())
+    atualizado_em = db.Column(db.DateTime(timezone=True), onupdate=func.now())
+
+    centro_custo = db.relationship('CentroCusto', backref='propostas_solares')
+    vendedor = db.relationship('Vendedor', backref='propostas_solares')
+    concessionaria = db.relationship('Concessionaria', backref='propostas_solares')
+    fornecedor = db.relationship('FornecedorKit', backref='propostas_solares')
+    modulo = db.relationship('ModuloFotovoltaico', backref='propostas_solares')
+    fabricante_inversor = db.relationship('FabricanteInversor', backref='propostas_solares')
+    
+    vistoria = db.relationship('Vistoria', backref='proposta', uselist=False)
+
+    __table_args__ = (
+        Index('ix_propostas_empresa_centro', 'empresa_id', 'centro_custo_id'),
+        Index('ix_propostas_empresa_vendedor', 'empresa_id', 'vendedor_id'),
+    )
+    
+class Concessionaria(db.Model):
+    __tablename__ = 'concessionarias'
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(120), nullable=False, unique=True)
+    estado = db.Column(db.String(2), nullable=True)
+    ativo = db.Column(db.Boolean, nullable=False, default=True)
+    
+class FornecedorKit(db.Model):
+    __tablename__ = 'fornecedores_kits'
+
+    id = db.Column(db.Integer, primary_key=True)
+    empresa_id = db.Column(db.Integer, db.ForeignKey('empresas.id'), nullable=False)
+    nome = db.Column(db.String(150), nullable=False)
+    ativo = db.Column(db.Boolean, nullable=False, default=True)
+    
+    empresa = db.relationship('Empresa', backref='fornecedores_kits')
+    
+class ModuloFotovoltaico(db.Model):
+    __tablename__ = 'modulos_fotovoltaicos'
+
+    id = db.Column(db.Integer, primary_key=True)
+    fabricante = db.Column(db.String(150), nullable=False)
+    modelo = db.Column(db.String(150), nullable=False)
+    potencia_wp = db.Column(db.Numeric(10, 2), nullable=False)
+    largura_m = db.Column(db.Numeric(10, 3), nullable=True)
+    altura_m = db.Column(db.Numeric(10, 3), nullable=True)
+    ativo = db.Column(db.Boolean, nullable=False, default=True)
+
+    def area_m2(self):
+        if self.largura_m and self.altura_m:
+            return float(self.largura_m) * float(self.altura_m)
+        return 0
+    
+class FabricanteInversor(db.Model):
+    __tablename__ = 'fabricantes_inversor'
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(150), nullable=False, unique=True)
+    potencia_inversor = db.Column(db.Numeric(10, 2), nullable=True)
+    tipo_inversor = db.Column(db.String(30), nullable=True)  # microinversor, string, hibrido
+    quantidade_mppt = db.Column(db.Integer, nullable=True)
+    fase = db.Column(db.String(20), nullable=True)
+    tensao = db.Column(db.String(30), nullable=True)
+    ativo = db.Column(db.Boolean, nullable=False, default=True)
+    
+class Vistoria(db.Model):
+    __tablename__ = 'vistorias'
+
+    id = db.Column(db.Integer, primary_key=True)
+    proposta_id = db.Column(db.Integer, db.ForeignKey('propostas_kit_solar.id'), nullable=False)
+
+    data_sugerida = db.Column(db.Date, nullable=False)
+    periodo = db.Column(db.String(20))
+    observacoes = db.Column(db.Text)
+    status = db.Column(db.String(20), default='pendente')
+    padrao_entrada = db.Column(db.String(50))
+    condicao_padrao = db.Column(db.String(100))
+    modelo_relogio = db.Column(db.String(50))
+    numero_relogio = db.Column(db.String(50))
+    aterramento = db.Column(db.Boolean)
+    disjuntor_amperagem = db.Column(db.String(20))
+    bitola_condutor = db.Column(db.String(50))
+    padrao_coletivo = db.Column(db.Boolean)
+
+    info_eletrica = db.Column(db.Text)
+    info_estrutural = db.Column(db.Text)
+    modificacoes_cliente = db.Column(db.Text)
+
+    data_cadastro = db.Column(db.DateTime, default=datetime.utcnow)
+    
+class FotoVistoria(db.Model):
+    __tablename__ = 'fotos_vistoria'
+
+    id = db.Column(db.Integer, primary_key=True)
+    vistoria_id = db.Column(db.Integer, db.ForeignKey('vistorias.id'), nullable=False)
+
+    tipo = db.Column(db.String(20))  
+    # externa | interna | telhado | extra
+
+    caminho = db.Column(db.String(255))
+
+    vistoria = db.relationship('Vistoria', backref='fotos')
     
 class Usuario(db.Model, UserMixin):
     __tablename__ = 'usuarios'
@@ -915,9 +1124,7 @@ def producao_mensal(usina_id, ano, mes):
     ano_bruto = round(ano_sum * 0.83, 2)
     ano_liquido = round(ano_bruto * 0.80, 2)
 
-    # --------------------------
     # Média Yield acumulado no ano (exceto mês atual)
-    # --------------------------
     geracoes_diarias = db.session.query(
         Geracao.data,
         func.sum(Geracao.energia_kwh)
@@ -5616,8 +5823,6 @@ def relatorio_gestao_usina():
     if not current_user.pode_acessar_financeiro:
         return "Acesso negado", 403
 
-    from sqlalchemy import func
-
     # Filtros de mês e ano atual (selecionado pelo usuário)
     mes = request.args.get('mes', default=date.today().month, type=int)
     ano = request.args.get('ano', default=date.today().year, type=int)
@@ -6288,8 +6493,6 @@ def excluir_participacao(participacao_id):
     db.session.delete(participacao)
     db.session.commit()
     return redirect(url_for('listar_participacoes_empresa', empresa_id=empresa_id))
-
-from flask import send_from_directory
 
 @app.route('/favicon.ico')
 def favicon():
@@ -7278,7 +7481,6 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade,
                 href = a.get_attribute("href") or ""
                 codigo_param = ""
                 if "?" in href:
-                    from urllib.parse import urlparse, parse_qs
                     q = parse_qs(urlparse(href).query)
                     codigo_param = (q.get("codigo", [""])[0]).strip()
                 cand = ''.join(filter(str.isdigit, codigo_param))  # ex.: 030082005
@@ -10496,7 +10698,12 @@ def cadastrar_centro_custo():
         telefone = request.form.get('telefone')
         email = request.form.get('email')
 
-        # validação básica
+        representante_nome = request.form.get('representante_nome')
+        representante_cpf = request.form.get('representante_cpf')
+        representante_endereco = request.form.get('representante_endereco')
+        representante_telefone = request.form.get('representante_telefone')
+        representante_email = request.form.get('representante_email')
+
         if not empresa_id or not cliente_id or not codigo or not nome:
             flash('Empresa, Cliente, Código e Nome são obrigatórios.', 'danger')
             return redirect(url_for('cadastrar_centro_custo'))
@@ -10508,12 +10715,20 @@ def cadastrar_centro_custo():
             flash('Empresa ou Cliente inválidos.', 'danger')
             return redirect(url_for('cadastrar_centro_custo'))
 
-        # garantir que o cliente pertence à empresa
         cliente = ClienteOperacional.query.get(cliente_id_int)
         if not cliente or cliente.empresa_id != empresa_id_int:
             flash('Cliente não pertence à empresa selecionada.', 'danger')
             return redirect(url_for('cadastrar_centro_custo'))
 
+        cpf_cnpj_limpo = (cpf_cnpj or '').replace('.', '').replace('-', '').replace('/', '').strip()
+        eh_cnpj = len(cpf_cnpj_limpo) > 11
+
+        if eh_cnpj:
+            if not representante_nome or not representante_cpf or not representante_endereco or not representante_telefone or not representante_email:
+                flash('Para CNPJ, os dados do representante são obrigatórios.', 'danger')
+                return redirect(url_for('cadastrar_centro_custo'))
+
+        # CRIA CENTRO
         novo_centro = CentroCusto(
             empresa_id=empresa_id_int,
             cliente_id=cliente_id_int,
@@ -10523,6 +10738,11 @@ def cadastrar_centro_custo():
             endereco=endereco.strip() if endereco else None,
             telefone=telefone.strip() if telefone else None,
             email=email.strip() if email else None,
+            representante_nome=representante_nome.strip() if representante_nome else None,
+            representante_cpf=representante_cpf.strip() if representante_cpf else None,
+            representante_endereco=representante_endereco.strip() if representante_endereco else None,
+            representante_telefone=representante_telefone.strip() if representante_telefone else None,
+            representante_email=representante_email.strip() if representante_email else None,
             ativo=True,
             criado_em=datetime.now()
         )
@@ -10530,17 +10750,51 @@ def cadastrar_centro_custo():
         try:
             db.session.add(novo_centro)
             db.session.commit()
+
+            # UPLOAD DE DOCUMENTOS
+            arquivos = request.files.getlist('documentos')
+
+            caminho_base = os.getenv(
+                'DOCUMENTOS_PATH',
+                os.path.join(current_app.root_path, 'static', 'documentos')
+            )
+
+            os.makedirs(caminho_base, exist_ok=True)
+
+            for arquivo in arquivos:
+                if arquivo and arquivo.filename:
+                    nome_original = secure_filename(arquivo.filename)
+                    ext = os.path.splitext(nome_original)[1]
+                    nome_unico = f"{uuid.uuid4().hex}{ext}"
+
+                    caminho_arquivo = os.path.join(caminho_base, nome_unico)
+                    arquivo.save(caminho_arquivo)
+
+                    doc = DocumentoCentroCusto(
+                        centro_custo_id=novo_centro.id,
+                        nome_arquivo=nome_original,
+                        caminho=nome_unico
+                    )
+
+                    db.session.add(doc)
+
+            db.session.commit()
+
             flash('Centro de Custo cadastrado com sucesso!', 'success')
             return redirect(url_for('listar_centros_custos'))
+
         except IntegrityError:
             db.session.rollback()
             flash('Já existe um Centro com este CÓDIGO nesta empresa.', 'warning')
+
         except Exception as e:
             db.session.rollback()
             flash(f'Erro ao cadastrar centro de custo: {e}', 'danger')
 
-    # GET: só renderiza o form
-    return render_template('cadastrar_centro_custo.html', empresas=empresas)
+    return render_template(
+        'cadastrar_centro_custo.html',
+        empresas=empresas
+    )
 
 @app.route('/centros_custos')
 @login_required
@@ -10562,10 +10816,10 @@ def listar_centros_custos():
 def editar_centro_custo(cc_id):
     cc = CentroCusto.query.get_or_404(cc_id)
     empresas = Empresa.query.order_by(Empresa.nome).all()
-    # filtrar clientes por empresa no HTML com JS
     clientes = ClienteOperacional.query.order_by(ClienteOperacional.nome).all()
 
     if request.method == 'POST':
+
         empresa_id = request.form.get('empresa_id')
         cliente_id = request.form.get('cliente_id')
         codigo = request.form.get('codigo')
@@ -10574,8 +10828,16 @@ def editar_centro_custo(cc_id):
         endereco = request.form.get('endereco')
         telefone = request.form.get('telefone')
         email = request.form.get('email')
+
+        representante_nome = request.form.get('representante_nome')
+        representante_cpf = request.form.get('representante_cpf')
+        representante_endereco = request.form.get('representante_endereco')
+        representante_telefone = request.form.get('representante_telefone')
+        representante_email = request.form.get('representante_email')
+
         ativo = True if request.form.get('ativo') == 'on' else False
 
+        # validações
         if not empresa_id or not cliente_id or not codigo or not nome:
             flash('Empresa, Cliente, Código e Nome são obrigatórios.', 'danger')
             return redirect(url_for('editar_centro_custo', cc_id=cc.id))
@@ -10583,32 +10845,106 @@ def editar_centro_custo(cc_id):
         try:
             cc.empresa_id = int(empresa_id)
             cc.cliente_id = int(cliente_id)
-        except (TypeError, ValueError):
+        except:
             flash('Empresa ou Cliente inválidos.', 'danger')
             return redirect(url_for('editar_centro_custo', cc_id=cc.id))
 
+        cpf_cnpj_limpo = (cpf_cnpj or '').replace('.', '').replace('-', '').replace('/', '').strip()
+        eh_cnpj = len(cpf_cnpj_limpo) > 11
+
+        if eh_cnpj:
+            if not representante_nome or not representante_cpf or not representante_endereco or not representante_telefone or not representante_email:
+                flash('Para CNPJ, os dados do representante são obrigatórios.', 'danger')
+                return redirect(url_for('editar_centro_custo', cc_id=cc.id))
+
+        # atualiza
         cc.codigo = codigo.strip()
         cc.nome = nome.strip()
         cc.cpf_cnpj = cpf_cnpj.strip() if cpf_cnpj else None
         cc.endereco = endereco.strip() if endereco else None
         cc.telefone = telefone.strip() if telefone else None
         cc.email = email.strip() if email else None
+
+        cc.representante_nome = representante_nome.strip() if representante_nome else None
+        cc.representante_cpf = representante_cpf.strip() if representante_cpf else None
+        cc.representante_endereco = representante_endereco.strip() if representante_endereco else None
+        cc.representante_telefone = representante_telefone.strip() if representante_telefone else None
+        cc.representante_email = representante_email.strip() if representante_email else None
+
         cc.ativo = ativo
         cc.atualizado_em = datetime.now()
 
         try:
             db.session.commit()
-            flash('Centro de Custo atualizado!', 'success')
+
+            # NOVOS DOCUMENTOS
+            arquivos = request.files.getlist('documentos')
+
+            caminho_base = os.getenv(
+                'DOCUMENTOS_PATH',
+                os.path.join(current_app.root_path, 'static', 'documentos')
+            )
+            os.makedirs(caminho_base, exist_ok=True)
+
+            for arquivo in arquivos:
+                if arquivo and arquivo.filename:
+                    nome_original = secure_filename(arquivo.filename)
+                    ext = os.path.splitext(nome_original)[1]
+                    nome_unico = f"{uuid.uuid4().hex}{ext}"
+
+                    caminho = os.path.join(caminho_base, nome_unico)
+                    arquivo.save(caminho)
+
+                    doc = DocumentoCentroCusto(
+                        centro_custo_id=cc.id,
+                        nome_arquivo=nome_original,
+                        caminho=nome_unico
+                    )
+                    db.session.add(doc)
+
+            db.session.commit()
+
+            flash('Centro atualizado com sucesso!', 'success')
             return redirect(url_for('listar_centros_custos'))
-        except IntegrityError:
-            db.session.rollback()
-            flash('Já existe este CÓDIGO nesta empresa.', 'warning')
+
         except Exception as e:
             db.session.rollback()
             flash(f'Erro ao salvar: {e}', 'danger')
 
-    return render_template('editar_centro_custo.html',
-                           cc=cc, empresas=empresas, clientes=clientes)
+    return render_template(
+        'editar_centro_custo.html',
+        cc=cc,
+        empresas=empresas,
+        clientes=clientes
+    )
+    
+@app.route('/centros_custos/documento/<int:doc_id>/excluir', methods=['POST'])
+@login_required
+def excluir_documento(doc_id):
+    doc = DocumentoCentroCusto.query.get_or_404(doc_id)
+
+    caminho_base = os.getenv(
+        'DOCUMENTOS_PATH',
+        os.path.join(current_app.root_path, 'static', 'documentos')
+    )
+
+    caminho = os.path.join(caminho_base, doc.caminho)
+
+    if os.path.exists(caminho):
+        os.remove(caminho)
+
+    db.session.delete(doc)
+    db.session.commit()
+
+    return jsonify({'sucesso': True})
+
+@app.route('/media/documentos/<filename>')
+def media_documentos(filename):
+    pasta = os.getenv(
+        'DOCUMENTOS_PATH',
+        os.path.join(current_app.root_path, 'static', 'documentos')
+    )
+    return send_from_directory(pasta, filename)
 
 @app.route('/centros_custos/<int:cc_id>/excluir', methods=['POST'])
 @login_required
@@ -11191,6 +11527,1530 @@ def excluir_vendedor(vendedor_id):
 
     return redirect(url_for('listar_vendedores'))
 
+def encontrar_melhor_kit_fornecedor_com_inversor(proposta, fornecedor_id, inversor_id, valor_frete=0):
+    geracao_solicitada = float(proposta.valor_tusd_fio_b or 0)
+    consumo = float(proposta.consumo_kwh or 0)
+    valor_frete = float(valor_frete or 0)
+
+    energia_base = geracao_solicitada if geracao_solicitada > 0 else consumo
+
+    if energia_base <= 0:
+        return None, 'Informe consumo ou geração solicitada para calcular a proposta.'
+
+    inversor = FabricanteInversor.query.filter_by(id=inversor_id, ativo=True).first()
+    if not inversor:
+        return None, 'Inversor inválido.'
+
+    tipo_normalizado = (inversor.tipo_inversor or '').strip().lower()
+
+    if tipo_normalizado == 'microinversor':
+        fator_divisao = 130.0
+    elif tipo_normalizado == 'string':
+        fator_divisao = 118.0
+    else:
+        return None, 'Tipo de inversor inválido para cálculo.'
+
+    potencia_necessaria_kwp = energia_base / fator_divisao
+
+    vinculos_modulos = (
+        FornecedorKitModulo.query
+        .join(ModuloFotovoltaico, FornecedorKitModulo.modulo_fotovoltaico_id == ModuloFotovoltaico.id)
+        .filter(
+            FornecedorKitModulo.fornecedor_kit_id == fornecedor_id,
+            ModuloFotovoltaico.ativo.is_(True)
+        )
+        .all()
+    )
+
+    vinculo_inversor = (
+        FornecedorKitInversor.query
+        .filter_by(
+            fornecedor_kit_id=fornecedor_id,
+            fabricante_inversor_id=inversor_id
+        )
+        .first()
+    )
+
+    if not vinculos_modulos:
+        return None, 'Fornecedor sem módulos vinculados.'
+
+    if not vinculo_inversor:
+        return None, 'Fornecedor sem esse inversor vinculado.'
+
+    melhor_opcao = None
+
+    for vinc_mod in vinculos_modulos:
+        modulo = vinc_mod.modulo
+        if not modulo or not modulo.potencia_wp:
+            continue
+
+        potencia_modulo_kwp = float(modulo.potencia_wp) / 1000.0
+        if potencia_modulo_kwp <= 0:
+            continue
+
+        qtd_modulos = math.ceil(potencia_necessaria_kwp / potencia_modulo_kwp)
+        potencia_total_modulos = qtd_modulos * potencia_modulo_kwp
+
+        potencia_unitaria_inversor_kw = float(inversor.potencia_inversor or 0)
+        if potencia_unitaria_inversor_kw <= 0:
+            continue
+
+        if tipo_normalizado == 'microinversor':
+            capacidade_modulos_por_inversor = int(inversor.quantidade_mppt or 0)
+            if capacidade_modulos_por_inversor <= 0:
+                continue
+
+            qtd_inversores = math.ceil(qtd_modulos / capacidade_modulos_por_inversor)
+        else:
+            qtd_inversores = math.ceil(
+                potencia_total_modulos / (potencia_unitaria_inversor_kw * 1.20)
+            )
+
+        if qtd_inversores <= 0:
+            qtd_inversores = 1
+
+        potencia_total_inversores = qtd_inversores * potencia_unitaria_inversor_kw
+        overload_maximo_kwp = potencia_total_inversores * 1.20
+
+        if potencia_total_modulos > overload_maximo_kwp:
+            continue
+
+        area_modulo = 0.0
+        if modulo.largura_m and modulo.altura_m:
+            area_modulo = float(modulo.largura_m) * float(modulo.altura_m)
+
+        area_total = qtd_modulos * area_modulo
+
+        valor_modulos = float(vinc_mod.valor or 0) * qtd_modulos
+        valor_inversores = float(vinculo_inversor.valor or 0) * qtd_inversores
+
+        base_equipamentos = valor_modulos + valor_inversores
+        valor_projeto = max(potencia_necessaria_kwp * 50.0, 500.0)
+        valor_instalacao = max(potencia_necessaria_kwp * 220.0, 950.0)
+        valor_restante_material = base_equipamentos * 0.10
+
+        base_antes_extras = (
+            base_equipamentos
+            + valor_frete
+            + valor_projeto
+            + valor_instalacao
+            + valor_restante_material
+        )
+
+        valor_extras = base_antes_extras * 0.05
+
+        base_comissao = base_antes_extras + valor_extras
+        valor_comissao_vendedor = base_comissao * 0.05
+
+        valor_imposto_material = base_equipamentos * 0.075
+        valor_imposto_servico = (
+            valor_projeto
+            + valor_instalacao
+            + valor_extras
+        ) * 0.075
+
+        valor_subtotal = (
+            base_comissao
+            + valor_comissao_vendedor
+            + valor_imposto_material
+            + valor_imposto_servico
+        )
+
+        valor_bdi = valor_subtotal * 0.26
+        valor_total_final = valor_subtotal + valor_bdi
+
+        opcao = {
+            'fornecedor_id': fornecedor_id,
+            'modulo': modulo,
+            'inversor': inversor,
+            'qtd_modulos': qtd_modulos,
+            'qtd_inversores': qtd_inversores,
+            'potencia_necessaria_kwp': potencia_necessaria_kwp,
+            'potencia_total_modulos': potencia_total_modulos,
+            'potencia_total_inversores': potencia_total_inversores,
+            'area_total': area_total,
+            'geracao_estimada': potencia_necessaria_kwp * fator_divisao,
+            'energia_base': energia_base,
+            'valor_modulos': valor_modulos,
+            'valor_inversores': valor_inversores,
+            'valor_frete': valor_frete,
+            'valor_projeto': valor_projeto,
+            'valor_instalacao': valor_instalacao,
+            'valor_restante_material': valor_restante_material,
+            'valor_extras': valor_extras,
+            'valor_comissao_vendedor': valor_comissao_vendedor,
+            'valor_imposto_material': valor_imposto_material,
+            'valor_imposto_servico': valor_imposto_servico,
+            'valor_subtotal': valor_subtotal,
+            'valor_bdi': valor_bdi,
+            'valor_total_final': valor_total_final,
+        }
+
+        if melhor_opcao is None:
+            melhor_opcao = opcao
+        else:
+            sobra_atual = opcao['potencia_total_inversores'] - opcao['potencia_total_modulos']
+            sobra_melhor = melhor_opcao['potencia_total_inversores'] - melhor_opcao['potencia_total_modulos']
+
+            if opcao['valor_total_final'] < melhor_opcao['valor_total_final']:
+                melhor_opcao = opcao
+            elif opcao['valor_total_final'] == melhor_opcao['valor_total_final'] and sobra_atual < sobra_melhor:
+                melhor_opcao = opcao
+
+    if melhor_opcao is None:
+        return None, 'Nenhuma combinação atende esse fornecedor.'
+
+    return melhor_opcao, None
+
+def encontrar_kits_por_fornecedor_tipo(proposta, empresa_id, tipo_inversor, valor_frete=0):
+    fornecedores = (
+        FornecedorKit.query
+        .filter_by(empresa_id=empresa_id, ativo=True)
+        .order_by(FornecedorKit.nome)
+        .all()
+    )
+
+    resultados = []
+
+    for fornecedor in fornecedores:
+
+        inversores = (
+            FornecedorKitInversor.query
+            .join(FabricanteInversor)
+            .filter(
+                FornecedorKitInversor.fornecedor_kit_id == fornecedor.id,
+                FabricanteInversor.tipo_inversor.ilike(tipo_inversor),
+                FabricanteInversor.ativo.is_(True)
+            )
+            .all()
+        )
+
+        melhor_kit = None
+
+        for vinc_inv in inversores:
+
+            kit, erro = encontrar_melhor_kit_fornecedor_com_inversor(
+                proposta=proposta,
+                fornecedor_id=fornecedor.id,
+                inversor_id=vinc_inv.fabricante_inversor_id,
+                valor_frete=valor_frete
+            )
+
+            if not kit:
+                continue
+
+            kit['fornecedor'] = fornecedor
+
+            if melhor_kit is None:
+                melhor_kit = kit
+            elif kit['valor_total_final'] < melhor_kit['valor_total_final']:
+                melhor_kit = kit
+
+        if melhor_kit:
+            resultados.append(melhor_kit)
+
+    resultados.sort(key=lambda x: x['valor_total_final'])
+
+    return resultados
+
+def aplicar_kit_na_proposta(proposta, kit, fase_inversor, tensao_inversor, observacoes):
+    proposta.fornecedor_id = kit['fornecedor'].id
+    proposta.tipo_inversor = kit['inversor'].tipo_inversor
+    proposta.modulo_id = kit['modulo'].id
+    proposta.fabricante_inversor_id = kit['inversor'].id
+    proposta.fase_inversor = fase_inversor
+    proposta.tensao_inversor = tensao_inversor
+    proposta.observacoes = observacoes
+
+    proposta.potencia_sugerida_kwp = Decimal(str(round(kit['potencia_necessaria_kwp'], 2)))
+    proposta.quantidade_modulos = kit['qtd_modulos']
+    proposta.quantidade_inversores = kit['qtd_inversores']
+    proposta.area_estimada_m2 = Decimal(str(round(kit['area_total'], 2)))
+    proposta.geracao_estimada_kwh_mes = Decimal(str(round(kit['geracao_estimada'], 2)))
+
+    proposta.valor_modulos = Decimal(str(round(kit['valor_modulos'], 2)))
+    proposta.valor_inversores = Decimal(str(round(kit['valor_inversores'], 2)))
+    proposta.valor_frete = Decimal(str(round(kit['valor_frete'], 2)))
+    proposta.valor_projeto = Decimal(str(round(kit['valor_projeto'], 2)))
+    proposta.valor_instalacao = Decimal(str(round(kit['valor_instalacao'], 2)))
+    proposta.valor_restante_material = Decimal(str(round(kit['valor_restante_material'], 2)))
+    proposta.valor_extras = Decimal(str(round(kit['valor_extras'], 2)))
+    proposta.valor_comissao_vendedor = Decimal(str(round(kit['valor_comissao_vendedor'], 2)))
+    proposta.valor_imposto_material = Decimal(str(round(kit['valor_imposto_material'], 2)))
+    proposta.valor_imposto_servico = Decimal(str(round(kit['valor_imposto_servico'], 2)))
+    proposta.valor_subtotal = Decimal(str(round(kit['valor_subtotal'], 2)))
+    proposta.valor_bdi = Decimal(str(round(kit['valor_bdi'], 2)))
+    proposta.valor_estimado_proposta = Decimal(str(round(kit['valor_total_final'], 2)))
+
+    proposta.status = 'gerada'
+
+def calcular_resumo_proposta(proposta, modulo):
+    geracao_solicitada = float(proposta.valor_tusd_fio_b or 0)
+    consumo = float(proposta.consumo_kwh or 0)
+    valor_frete = float(proposta.valor_frete or 0)
+
+    energia_base = geracao_solicitada if geracao_solicitada > 0 else consumo
+
+    if energia_base <= 0 or not modulo or not proposta.fornecedor_id:
+        proposta.potencia_sugerida_kwp = Decimal('0.00')
+        proposta.quantidade_modulos = 0
+        proposta.area_estimada_m2 = Decimal('0.00')
+        proposta.geracao_estimada_kwh_mes = Decimal('0.00')
+
+        proposta.valor_modulos = Decimal('0.00')
+        proposta.valor_inversores = Decimal('0.00')
+        proposta.valor_frete = Decimal('0.00')
+        proposta.valor_projeto = Decimal('0.00')
+        proposta.valor_instalacao = Decimal('0.00')
+        proposta.valor_restante_material = Decimal('0.00')
+        proposta.valor_extras = Decimal('0.00')
+        proposta.valor_comissao_vendedor = Decimal('0.00')
+        proposta.valor_imposto_material = Decimal('0.00')
+        proposta.valor_imposto_servico = Decimal('0.00')
+        proposta.valor_subtotal = Decimal('0.00')
+        proposta.valor_bdi = Decimal('0.00')
+        proposta.valor_estimado_proposta = Decimal('0.00')
+        return
+
+    tipo_inv = (proposta.tipo_inversor or '').strip().lower()
+    if tipo_inv == 'microinversor':
+        fator_divisao = 130.0
+    else:
+        fator_divisao = 118.0
+
+    potencia_kwp = energia_base / fator_divisao
+    qtd_modulos = math.ceil((potencia_kwp * 1000) / float(modulo.potencia_wp))
+
+    area_modulo = 0.0
+    if modulo.largura_m and modulo.altura_m:
+        area_modulo = float(modulo.largura_m) * float(modulo.altura_m)
+
+    area_total = qtd_modulos * area_modulo
+    geracao_estimada = potencia_kwp * fator_divisao
+
+    vinculo_modulo = FornecedorKitModulo.query.filter_by(
+        fornecedor_kit_id=proposta.fornecedor_id,
+        modulo_fotovoltaico_id=proposta.modulo_id
+    ).first()
+
+    valor_unitario_modulo = float(vinculo_modulo.valor or 0) if vinculo_modulo else 0.0
+    valor_modulos = valor_unitario_modulo * qtd_modulos
+
+    vinculo_inversor = FornecedorKitInversor.query.filter_by(
+        fornecedor_kit_id=proposta.fornecedor_id,
+        fabricante_inversor_id=proposta.fabricante_inversor_id
+    ).first()
+
+    qtd_inversores = int(proposta.quantidade_inversores or 1)
+    valor_unitario_inversor = float(vinculo_inversor.valor or 0) if vinculo_inversor else 0.0
+    valor_inversores = valor_unitario_inversor * qtd_inversores
+
+    base_equipamentos = valor_modulos + valor_inversores
+
+    valor_projeto = max(potencia_kwp * 50.0, 500.0)
+    valor_instalacao = max(potencia_kwp * 220.0, 950.0)
+    valor_restante_material = base_equipamentos * 0.10
+
+    base_antes_extras = (
+        base_equipamentos
+        + valor_frete
+        + valor_projeto
+        + valor_instalacao
+        + valor_restante_material
+    )
+
+    valor_extras = base_antes_extras * 0.05
+
+    base_comissao = base_antes_extras + valor_extras
+    valor_comissao_vendedor = base_comissao * 0.05
+
+    valor_imposto_material = base_equipamentos * 0.075
+    valor_imposto_servico = (
+        valor_projeto
+        + valor_instalacao
+        + valor_extras
+    ) * 0.075
+
+    valor_subtotal = (
+        base_comissao
+        + valor_comissao_vendedor
+        + valor_imposto_material
+        + valor_imposto_servico
+    )
+
+    valor_bdi = valor_subtotal * 0.26
+    valor_total_final = valor_subtotal + valor_bdi
+
+    proposta.potencia_sugerida_kwp = Decimal(str(round(potencia_kwp, 2)))
+    proposta.quantidade_modulos = qtd_modulos
+    proposta.area_estimada_m2 = Decimal(str(round(area_total, 2)))
+    proposta.geracao_estimada_kwh_mes = Decimal(str(round(geracao_estimada, 2)))
+
+    proposta.valor_modulos = Decimal(str(round(valor_modulos, 2)))
+    proposta.valor_inversores = Decimal(str(round(valor_inversores, 2)))
+    proposta.valor_frete = Decimal(str(round(valor_frete, 2)))
+    proposta.valor_projeto = Decimal(str(round(valor_projeto, 2)))
+    proposta.valor_instalacao = Decimal(str(round(valor_instalacao, 2)))
+    proposta.valor_restante_material = Decimal(str(round(valor_restante_material, 2)))
+    proposta.valor_extras = Decimal(str(round(valor_extras, 2)))
+    proposta.valor_comissao_vendedor = Decimal(str(round(valor_comissao_vendedor, 2)))
+    proposta.valor_imposto_material = Decimal(str(round(valor_imposto_material, 2)))
+    proposta.valor_imposto_servico = Decimal(str(round(valor_imposto_servico, 2)))
+    proposta.valor_subtotal = Decimal(str(round(valor_subtotal, 2)))
+    proposta.valor_bdi = Decimal(str(round(valor_bdi, 2)))
+    proposta.valor_estimado_proposta = Decimal(str(round(valor_total_final, 2)))
+
+def gerar_numero_proposta():
+    agora = datetime.now()
+    sequencia = PropostaKitSolar.query.count() + 1
+    return f"PROP-{agora.strftime('%Y%m%d')}-{sequencia:04d}"
+
+def moeda_para_decimal(valor):
+    if not valor:
+        return None
+    valor = (
+        str(valor)
+        .replace('R$', '')
+        .replace('%', '')
+        .replace('.', '')
+        .replace(',', '.')
+        .strip()
+    )
+    try:
+        return Decimal(valor)
+    except:
+        return None
+
+def decimal_proposta(valor):
+    if valor is None:
+        return None
+
+    valor = str(valor).strip()
+
+    if not valor:
+        return None
+
+    valor = valor.replace('R$', '').replace('%', '').strip()
+
+    # Se vier no formato brasileiro 1.234,56
+    if ',' in valor and '.' in valor:
+        valor = valor.replace('.', '').replace(',', '.')
+    else:
+        # Se vier 0,86 -> 0.86
+        valor = valor.replace(',', '.')
+
+    try:
+        return Decimal(valor)
+    except (InvalidOperation, ValueError):
+        return None
+
+@app.route('/propostas/novo', methods=['GET', 'POST'])
+@login_required
+def nova_proposta_etapa1():
+    centros_custo = (
+        CentroCusto.query
+        .filter_by(ativo=True)
+        .order_by(CentroCusto.nome)
+        .all()
+    )
+
+    vendedores = (
+        Vendedor.query
+        .filter_by(ativo=True)
+        .order_by(Vendedor.nome)
+        .all()
+    )
+
+    concessionarias = (
+        Concessionaria.query
+        .filter_by(ativo=True)
+        .order_by(Concessionaria.nome)
+        .all()
+    )
+
+    comerciais = (
+        Comercial.query
+        .filter_by(ativo=True)
+        .order_by(Comercial.nome)
+        .all()
+    )
+
+    if request.method == 'POST':
+        centro_custo_id = request.form.get('centro_custo_id', type=int)
+        vendedor_id = request.form.get('vendedor_id', type=int)
+        comercial_id = request.form.get('comercial_id', type=int)
+        concessionaria_id = request.form.get('concessionaria_id', type=int)
+
+        centro_custo = CentroCusto.query.get_or_404(centro_custo_id)
+
+        consumo_kwh = decimal_proposta(request.form.get('consumo_kwh'))
+        geracao_solicitada = decimal_proposta(request.form.get('valor_tusd_fio_b'))
+
+        if (consumo_kwh is None or consumo_kwh <= 0) and (geracao_solicitada is None or geracao_solicitada <= 0):
+            flash('Informe o consumo em kWh ou a geração solicitada para continuar.', 'danger')
+            return render_template(
+                'proposta_etapa1_conta_energia.html',
+                proposta=None,
+                centros_custo=centros_custo,
+                vendedores=vendedores,
+                concessionarias=concessionarias,
+                comerciais=comerciais
+            )
+
+        proposta = PropostaKitSolar(
+            empresa_id=centro_custo.empresa_id,
+            numero=gerar_numero_proposta(),
+            centro_custo_id=centro_custo.id,
+            vendedor_id=vendedor_id,
+            comercial_id=comercial_id,
+            codigo_instalacao=request.form.get('codigo_instalacao'),
+            codigo_cliente=request.form.get('codigo_cliente'), 
+            grupo_tarifario=request.form.get('grupo_tarifario'),
+            consumo_kwh=consumo_kwh,
+            custo_disponibilidade=decimal_proposta(request.form.get('custo_disponibilidade')),
+            custo_iluminacao_publica=decimal_proposta(request.form.get('custo_iluminacao_publica')),
+            valor_total_conta=decimal_proposta(request.form.get('valor_total_conta')),
+            concessionaria_id=concessionaria_id,
+            valor_kwh=decimal_proposta(request.form.get('valor_kwh')),
+            valor_tusd_fio_b=geracao_solicitada,  # aqui agora significa GERAÇÃO SOLICITADA
+            tipo_fase=request.form.get('tipo_fase'),
+            tensao_rede=request.form.get('tensao_rede'),
+            status='em_edicao'
+        )
+
+        db.session.add(proposta)
+        db.session.commit()
+
+        flash('Etapa 1 salva com sucesso.', 'success')
+        return redirect(url_for('editar_proposta_etapa2', proposta_id=proposta.id))
+
+    return render_template(
+        'proposta_etapa1_conta_energia.html',
+        proposta=None,
+        centros_custo=centros_custo,
+        vendedores=vendedores,
+        concessionarias=concessionarias,
+        comerciais=comerciais
+    )
+    
+def coordenada_para_decimal(valor):
+    if valor is None:
+        return None
+
+    valor = str(valor).strip()
+
+    if not valor:
+        return None
+
+    # aceita tanto ponto quanto vírgula como separador decimal
+    valor = valor.replace(',', '.')
+
+    try:
+        return Decimal(valor)
+    except (InvalidOperation, ValueError):
+        return None
+    
+@app.route('/propostas/<int:proposta_id>/etapa2', methods=['GET', 'POST'])
+@login_required
+def editar_proposta_etapa2(proposta_id):
+    proposta = PropostaKitSolar.query.get_or_404(proposta_id)
+
+    if request.method == 'POST':
+        proposta.latitude = coordenada_para_decimal(request.form.get('latitude'))
+        proposta.longitude = coordenada_para_decimal(request.form.get('longitude'))
+        proposta.endereco_instalacao = request.form.get('endereco_instalacao')
+        proposta.tipo_telhado = request.form.get('tipo_telhado')
+
+        db.session.commit()
+        flash('Etapa 2 salva com sucesso.', 'success')
+        return redirect(url_for('editar_proposta_etapa3', proposta_id=proposta.id))
+
+    return render_template('proposta_etapa2_local_instalacao.html', proposta=proposta)
+
+@app.route('/propostas/<int:proposta_id>/etapa3', methods=['GET', 'POST'])
+@login_required
+def editar_proposta_etapa3(proposta_id):
+    proposta = PropostaKitSolar.query.get_or_404(proposta_id)
+    empresa_id = proposta.empresa_id
+
+    kits_recomendados = []
+
+    if request.method == 'POST':
+        acao = request.form.get('acao')
+
+        tipo_inversor = (request.form.get('tipo_inversor') or '').strip().lower()
+        fase_inversor = request.form.get('fase_inversor')
+        tensao_inversor = request.form.get('tensao_inversor')
+        observacoes = request.form.get('observacoes')
+
+        valor_frete = decimal_proposta(request.form.get('valor_frete')) or Decimal('0.00')
+
+        # 🔥 Validação do tipo de inversor
+        if tipo_inversor not in ['string', 'microinversor']:
+            flash('Selecione um tipo de inversor.', 'danger')
+            return render_template(
+                'proposta_etapa3_selecao_gerador.html',
+                proposta=proposta,
+                kits_recomendados=[]
+            )
+
+        # 🔎 Buscar kits por fornecedor
+        if acao == 'buscar_kits':
+
+            kits_recomendados = encontrar_kits_por_fornecedor_tipo(
+                proposta=proposta,
+                empresa_id=empresa_id,
+                tipo_inversor=tipo_inversor,
+                valor_frete=valor_frete
+            )
+
+            if not kits_recomendados:
+                flash('Nenhum fornecedor possui kit compatível com esse tipo de inversor.', 'warning')
+
+            return render_template(
+                'proposta_etapa3_selecao_gerador.html',
+                proposta=proposta,
+                kits_recomendados=kits_recomendados,
+                tipo_inversor_selecionado=tipo_inversor,
+                fase_inversor_selecionada=fase_inversor,
+                tensao_inversor_selecionada=tensao_inversor,
+                observacoes_digitadas=observacoes,
+                valor_frete_digitado=valor_frete
+            )
+
+        # Confirmar kit escolhido
+        if acao == 'confirmar_kit':
+
+            fornecedor_escolhido_id = request.form.get('fornecedor_escolhido_id', type=int)
+
+            if not fornecedor_escolhido_id:
+                flash('Selecione um kit para confirmar.', 'danger')
+
+                kits_recomendados = encontrar_kits_por_fornecedor_tipo(
+                    proposta=proposta,
+                    empresa_id=empresa_id,
+                    tipo_inversor=tipo_inversor,
+                    valor_frete=valor_frete
+                )
+
+                return render_template(
+                    'proposta_etapa3_selecao_gerador.html',
+                    proposta=proposta,
+                    kits_recomendados=kits_recomendados,
+                    tipo_inversor_selecionado=tipo_inversor,
+                    fase_inversor_selecionada=fase_inversor,
+                    tensao_inversor_selecionada=tensao_inversor,
+                    observacoes_digitadas=observacoes,
+                    valor_frete_digitado=valor_frete
+                )
+
+            # Recalcula lista (garante consistência)
+            kits_recomendados = encontrar_kits_por_fornecedor_tipo(
+                proposta=proposta,
+                empresa_id=empresa_id,
+                tipo_inversor=tipo_inversor,
+                valor_frete=valor_frete
+            )
+
+            kit_escolhido = None
+
+            for kit in kits_recomendados:
+                if kit['fornecedor'].id == fornecedor_escolhido_id:
+                    kit_escolhido = kit
+                    break
+
+            if not kit_escolhido:
+                flash('Kit selecionado não encontrado.', 'danger')
+                return render_template(
+                    'proposta_etapa3_selecao_gerador.html',
+                    proposta=proposta,
+                    kits_recomendados=kits_recomendados,
+                    tipo_inversor_selecionado=tipo_inversor,
+                    fase_inversor_selecionada=fase_inversor,
+                    tensao_inversor_selecionada=tensao_inversor,
+                    observacoes_digitadas=observacoes,
+                    valor_frete_digitado=valor_frete
+                )
+
+            # Aplicar kit na proposta
+            aplicar_kit_na_proposta(
+                proposta=proposta,
+                kit=kit_escolhido,
+                fase_inversor=fase_inversor,
+                tensao_inversor=tensao_inversor,
+                observacoes=observacoes
+            )
+
+            db.session.commit()
+
+            flash(
+                f"Kit confirmado: {kit_escolhido['fornecedor'].nome} | "
+                f"{kit_escolhido['qtd_modulos']} módulos | "
+                f"{kit_escolhido['qtd_inversores']} inversores | "
+                f"Valor: R$ {kit_escolhido['valor_total_final']:.2f}",
+                'success'
+            )
+
+            return redirect(url_for('visualizar_proposta', proposta_id=proposta.id))
+
+    # GET inicial
+    return render_template(
+        'proposta_etapa3_selecao_gerador.html',
+        proposta=proposta,
+        kits_recomendados=[]
+    )
+
+@app.route('/propostas/<int:proposta_id>')
+@login_required
+def visualizar_proposta(proposta_id):
+    proposta = PropostaKitSolar.query.get_or_404(proposta_id)
+    return render_template('proposta_visualizar.html', proposta=proposta)
+
+@app.route('/propostas/<int:proposta_id>/editar', methods=['GET', 'POST'])
+@login_required
+def editar_proposta_etapa1(proposta_id):
+    proposta = PropostaKitSolar.query.get_or_404(proposta_id)
+
+    centros_custo = CentroCusto.query.filter_by(ativo=True).order_by(CentroCusto.nome).all()
+    vendedores = Vendedor.query.filter_by(ativo=True).order_by(Vendedor.nome).all()
+    concessionarias = Concessionaria.query.filter_by(ativo=True).order_by(Concessionaria.nome).all()
+    comerciais = Comercial.query.filter_by(ativo=True).order_by(Comercial.nome).all()
+
+    if request.method == 'POST':
+        centro_custo_id = request.form.get('centro_custo_id', type=int)
+        vendedor_id = request.form.get('vendedor_id', type=int)
+        comercial_id = request.form.get('comercial_id', type=int)
+        concessionaria_id = request.form.get('concessionaria_id', type=int)
+
+        centro_custo = CentroCusto.query.get_or_404(centro_custo_id)
+
+        proposta.empresa_id = centro_custo.empresa_id
+        proposta.centro_custo_id = centro_custo.id
+        proposta.vendedor_id = vendedor_id
+        proposta.comercial_id = comercial_id
+        proposta.grupo_tarifario = request.form.get('grupo_tarifario')
+        proposta.consumo_kwh = decimal_proposta(request.form.get('consumo_kwh'))
+        proposta.codigo_instalacao = request.form.get('codigo_instalacao')
+        proposta.codigo_cliente = request.form.get('codigo_cliente')
+        proposta.custo_disponibilidade = decimal_proposta(request.form.get('custo_disponibilidade'))
+        proposta.custo_iluminacao_publica = decimal_proposta(request.form.get('custo_iluminacao_publica'))
+        proposta.valor_total_conta = decimal_proposta(request.form.get('valor_total_conta'))
+        proposta.concessionaria_id = concessionaria_id
+        proposta.valor_kwh = decimal_proposta(request.form.get('valor_kwh'))
+        proposta.valor_tusd_fio_b = decimal_proposta(request.form.get('valor_tusd_fio_b'))
+        proposta.tipo_fase = request.form.get('tipo_fase')
+        proposta.tensao_rede = request.form.get('tensao_rede')
+
+        db.session.commit()
+        flash('Proposta atualizada com sucesso.', 'success')
+        return redirect(url_for('editar_proposta_etapa2', proposta_id=proposta.id))
+
+    return render_template(
+        'proposta_etapa1_conta_energia.html',
+        proposta=proposta,
+        centros_custo=centros_custo,
+        vendedores=vendedores,
+        concessionarias=concessionarias,
+        comerciais=comerciais
+    )
+
+@app.route('/propostas')
+@login_required
+def listar_propostas():
+    propostas = (
+        PropostaKitSolar.query
+        .options(joinedload(PropostaKitSolar.vistoria))
+        .order_by(PropostaKitSolar.criado_em.desc())
+        .all()
+    )
+
+    return render_template('proposta_listar.html', propostas=propostas)
+
+@app.route('/concessionarias')
+@login_required
+def listar_concessionarias():
+    concessionarias = Concessionaria.query.order_by(Concessionaria.nome.asc()).all()
+    return render_template('listar_concessionarias.html', concessionarias=concessionarias)
+
+
+@app.route('/concessionarias/nova', methods=['GET', 'POST'])
+@login_required
+def nova_concessionaria():
+    if request.method == 'POST':
+        nome = request.form.get('nome', '').strip()
+        estado = request.form.get('estado', '').strip() or None
+        ativo = True if request.form.get('ativo') == 'on' else False
+
+        if not nome:
+            flash('Informe o nome da concessionária.', 'danger')
+            return redirect(url_for('nova_concessionaria'))
+
+        existente = Concessionaria.query.filter(
+            db.func.lower(Concessionaria.nome) == nome.lower()
+        ).first()
+
+        if existente:
+            flash('Já existe uma concessionária com esse nome.', 'warning')
+            return redirect(url_for('nova_concessionaria'))
+
+        c = Concessionaria(
+            nome=nome,
+            estado=estado,
+            ativo=ativo
+        )
+        db.session.add(c)
+        db.session.commit()
+
+        flash('Concessionária cadastrada com sucesso.', 'success')
+        return redirect(url_for('listar_concessionarias'))
+
+    return render_template('concessionarias_form.html', concessionaria=None)
+
+@app.route('/concessionarias/<int:id>/editar', methods=['GET', 'POST'])
+@login_required
+def editar_concessionaria(id):
+    concessionaria = Concessionaria.query.get_or_404(id)
+
+    if request.method == 'POST':
+        nome = request.form.get('nome', '').strip()
+        estado = request.form.get('estado', '').strip() or None
+        ativo = True if request.form.get('ativo') == 'on' else False
+
+        if not nome:
+            flash('Informe o nome da concessionária.', 'danger')
+            return redirect(url_for('editar_concessionaria', id=id))
+
+        existente = Concessionaria.query.filter(
+            db.func.lower(Concessionaria.nome) == nome.lower(),
+            Concessionaria.id != concessionaria.id
+        ).first()
+
+        if existente:
+            flash('Já existe outra concessionária com esse nome.', 'warning')
+            return redirect(url_for('editar_concessionaria', id=id))
+
+        concessionaria.nome = nome
+        concessionaria.estado = estado
+        concessionaria.ativo = ativo
+
+        db.session.commit()
+        flash('Concessionária atualizada com sucesso.', 'success')
+        return redirect(url_for('listar_concessionarias'))
+
+    return render_template('concessionarias_form.html', concessionaria=concessionaria)
+
+@app.route('/concessionarias/<int:id>/excluir', methods=['POST'])
+@login_required
+def excluir_concessionaria(id):
+    concessionaria = Concessionaria.query.get_or_404(id)
+
+    try:
+        db.session.delete(concessionaria)
+        db.session.commit()
+        flash('Concessionária excluída com sucesso.', 'success')
+    except Exception:
+        db.session.rollback()
+        flash('Não foi possível excluir. Pode haver vínculos com propostas.', 'danger')
+
+    return redirect(url_for('listar_concessionarias'))
+
+@app.route('/fornecedores-kit')
+@login_required
+def listar_fornecedores_kit():
+    fornecedores = (
+        FornecedorKit.query
+        .join(Empresa, FornecedorKit.empresa_id == Empresa.id)
+        .order_by(Empresa.nome.asc(), FornecedorKit.nome.asc())
+        .all()
+    )
+    return render_template('listar_fornecedores_kit.html', fornecedores=fornecedores)
+
+@app.route('/fornecedores-kit/novo', methods=['GET', 'POST'])
+@login_required
+def novo_fornecedor_kit():
+    empresas = Empresa.query.order_by(Empresa.nome.asc()).all()
+
+    if request.method == 'POST':
+        empresa_id = request.form.get('empresa_id', type=int)
+        nome = request.form.get('nome', '').strip()
+        ativo = True if request.form.get('ativo') == 'on' else False
+
+        if not empresa_id:
+            flash('Selecione a empresa.', 'danger')
+            return redirect(url_for('novo_fornecedor_kit'))
+
+        if not nome:
+            flash('Informe o nome do fornecedor.', 'danger')
+            return redirect(url_for('novo_fornecedor_kit'))
+
+        fornecedor = FornecedorKit(
+            empresa_id=empresa_id,
+            nome=nome,
+            ativo=ativo
+        )
+        db.session.add(fornecedor)
+        db.session.commit()
+
+        flash('Fornecedor cadastrado com sucesso.', 'success')
+        return redirect(url_for('listar_fornecedores_kit'))
+
+    return render_template('fornecedores_kit_form.html', fornecedor=None, empresas=empresas)
+
+@app.route('/fornecedores-kit/<int:id>/editar', methods=['GET', 'POST'])
+@login_required
+def editar_fornecedor_kit(id):
+    fornecedor = FornecedorKit.query.get_or_404(id)
+    empresas = Empresa.query.order_by(Empresa.nome.asc()).all()
+
+    if request.method == 'POST':
+        empresa_id = request.form.get('empresa_id', type=int)
+        nome = request.form.get('nome', '').strip()
+        ativo = True if request.form.get('ativo') == 'on' else False
+
+        if not empresa_id:
+            flash('Selecione a empresa.', 'danger')
+            return redirect(url_for('editar_fornecedor_kit', id=id))
+
+        if not nome:
+            flash('Informe o nome do fornecedor.', 'danger')
+            return redirect(url_for('editar_fornecedor_kit', id=id))
+
+        fornecedor.empresa_id = empresa_id
+        fornecedor.nome = nome
+        fornecedor.ativo = ativo
+
+        db.session.commit()
+        flash('Fornecedor atualizado com sucesso.', 'success')
+        return redirect(url_for('listar_fornecedores_kit'))
+
+    return render_template('fornecedores_kit_form.html', fornecedor=fornecedor, empresas=empresas)
+
+@app.route('/fornecedores-kit/<int:id>/excluir', methods=['POST'])
+@login_required
+def excluir_fornecedor_kit(id):
+    fornecedor = FornecedorKit.query.get_or_404(id)
+
+    try:
+        db.session.delete(fornecedor)
+        db.session.commit()
+        flash('Fornecedor excluído com sucesso.', 'success')
+    except Exception:
+        db.session.rollback()
+        flash('Não foi possível excluir. Pode haver vínculos com propostas.', 'danger')
+
+    return redirect(url_for('listar_fornecedores_kit'))
+
+@app.route('/fornecedores-kit/<int:id>/produtos')
+@login_required
+def produtos_fornecedor_kit(id):
+    fornecedor = FornecedorKit.query.get_or_404(id)
+
+    modulos_vinculados = (
+        db.session.query(FornecedorKitModulo)
+        .join(ModuloFotovoltaico, FornecedorKitModulo.modulo_fotovoltaico_id == ModuloFotovoltaico.id)
+        .filter(FornecedorKitModulo.fornecedor_kit_id == fornecedor.id)
+        .order_by(ModuloFotovoltaico.fabricante.asc(), ModuloFotovoltaico.modelo.asc())
+        .all()
+    )
+
+    inversores_vinculados = (
+        db.session.query(FornecedorKitInversor)
+        .join(FabricanteInversor, FornecedorKitInversor.fabricante_inversor_id == FabricanteInversor.id)
+        .filter(FornecedorKitInversor.fornecedor_kit_id == fornecedor.id)
+        .order_by(FabricanteInversor.nome.asc())
+        .all()
+    )
+
+    modulos_disponiveis = (
+        ModuloFotovoltaico.query
+        .filter_by(ativo=True)
+        .order_by(ModuloFotovoltaico.fabricante.asc(), ModuloFotovoltaico.modelo.asc())
+        .all()
+    )
+
+    inversores_disponiveis = (
+        FabricanteInversor.query
+        .filter_by(ativo=True)
+        .order_by(FabricanteInversor.nome.asc())
+        .all()
+    )
+
+    return render_template(
+        'produtos_fornecedor_kit.html',
+        fornecedor=fornecedor,
+        modulos_vinculados=modulos_vinculados,
+        inversores_vinculados=inversores_vinculados,
+        modulos_disponiveis=modulos_disponiveis,
+        inversores_disponiveis=inversores_disponiveis
+    )
+    
+@app.route('/fornecedores-kit/<int:id>/produtos/vincular-modulo', methods=['POST'])
+@login_required
+def vincular_modulo_fornecedor_kit(id):
+    fornecedor = FornecedorKit.query.get_or_404(id)
+
+    modulo_id = request.form.get('modulo_id', type=int)
+    valor = request.form.get('valor')
+
+    if not modulo_id:
+        flash('Selecione um módulo.', 'warning')
+        return redirect(url_for('produtos_fornecedor_kit', id=id))
+
+    valor = float(valor.replace(',', '.')) if valor else None
+
+    existente = FornecedorKitModulo.query.filter_by(
+        fornecedor_kit_id=id,
+        modulo_fotovoltaico_id=modulo_id
+    ).first()
+
+    if existente:
+        flash('Módulo já vinculado.', 'info')
+        return redirect(url_for('produtos_fornecedor_kit', id=id))
+
+    novo = FornecedorKitModulo(
+        fornecedor_kit_id=id,
+        modulo_fotovoltaico_id=modulo_id,
+        valor=valor
+    )
+
+    db.session.add(novo)
+    db.session.commit()
+
+    flash('Módulo vinculado com valor.', 'success')
+    return redirect(url_for('produtos_fornecedor_kit', id=id))
+
+@app.route('/fornecedores-kit/<int:id>/produtos/desvincular-modulo/<int:vinculo_id>', methods=['POST'])
+@login_required
+def desvincular_modulo_fornecedor_kit(id, vinculo_id):
+    fornecedor = FornecedorKit.query.get_or_404(id)
+
+    vinculo = FornecedorKitModulo.query.filter_by(
+        id=vinculo_id,
+        fornecedor_kit_id=fornecedor.id
+    ).first_or_404()
+
+    db.session.delete(vinculo)
+    db.session.commit()
+
+    flash('Módulo desvinculado com sucesso.', 'success')
+    return redirect(url_for('produtos_fornecedor_kit', id=fornecedor.id))
+
+@app.route('/fornecedores-kit/<int:id>/produtos/vincular-inversor', methods=['POST'])
+@login_required
+def vincular_inversor_fornecedor_kit(id):
+    fornecedor = FornecedorKit.query.get_or_404(id)
+
+    inversor_id = request.form.get('inversor_id', type=int)
+    valor = request.form.get('valor')
+
+    if not inversor_id:
+        flash('Selecione um inversor.', 'warning')
+        return redirect(url_for('produtos_fornecedor_kit', id=id))
+
+    valor = float(valor.replace(',', '.')) if valor else None
+
+    existente = FornecedorKitInversor.query.filter_by(
+        fornecedor_kit_id=id,
+        fabricante_inversor_id=inversor_id
+    ).first()
+
+    if existente:
+        flash('Inversor já vinculado.', 'info')
+        return redirect(url_for('produtos_fornecedor_kit', id=id))
+
+    novo = FornecedorKitInversor(
+        fornecedor_kit_id=id,
+        fabricante_inversor_id=inversor_id,
+        valor=valor
+    )
+
+    db.session.add(novo)
+    db.session.commit()
+
+    flash('Inversor vinculado com valor.', 'success')
+    return redirect(url_for('produtos_fornecedor_kit', id=id))
+
+@app.route('/fornecedores-kit/<int:id>/produtos/desvincular-inversor/<int:vinculo_id>', methods=['POST'])
+@login_required
+def desvincular_inversor_fornecedor_kit(id, vinculo_id):
+    fornecedor = FornecedorKit.query.get_or_404(id)
+
+    vinculo = FornecedorKitInversor.query.filter_by(
+        id=vinculo_id,
+        fornecedor_kit_id=fornecedor.id
+    ).first_or_404()
+
+    db.session.delete(vinculo)
+    db.session.commit()
+
+    flash('Inversor desvinculado com sucesso.', 'success')
+    return redirect(url_for('produtos_fornecedor_kit', id=fornecedor.id))
+
+@app.route('/fornecedores-kit/<int:id>/produtos/novo-modulo', methods=['POST'])
+@login_required
+def novo_modulo_fornecedor(id):
+
+    fabricante = request.form.get('fabricante')
+    modelo = request.form.get('modelo')
+    potencia = request.form.get('potencia_wp')
+    largura = request.form.get('largura_m')
+    altura = request.form.get('altura_m')
+
+    if not fabricante or not modelo or not potencia:
+        flash('Preencha os campos obrigatórios do módulo.', 'warning')
+        return redirect(url_for('produtos_fornecedor_kit', id=id))
+
+    novo = ModuloFotovoltaico(
+        fabricante=fabricante,
+        modelo=modelo,
+        potencia_wp=float(potencia.replace(',', '.')),
+        largura_m=float(largura.replace(',', '.')) if largura else None,
+        altura_m=float(altura.replace(',', '.')) if altura else None,
+        ativo=True
+    )
+
+    db.session.add(novo)
+    db.session.commit()
+
+    flash('Módulo cadastrado com sucesso.', 'success')
+    return redirect(url_for('produtos_fornecedor_kit', id=id))
+
+@app.route('/fornecedores-kit/<int:id>/produtos/novo-inversor', methods=['POST'])
+@login_required
+def novo_inversor_fornecedor(id):
+
+    nome = request.form.get('nome')
+    tipo = request.form.get('tipo_inversor')
+    potencia = request.form.get('potencia_inversor')
+    mppt = request.form.get('quantidade_mppt')
+    fase = request.form.get('fase')
+    tensao = request.form.get('tensao')
+
+    if not nome:
+        flash('Informe o nome do inversor.', 'warning')
+        return redirect(url_for('produtos_fornecedor_kit', id=id))
+
+    novo = FabricanteInversor(
+        nome=nome,
+        tipo_inversor=tipo,
+        potencia_inversor=float(potencia.replace(',', '.')) if potencia else None,
+        quantidade_mppt=int(mppt) if mppt else None,
+        fase=fase,
+        tensao=tensao,
+        ativo=True
+    )
+
+    db.session.add(novo)
+    db.session.commit()
+
+    flash('Inversor cadastrado com sucesso.', 'success')
+    return redirect(url_for('produtos_fornecedor_kit', id=id))
+
+@app.route('/fornecedores-kit/inversor-vinculo/<int:vinculo_id>/editar', methods=['POST'])
+@login_required
+def editar_inversor_vinculo(vinculo_id):
+    vinculo = FornecedorKitInversor.query.get_or_404(vinculo_id)
+    inversor = vinculo.inversor
+
+    nome = request.form.get('nome', '').strip()
+    tipo_inversor = request.form.get('tipo_inversor', '').strip()
+    potencia_inversor = request.form.get('potencia_inversor', '').strip()
+    quantidade_mppt = request.form.get('quantidade_mppt', '').strip()
+    fase = request.form.get('fase', '').strip()
+    tensao = request.form.get('tensao', '').strip()
+    valor_vinculo = request.form.get('valor_vinculo', '').strip()
+
+    if not nome:
+        flash('O nome do inversor é obrigatório.', 'warning')
+        return redirect(request.referrer or url_for('produtos_fornecedor_kit', id=vinculo.fornecedor_kit_id))
+
+    inversor.nome = nome
+    inversor.tipo_inversor = tipo_inversor or None
+    inversor.potencia_inversor = float(potencia_inversor.replace(',', '.')) if potencia_inversor else None
+    inversor.quantidade_mppt = int(quantidade_mppt) if quantidade_mppt else None
+    inversor.fase = fase or None
+    inversor.tensao = tensao or None
+    vinculo.valor = float(valor_vinculo.replace('.', '').replace(',', '.')) if valor_vinculo else None
+
+    db.session.commit()
+    flash('Inversor e valor do vínculo atualizados com sucesso.', 'success')
+    return redirect(url_for('produtos_fornecedor_kit', id=vinculo.fornecedor_kit_id))
+
+@app.route('/fornecedores-kit/modulo-vinculo/<int:vinculo_id>/editar', methods=['POST'])
+@login_required
+def editar_modulo_vinculo(vinculo_id):
+    vinculo = FornecedorKitModulo.query.get_or_404(vinculo_id)
+    modulo = vinculo.modulo
+
+    fabricante = request.form.get('fabricante', '').strip()
+    modelo = request.form.get('modelo', '').strip()
+    potencia_wp = request.form.get('potencia_wp', '').strip()
+    largura_m = request.form.get('largura_m', '').strip()
+    altura_m = request.form.get('altura_m', '').strip()
+    valor_vinculo = request.form.get('valor_vinculo', '').strip()
+
+    if not fabricante or not modelo or not potencia_wp:
+        flash('Fabricante, modelo e potência são obrigatórios.', 'warning')
+        return redirect(request.referrer or url_for('produtos_fornecedor_kit', id=vinculo.fornecedor_kit_id))
+
+    modulo.fabricante = fabricante
+    modulo.modelo = modelo
+    modulo.potencia_wp = float(potencia_wp.replace(',', '.'))
+    modulo.largura_m = float(largura_m.replace(',', '.')) if largura_m else None
+    modulo.altura_m = float(altura_m.replace(',', '.')) if altura_m else None
+    vinculo.valor = float(valor_vinculo.replace('.', '').replace(',', '.')) if valor_vinculo else None
+
+    db.session.commit()
+    flash('Módulo e valor do vínculo atualizados com sucesso.', 'success')
+    return redirect(url_for('produtos_fornecedor_kit', id=vinculo.fornecedor_kit_id))
+
+@app.route('/propostas/<int:proposta_id>/aprovar', methods=['GET', 'POST'])
+@login_required
+def aprovar_proposta(proposta_id):
+    proposta = PropostaKitSolar.query.get_or_404(proposta_id)
+
+    if request.method == 'POST':
+        forma_pagamento = (request.form.get('forma_pagamento') or '').strip().lower()
+        parcelas = request.form.get('parcelas', type=int) or 1
+        data_pagamento = _parse_date(request.form.get('data_pagamento'))
+        data_primeira_parcela = _parse_date(request.form.get('data_primeira_parcela'))
+        valor_entrada = _parse_decimal_br(request.form.get('valor_entrada')) or Decimal('0.00')
+
+        if forma_pagamento not in ['avista', 'parcelado']:
+            flash('Informe uma forma de pagamento válida.', 'danger')
+            return redirect(url_for('aprovar_proposta', proposta_id=proposta.id))
+
+        valor_total = Decimal(str(proposta.valor_estimado_proposta or 0)).quantize(Decimal('0.01'))
+        if valor_total <= 0:
+            flash('A proposta não possui valor válido para lançamento.', 'danger')
+            return redirect(url_for('aprovar_proposta', proposta_id=proposta.id))
+
+        try:
+            if forma_pagamento == 'avista':
+                if not data_pagamento:
+                    flash('Informe a data do pagamento.', 'danger')
+                    return redirect(url_for('aprovar_proposta', proposta_id=proposta.id))
+
+                titulo = FinanceiroEmpresa(
+                    empresa_id=proposta.empresa_id,
+                    data=date.today(),
+                    tipo='receita',
+                    descricao=f"Proposta Solar {proposta.numero} - À vista",
+                    valor=valor_total,
+                    status='pendente',
+                    data_vencimento=data_pagamento,
+                    numero_documento=proposta.numero,
+                    cliente_operacional_id=None,
+                    plano_financeiro_id=None,
+                    centro_custo_id=proposta.centro_custo_id,
+                    aprovado=False
+                )
+                db.session.add(titulo)
+
+            else:
+                if parcelas < 1:
+                    parcelas = 1
+
+                if not data_primeira_parcela:
+                    flash('Informe a data da primeira parcela.', 'danger')
+                    return redirect(url_for('aprovar_proposta', proposta_id=proposta.id))
+
+                if valor_entrada < 0:
+                    flash('O valor da entrada não pode ser negativo.', 'danger')
+                    return redirect(url_for('aprovar_proposta', proposta_id=proposta.id))
+
+                if valor_entrada >= valor_total:
+                    flash('O valor da entrada deve ser menor que o valor total da proposta.', 'danger')
+                    return redirect(url_for('aprovar_proposta', proposta_id=proposta.id))
+
+                # lança a entrada, se houver
+                if valor_entrada > 0:
+                    titulo_entrada = FinanceiroEmpresa(
+                        empresa_id=proposta.empresa_id,
+                        data=date.today(),
+                        tipo='receita',
+                        descricao=f"Proposta Solar {proposta.numero} - Entrada",
+                        valor=valor_entrada.quantize(Decimal('0.01')),
+                        status='pendente',
+                        data_vencimento=data_primeira_parcela,
+                        numero_documento=proposta.numero,
+                        cliente_operacional_id=None,
+                        plano_financeiro_id=None,
+                        centro_custo_id=proposta.centro_custo_id,
+                        aprovado=False
+                    )
+                    db.session.add(titulo_entrada)
+
+                saldo_restante = (valor_total - valor_entrada).quantize(Decimal('0.01'))
+
+                valor_base = (saldo_restante / Decimal(parcelas)).quantize(Decimal('0.01'))
+                valores_parcelas = [valor_base] * parcelas
+                diferenca = saldo_restante - sum(valores_parcelas)
+
+                if diferenca != Decimal('0.00'):
+                    valores_parcelas[-1] = (valores_parcelas[-1] + diferenca).quantize(Decimal('0.01'))
+
+                for i in range(parcelas):
+                    data_venc = data_primeira_parcela + timedelta(days=30 * i)
+
+                    titulo = FinanceiroEmpresa(
+                        empresa_id=proposta.empresa_id,
+                        data=date.today(),
+                        tipo='receita',
+                        descricao=f"Proposta Solar {proposta.numero} ({i+1}/{parcelas})",
+                        valor=valores_parcelas[i],
+                        status='pendente',
+                        data_vencimento=data_venc,
+                        numero_documento=proposta.numero,
+                        cliente_operacional_id=None,
+                        plano_financeiro_id=None,
+                        centro_custo_id=proposta.centro_custo_id,
+                        aprovado=False
+                    )
+                    db.session.add(titulo)
+
+            proposta.status = 'aprovada'
+            db.session.commit()
+
+            flash('Proposta aprovada e lançada no financeiro com sucesso.', 'success')
+            return redirect(url_for('empresa_financeiro_listar'))
+
+        except Exception as e:
+            db.session.rollback()
+            print('Erro ao aprovar proposta:', e)
+            flash('Erro ao aprovar proposta.', 'danger')
+            return redirect(url_for('aprovar_proposta', proposta_id=proposta.id))
+
+    return render_template(
+        'aprovar_proposta.html',
+        proposta=proposta
+    )
+
+@app.route('/propostas/<int:proposta_id>/vistoria', methods=['GET', 'POST'])
+@login_required
+def agendar_vistoria(proposta_id):
+    proposta = PropostaKitSolar.query.get_or_404(proposta_id)
+    centro = proposta.centro_custo
+
+    cliente = db.session.get(ClienteOperacional, centro.cliente_id) if centro and centro.cliente_id else None
+    cliente_nome = cliente.nome if cliente else ''
+
+    if request.method == 'POST':
+        data_sugerida = datetime.strptime(request.form.get('data_sugerida'), '%Y-%m-%d').date()
+        periodo = request.form.get('periodo')
+        observacoes = request.form.get('observacoes')
+
+        nova_vistoria = Vistoria(
+            proposta_id=proposta.id,
+            data_sugerida=data_sugerida,
+            periodo=periodo,
+            observacoes=observacoes
+        )
+
+        db.session.add(nova_vistoria)
+        db.session.commit()
+
+        # REDIRECIONA PARA listar propostas
+        return redirect(url_for('listar_propostas', vistoria_id=nova_vistoria.id))
+
+    return render_template(
+        'agendar_vistoria.html',
+        proposta=proposta,
+        centro=centro,
+        cliente_nome=cliente_nome
+    )
+    
+@app.route('/vistoria/<int:vistoria_id>/fotos', methods=['GET', 'POST'])
+@login_required
+def vistoria_fotos(vistoria_id):
+    vistoria = Vistoria.query.get_or_404(vistoria_id)
+    proposta = vistoria.proposta
+    centro = proposta.centro_custo
+
+    if request.method == 'POST':
+        tipos = ['externa', 'interna', 'telhado', 'extra']
+
+        caminho_base = os.path.abspath(os.getenv('LOGOS_PATH', os.path.join('static', 'logos')))
+        os.makedirs(caminho_base, exist_ok=True)
+
+        for tipo in tipos:
+            arquivos = request.files.getlist(tipo)
+
+            for arquivo in arquivos:
+                if arquivo and arquivo.filename:
+                    filename = secure_filename(arquivo.filename)
+                    ext = os.path.splitext(filename)[1]
+                    unique_filename = f"{uuid.uuid4().hex}{ext}"
+
+                    caminho = os.path.join(caminho_base, unique_filename)
+                    arquivo.save(caminho)
+
+                    foto = FotoVistoria(
+                        vistoria_id=vistoria.id,
+                        tipo=tipo,
+                        caminho=unique_filename
+                    )
+                    db.session.add(foto)
+
+        db.session.commit()
+
+        flash('Vistoria finalizada com sucesso!', 'success')
+        return redirect(url_for('listar_propostas'))
+
+    return render_template(
+        'vistoria_fotos.html',
+        vistoria=vistoria,
+        proposta=proposta,
+        centro=centro
+    )
+    
+from flask import current_app, jsonify
+
+@app.route('/vistoria/<int:vistoria_id>/upload', methods=['POST'])
+@login_required
+def upload_foto_vistoria(vistoria_id):
+
+    vistoria = db.session.get(Vistoria, vistoria_id)
+    if not vistoria:
+        return jsonify({"erro": "Vistoria não encontrada"}), 404
+
+    arquivo = request.files.get('foto')
+    tipo = request.form.get('tipo')
+
+    if not arquivo:
+        return jsonify({"erro": "Sem arquivo"}), 400
+
+    # CAMINHO CORRETO
+    caminho_base = os.getenv(
+        'LOGOS_PATH',
+        os.path.join(current_app.root_path, 'static', 'logos')
+    )
+
+    os.makedirs(caminho_base, exist_ok=True)
+
+    filename = secure_filename(arquivo.filename)
+    ext = os.path.splitext(filename)[1]
+    unique_filename = f"{uuid.uuid4().hex}{ext}"
+
+    caminho = os.path.join(caminho_base, unique_filename)
+    arquivo.save(caminho)
+
+    foto = FotoVistoria(
+        vistoria_id=vistoria.id,
+        tipo=tipo,
+        caminho=unique_filename
+    )
+
+    db.session.add(foto)
+    db.session.commit()
+
+    return jsonify({
+        "sucesso": True,
+        "caminho": unique_filename,
+        "foto_id": foto.id
+    })
+
+@app.route('/vistoria/foto/<int:foto_id>/delete', methods=['POST'])
+@login_required
+def deletar_foto_vistoria(foto_id):
+    foto = db.session.get(FotoVistoria, foto_id) # Atualizado
+    if not foto:
+        return {"erro": "Foto não encontrada"}, 404
+
+    caminho_base = os.path.abspath(os.getenv('LOGOS_PATH', os.path.join('app', 'static', 'logos')))
+    caminho_arquivo = os.path.join(caminho_base, foto.caminho)
+
+    if os.path.exists(caminho_arquivo):
+        os.remove(caminho_arquivo)
+
+    db.session.delete(foto)
+    db.session.commit()
+    return jsonify({"sucesso": True})
+
+@app.route('/vistoria/<int:vistoria_id>/observacoes', methods=['POST'])
+@login_required
+def salvar_observacoes_vistoria(vistoria_id):
+    vistoria = db.session.get(Vistoria, vistoria_id) # Atualizado
+    if not vistoria:
+        return {"erro": "Vistoria não encontrada"}, 404
+
+    vistoria.observacoes = request.form.get('observacoes')
+    db.session.commit()
+    return jsonify({"sucesso": True})
+
+@app.route('/vistoria/<int:vistoria_id>/status', methods=['POST'])
+@login_required
+def atualizar_status_vistoria(vistoria_id):
+    vistoria = db.session.get(Vistoria, vistoria_id)
+
+    status = request.form.get('status')
+    if status not in ['aprovada', 'reprovada']:
+        return jsonify({"erro": "Status inválido"}), 400
+
+    vistoria.status = status
+    db.session.commit()
+
+    return jsonify({"sucesso": True})
+
+@app.route('/vistoria/<int:vistoria_id>/relatorio')
+@login_required
+def relatorio_vistoria(vistoria_id):
+    vistoria = Vistoria.query.get_or_404(vistoria_id)
+    proposta = vistoria.proposta
+    centro = proposta.centro_custo
+
+    return render_template(
+        'relatorio_vistoria.html',
+        vistoria=vistoria,
+        proposta=proposta,
+        centro=centro
+    )
+    
+@app.route('/vistoria/<int:vistoria_id>/tecnico', methods=['POST'])
+@login_required
+def salvar_dados_tecnicos(vistoria_id):
+    v = db.session.get(Vistoria, vistoria_id)
+
+    v.padrao_entrada = request.form.get('padrao_entrada')
+    v.condicao_padrao = request.form.get('condicao_padrao')
+    v.modelo_relogio = request.form.get('modelo_relogio')
+    v.numero_relogio = request.form.get('numero_relogio')
+
+    v.aterramento = request.form.get('aterramento') == 'true'
+    v.disjuntor_amperagem = request.form.get('disjuntor')
+    v.bitola_condutor = request.form.get('bitola')
+    v.padrao_coletivo = request.form.get('padrao_coletivo') == 'true'
+
+    v.info_eletrica = request.form.get('info_eletrica')
+    v.info_estrutural = request.form.get('info_estrutural')
+    v.modificacoes_cliente = request.form.get('modificacoes')
+
+    db.session.commit()
+
+    return jsonify({"sucesso": True})
+
+@app.route('/propostas/<int:proposta_id>/contrato')
+@login_required
+def contrato_proposta(proposta_id):
+    proposta = db.session.get(PropostaKitSolar, proposta_id) #
+    if not proposta:
+        abort(404)
+
+    # Busca as parcelas que contêm o número da proposta na descrição
+    parcelas = FinanceiroEmpresa.query.filter(
+        FinanceiroEmpresa.descricao.like(f"%{proposta.numero}%"), # 
+        FinanceiroEmpresa.tipo == 'receita' #
+    ).order_by(FinanceiroEmpresa.data_vencimento.asc()).all() #
+
+    return render_template(
+        'contrato.html',
+        proposta=proposta,
+        vistoria=proposta.vistoria,
+        centro=proposta.centro_custo,
+        parcelas=parcelas, 
+        ano_atual=datetime.now().year
+    )
+    
 
 if __name__ == "__main__":
     with app.app_context():

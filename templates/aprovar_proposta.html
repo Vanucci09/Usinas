@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+
+{% macro moeda(valor) -%}
+  {%- if valor is not none -%}
+    R$ {{ "{:,.2f}".format(valor).replace(",", "X").replace(".", ",").replace("X", ".") }}
+  {%- else -%}
+    -
+  {%- endif -%}
+{%- endmacro %}
+
+{% block title %}Aprovar Proposta{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+
+    <div class="card shadow border-0">
+        <div class="card-body">
+
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h3 class="text-success mb-0">
+                    Aprovar Proposta {{ proposta.numero }}
+                </h3>
+
+                <a href="{{ url_for('listar_propostas') }}" class="btn btn-outline-secondary">
+                    ← Voltar
+                </a>
+            </div>
+
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <div class="border rounded p-3 bg-light h-100">
+                        <strong>Centro de Custo</strong><br>
+                        {{ proposta.centro_custo.codigo }} - {{ proposta.centro_custo.nome }}
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="border rounded p-3 bg-light h-100">
+                        <strong>Vendedor</strong><br>
+                        {{ proposta.vendedor.nome }}
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="border rounded p-3 bg-light h-100">
+                        <strong>Consumo</strong><br>
+                        {{ proposta.consumo_kwh or '-' }} kWh
+                    </div>
+                </div>
+            </div>
+
+            <div class="alert alert-success text-center mb-4">
+                <h4 class="mb-0">
+                    Valor Total da Proposta<br>
+                    <strong style="font-size: 1.5rem;">
+                        {{ moeda(proposta.valor_estimado_proposta) }}
+                    </strong>
+                </h4>
+            </div>
+
+            <form method="POST" id="formAprovacao">
+                <div class="row">
+
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Forma de Pagamento</label>
+                        <select name="forma_pagamento" id="forma_pagamento" class="form-select" required>
+                            <option value="">Selecione</option>
+                            <option value="avista">À vista</option>
+                            <option value="parcelado">Parcelado</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-6 mb-3 d-none" id="blocoDataPagamento">
+                        <label class="form-label">Data do Pagamento</label>
+                        <input type="date"
+                               name="data_pagamento"
+                               id="data_pagamento"
+                               class="form-control">
+                    </div>
+
+                    <div class="col-md-4 mb-3 d-none" id="blocoParcelas">
+                        <label class="form-label">Quantidade de Parcelas</label>
+                        <input type="number"
+                               name="parcelas"
+                               id="parcelas"
+                               class="form-control"
+                               value="1"
+                               min="1">
+                    </div>
+
+                    <div class="col-md-4 mb-3 d-none" id="blocoPrimeiraParcela">
+                        <label class="form-label">Data da Primeira Parcela</label>
+                        <input type="date"
+                               name="data_primeira_parcela"
+                               id="data_primeira_parcela"
+                               class="form-control">
+                    </div>
+
+                    <div class="col-md-4 mb-3 d-none" id="blocoValorEntrada">
+                        <label class="form-label">Valor da Entrada</label>
+                        <input type="text"
+                               name="valor_entrada"
+                               id="valor_entrada"
+                               class="form-control"
+                               value="0,00">
+                    </div>
+
+                </div>
+
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                    <a href="{{ url_for('listar_propostas') }}" class="btn btn-secondary">
+                        Cancelar
+                    </a>
+
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check-circle"></i>
+                        Confirmar Aprovação
+                    </button>
+                </div>
+            </form>
+
+        </div>
+    </div>
+
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const formaPagamento = document.getElementById('forma_pagamento');
+    const blocoParcelas = document.getElementById('blocoParcelas');
+    const blocoDataPagamento = document.getElementById('blocoDataPagamento');
+    const blocoPrimeiraParcela = document.getElementById('blocoPrimeiraParcela');
+    const blocoValorEntrada = document.getElementById('blocoValorEntrada');
+
+    const parcelas = document.getElementById('parcelas');
+    const dataPagamento = document.getElementById('data_pagamento');
+    const dataPrimeiraParcela = document.getElementById('data_primeira_parcela');
+    const valorEntrada = document.getElementById('valor_entrada');
+
+    function atualizarCampos() {
+        const valor = formaPagamento.value;
+
+        if (valor === 'avista') {
+            blocoDataPagamento.classList.remove('d-none');
+            blocoParcelas.classList.add('d-none');
+            blocoPrimeiraParcela.classList.add('d-none');
+            blocoValorEntrada.classList.add('d-none');
+
+            dataPagamento.required = true;
+            parcelas.required = false;
+            dataPrimeiraParcela.required = false;
+            valorEntrada.required = false;
+
+        } else if (valor === 'parcelado') {
+            blocoDataPagamento.classList.add('d-none');
+            blocoParcelas.classList.remove('d-none');
+            blocoPrimeiraParcela.classList.remove('d-none');
+            blocoValorEntrada.classList.remove('d-none');
+
+            dataPagamento.required = false;
+            parcelas.required = true;
+            dataPrimeiraParcela.required = true;
+            valorEntrada.required = true;
+
+        } else {
+            blocoDataPagamento.classList.add('d-none');
+            blocoParcelas.classList.add('d-none');
+            blocoPrimeiraParcela.classList.add('d-none');
+            blocoValorEntrada.classList.add('d-none');
+
+            dataPagamento.required = false;
+            parcelas.required = false;
+            dataPrimeiraParcela.required = false;
+            valorEntrada.required = false;
+        }
+    }
+
+    formaPagamento.addEventListener('change', atualizarCampos);
+    atualizarCampos();
+});
+</script>
+{% endblock %}

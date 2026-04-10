@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'Editar' if fornecedor else 'Novo' }} Fornecedor{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="card shadow border-0">
+        <div class="card-body">
+            <h2 class="text-primary mb-4">{{ 'Editar' if fornecedor else 'Novo' }} Fornecedor de Kit</h2>
+
+            <form method="POST">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Empresa</label>
+                        <select name="empresa_id" class="form-select" required>
+                            <option value="">Selecione</option>
+                            {% for e in empresas %}
+                                <option value="{{ e.id }}"
+                                    {% if fornecedor and fornecedor.empresa_id == e.id %}selected{% endif %}>
+                                    {{ e.nome }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Nome</label>
+                        <input type="text" name="nome" class="form-control"
+                               value="{{ fornecedor.nome if fornecedor else '' }}" required>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input type="checkbox" name="ativo" class="form-check-input" id="ativo"
+                                   {% if not fornecedor or fornecedor.ativo %}checked{% endif %}>
+                            <label class="form-check-label" for="ativo">Ativo</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 d-flex justify-content-between">
+                    <a href="{{ url_for('listar_fornecedores_kit') }}" class="btn btn-outline-secondary">Voltar</a>
+                    <button type="submit" class="btn btn-primary">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

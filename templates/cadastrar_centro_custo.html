@@ -1,27 +1,30 @@
 {% extends 'base.html' %}
 {% block title %}Cadastrar Centro de Custo{% endblock %}
+
 {% block content %}
 <div class="container mt-4">
   <h2 class="text-primary mb-3">Cadastrar Centro de Custo</h2>
 
-  <form method="POST">
+  <!-- 🔥 IMPORTANTE: enctype -->
+  <form method="POST" enctype="multipart/form-data">
     <div class="row g-3">
+
       <div class="col-md-6">
         <label class="form-label">Empresa</label>
         <select name="empresa_id" id="empresa_id" class="form-select" required>
-            <option value="">Selecione...</option>
-            {% for e in empresas %}
-            <option value="{{ e.id }}">{{ e.nome }}</option>
-            {% endfor %}
+          <option value="">Selecione...</option>
+          {% for e in empresas %}
+          <option value="{{ e.id }}">{{ e.nome }}</option>
+          {% endfor %}
         </select>
-        </div>
+      </div>
 
-        <div class="col-md-6">
+      <div class="col-md-6">
         <label class="form-label">Cliente Operacional</label>
         <select name="cliente_id" id="cliente_id" class="form-select" required disabled>
-            <option value="">Selecione a empresa primeiro...</option>
+          <option value="">Selecione a empresa primeiro...</option>
         </select>
-        </div>
+      </div>
 
       <div class="col-md-4">
         <label class="form-label">Código</label>
@@ -35,7 +38,7 @@
 
       <div class="col-md-4">
         <label class="form-label">CPF/CNPJ</label>
-        <input type="text" name="cpf_cnpj" class="form-control">
+        <input type="text" name="cpf_cnpj" id="cpf_cnpj" class="form-control">
       </div>
 
       <div class="col-md-8">
@@ -52,6 +55,51 @@
         <label class="form-label">Email</label>
         <input type="email" name="email" class="form-control">
       </div>
+
+      <!-- 🔥 NOVO BLOCO DOCUMENTOS -->
+      <div class="col-md-12">
+        <label class="form-label">Documentos</label>
+        <input type="file" name="documentos" class="form-control" multiple>
+        <small class="text-muted">
+          Você pode anexar RG, contrato, comprovante, etc.
+        </small>
+      </div>
+
+      <!-- 🔥 BLOCO REPRESENTANTE -->
+      <div id="blocoRepresentante" class="d-none mt-4">
+        <hr>
+        <h5 class="text-secondary">Dados do Representante (Obrigatório para CNPJ)</h5>
+
+        <div class="row g-3">
+
+          <div class="col-md-6">
+            <label class="form-label">Nome do Representante</label>
+            <input type="text" name="representante_nome" id="rep_nome" class="form-control">
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">CPF do Representante</label>
+            <input type="text" name="representante_cpf" id="rep_cpf" class="form-control">
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Telefone</label>
+            <input type="text" name="representante_telefone" id="rep_tel" class="form-control">
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Email</label>
+            <input type="email" name="representante_email" id="rep_email" class="form-control">
+          </div>
+
+          <div class="col-md-12">
+            <label class="form-label">Endereço</label>
+            <input type="text" name="representante_endereco" id="rep_end" class="form-control">
+          </div>
+
+        </div>
+      </div>
+
     </div>
 
     <div class="mt-4 d-flex gap-2">
@@ -65,35 +113,59 @@
 (async function () {
   const empresaSel = document.getElementById('empresa_id');
   const clienteSel = document.getElementById('cliente_id');
+  const cpfCnpj = document.getElementById('cpf_cnpj');
+
+  const blocoRep = document.getElementById('blocoRepresentante');
+  const camposRep = ['rep_nome','rep_cpf','rep_tel','rep_email','rep_end'];
+
+  function isCNPJ(valor) {
+    if (!valor) return false;
+    const numeros = valor.replace(/\D/g, '');
+    return numeros.length > 11;
+  }
+
+  function atualizarRepresentante() {
+    if (isCNPJ(cpfCnpj.value)) {
+      blocoRep.classList.remove('d-none');
+      camposRep.forEach(id => document.getElementById(id).required = true);
+    } else {
+      blocoRep.classList.add('d-none');
+      camposRep.forEach(id => document.getElementById(id).required = false);
+    }
+  }
+
+  cpfCnpj.addEventListener('input', atualizarRepresentante);
 
   async function carregaClientes(empresaId) {
     clienteSel.innerHTML = '<option value="">Carregando...</option>';
     clienteSel.disabled = true;
+
     if (!empresaId) {
       clienteSel.innerHTML = '<option value="">Selecione a empresa primeiro...</option>';
       return;
     }
+
     try {
       const resp = await fetch(`/api/empresas/${empresaId}/clientes`);
       const data = await resp.json();
-      if (!Array.isArray(data) || data.length === 0) {
-        clienteSel.innerHTML = '<option value="">Nenhum cliente para esta empresa</option>';
-        return;
-      }
+
       clienteSel.innerHTML = '<option value="">Selecione...</option>';
-      for (const c of data) {
+      data.forEach(c => {
         const opt = document.createElement('option');
         opt.value = c.id;
         opt.textContent = c.nome;
         clienteSel.appendChild(opt);
-      }
+      });
+
       clienteSel.disabled = false;
-    } catch (e) {
+    } catch {
       clienteSel.innerHTML = '<option value="">Erro ao carregar</option>';
     }
   }
 
   empresaSel.addEventListener('change', () => carregaClientes(empresaSel.value));
+
 })();
 </script>
+
 {% endblock %}

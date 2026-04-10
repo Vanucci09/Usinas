@@ -29,42 +29,127 @@
           <td>{{ cc.empresa.nome }}</td>
           <td>{{ cc.email or '-' }}</td>
           <td>{{ cc.telefone or '-' }}</td>
+
           <td class="text-end">
-            <div class="btn-group btn-group-sm" role="group">
-              <a class="btn btn-outline-primary" title="Editar"
+            <div class="btn-group btn-group-sm">
+
+              <!-- ✏️ Editar -->
+              <a class="btn btn-outline-primary"
                  href="{{ url_for('editar_centro_custo', cc_id=cc.id) }}">
                 <i class="bi bi-pencil"></i>
               </a>
 
-              <button type="button" class="btn btn-outline-danger" title="Excluir"
-                      data-bs-toggle="modal" data-bs-target="#modalExcluir{{ cc.id }}">
+              <!-- 📄 Documentos -->
+              <button class="btn btn-outline-secondary"
+                      data-bs-toggle="modal"
+                      data-bs-target="#modalDocs{{ cc.id }}">
+                <i class="bi bi-file-earmark-text"></i>
+              </button>
+
+              <!-- 🗑 Excluir -->
+              <button class="btn btn-outline-danger"
+                      data-bs-toggle="modal"
+                      data-bs-target="#modalExcluir{{ cc.id }}">
                 <i class="bi bi-trash"></i>
               </button>
+
             </div>
 
-            <!-- Modal excluir -->
-            <div class="modal fade" id="modalExcluir{{ cc.id }}" tabindex="-1" aria-hidden="true">
+            <!-- MODAL DOCUMENTOS -->
+          <div class="modal fade" id="modalDocs{{ cc.id }}" tabindex="-1">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+              <div class="modal-content">
+
+                <div class="modal-header">
+                  <h5 class="modal-title">
+                    Documentos - {{ cc.codigo }} {{ cc.nome }}
+                  </h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+
+                  <!-- 🚀 UPLOAD -->
+                  <form id="formUpload{{ cc.id }}" enctype="multipart/form-data">
+                    <input type="file" name="documentos" multiple class="form-control mb-3">
+                    <button type="button"
+                            class="btn btn-success btn-sm mb-3"
+                            onclick="uploadDocs({{ cc.id }})">
+                      Enviar arquivos
+                    </button>
+                  </form>
+
+                  <!-- 📄 LISTA -->
+                  <div id="listaDocs{{ cc.id }}">
+
+                    {% if cc.documentos %}
+                      <div class="list-group">
+
+                        {% for doc in cc.documentos %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+
+                          <div>
+                            <i class="bi bi-file-earmark me-2"></i>
+                            {{ doc.nome_arquivo }}
+                          </div>
+
+                          <a href="{{ url_for('media_documentos', filename=doc.caminho) }}"
+                            target="_blank"
+                            class="btn btn-sm btn-primary">
+                            Abrir
+                          </a>
+
+                        </div>
+                        {% endfor %}
+
+                      </div>
+                    {% else %}
+                      <div class="text-muted text-center">
+                        Nenhum documento anexado
+                      </div>
+                    {% endif %}
+
+                  </div>
+
+                </div>
+
+                <div class="modal-footer">
+                  <button class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+            <!-- 🔥 MODAL EXCLUIR -->
+            <div class="modal fade" id="modalExcluir{{ cc.id }}" tabindex="-1">
               <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">
+
                   <div class="modal-header">
-                    <h5 class="modal-title">Excluir Centro de Custo</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                    <h5 class="modal-title">Excluir Centro</h5>
+                    <button class="btn-close" data-bs-dismiss="modal"></button>
                   </div>
+
                   <div class="modal-body">
                     Confirma excluir <strong>{{ cc.codigo }} - {{ cc.nome }}</strong>?
-                    Esta ação não pode ser desfeita.
                   </div>
+
                   <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <form action="{{ url_for('excluir_centro_custo', cc_id=cc.id) }}" method="POST" class="d-inline">
+                    <button class="btn btn-secondary" data-bs-dismiss="modal">
+                      Cancelar
+                    </button>
+
+                    <form action="{{ url_for('excluir_centro_custo', cc_id=cc.id) }}" method="POST">
                       {% if csrf_token %}{{ csrf_token() }}{% endif %}
-                      <button type="submit" class="btn btn-danger">Excluir</button>
+                      <button class="btn btn-danger">Excluir</button>
                     </form>
                   </div>
+
                 </div>
               </div>
             </div>
-            <!-- /Modal -->
+
           </td>
         </tr>
         {% endfor %}
@@ -75,14 +160,13 @@
     <div class="alert alert-info">Nenhum centro de custo cadastrado.</div>
   {% endif %}
 
-  <div class="d-flex flex-column flex-md-row justify-content-end align-items-stretch gap-2 mt-4">
-    <a href="{{ url_for('index') }}?aba=financeiro_empresa"
-       class="btn btn-outline-secondary d-flex align-items-center w-100 w-md-auto">
-      <i class="bi bi-arrow-left me-2"></i> Voltar
+  <div class="d-flex justify-content-end gap-2 mt-4">
+    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left"></i> Voltar
     </a>
-    <a href="{{ url_for('cadastrar_centro_custo') }}"
-       class="btn btn-success d-flex align-items-center w-100 w-md-auto">
-      <i class="bi bi-person-plus me-2"></i> Novo Centro de Custo
+
+    <a href="{{ url_for('cadastrar_centro_custo') }}" class="btn btn-success">
+      <i class="bi bi-person-plus"></i> Novo Centro
     </a>
   </div>
 </div>

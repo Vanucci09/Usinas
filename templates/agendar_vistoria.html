@@ -1,0 +1,146 @@
+{% extends 'base.html' %}
+
+{% macro numero_br(valor) -%}
+  {%- if valor is not none -%}
+    {{ "{:,.2f}".format(valor).replace(",", "X").replace(".", ",").replace("X", ".") }}
+  {%- else -%}
+    -
+  {%- endif -%}
+{%- endmacro %}
+
+{% block title %}Agendar Vistoria{% endblock %}
+
+{% block content %}
+<div class="container mt-4 mb-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            
+            <div class="d-flex align-items-center mb-4">
+                <a href="{{ url_for('listar_propostas') }}" class="btn btn-outline-secondary btn-sm me-3">
+                    <i class="bi bi-arrow-left"></i>
+                </a>
+                <h3 class="text-primary mb-0">Solicitar Vistoria Técnica (SFV)</h3>
+            </div>
+
+            <form method="POST">
+                <div class="card shadow-sm border-0 mb-4">
+                    <div class="card-body bg-light rounded">
+                        <h6 class="text-uppercase text-muted fw-bold mb-3 small">Dados do Cliente e Local</h6>
+                        <div class="row">
+                            <div class="col-md-6 mb-2">
+                                <label class="text-muted d-block small">Cliente</label>
+                                <span class="fw-bold fs-5">{{ cliente_nome if cliente else centro.nome }}</span>
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="text-muted d-block small">Contato</label>
+                                <span class="fw-bold">{{ centro.telefone or 'Não informado' }}</span>
+                            </div>
+                            <div class="col-12 mt-2">
+                                <label class="text-muted d-block small">Endereço da Instalação</label>
+                                <span class="text-dark">{{ centro.endereco or 'Endereço não cadastrado' }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm border-0 mb-4">
+                    <div class="card-header bg-white py-3">
+                        <h5 class="mb-0"><i class="bi bi-cpu me-2"></i>Especificações do Sistema</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-4">
+                            <div class="col-md-6 border-end">
+                                <div class="row">
+                                    <div class="col-6 mb-3">
+                                        <label class="text-muted d-block small">Potência Sugerida</label>
+                                        <span class="fw-bold text-primary">{{ numero_br(proposta.potencia_sugerida_kwp) }} kWp</span>
+                                    </div>
+                                    <div class="col-6 mb-3">
+                                        <label class="text-muted d-block small">Geração Estimada</label>
+                                        <span class="fw-bold text-success">{{ numero_br(proposta.geracao_estimada_kwh_mes) }} kWh/mês</span>
+                                    </div>
+                                    <div class="col-12 mb-3">
+                                        <label class="text-muted d-block small">Módulo Fotovoltaico</label>
+                                        <span class="d-block">{{ proposta.modulo.fabricante ~ ' - ' ~ proposta.modulo.modelo if proposta.modulo else '-' }}</span>
+                                        <small class="text-muted">
+                                            {{ proposta.quantidade_modulos or 0 }} unidades de {{ numero_br(proposta.modulo.potencia_wp) if proposta.modulo else '-' }} Wp
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="row">
+                                    <div class="col-6 mb-3">
+                                        <label class="text-muted d-block small">Equipamento</label>
+                                        <span class="fw-bold">{{ proposta.fabricante_inversor.nome if proposta.fabricante_inversor else '-' }}</span>
+                                    </div>
+                                    <div class="col-6 mb-3">
+                                        <label class="text-muted d-block small">Tecnologia</label>
+                                        <span class="badge bg-info text-dark text-uppercase">{{ proposta.fabricante_inversor.tipo_inversor if proposta.fabricante_inversor else '-' }}</span>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="text-muted d-block small">Configuração</label>
+                                        <span>{{ proposta.quantidade_inversores or 0 }}x de {{ numero_br(proposta.fabricante_inversor.potencia_inversor) if proposta.fabricante_inversor else '-' }} kW</span>
+                                        <div class="small text-muted mt-1">Área estimada: {{ numero_br(proposta.area_estimada_m2) }} m²</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm border-primary mb-4" style="border-left: 5px solid !important;">
+                    <div class="card-body">
+                        <h5 class="card-title mb-4 text-primary"><i class="bi bi-clock me-2"></i>Agendamento</h5>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Data da Vistoria</label>
+                                <input type="date" name="data_sugerida" class="form-control form-control-lg" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Melhor Período</label>
+                                <select name="periodo" class="form-select form-select-lg">
+                                    <option value="manha">Manhã (08:00 - 12:00)</option>
+                                    <option value="tarde">Tarde (13:00 - 18:00)</option>
+                                </select>
+                            </div>
+                            <div class="col-12 mb-3">
+                                <label class="form-label fw-bold">Observações Adicionais</label>
+                                <textarea name="observacoes" class="form-control" rows="3" placeholder="Ex: Cuidado com o cão, chave está com o vizinho, etc.">{{ proposta.observacoes or '' }}</textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {% if proposta.latitude and proposta.longitude %}
+                <div class="card shadow-sm border-0 mb-4">
+                    <div class="card-body p-0 overflow-hidden rounded">
+                        <iframe
+                            width="100%"
+                            height="200"
+                            style="border:0"
+                            loading="lazy"
+                            allowfullscreen
+                            src="https://maps.google.com/maps?q={{ proposta.latitude }},{{ proposta.longitude }}&z=15&output=embed">
+                        </iframe>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="d-flex justify-content-between align-items-center">
+                    <p class="text-muted small mb-0">
+                        <i class="bi bi-info-circle me-1"></i> Verifique se os dados do sistema estão corretos antes de confirmar.
+                    </p>
+                    <div class="d-flex gap-3">
+                        <a href="{{ url_for('listar_propostas') }}" class="btn btn-light px-4">Sair</a>
+                        <button class="btn btn-success btn-lg px-5 shadow">
+                            <i class="bi bi-calendar-check me-2"></i>Confirmar Agendamento
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

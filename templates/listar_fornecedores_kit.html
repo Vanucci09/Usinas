@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block title %}Fornecedores de Kit{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <div class="card shadow border-0">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="text-primary mb-0">Fornecedores de Kit</h2>
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">← Início</a>
+                    <a href="{{ url_for('novo_fornecedor_kit') }}" class="btn btn-success">+ Novo</a>
+                </div>
+            </div>
+
+            <table class="table table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Empresa</th>
+                        <th>Nome</th>
+                        <th>Status</th>
+                        <th width="180">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for f in fornecedores %}
+                    <tr>
+                        <td>{{ f.empresa.nome if f.empresa else f.empresa_id }}</td>
+                        <td>{{ f.nome }}</td>
+                        <td>
+                            {% if f.ativo %}
+                                <span class="badge bg-success">Ativo</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Inativo</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('produtos_fornecedor_kit', id=f.id) }}" class="btn btn-sm btn-outline-dark">
+                                Produtos
+                            </a>
+                            <a href="{{ url_for('editar_fornecedor_kit', id=f.id) }}" class="btn btn-sm btn-outline-primary">
+                                Editar
+                            </a>
+                            <form method="POST" action="{{ url_for('excluir_fornecedor_kit', id=f.id) }}" class="d-inline"
+                                onsubmit="return confirm('Excluir este fornecedor?');">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">Excluir</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" class="text-center text-muted">Nenhum registro encontrado.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

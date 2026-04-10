@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+
+{% block title %}Proposta {{ proposta.numero }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="card shadow border-0">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2 class="text-primary mb-1">Proposta {{ proposta.numero }}</h2>
+                    <div class="text-muted">
+                        Centro de custo: {{ proposta.centro_custo.codigo }} - {{ proposta.centro_custo.nome }}
+                    </div>
+                    <div class="text-muted">
+                        Vendedor: {{ proposta.vendedor.nome }}
+                    </div>
+                </div>
+                <button type="button" class="btn btn-danger" onclick="window.print()">
+                    Imprimir
+                </button>
+            </div>
+
+            <hr>
+
+            <h5 class="text-secondary">Conta de Energia</h5>
+            <p><strong>Grupo:</strong> {{ proposta.grupo_tarifario }}</p>
+            <p><strong>Consumo:</strong> {{ proposta.consumo_kwh }} kWh</p>
+            <p><strong>Valor total conta:</strong> R$ {{ proposta.valor_total_conta }}</p>
+            <p><strong>Concessionária:</strong> {{ proposta.concessionaria.nome if proposta.concessionaria else '-' }}</p>
+
+            <hr>
+
+            <h5 class="text-secondary">Local de Instalação</h5>
+            <p><strong>Latitude:</strong> {{ proposta.latitude }}</p>
+            <p><strong>Longitude:</strong> {{ proposta.longitude }}</p>
+            <p><strong>Telhado:</strong> {{ proposta.tipo_telhado }}</p>
+
+            <hr>
+
+            <h5 class="text-secondary">Gerador Selecionado</h5>
+            <p><strong>Fornecedor:</strong> {{ proposta.fornecedor.nome if proposta.fornecedor else '-' }}</p>
+            <p><strong>Tipo de inversor:</strong> {{ proposta.tipo_inversor }}</p>
+            <p><strong>Módulo:</strong>
+                {% if proposta.modulo %}
+                    {{ proposta.modulo.fabricante }} - {{ proposta.modulo.modelo }} - {{ proposta.modulo.potencia_wp }} Wp
+                {% else %}
+                    -
+                {% endif %}
+            </p>
+
+            <hr>
+
+            <h5 class="text-secondary">Resumo Inicial</h5>
+            <p><strong>Potência sugerida:</strong> {{ proposta.potencia_sugerida_kwp }} kWp</p>
+            <p><strong>Qtd. módulos:</strong> {{ proposta.quantidade_modulos }}</p>
+            <p><strong>Área estimada:</strong> {{ proposta.area_estimada_m2 }} m²</p>
+            <p><strong>Geração estimada:</strong> {{ proposta.geracao_estimada_kwh_mes }} kWh/mês</p>
+            <p><strong>Valor estimado:</strong> R$ {{ proposta.valor_estimado_proposta }}</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
