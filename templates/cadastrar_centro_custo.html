@@ -5,10 +5,13 @@
 <div class="container mt-4">
   <h2 class="text-primary mb-3">Cadastrar Centro de Custo</h2>
 
-  <!-- 🔥 IMPORTANTE: enctype -->
   <form method="POST" enctype="multipart/form-data">
     <div class="row g-3">
 
+      <!-- EMPRESA -->
+      {% if empresa_unica %}
+        <input type="hidden" name="empresa_id" value="{{ empresa_unica.id }}">
+      {% else %}
       <div class="col-md-6">
         <label class="form-label">Empresa</label>
         <select name="empresa_id" id="empresa_id" class="form-select" required>
@@ -18,27 +21,33 @@
           {% endfor %}
         </select>
       </div>
+      {% endif %}
 
+      <!-- CLIENTE -->
+      {% if cliente_unico %}
+        <input type="hidden" name="cliente_id" value="{{ cliente_unico.id }}">
+      {% else %}
       <div class="col-md-6">
         <label class="form-label">Cliente Operacional</label>
-        <select name="cliente_id" id="cliente_id" class="form-select" required disabled>
+        <select name="cliente_id" id="cliente_id" class="form-select" required>
           <option value="">Selecione a empresa primeiro...</option>
         </select>
       </div>
+      {% endif %}
 
       <div class="col-md-4">
         <label class="form-label">Código</label>
-        <input type="text" name="codigo" class="form-control" required>
+        <input type="text" name="codigo" class="form-control" placeholder="(Opcional por enquanto)">
       </div>
 
       <div class="col-md-8">
-        <label class="form-label">Nome do Centro de Custo</label>
+        <label class="form-label">Nome</label>
         <input type="text" name="nome" class="form-control" required>
       </div>
 
       <div class="col-md-4">
         <label class="form-label">CPF/CNPJ</label>
-        <input type="text" name="cpf_cnpj" id="cpf_cnpj" class="form-control">
+        <input type="text" id="cpf_cnpj" name="cpf_cnpj" class="form-control">
       </div>
 
       <div class="col-md-8">
@@ -56,116 +65,73 @@
         <input type="email" name="email" class="form-control">
       </div>
 
-      <!-- 🔥 NOVO BLOCO DOCUMENTOS -->
+      <!-- DOCUMENTOS -->
       <div class="col-md-12">
         <label class="form-label">Documentos</label>
         <input type="file" name="documentos" class="form-control" multiple>
-        <small class="text-muted">
-          Você pode anexar RG, contrato, comprovante, etc.
-        </small>
       </div>
 
-      <!-- 🔥 BLOCO REPRESENTANTE -->
+      <!-- REPRESENTANTE -->
       <div id="blocoRepresentante" class="d-none mt-4">
         <hr>
-        <h5 class="text-secondary">Dados do Representante (Obrigatório para CNPJ)</h5>
+        <h5>Dados do Representante</h5>
 
         <div class="row g-3">
-
           <div class="col-md-6">
-            <label class="form-label">Nome do Representante</label>
-            <input type="text" name="representante_nome" id="rep_nome" class="form-control">
+            <input type="text" name="representante_nome" id="rep_nome" class="form-control" placeholder="Nome">
           </div>
-
           <div class="col-md-6">
-            <label class="form-label">CPF do Representante</label>
-            <input type="text" name="representante_cpf" id="rep_cpf" class="form-control">
+            <input type="text" name="representante_cpf" id="rep_cpf" class="form-control" placeholder="CPF">
           </div>
-
           <div class="col-md-6">
-            <label class="form-label">Telefone</label>
-            <input type="text" name="representante_telefone" id="rep_tel" class="form-control">
+            <input type="text" name="representante_telefone" id="rep_tel" class="form-control" placeholder="Telefone">
           </div>
-
           <div class="col-md-6">
-            <label class="form-label">Email</label>
-            <input type="email" name="representante_email" id="rep_email" class="form-control">
+            <input type="email" name="representante_email" id="rep_email" class="form-control" placeholder="Email">
           </div>
-
           <div class="col-md-12">
-            <label class="form-label">Endereço</label>
-            <input type="text" name="representante_endereco" id="rep_end" class="form-control">
+            <input type="text" name="representante_endereco" id="rep_end" class="form-control" placeholder="Endereço">
           </div>
-
         </div>
       </div>
 
     </div>
 
-    <div class="mt-4 d-flex gap-2">
-      <button type="submit" class="btn btn-success">Salvar</button>
+    <div class="mt-4">
+      <button class="btn btn-success">Salvar</button>
       <a href="{{ url_for('listar_centros_custos') }}" class="btn btn-secondary">Cancelar</a>
     </div>
   </form>
 </div>
 
 <script>
-(async function () {
-  const empresaSel = document.getElementById('empresa_id');
-  const clienteSel = document.getElementById('cliente_id');
-  const cpfCnpj = document.getElementById('cpf_cnpj');
+const cpfCnpj = document.getElementById('cpf_cnpj');
+const bloco = document.getElementById('blocoRepresentante');
 
-  const blocoRep = document.getElementById('blocoRepresentante');
-  const camposRep = ['rep_nome','rep_cpf','rep_tel','rep_email','rep_end'];
+function isCNPJ(valor) {
+  if (!valor) return false;
+  return valor.replace(/\D/g, '').length > 11;
+}
 
-  function isCNPJ(valor) {
-    if (!valor) return false;
-    const numeros = valor.replace(/\D/g, '');
-    return numeros.length > 11;
-  }
+cpfCnpj.addEventListener('input', () => {
+  bloco.classList.toggle('d-none', !isCNPJ(cpfCnpj.value));
+});
 
-  function atualizarRepresentante() {
-    if (isCNPJ(cpfCnpj.value)) {
-      blocoRep.classList.remove('d-none');
-      camposRep.forEach(id => document.getElementById(id).required = true);
-    } else {
-      blocoRep.classList.add('d-none');
-      camposRep.forEach(id => document.getElementById(id).required = false);
-    }
-  }
+// API clientes
+const empresaSel = document.getElementById('empresa_id');
+const clienteSel = document.getElementById('cliente_id');
 
-  cpfCnpj.addEventListener('input', atualizarRepresentante);
+if (empresaSel && clienteSel) {
+  empresaSel.addEventListener('change', async () => {
+    const resp = await fetch(`/api/empresas/${empresaSel.value}/clientes`);
+    const data = await resp.json();
 
-  async function carregaClientes(empresaId) {
-    clienteSel.innerHTML = '<option value="">Carregando...</option>';
-    clienteSel.disabled = true;
-
-    if (!empresaId) {
-      clienteSel.innerHTML = '<option value="">Selecione a empresa primeiro...</option>';
-      return;
-    }
-
-    try {
-      const resp = await fetch(`/api/empresas/${empresaId}/clientes`);
-      const data = await resp.json();
-
-      clienteSel.innerHTML = '<option value="">Selecione...</option>';
-      data.forEach(c => {
-        const opt = document.createElement('option');
-        opt.value = c.id;
-        opt.textContent = c.nome;
-        clienteSel.appendChild(opt);
-      });
-
-      clienteSel.disabled = false;
-    } catch {
-      clienteSel.innerHTML = '<option value="">Erro ao carregar</option>';
-    }
-  }
-
-  empresaSel.addEventListener('change', () => carregaClientes(empresaSel.value));
-
-})();
+    clienteSel.innerHTML = '<option value="">Selecione...</option>';
+    data.forEach(c => {
+      clienteSel.innerHTML += `<option value="${c.id}">${c.nome}</option>`;
+    });
+  });
+}
 </script>
 
 {% endblock %}

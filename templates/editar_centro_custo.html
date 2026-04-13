@@ -5,10 +5,10 @@
 <div class="container mt-4">
   <h2 class="text-primary mb-3">Editar Centro de Custo</h2>
 
-  <!-- 🔥 IMPORTANTE -->
   <form method="POST" enctype="multipart/form-data">
     <div class="row g-3">
 
+      <!-- EMPRESA -->
       <div class="col-md-6">
         <label class="form-label">Empresa</label>
         <select name="empresa_id" id="empresa_id" class="form-select" required>
@@ -20,6 +20,7 @@
         </select>
       </div>
 
+      <!-- CLIENTE -->
       <div class="col-md-6">
         <label class="form-label">Cliente Operacional</label>
         <select name="cliente_id" id="cliente_id" class="form-select" required disabled>
@@ -27,45 +28,56 @@
         </select>
       </div>
 
+      <!-- CODIGO (AGORA OPCIONAL) -->
       <div class="col-md-4">
         <label class="form-label">Código</label>
-        <input type="text" name="codigo" class="form-control" value="{{ cc.codigo }}" required>
+        <input type="text"
+               name="codigo"
+               class="form-control"
+               value="{{ cc.codigo or '' }}"
+               placeholder="(Opcional por enquanto)">
+        {% if not cc.codigo %}
+          <small class="text-warning">Sem código definido</small>
+        {% endif %}
       </div>
 
+      <!-- NOME -->
       <div class="col-md-8">
         <label class="form-label">Nome</label>
         <input type="text" name="nome" class="form-control" value="{{ cc.nome }}" required>
       </div>
 
+      <!-- CPF/CNPJ -->
       <div class="col-md-4">
         <label class="form-label">CPF/CNPJ</label>
         <input type="text" name="cpf_cnpj" id="cpf_cnpj" class="form-control" value="{{ cc.cpf_cnpj or '' }}">
       </div>
 
+      <!-- ENDEREÇO -->
       <div class="col-md-8">
         <label class="form-label">Endereço</label>
         <input type="text" name="endereco" class="form-control" value="{{ cc.endereco or '' }}">
       </div>
 
+      <!-- TELEFONE -->
       <div class="col-md-6">
         <label class="form-label">Telefone</label>
         <input type="text" name="telefone" class="form-control" value="{{ cc.telefone or '' }}">
       </div>
 
+      <!-- EMAIL -->
       <div class="col-md-6">
         <label class="form-label">Email</label>
         <input type="email" name="email" class="form-control" value="{{ cc.email or '' }}">
       </div>
 
-      <!-- 🔥 DOCUMENTOS -->
+      <!-- DOCUMENTOS -->
       <div class="col-md-12 mt-4">
         <hr>
         <h5 class="text-secondary">Documentos</h5>
 
-        <!-- upload -->
         <input type="file" name="documentos" multiple class="form-control mb-3">
 
-        <!-- lista -->
         <div class="list-group">
           {% for doc in cc.documentos %}
           <div class="list-group-item d-flex justify-content-between align-items-center">
@@ -87,7 +99,7 @@
         </div>
       </div>
 
-      <!-- 🔥 REPRESENTANTE -->
+      <!-- REPRESENTANTE -->
       <div id="blocoRepresentante" class="mt-4 d-none">
         <hr>
         <h5 class="text-secondary">Representante</h5>
@@ -120,6 +132,7 @@
         </div>
       </div>
 
+      <!-- ATIVO -->
       <div class="col-12 form-check mt-2">
         <input class="form-check-input" type="checkbox" name="ativo" {% if cc.ativo %}checked{% endif %}>
         <label class="form-check-label">Ativo</label>
@@ -134,7 +147,7 @@
   </form>
 </div>
 
-<!-- 🔥 JS EXCLUIR -->
+<!-- EXCLUIR DOCUMENTO -->
 <script>
 function excluirDoc(id, btn){
   if(!confirm('Excluir documento?')) return;
@@ -149,6 +162,7 @@ function excluirDoc(id, btn){
 }
 </script>
 
+<!-- JS PRINCIPAL -->
 <script>
 (async function () {
 
@@ -162,7 +176,7 @@ function excluirDoc(id, btn){
   const camposRep = ['rep_nome','rep_cpf','rep_tel','rep_email','rep_end'];
 
   function isCNPJ(valor) {
-    return valor.replace(/\D/g, '').length > 11;
+    return (valor || '').replace(/\D/g, '').length > 11;
   }
 
   function toggleRep() {
@@ -175,8 +189,10 @@ function excluirDoc(id, btn){
     }
   }
 
-  cpfCnpj.addEventListener('input', toggleRep);
-  toggleRep();
+  if (cpfCnpj) {
+    cpfCnpj.addEventListener('input', toggleRep);
+    toggleRep();
+  }
 
   async function carregaClientes(empresaId, selecionado=null) {
     const resp = await fetch(`/api/empresas/${empresaId}/clientes`);
@@ -193,7 +209,10 @@ function excluirDoc(id, btn){
   }
 
   await carregaClientes(empresaSel.value, clienteAtual);
-  empresaSel.addEventListener('change', () => carregaClientes(empresaSel.value));
+
+  empresaSel.addEventListener('change', () => {
+    carregaClientes(empresaSel.value);
+  });
 
 })();
 </script>

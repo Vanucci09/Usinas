@@ -134,11 +134,13 @@
                 data-bs-parent="#accordionGrupos">
                 <div class="accordion-body">
                     <div class="row g-3">
+                        {#
                         <div class="col-md-4">
                             <a href="{{ url_for('listar_comerciais') }}" class="btn btn-outline-primary w-100">
                                 Equipes Comerciais
                             </a>
                         </div>
+                        #}
                         <div class="col-md-4">
                             <a href="{{ url_for('listar_vendedores') }}" class="btn btn-outline-primary w-100">
                                 Vendedores
@@ -162,7 +164,7 @@
                         <div class="col-md-4">
                             <a href="{{ url_for('listar_centros_custos') }}"
                                 class="btn btn-outline-secondary w-100">
-                                Centro de Custo
+                                Cadastro de Cliente
                             </a>
                         </div>
                     </div>
@@ -250,7 +252,7 @@
                         <div class="col-md-4">
                             <a href="{{ url_for('listar_centros_custos') }}"
                                 class="btn btn-outline-secondary w-100">
-                                Centro de Custo
+                                Clientes
                             </a>
                         </div>
 

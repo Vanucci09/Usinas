@@ -567,7 +567,7 @@ class CentroCusto(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     empresa_id = db.Column(db.Integer, db.ForeignKey('empresas.id'), nullable=False)
     cliente_id = db.Column(db.Integer, db.ForeignKey('clientes_operacionais.id'), nullable=False)
-    codigo = db.Column(db.String(50), nullable=False)   # Ex.: CC-001, 1001, etc.
+    codigo = db.Column(db.String(50), nullable=True)   # Ex.: CC-001, 1001, etc.
     nome = db.Column(db.String(255), nullable=False)
     cpf_cnpj = db.Column(db.String(20), nullable=True)
     endereco = db.Column(db.String(255), nullable=True)
@@ -592,7 +592,13 @@ class CentroCusto(db.Model):
 
     __table_args__ = (
         # Um mesmo código não se repete dentro da mesma empresa
-        UniqueConstraint('empresa_id', 'codigo', name='uq_centro_custo_codigo_por_empresa'),
+        Index(
+            'uq_centro_custo_codigo_por_empresa',
+            'empresa_id',
+            'codigo',
+            unique=True,
+            postgresql_where=(codigo.isnot(None))
+        ),
         Index('ix_centros_custos_empresa_codigo', 'empresa_id', 'codigo'),
         Index('ix_centros_custos_empresa_cliente', 'empresa_id', 'cliente_id'),
     )
@@ -10688,9 +10694,20 @@ def excluir_cliente_operacional(cliente_id):
 def cadastrar_centro_custo():
     empresas = Empresa.query.order_by(Empresa.nome).all()
 
+    # Detecta empresa única
+    empresa_unica = empresas[0] if len(empresas) == 1 else None
+
+    # Detecta cliente único
+    cliente_unico = None
+    if empresa_unica:
+        clientes = ClienteOperacional.query.filter_by(empresa_id=empresa_unica.id).all()
+        if len(clientes) == 1:
+            cliente_unico = clientes[0]
+
     if request.method == 'POST':
-        empresa_id = request.form.get('empresa_id')
-        cliente_id = request.form.get('cliente_id')
+        empresa_id = request.form.get('empresa_id') or (empresa_unica.id if empresa_unica else None)
+        cliente_id = request.form.get('cliente_id') or (cliente_unico.id if cliente_unico else None)
+
         codigo = request.form.get('codigo')
         nome = request.form.get('nome')
         cpf_cnpj = request.form.get('cpf_cnpj')
@@ -10704,35 +10721,34 @@ def cadastrar_centro_custo():
         representante_telefone = request.form.get('representante_telefone')
         representante_email = request.form.get('representante_email')
 
-        if not empresa_id or not cliente_id or not codigo or not nome:
+        if not empresa_id or not cliente_id or not nome:
             flash('Empresa, Cliente, Código e Nome são obrigatórios.', 'danger')
             return redirect(url_for('cadastrar_centro_custo'))
 
         try:
             empresa_id_int = int(empresa_id)
             cliente_id_int = int(cliente_id)
-        except (TypeError, ValueError):
+        except:
             flash('Empresa ou Cliente inválidos.', 'danger')
             return redirect(url_for('cadastrar_centro_custo'))
 
         cliente = ClienteOperacional.query.get(cliente_id_int)
         if not cliente or cliente.empresa_id != empresa_id_int:
-            flash('Cliente não pertence à empresa selecionada.', 'danger')
+            flash('Cliente não pertence à empresa.', 'danger')
             return redirect(url_for('cadastrar_centro_custo'))
 
         cpf_cnpj_limpo = (cpf_cnpj or '').replace('.', '').replace('-', '').replace('/', '').strip()
         eh_cnpj = len(cpf_cnpj_limpo) > 11
 
         if eh_cnpj:
-            if not representante_nome or not representante_cpf or not representante_endereco or not representante_telefone or not representante_email:
+            if not all([representante_nome, representante_cpf, representante_endereco, representante_telefone, representante_email]):
                 flash('Para CNPJ, os dados do representante são obrigatórios.', 'danger')
                 return redirect(url_for('cadastrar_centro_custo'))
 
-        # CRIA CENTRO
         novo_centro = CentroCusto(
             empresa_id=empresa_id_int,
             cliente_id=cliente_id_int,
-            codigo=codigo.strip(),
+            codigo=codigo.strip() if codigo else None,
             nome=nome.strip(),
             cpf_cnpj=cpf_cnpj.strip() if cpf_cnpj else None,
             endereco=endereco.strip() if endereco else None,
@@ -10751,7 +10767,7 @@ def cadastrar_centro_custo():
             db.session.add(novo_centro)
             db.session.commit()
 
-            # UPLOAD DE DOCUMENTOS
+            # Upload documentos
             arquivos = request.files.getlist('documentos')
 
             caminho_base = os.getenv(
@@ -10775,7 +10791,6 @@ def cadastrar_centro_custo():
                         nome_arquivo=nome_original,
                         caminho=nome_unico
                     )
-
                     db.session.add(doc)
 
             db.session.commit()
@@ -10785,15 +10800,17 @@ def cadastrar_centro_custo():
 
         except IntegrityError:
             db.session.rollback()
-            flash('Já existe um Centro com este CÓDIGO nesta empresa.', 'warning')
+            flash('Já existe um centro com esse código.', 'warning')
 
         except Exception as e:
             db.session.rollback()
-            flash(f'Erro ao cadastrar centro de custo: {e}', 'danger')
+            flash(f'Erro: {e}', 'danger')
 
     return render_template(
         'cadastrar_centro_custo.html',
-        empresas=empresas
+        empresas=empresas,
+        empresa_unica=empresa_unica,
+        cliente_unico=cliente_unico
     )
     
 @app.route('/centros_custos/<int:cc_id>/upload_documentos', methods=['POST'])
@@ -10873,9 +10890,9 @@ def editar_centro_custo(cc_id):
 
         ativo = True if request.form.get('ativo') == 'on' else False
 
-        # validações
-        if not empresa_id or not cliente_id or not codigo or not nome:
-            flash('Empresa, Cliente, Código e Nome são obrigatórios.', 'danger')
+        # AJUSTE AQUI (codigo removido da validação)
+        if not empresa_id or not cliente_id or not nome:
+            flash('Empresa, Cliente e Nome são obrigatórios.', 'danger')
             return redirect(url_for('editar_centro_custo', cc_id=cc.id))
 
         try:
@@ -10889,12 +10906,13 @@ def editar_centro_custo(cc_id):
         eh_cnpj = len(cpf_cnpj_limpo) > 11
 
         if eh_cnpj:
-            if not representante_nome or not representante_cpf or not representante_endereco or not representante_telefone or not representante_email:
+            if not all([representante_nome, representante_cpf, representante_endereco, representante_telefone, representante_email]):
                 flash('Para CNPJ, os dados do representante são obrigatórios.', 'danger')
                 return redirect(url_for('editar_centro_custo', cc_id=cc.id))
 
-        # atualiza
-        cc.codigo = codigo.strip()
+        # AJUSTE IMPORTANTE
+        cc.codigo = codigo.strip() if codigo else None
+
         cc.nome = nome.strip()
         cc.cpf_cnpj = cpf_cnpj.strip() if cpf_cnpj else None
         cc.endereco = endereco.strip() if endereco else None
@@ -10913,7 +10931,7 @@ def editar_centro_custo(cc_id):
         try:
             db.session.commit()
 
-            # NOVOS DOCUMENTOS
+            # DOCUMENTOS
             arquivos = request.files.getlist('documentos')
 
             caminho_base = os.getenv(
@@ -11455,10 +11473,15 @@ def cadastrar_vendedor():
     empresas = Empresa.query.order_by(Empresa.nome).all()
     comerciais = Comercial.query.order_by(Comercial.nome).all()
 
+    # Detecta únicos
+    empresa_unica = empresas[0] if len(empresas) == 1 else None
+    comercial_unico = comerciais[0] if len(comerciais) == 1 else None
+
     if request.method == 'POST':
         try:
-            empresa_id = request.form.get('empresa_id', type=int)
-            comercial_id = request.form.get('comercial_id', type=int)
+            empresa_id = request.form.get('empresa_id', type=int) or (empresa_unica.id if empresa_unica else None)
+            comercial_id = request.form.get('comercial_id', type=int) or (comercial_unico.id if comercial_unico else None)
+
             nome = request.form.get('nome', '').strip()
             telefone = request.form.get('telefone', '').strip()
             email = request.form.get('email', '').strip()
@@ -11471,26 +11494,41 @@ def cadastrar_vendedor():
 
             if not empresa_id:
                 flash('Selecione uma empresa.', 'warning')
-                return render_template('vendedores_form.html', vendedor=None, empresas=empresas, comerciais=comerciais)
+                return render_template(
+                    'vendedores_form.html',
+                    vendedor=None,
+                    empresas=empresas,
+                    comerciais=comerciais,
+                    empresa_unica=empresa_unica,
+                    comercial_unico=comercial_unico
+                )
 
             if not nome:
                 flash('Informe o nome do vendedor.', 'warning')
-                return render_template('vendedores_form.html', vendedor=None, empresas=empresas, comerciais=comerciais)
+                return render_template(
+                    'vendedores_form.html',
+                    vendedor=None,
+                    empresas=empresas,
+                    comerciais=comerciais,
+                    empresa_unica=empresa_unica,
+                    comercial_unico=comercial_unico
+                )
 
             vendedor = Vendedor(
                 empresa_id=empresa_id,
                 comercial_id=comercial_id if comercial_id else None,
                 nome=nome,
-                telefone=telefone if telefone else None,
-                email=email if email else None,
-                cpf=cpf if cpf else None,
+                telefone=telefone or None,
+                email=email or None,
+                cpf=cpf or None,
                 comissao_percentual=comissao_percentual,
-                observacoes=observacoes if observacoes else None,
+                observacoes=observacoes or None,
                 ativo=ativo
             )
 
             db.session.add(vendedor)
             db.session.commit()
+
             flash('Vendedor cadastrado com sucesso.', 'success')
             return redirect(url_for('listar_vendedores'))
 
@@ -11498,7 +11536,14 @@ def cadastrar_vendedor():
             db.session.rollback()
             flash(f'Erro ao cadastrar vendedor: {e}', 'danger')
 
-    return render_template('vendedores_form.html', vendedor=None, empresas=empresas, comerciais=comerciais)
+    return render_template(
+        'vendedores_form.html',
+        vendedor=None,
+        empresas=empresas,
+        comerciais=comerciais,
+        empresa_unica=empresa_unica,
+        comercial_unico=comercial_unico
+    )
 
 @app.route('/vendedores/<int:vendedor_id>')
 @login_required
@@ -11510,13 +11555,19 @@ def visualizar_vendedor(vendedor_id):
 @login_required
 def editar_vendedor(vendedor_id):
     vendedor = Vendedor.query.get_or_404(vendedor_id)
+
     empresas = Empresa.query.order_by(Empresa.nome).all()
     comerciais = Comercial.query.order_by(Comercial.nome).all()
 
+    # Detecta únicos
+    empresa_unica = empresas[0] if len(empresas) == 1 else None
+    comercial_unico = comerciais[0] if len(comerciais) == 1 else None
+
     if request.method == 'POST':
         try:
-            empresa_id = request.form.get('empresa_id', type=int)
-            comercial_id = request.form.get('comercial_id', type=int)
+            empresa_id = request.form.get('empresa_id', type=int) or (empresa_unica.id if empresa_unica else None)
+            comercial_id = request.form.get('comercial_id', type=int) or (comercial_unico.id if comercial_unico else None)
+
             nome = request.form.get('nome', '').strip()
             telefone = request.form.get('telefone', '').strip()
             email = request.form.get('email', '').strip()
@@ -11529,23 +11580,38 @@ def editar_vendedor(vendedor_id):
 
             if not empresa_id:
                 flash('Selecione uma empresa.', 'warning')
-                return render_template('vendedores_form.html', vendedor=vendedor, empresas=empresas, comerciais=comerciais)
+                return render_template(
+                    'vendedores_form.html',
+                    vendedor=vendedor,
+                    empresas=empresas,
+                    comerciais=comerciais,
+                    empresa_unica=empresa_unica,
+                    comercial_unico=comercial_unico
+                )
 
             if not nome:
                 flash('Informe o nome do vendedor.', 'warning')
-                return render_template('vendedores_form.html', vendedor=vendedor, empresas=empresas, comerciais=comerciais)
+                return render_template(
+                    'vendedores_form.html',
+                    vendedor=vendedor,
+                    empresas=empresas,
+                    comerciais=comerciais,
+                    empresa_unica=empresa_unica,
+                    comercial_unico=comercial_unico
+                )
 
             vendedor.empresa_id = empresa_id
             vendedor.comercial_id = comercial_id if comercial_id else None
             vendedor.nome = nome
-            vendedor.telefone = telefone if telefone else None
-            vendedor.email = email if email else None
-            vendedor.cpf = cpf if cpf else None
+            vendedor.telefone = telefone or None
+            vendedor.email = email or None
+            vendedor.cpf = cpf or None
             vendedor.comissao_percentual = comissao_percentual
-            vendedor.observacoes = observacoes if observacoes else None
+            vendedor.observacoes = observacoes or None
             vendedor.ativo = ativo
 
             db.session.commit()
+
             flash('Vendedor atualizado com sucesso.', 'success')
             return redirect(url_for('listar_vendedores'))
 
@@ -11553,8 +11619,14 @@ def editar_vendedor(vendedor_id):
             db.session.rollback()
             flash(f'Erro ao editar vendedor: {e}', 'danger')
 
-    return render_template('vendedores_form.html', vendedor=vendedor, empresas=empresas, comerciais=comerciais)
-
+    return render_template(
+        'vendedores_form.html',
+        vendedor=vendedor,
+        empresas=empresas,
+        comerciais=comerciais,
+        empresa_unica=empresa_unica,
+        comercial_unico=comercial_unico
+    )
 
 @app.route('/vendedores/<int:vendedor_id>/excluir', methods=['POST'])
 @login_required
@@ -12012,20 +12084,16 @@ def nova_proposta_etapa1():
         .all()
     )
 
-    comerciais = (
-        Comercial.query
-        .filter_by(ativo=True)
-        .order_by(Comercial.nome)
-        .all()
-    )
-
     if request.method == 'POST':
         centro_custo_id = request.form.get('centro_custo_id', type=int)
         vendedor_id = request.form.get('vendedor_id', type=int)
-        comercial_id = request.form.get('comercial_id', type=int)
         concessionaria_id = request.form.get('concessionaria_id', type=int)
 
         centro_custo = CentroCusto.query.get_or_404(centro_custo_id)
+        vendedor = Vendedor.query.get_or_404(vendedor_id)
+
+        # 🔥 COMERCIAL AUTOMÁTICO
+        comercial_id = vendedor.comercial_id
 
         consumo_kwh = decimal_proposta(request.form.get('consumo_kwh'))
         geracao_solicitada = decimal_proposta(request.form.get('valor_tusd_fio_b'))
@@ -12037,18 +12105,17 @@ def nova_proposta_etapa1():
                 proposta=None,
                 centros_custo=centros_custo,
                 vendedores=vendedores,
-                concessionarias=concessionarias,
-                comerciais=comerciais
+                concessionarias=concessionarias
             )
 
         proposta = PropostaKitSolar(
             empresa_id=centro_custo.empresa_id,
             numero=gerar_numero_proposta(),
             centro_custo_id=centro_custo.id,
-            vendedor_id=vendedor_id,
-            comercial_id=comercial_id,
+            vendedor_id=vendedor.id,
+            comercial_id=comercial_id,  # 🔥 automático
             codigo_instalacao=request.form.get('codigo_instalacao'),
-            codigo_cliente=request.form.get('codigo_cliente'), 
+            codigo_cliente=request.form.get('codigo_cliente'),
             grupo_tarifario=request.form.get('grupo_tarifario'),
             consumo_kwh=consumo_kwh,
             custo_disponibilidade=decimal_proposta(request.form.get('custo_disponibilidade')),
@@ -12056,7 +12123,7 @@ def nova_proposta_etapa1():
             valor_total_conta=decimal_proposta(request.form.get('valor_total_conta')),
             concessionaria_id=concessionaria_id,
             valor_kwh=decimal_proposta(request.form.get('valor_kwh')),
-            valor_tusd_fio_b=geracao_solicitada,  # aqui agora significa GERAÇÃO SOLICITADA
+            valor_tusd_fio_b=geracao_solicitada,
             tipo_fase=request.form.get('tipo_fase'),
             tensao_rede=request.form.get('tensao_rede'),
             status='em_edicao'
@@ -12073,8 +12140,7 @@ def nova_proposta_etapa1():
         proposta=None,
         centros_custo=centros_custo,
         vendedores=vendedores,
-        concessionarias=concessionarias,
-        comerciais=comerciais
+        concessionarias=concessionarias
     )
     
 def coordenada_para_decimal(valor):

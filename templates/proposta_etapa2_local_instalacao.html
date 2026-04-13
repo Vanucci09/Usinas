@@ -1,142 +1,135 @@
 {% extends 'base.html' %}
 
-{% block title %}Local de Instalação{% endblock %}
+{% block title %}Local de Instalação - Usinas{% endblock %}
 
 {% block content %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 
-<div class="container mt-4">
-    <div class="card shadow-sm border-0">
-        <div class="card-body">
-            <h2 class="text-primary mb-4">Gerador de Proposta - Etapa 2</h2>
-            <h5 class="mb-4 text-secondary">Local de Instalação</h5>
-
-            <div class="mb-3">
-                <label class="form-label">Pesquisar por endereço ou CEP</label>
-                <div class="input-group">
-                    <input
-                        type="text"
-                        id="busca_endereco"
-                        class="form-control"
-                        placeholder="Ex.: Rua X, Brasília - DF ou 72850-000"
-                    >
-                    <button type="button" class="btn btn-primary" id="btnBuscarEndereco">
-                        Buscar
-                    </button>
+<div class="container py-4">
+    <div class="row">
+        <div class="col-lg-8 mb-4">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0 text-primary fw-bold"><i class="bi bi-map me-2"></i>Mapa de Instalação</h5>
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Passo 2 de 3</span>
                 </div>
-                <small class="text-muted">
-                    Você pode pesquisar por endereço ou CEP e depois clicar/ajustar o ponto no mapa.
-                </small>
+                <div class="card-body p-0 position-relative">
+                    <div class="p-3 bg-light border-bottom">
+                        <div class="input-group shadow-sm">
+                            <input type="text" id="busca_endereco" class="form-control" 
+                                   placeholder="Pesquisar endereço ou CEP (Ex: Esplanada, Brasília)...">
+                            <button type="button" class="btn btn-primary" id="btnBuscarEndereco">
+                                <i class="bi bi-search"></i> Buscar
+                            </button>
+                        </div>
+                        <div id="resultado_busca" class="mt-2"></div>
+                    </div>
+
+                    <div id="mapa" style="height: 600px; width: 100%; z-index: 1;"></div>
+                    
+                    <div class="p-2 bg-white border-top">
+                        <small class="text-muted italic">
+                            <i class="bi bi-info-circle me-1"></i> Clique no mapa para refinar a posição exata das placas.
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-body">
+                    <h5 class="text-secondary mb-4 border-bottom pb-2">Detalhes do Local</h5>
+                    
+                    <form method="POST">
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <label class="form-label fw-semibold small text-uppercase">Latitude</label>
+                                <input type="text" id="latitude" name="latitude" class="form-control bg-light" 
+                                       value="{{ proposta.latitude or '' }}" required readonly>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label fw-semibold small text-uppercase">Longitude</label>
+                                <input type="text" id="longitude" name="longitude" class="form-control bg-light" 
+                                       value="{{ proposta.longitude or '' }}" required readonly>
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label fw-semibold">Endereço Confirmado</label>
+                                <textarea id="endereco_instalacao" name="endereco_instalacao" class="form-control" 
+                                          rows="3" placeholder="O endereço aparecerá aqui após a seleção no mapa">{{ proposta.endereco_instalacao or '' }}</textarea>
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label fw-semibold">Tipo de Estrutura / Telhado</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-white"><i class="bi bi-house-door"></i></span>
+                                    <select name="tipo_telhado" class="form-select" required>
+                                        <option value="">Selecione a estrutura...</option>
+                                        {% for tipo in ['Cerâmico', 'Metálico', 'Fibrocimento', 'Laje', 'Solo'] %}
+                                            <option value="{{ tipo }}" {{ 'selected' if proposta.tipo_telhado == tipo }}>{{ tipo }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg shadow-sm">
+                                Próxima Etapa <i class="bi bi-arrow-right ms-2"></i>
+                            </button>
+                            <a href="{% if proposta.id %}{{ url_for('editar_proposta_etapa1', proposta_id=proposta.id) }}{% else %}{{ url_for('nova_proposta_etapa1') }}{% endif %}"
+                               class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-left me-2"></i>Voltar
+                            </a>
+                        </div>
+                    </form>
+                </div>
             </div>
 
-            <div id="resultado_busca" class="mb-3"></div>
-
-            <div class="mb-4">
-                <label class="form-label">Selecione o local no mapa</label>
-                <div id="mapa" style="height: 520px; width: 100%; border-radius: 10px; border: 1px solid #ddd;"></div>
-                <small class="text-muted">
-                    Clique no mapa para marcar o local exato. A latitude e longitude serão preenchidas automaticamente.
-                </small>
+            <div class="alert alert-info border-0 shadow-sm small">
+                <h6>Dica técnica:</h6>
+                A imagem de <strong>Satélite</strong> (no ícone de camadas do mapa) ajuda a identificar obstáculos como chaminés ou sombras de árvores.
             </div>
-
-            <form method="POST">
-                <div class="row g-3">
-                    <div class="col-md-3">
-                        <label class="form-label">Latitude</label>
-                        <input
-                            type="text"
-                            id="latitude"
-                            name="latitude"
-                            class="form-control"
-                            value="{{ proposta.latitude or '' }}"
-                            required
-                            readonly
-                        >
-                    </div>
-
-                    <div class="col-md-3">
-                        <label class="form-label">Longitude</label>
-                        <input
-                            type="text"
-                            id="longitude"
-                            name="longitude"
-                            class="form-control"
-                            value="{{ proposta.longitude or '' }}"
-                            required
-                            readonly
-                        >
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Endereço de Instalação</label>
-                        <input
-                            type="text"
-                            id="endereco_instalacao"
-                            name="endereco_instalacao"
-                            class="form-control"
-                            value="{{ proposta.endereco_instalacao or '' }}"
-                        >
-                    </div>
-
-                    <div class="col-md-4">
-                        <label class="form-label">Tipo de Telhado</label>
-                        <select name="tipo_telhado" class="form-select" required>
-                            <option value="">Selecione</option>
-                            <option value="Cerâmico" {% if proposta.tipo_telhado == 'Cerâmico' %}selected{% endif %}>Cerâmico</option>
-                            <option value="Metálico" {% if proposta.tipo_telhado == 'Metálico' %}selected{% endif %}>Metálico</option>
-                            <option value="Fibrocimento" {% if proposta.tipo_telhado == 'Fibrocimento' %}selected{% endif %}>Fibrocimento</option>
-                            <option value="Laje" {% if proposta.tipo_telhado == 'Laje' %}selected{% endif %}>Laje</option>
-                            <option value="Solo" {% if proposta.tipo_telhado == 'Solo' %}selected{% endif %}>Solo</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="mt-4 d-flex justify-content-between">
-                    <a href="{% if proposta and proposta.id %}{{ url_for('editar_proposta_etapa1', proposta_id=proposta.id) }}{% else %}{{ url_for('nova_proposta_etapa1') }}{% endif %}"
-                        class="btn btn-outline-secondary">
-                        Voltar
-                    </a>
-                    <button type="submit" class="btn btn-primary">Próxima Etapa</button>
-                </div>
-            </form>
         </div>
     </div>
 </div>
 
+<style>
+    #mapa { cursor: crosshair; }
+    .list-group-item-action { cursor: pointer; font-size: 0.85rem; }
+    .card-header { border-bottom: 1px solid #f0f0f0; }
+</style>
+
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script>
+    // Configurações Iniciais
     let latInicial = {{ proposta.latitude if proposta.latitude is not none else -15.793889 }};
     let lngInicial = {{ proposta.longitude if proposta.longitude is not none else -47.882778 }};
-    let zoomInicial = {% if proposta.latitude and proposta.longitude %}18{% else %}12{% endif %};
+    let zoomInicial = {{ 18 if proposta.latitude and proposta.longitude else 12 }};
 
     const mapa = L.map('mapa').setView([latInicial, lngInicial], zoomInicial);
 
-    // Camada padrão (mapa)
+    // Camadas de Mapa
     const camadaMapa = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors',
-        maxZoom: 22
+        attribution: '&copy; OpenStreetMap',
+        maxZoom: 20
     });
 
-    // Camada satélite
-    const camadaSatelite = L.tileLayer(
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        {
-            attribution: 'Tiles &copy; Esri',
-            maxZoom: 22
-        }
-    );
+    const camadaSatelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Esri',
+        maxZoom: 20
+    });
 
-    camadaMapa.addTo(mapa);
+    camadaSatelite.addTo(mapa); // Satélite como padrão para energia solar é melhor!
 
-    const baseLayers = {
-        "Mapa": camadaMapa,
-        "Satélite": camadaSatelite
-    };
-
-    L.control.layers(baseLayers).addTo(mapa);
+    L.control.layers({"Satélite": camadaSatelite, "Mapa": camadaMapa}).addTo(mapa);
 
     let marcador = L.marker([latInicial, lngInicial], { draggable: true }).addTo(mapa);
 
+    // Funções de Interface
     function atualizarCampos(lat, lng) {
         document.getElementById('latitude').value = Number(lat).toFixed(7);
         document.getElementById('longitude').value = Number(lng).toFixed(7);
@@ -148,12 +141,8 @@
         atualizarCampos(lat, lng);
     }
 
-    atualizarCampos(latInicial, lngInicial);
-
     mapa.on('click', function(e) {
-        const lat = e.latlng.lat;
-        const lng = e.latlng.lng;
-        moverMarcador(lat, lng, mapa.getZoom() < 18 ? 18 : mapa.getZoom());
+        moverMarcador(e.latlng.lat, e.latlng.lng, mapa.getZoom());
     });
 
     marcador.on('dragend', function() {
@@ -161,126 +150,46 @@
         atualizarCampos(pos.lat, pos.lng);
     });
 
+    // Busca (Nominatim)
     async function buscarEndereco() {
         const termo = document.getElementById('busca_endereco').value.trim();
-        const resultadoBusca = document.getElementById('resultado_busca');
+        const container = document.getElementById('resultado_busca');
+        if (!termo) return;
 
-        resultadoBusca.innerHTML = '';
-
-        if (!termo) {
-            resultadoBusca.innerHTML = `
-                <div class="alert alert-warning py-2">
-                    Informe um endereço ou CEP para pesquisar.
-                </div>
-            `;
-            return;
-        }
+        container.innerHTML = '<div class="spinner-border spinner-border-sm text-primary"></div> Buscando...';
 
         try {
-            resultadoBusca.innerHTML = `
-                <div class="alert alert-info py-2">
-                    Buscando local...
-                </div>
-            `;
+            const url = `https://nominatim.openstreetmap.org/search?format=json&limit=3&countrycodes=br&q=${encodeURIComponent(termo)}`;
+            const resp = await fetch(url);
+            const dados = await resp.json();
 
-            // Remove caracteres não numéricos para detectar CEP
-            const cepLimpo = termo.replace(/\D/g, '');
-            let consulta = termo;
-
-            // Se parece CEP brasileiro, força Brasil
-            if (cepLimpo.length === 8) {
-                consulta = cepLimpo + ', Brasil';
-            }
-
-            const url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=br&q=${encodeURIComponent(consulta)}`;
-
-            const response = await fetch(url, {
-                headers: {
-                    'Accept': 'application/json'
-                }
-            });
-
-            const dados = await response.json();
-
-            if (!dados || dados.length === 0) {
-                resultadoBusca.innerHTML = `
-                    <div class="alert alert-warning py-2">
-                        Nenhum local encontrado.
-                    </div>
-                `;
+            if (dados.length === 0) {
+                container.innerHTML = '<div class="alert alert-warning p-2 small">Local não encontrado.</div>';
                 return;
             }
 
-            if (dados.length === 1) {
-                const item = dados[0];
-                const lat = parseFloat(item.lat);
-                const lon = parseFloat(item.lon);
-
-                moverMarcador(lat, lon, 19);
-                document.getElementById('endereco_instalacao').value = item.display_name || '';
-                resultadoBusca.innerHTML = `
-                    <div class="alert alert-success py-2 mb-0">
-                        Local encontrado e marcado no mapa.
-                    </div>
-                `;
-                return;
-            }
-
-            let html = `
-                <div class="alert alert-secondary py-2">
-                    Encontramos mais de um resultado. Selecione um:
-                </div>
-                <div class="list-group">
-            `;
-
+            let html = '<div class="list-group shadow-sm mt-2">';
             dados.forEach((item, idx) => {
                 html += `
-                    <button type="button"
-                            class="list-group-item list-group-item-action"
-                            onclick="selecionarResultadoBusca(${item.lat}, ${item.lon}, ${idx})"
-                            data-endereco="${(item.display_name || '').replace(/"/g, '&quot;')}">
-                        ${item.display_name || 'Sem descrição'}
-                    </button>
-                `;
+                    <button type="button" class="list-group-item list-group-item-action" 
+                            onclick="selecionarLocal(${item.lat}, ${item.lon}, '${item.display_name.replace(/'/g, "\\'")}')">
+                        <i class="bi bi-geo-alt-fill text-danger me-2"></i>${item.display_name}
+                    </button>`;
             });
-
-            html += `</div>`;
-            resultadoBusca.innerHTML = html;
-
-            window.resultadosBusca = dados;
-
-        } catch (erro) {
-            console.error(erro);
-            resultadoBusca.innerHTML = `
-                <div class="alert alert-danger py-2">
-                    Erro ao buscar endereço.
-                </div>
-            `;
+            html += '</div>';
+            container.innerHTML = html;
+        } catch (e) {
+            container.innerHTML = '<div class="alert alert-danger p-2 small">Erro na busca.</div>';
         }
     }
 
-    window.selecionarResultadoBusca = function(lat, lon, idx) {
-        moverMarcador(parseFloat(lat), parseFloat(lon), 19);
-
-        if (window.resultadosBusca && window.resultadosBusca[idx]) {
-            document.getElementById('endereco_instalacao').value =
-                window.resultadosBusca[idx].display_name || '';
-        }
-
-        document.getElementById('resultado_busca').innerHTML = `
-            <div class="alert alert-success py-2 mb-0">
-                Local selecionado e marcado no mapa.
-            </div>
-        `;
+    window.selecionarLocal = function(lat, lon, nome) {
+        moverMarcador(lat, lon, 19);
+        document.getElementById('endereco_instalacao').value = nome;
+        document.getElementById('resultado_busca').innerHTML = '';
     };
 
     document.getElementById('btnBuscarEndereco').addEventListener('click', buscarEndereco);
-
-    document.getElementById('busca_endereco').addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            buscarEndereco();
-        }
-    });
+    document.getElementById('busca_endereco').addEventListener('keypress', e => { if(e.key === 'Enter') { e.preventDefault(); buscarEndereco(); } });
 </script>
 {% endblock %}
