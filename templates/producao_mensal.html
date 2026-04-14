@@ -2,188 +2,203 @@
 
 {% block content %}
 <style>
-    .card-metrica {
-        height: 120px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        text-align: center;
+    /* Estilização Moderna */
+    .dashboard-container {
+        background-color: #f8f9fa;
+        padding-bottom: 50px;
     }
-    .card-metrica .fs-5 {
-        font-size: 1.4rem;
+    .metric-card {
+        border: none;
+        border-radius: 12px;
+        transition: transform 0.2s;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     }
-    .card-metrica small {
-        font-size: 0.8rem;
-        display: block;
+    .metric-card:hover {
+        transform: translateY(-5px);
+    }
+    .metric-title {
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+    }
+    .metric-value {
+        font-size: 1.6rem;
+        font-weight: 800;
+        margin-top: 10px;
+    }
+    .chart-box {
+        background: white;
+        border-radius: 15px;
+        padding: 20px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        margin-bottom: 25px;
+    }
+    .filter-section {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 30px;
+        border-bottom: 4px solid #4A90E2;
     }
 </style>
 
-<div class="container mt-4">
-    <h2 class="mb-4 text-primary">
-        Produção Mensal – {{ usina_nome }}
-        {% if potencia_kw is not none %}
-            ({{ potencia_kw }} kWp)
-        {% endif %}
-    </h2>
-
-    <!-- Filtros -->
-    <div class="row justify-content-center mb-4">
-        <div class="col-lg-8">
-            <div class="card shadow-sm">
-                <div class="card-header bg-white">
-                    <h5 class="mb-0">Filtros</h5>
-                </div>
-                <div class="card-body row g-3">
-                    <div class="col-md-4">
-                        <label for="usina_id" class="form-label">Usina</label>
-                        <select class="form-select" id="usina_id">
-                            <option value="">Selecione</option>
-                            {% for usina in usinas %}
-                                <option value="{{ usina.id }}" {% if usina_id|int == usina.id %}selected{% endif %}>
-                                    {{ usina.nome }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label for="ano" class="form-label">Ano</label>
-                        <input type="number" class="form-control" id="ano" value="{{ ano }}" min="2000" max="2100">
-                    </div>
-                    <div class="col-md-2">
-                        <label for="mes" class="form-label">Mês</label>
-                        <input type="number" class="form-control" id="mes" value="{{ mes }}" min="1" max="12">
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Métricas -->
-    <div class="row mb-4">
-        <!-- Geração Anual -->
-        <div class="col-12 col-sm-6 col-md-3 fade-in">
-            <div class="card border-success shadow-sm card-metrica">
-                <div class="card-body">
-                    <h6 class="text-success">Geração Anual</h6>
-                    <p class="fs-5 mb-0">
-                        {{ "{:,}".format(ano_geracao_total|round(2)).replace(",", "X").replace(".", ",").replace("X", ".") }} kWh
-                    </p>
-                </div>
-            </div>
-        </div>
-        <!-- Geração Mensal -->
-        <div class="col-12 col-sm-6 col-md-3 fade-in" style="animation-delay: 0.2s;">
-            <div class="card border-primary shadow-sm card-metrica">
-                <div class="card-body">
-                    <h6 class="text-primary">Geração Mensal</h6>
-                    <p class="fs-5 mb-0">
-                        {{ "{:,}".format(soma_total|round(2)).replace(",", "X").replace(".", ",").replace("X", ".") }} kWh
-                    </p>
-                </div>
-            </div>
-        </div>
-        <!-- Previsão Mensal -->
-        <div class="col-12 col-sm-6 col-md-3 fade-in" style="animation-delay: 0.4s;">
-            <div class="card border-warning shadow-sm card-metrica">
-                <div class="card-body">
-                    <h6 class="text-warning">Previsão Mensal</h6>
-                    <p class="fs-5 mb-0">
-                        {{ "{:,}".format(previsao_mensal|round(2)).replace(",", "X").replace(".", ",").replace("X", ".") }} kWh
-                    </p>
-                </div>
-            </div>
-        </div>
-    <!-- Yield -->
-    <div class="col-12 col-sm-6 col-md-3 fade-in" style="animation-delay: 0.6s;">
-        <div class="card border-dark shadow-sm card-metrica">
-            <div class="card-body">
-                <h6 class="text-dark">Yield (kWh/kWp)</h6>
-                <p class="fs-5 mb-1">
-                    {% set dias_com_dados = totais | select("gt", 0) | list | length %}
-                    {% if potencia_kw is not none and potencia_kw > 0 and dias_no_mes > 0 and dias_com_dados > 0 %}
-                        {% set resultado = soma_total / (dias_com_dados * (potencia_kw / dias_no_mes)) %}
-                        {{ resultado | round(2) }}
-                    {% else %}
-                        <span class="text-muted">Não calculável</span>
-                    {% endif %}
-                </p>
-                {% if media_yield_acumulado %}
-                    <small class="text-muted">Média anual acumulada: {{ media_yield_acumulado }}</small>
+<div class="dashboard-container">
+    <div class="container pt-4">
+        
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="text-primary fw-bold mb-0">
+                <i class="bi bi-lightning-charge-fill"></i> {{ usina_nome }}
+                {% if potencia_kw is not none %}
+                    <span class="badge bg-soft-primary text-primary fs-6 fw-normal" style="background: #eef5ff;">{{ potencia_kw }} kWp</span>
                 {% endif %}
-                {% if yield_ano_anterior is not none %}
-                    <small class="text-muted">Mesmo mês ano anterior: {{ yield_ano_anterior }}</small>
-                {% else %}
-                    <small class="text-danger">Sem dados do ano anterior</small>
-                {% endif %}
+            </h2>
+            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> Início
+            </a>
+        </div>
+
+        <div class="filter-section shadow-sm">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-5">
+                    <label for="usina_id" class="form-label small fw-bold text-muted">Selecionar Usina</label>
+                    <select class="form-select border-0 bg-light" id="usina_id">
+                        <option value="">Selecione</option>
+                        {% for usina in usinas %}
+                            <option value="{{ usina.id }}" {% if usina_id|int == usina.id %}selected{% endif %}>
+                                {{ usina.nome }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="ano" class="form-label small fw-bold text-muted">Ano</label>
+                    <input type="number" class="form-control border-0 bg-light" id="ano" value="{{ ano }}" min="2000" max="2100">
+                </div>
+                <div class="col-md-3">
+                    <label for="mes" class="form-label small fw-bold text-muted">Mês</label>
+                    <input type="number" class="form-control border-0 bg-light" id="mes" value="{{ mes }}" min="1" max="12">
+                </div>
             </div>
         </div>
-    </div>
 
-    <div class="mt-4"></div>
+        <div class="row g-3 mb-4">
+            <div class="col-md-3">
+                <div class="card metric-card border-start border-success border-5 p-2">
+                    <div class="card-body">
+                        <div class="metric-title text-success">Geração Anual</div>
+                        <div class="metric-value">{{ "{:,}".format(ano_geracao_total|round(1)).replace(",", "X").replace(".", ",").replace("X", ".") }} <small class="fs-6">kWh</small></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card border-start border-primary border-5 p-2">
+                    <div class="card-body">
+                        <div class="metric-title text-primary">Geração Mensal</div>
+                        <div class="metric-value">{{ "{:,}".format(soma_total|round(1)).replace(",", "X").replace(".", ",").replace("X", ".") }} <small class="fs-6">kWh</small></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card border-start border-warning border-5 p-2">
+                    <div class="card-body">
+                        <div class="metric-title text-warning">Previsão Mês</div>
+                        <div class="metric-value">{{ "{:,}".format(previsao_mensal|round(1)).replace(",", "X").replace(".", ",").replace("X", ".") }} <small class="fs-6">kWh</small></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card border-start border-dark border-5 p-2 shadow-sm">
+                    <div class="card-body">
+                        <div class="metric-title text-dark">Yield (Eficiência)</div>
+                        <div class="metric-value">
+                            {% set dias_com_dados = totais | select("gt", 0) | list | length %}
+                            {% if potencia_kw and dias_no_mes > 0 and dias_com_dados > 0 %}
+                                {{ (soma_total / (dias_com_dados * (potencia_kw / dias_no_mes))) | round(2) }}
+                            {% else %}
+                                <span class="text-muted fs-5">--</span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mt-2 pt-2 border-top">
+                            {% if yield_ano_anterior is not none and yield_ano_anterior > 0 %}
+                                <small class="text-muted d-block" style="font-size: 0.75rem;">
+                                    <i class="bi bi-calendar-event"></i> Mesmo mês/ano ant: 
+                                    <strong class="text-dark">{{ yield_ano_anterior | round(2) }}</strong>
+                                </small>
+                            {% else %}
+                                <small class="text-danger d-block" style="font-size: 0.75rem;">
+                                    <i class="bi bi-exclamation-triangle"></i> Sem dados de 2025
+                                </small>
+                            {% endif %}
+                            
+                            {% if media_yield_acumulado %}
+                                <small class="text-muted d-block" style="font-size: 0.75rem;">
+                                    <i class="bi bi-graph-up"></i> Média anual: <strong>{{ media_yield_acumulado }}</strong>
+                                </small>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-    <!-- Desvio e Tendência -->
-    <div class="row mb-4 fade-in" style="animation-delay: 0.8s;">
-        <div class="col-md-12">
-            <div class="alert alert-info">
-                {% set dias_com_dados = totais | select("gt", 0) | list | length %}
-                {% set previsao_diaria = previsao_mensal / dias_no_mes %}
-                {% set previsao_acumulada_ate_agora = previsao_diaria * dias_com_dados %}
-                {% set desvio_percentual = ((soma_total - previsao_acumulada_ate_agora) / previsao_acumulada_ate_agora * 100) if previsao_acumulada_ate_agora > 0 else 0 %}
-
-                <p><strong>Desvio Geração Bruto x Real:</strong> {{ desvio_percentual | round(2) }}%</p>
-
-                {% set hoje = current_day if current_day is defined else detalhes[-1].data.day if detalhes else 1 %}
-                {% set dias_mes = dias_no_mes if dias_no_mes is defined else 30 %}
-                {% set media_diaria = (soma_total / hoje) if hoje > 0 else 0 %}
-                {% set estimativa_final = media_diaria * dias_mes %}
-
-                <p><strong>Estimativa de geração até o fim do mês:</strong> {{ "{:,}".format(estimativa_final | round(2)).replace(",", "X").replace(".", ",").replace("X", ".") }} kWh</p>
-
-                <p><strong>Status:</strong>
-                {% if estimativa_final >= previsao_mensal %}
-                    ✅ A geração está no ritmo para alcançar ou superar a meta mensal.
-                {% elif estimativa_final >= (previsao_mensal * 0.90) %}
-                    ⚠️ Geração levemente abaixo do ritmo ideal (até 10% de desvio). Acompanhar de perto.
-                {% else %}
-                    ❌ Geração abaixo do ritmo necessário. Ajustes são recomendados para atingir a meta.
-                {% endif %}
-                </p>
+        <div class="alert alert-info border-0 shadow-sm mb-4 p-4">
+            <h5 class="fw-bold"><i class="bi bi-info-circle-fill"></i> Análise de Desempenho</h5>
+            <hr>
+            {% set dias_com_dados = totais | select("gt", 0) | list | length %}
+            {% set previsao_diaria = previsao_mensal / dias_no_mes if dias_no_mes > 0 else 0 %}
+            {% set previsao_acumulada_ate_agora = previsao_diaria * dias_com_dados %}
+            {% set desvio_percentual = ((soma_total - previsao_acumulada_ate_agora) / previsao_acumulada_ate_agora * 100) if previsao_acumulada_ate_agora > 0 else 0 %}
+            
+            <div class="row text-center">
+                <div class="col-md-4 border-end">
+                    <small class="text-muted d-block">Desvio Atual</small>
+                    <span class="fw-bold {{ 'text-success' if desvio_percentual >= 0 else 'text-danger' }}">
+                        {{ desvio_percentual | round(2) }}%
+                    </span>
+                </div>
+                <div class="col-md-4 border-end">
+                    <small class="text-muted d-block">Estimativa Final do Mês</small>
+                    {% set hoje = current_day if current_day is defined else detalhes[-1].data.day if detalhes else 1 %}
+                    {% set media_diaria = (soma_total / hoje) if hoje > 0 else 0 %}
+                    {% set estimativa_final = media_diaria * dias_no_mes %}
+                    <span class="fw-bold text-dark">{{ "{:,}".format(estimativa_final | round(1)).replace(",", "X").replace(".", ",").replace("X", ".") }} kWh</span>
+                </div>
+                <div class="col-md-4">
+                    <small class="text-muted d-block">Status do Ritmo</small>
+                    <span class="fw-bold">
+                        {% if estimativa_final >= previsao_mensal %} ✅ No Alvo {% elif estimativa_final >= (previsao_mensal * 0.90) %} ⚠️ Atenção {% else %} ❌ Alerta {% endif %}
+                    </span>
+                </div>
             </div>
         </div>
-    </div>
 
-    <!-- Gráficos -->
-    <div class="card mb-4 shadow-sm fade-in">
-        <div class="card-body">
+        <div class="chart-box">
             <canvas id="graficoProducaoOriginal" height="100"></canvas>
         </div>
-    </div>
 
-    <div class="card mb-4 shadow-sm fade-in">
-        <div class="card-body">
-            <h5 class="card-title">Geração Real vs Previsão</h5>
-            <canvas id="graficoComparativo" height="100"></canvas>
+        <div class="row">
+            <div class="col-md-6">
+                <div class="chart-box">
+                    <h6 class="fw-bold text-muted mb-3">Real vs Previsão Diária</h6>
+                    <canvas id="graficoComparativo" height="200"></canvas>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="chart-box">
+                    <h6 class="fw-bold text-muted mb-3">Produção Acumulada</h6>
+                    <canvas id="graficoAcumulado" height="200"></canvas>
+                </div>
+            </div>
         </div>
-    </div>
 
-    <div class="card mb-5 shadow-sm fade-in">
-        <div class="card-body">
-            <h5 class="card-title">Geração Acumulada</h5>
-            <canvas id="graficoAcumulado" height="100"></canvas>
-        </div>
-    </div>
-
-    <div class="text-center mt-4">
-        <a href="{{ url_for('index') }}" class="btn btn-secondary">
-            <i class="bi bi-house-door-fill"></i> Voltar para o Início
-        </a>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
+    // Manteve toda a sua lógica de script intacta para garantir o funcionamento
     function irParaProducao() {
         const usina = document.getElementById('usina_id').value;
         const ano = document.getElementById('ano').value;
@@ -240,15 +255,13 @@
         data: {
             labels: dias,
             datasets: [
-                { label: 'Geração Real', data: producao, borderColor: 'green', tension: 0.3, fill: false },
-                { label: 'Previsão', data: previsoes, borderColor: 'orange', borderDash: [5, 5], tension: 0.3, fill: false }
+                { label: 'Geração Real', data: producao, borderColor: '#27ae60', tension: 0.3, fill: false },
+                { label: 'Previsão', data: previsoes, borderColor: '#f39c12', borderDash: [5, 5], tension: 0.3, fill: false }
             ]
         },
         options: {
             responsive: true,
-            plugins: {
-                title: { display: true, text: 'Geração Real x Previsão' }
-            }
+            plugins: { title: { display: false } }
         }
     });
 
@@ -267,15 +280,13 @@
         data: {
             labels: dias,
             datasets: [
-                { label: 'Acumulado Real', data: acumuladoReal, borderColor: 'blue', fill: false, tension: 0.3 },
-                { label: 'Acumulado Previsto', data: acumuladoPrevisto, borderColor: 'gray', borderDash: [5, 5], fill: false, tension: 0.3 }
+                { label: 'Acumulado Real', data: acumuladoReal, borderColor: '#4A90E2', fill: true, backgroundColor: 'rgba(74, 144, 226, 0.1)', tension: 0.3 },
+                { label: 'Acumulado Previsto', data: acumuladoPrevisto, borderColor: '#95a5a6', borderDash: [5, 5], fill: false, tension: 0.3 }
             ]
         },
         options: {
             responsive: true,
-            plugins: {
-                title: { display: true, text: 'Geração Acumulada no Mês' }
-            }
+            plugins: { title: { display: false } }
         }
     });
 </script>

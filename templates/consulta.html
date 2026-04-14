@@ -1,82 +1,141 @@
 {% extends 'base.html' %}
 
-{% block title %}Cadastrar Geração Diária{% endblock %}
+{% block title %}Consulta de Geração{% endblock %}
 
 {% block content %}
-<body class="bg-light">
+<style>
+    .search-card {
+        background: #ffffff;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        padding: 25px;
+        margin-bottom: 30px;
+    }
 
-    <div class="container mt-5">
-        <h2 class="mb-4 text-primary">Consulta de Geração</h2>
+    .table-container {
+        background: #ffffff;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        overflow: hidden;
+    }
 
-        <form class="row g-3 mb-4" method="GET" action="{{ url_for('consulta') }}">
+    .summary-box {
+        background: #eef5ff;
+        padding: 15px 25px;
+        border-radius: 8px;
+        border-left: 5px solid #4A90E2;
+        display: inline-block;
+    }
+
+    .status-indicator {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 5px;
+    }
+
+    .btn-action {
+        border-radius: 8px;
+        padding: 8px 20px;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+</style>
+
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="text-primary m-0">Consulta de Geração</h2>
+        <a href="/" class="btn btn-outline-secondary btn-action">
+            <i class="bi bi-house"></i> Voltar
+        </a>
+    </div>
+
+    <div class="search-card">
+        <form class="row g-3 align-items-end" method="GET" action="{{ url_for('consulta') }}">
             <div class="col-md-4">
-                <label for="usina_id" class="form-label">Usina</label>
+                <label for="usina_id" class="form-label fw-bold">Usina Solar</label>
                 <select name="usina_id" id="usina_id" class="form-select">
-                    <option value="">Todas</option>
+                    <option value="">Todas as Usinas</option>
                     {% for usina in usinas %}
                         <option value="{{ usina.id }}" {% if usina_id|int == usina.id %}selected{% endif %}>{{ usina.nome }}</option>
                     {% endfor %}
                 </select>
             </div>
             <div class="col-md-3">
-                <label for="data_inicio" class="form-label">Data Início</label>
+                <label for="data_inicio" class="form-label fw-bold">Data Início</label>
                 <input type="date" id="data_inicio" name="data_inicio" value="{{ data_inicio }}" class="form-control">
             </div>
             <div class="col-md-3">
-                <label for="data_fim" class="form-label">Data Fim</label>
+                <label for="data_fim" class="form-label fw-bold">Data Fim</label>
                 <input type="date" id="data_fim" name="data_fim" value="{{ data_fim }}" class="form-control">
             </div>
-            <div class="col-md-2 d-flex align-items-end">
-                <button type="submit" class="btn btn-primary w-100">Filtrar</button>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100 btn-action">
+                    <i class="bi bi-filter"></i> Filtrar
+                </button>
             </div>
         </form>
+    </div>
 
-        <table class="table table-striped table-hover">
+    <div class="table-container">
+        <table class="table table-hover mb-0">
             <thead class="table-light">
                 <tr>
-                    <th>Usina</th>
+                    <th class="ps-4">Usina</th>
                     <th>Data</th>
-                    <th>Previsão Diária (kWh)</th>
-                    <th>Geração (kWh)</th>
+                    <th>Previsão (kWh)</th>
+                    <th>Realizado (kWh)</th>
+                    <th class="text-center">Status</th>
                 </tr>
             </thead>
             <tbody>
                 {% for item in resultados %}
                 <tr>
-                    <td>{{ item.nome }}</td>
+                    <td class="ps-4 fw-bold">{{ item.nome }}</td>
                     <td>{{ item.data }}</td>
-                    <td>{{ "{:,}".format(item.previsao_diaria|round(2)).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
-                    <td class="
-                        {% if item.energia_kwh >= item.previsao_diaria %} text-success 
-                        {% elif item.energia_kwh >= (item.previsao_diaria * 0.9) %} text-warning 
-                        {% else %} text-danger 
-                        {% endif %}
-                    ">
+                    <td class="text-muted">{{ "{:,}".format(item.previsao_diaria|round(2)).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
+                    <td class="fw-bold">
                         {{ "{:,}".format(item.energia_kwh|round(2)).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                    </td>
+                    <td class="text-center">
+                        {% if item.energia_kwh >= item.previsao_diaria %}
+                            <span class="badge bg-success">Excelente</span>
+                        {% elif item.energia_kwh >= (item.previsao_diaria * 0.9) %}
+                            <span class="badge bg-warning text-dark">Atenção</span>
+                        {% else %}
+                            <span class="badge bg-danger">Abaixo da Meta</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="text-center py-5 text-muted">
+                        Nenhum registro encontrado para este período.
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
-
-        <div class="text-end mt-4">
-            <strong>Total da Geração: </strong>{{ "{:,}".format(total|round(2)).replace(",", "X").replace(".", ",").replace("X", ".") }} kWh
-        </div>
-
-        {% if usina_id %}
-        {% set ano = data_inicio[:4] %}
-        {% set mes = data_inicio[5:7] %}
-        <a href="{{ url_for('producao_mensal', usina_id=usina_id, ano=ano, mes=mes) }}" class="btn btn-outline-primary mt-3">
-            Ver Gráfico Mensal
-        </a>
-        
-{% endif %}
-
-
-        <a href="/" class="btn btn-secondary mt-3">Voltar</a>
     </div>
 
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mt-4 gap-3">
+        <div class="summary-box">
+            <span class="text-muted">Total Gerado no Período:</span>
+            <span class="h4 m-0 ms-2 fw-bold text-primary">
+                {{ "{:,}".format(total|round(2)).replace(",", "X").replace(".", ",").replace("X", ".") }} <small>kWh</small>
+            </span>
+        </div>
 
-</body>
-</html>
+        <div class="d-flex gap-2">
+            {% if usina_id %}
+                {% set ano = data_inicio[:4] %}
+                {% set mes = data_inicio[5:7] %}
+                <a href="{{ url_for('producao_mensal', usina_id=usina_id, ano=ano, mes=mes) }}" class="btn btn-info text-white btn-action">
+                    <i class="bi bi-graph-up"></i> Ver Gráfico Mensal
+                </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
 {% endblock %}
