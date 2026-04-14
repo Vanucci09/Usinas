@@ -2,420 +2,258 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Gestão de Usina Solar</title>
+    <title>Gestão de Usina Solar | Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
     <style>
+        :root {
+            --sidebar-width: 280px;
+            --primary-color: #0d6efd;
+            --bg-light: #f4f7fe;
+            --transition: all 0.2s ease-in-out;
+        }
+
         body {
-            background: #f8f9fa;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-light);
+            color: #2d3748;
+            margin: 0;
         }
-        .card-custom {
-            transition: transform 0.3s, box-shadow 0.3s;
+
+        /* Sidebar */
+        .sidebar {
+            width: var(--sidebar-width);
+            height: 100vh;
+            position: fixed;
+            left: 0;
+            top: 0;
+            background: #fff;
+            border-right: 1px solid #e2e8f0;
+            z-index: 1000;
+            padding: 1.5rem 1.25rem;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .nav-link-custom {
+            display: flex;
+            align-items: center;
+            padding: 0.8rem 1rem;
+            color: #718096;
+            border-radius: 0.75rem;
+            text-decoration: none;
+            margin-bottom: 0.3rem;
+            transition: var(--transition);
+            font-weight: 500;
+            cursor: pointer;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+        }
+
+        .nav-link-custom:hover { background: #f8fafc; color: var(--primary-color); }
+        .nav-link-custom.active { background: #edf2ff; color: var(--primary-color); }
+        .nav-link-custom i { margin-right: 0.85rem; font-size: 1.2rem; }
+
+        /* Main Content Area */
+        .main-content {
+            margin-left: var(--sidebar-width);
+            padding: 2.5rem;
+        }
+
+        main section { display: none; }
+        main section.active-section { display: block; animation: fadeIn 0.3s ease-out; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .section-title { font-weight: 700; font-size: 1.5rem; margin-bottom: 2rem; color: #1a202c; }
+
+        /* Cards Estilizados */
+        .card-menu {
+            background: #fff;
+            border: 1px solid #e2e8f0;
             border-radius: 1rem;
+            padding: 1.25rem;
+            transition: var(--transition);
+            text-decoration: none;
+            color: inherit;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
         }
-        .card-custom:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1);
+
+        .card-menu:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 15px rgba(0,0,0,0.05);
+            border-color: var(--primary-color);
         }
-        .card-icon {
-            font-size: 2rem;
-            color: #0d6efd;
+
+        .icon-box {
+            width: 38px;
+            height: 38px;
+            border-radius: 8px;
+            background: #f0f7ff;
+            color: var(--primary-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
         }
-        .accordion-button {
-            font-weight: 600;
-            color: #0d6efd;
-        }
+
+        .card-menu h5 { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.2rem; }
+        .card-menu p { font-size: 0.8rem; color: #a0aec0; margin: 0; }
+
+        .user-profile { background: #f8fafc; padding: 1rem; border-radius: 1rem; margin-top: auto; }
     </style>
 </head>
 <body>
 
-<nav class="navbar navbar-light bg-white shadow-sm mb-4">
-    <div class="container d-flex justify-content-between align-items-center">
-        <span class="navbar-text text-primary fw-bold d-flex align-items-center">
-            <img src="{{ url_for('static', filename='img/LogoEmpresa.jpg') }}" alt="Logo" style="height: 40px; width: auto;" class="me-2">
-            Gestão de Usina Solar
-        </span>
-        <div class="d-flex align-items-center gap-3">
-            <span class="text-muted">👤 {{ current_user.nome }}</span>
-            <a href="{{ url_for('logout') }}" class="btn btn-outline-danger btn-sm">Sair</a>
-        </div>
+<aside class="sidebar">
+    <div class="mb-4 px-2">
+        <img src="{{ url_for('static', filename='img/LogoEmpresa.jpg') }}" alt="Logo" style="height: 40px;">
     </div>
-</nav>
 
-<div class="container mb-5">
-    <div class="accordion" id="accordionGrupos">
-
-        <!-- Geração -->
-        <div class="accordion-item">
-            <h2 class="accordion-header" id="headingGeracao">
-                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseGeracao" aria-expanded="false" aria-controls="collapseGeracao">
-                    ⚡ Geração
-                </button>
-            </h2>
-            <div id="collapseGeracao" class="accordion-collapse collapse" aria-labelledby="headingGeracao" data-bs-parent="#accordionGrupos">
-                <div class="accordion-body">
-                    <div class="row g-3">
-                        <div class="col-md-4">
-                            <a href="{{ url_for('cadastrar_usina') }}" class="btn btn-outline-primary w-100">Cadastrar Usina</a>
-                        </div>
-                        <div class="col-md-4">
-                            <a href="{{ url_for('cadastrar_geracao') }}" class="btn btn-outline-primary w-100">Cadastrar Geração</a>
-                        </div>
-                        <div class="col-md-4">
-                            <a href="{{ url_for('consulta') }}" class="btn btn-outline-primary w-100">Consulta de Geração</a>
-                        </div>
-                        <div class="col-md-4">
-                            <a href="{{ url_for('portal_usinas') }}" class="btn btn-outline-primary w-100">Vincular Usinas Solis</a>
-                        </div>
-                        <div class="col-md-4">
-                            <a href="{{ url_for('vincular_usinas_sungrow') }}" class="btn btn-outline-primary w-100">Vincular Usinas Sungrow</a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Monitoramento -->
-        <div class="accordion-item">
-        <h2 class="accordion-header" id="headingMonitoramento">
-            <button
-            class="accordion-button {% if request.args.get('aba') == 'monitoramento' %}{% else %}collapsed{% endif %}"
-            type="button"
-            data-bs-toggle="collapse"
-            data-bs-target="#collapseMonitoramento"
-            aria-expanded="{% if request.args.get('aba') == 'monitoramento' %}true{% else %}false{% endif %}"
-            aria-controls="collapseMonitoramento">
-            🛰️ Monitoramento
-            </button>
-        </h2>
-
-        <div id="collapseMonitoramento"
-            class="accordion-collapse collapse {% if request.args.get('aba') == 'monitoramento' %}show{% endif %}"
-            aria-labelledby="headingMonitoramento"
-            data-bs-parent="#accordionGrupos">
-            <div class="accordion-body">
-            <div class="row g-3">
-                <div class="col-md-4">
-                <a href="{{ url_for('monitoramento_index') }}"
-                    class="btn btn-outline-primary w-100">
-                    Monitorar Usinas
-                </a>
-                </div>
-                <div class="col-md-4">
-                <a href="{{ url_for('monitoramento_index') }}"
-                    class="btn btn-outline-secondary w-100">
-                    Inserir Geração / Análise Diária
-                </a>
-                </div>
-            </div>
-            
-            </div>
-        </div>
-        </div>
-
-        <!-- Comercial -->
-        <div class="accordion-item">
-            <h2 class="accordion-header" id="headingComercial">
-                <button
-                class="accordion-button {% if request.args.get('aba') == 'comercial' %}{% else %}collapsed{% endif %}"
-                type="button"
-                data-bs-toggle="collapse"
-                data-bs-target="#collapseComercial"
-                aria-expanded="{% if request.args.get('aba') == 'comercial' %}true{% else %}false{% endif %}"
-                aria-controls="collapseComercial">
-                🛒 Comercial
-                </button>
-            </h2>
-
-            <div id="collapseComercial"
-                class="accordion-collapse collapse {% if request.args.get('aba') == 'comercial' %}show{% endif %}"
-                aria-labelledby="headingComercial"
-                data-bs-parent="#accordionGrupos">
-                <div class="accordion-body">
-                    <div class="row g-3">
-                        {#
-                        <div class="col-md-4">
-                            <a href="{{ url_for('listar_comerciais') }}" class="btn btn-outline-primary w-100">
-                                Equipes Comerciais
-                            </a>
-                        </div>
-                        #}
-                        <div class="col-md-4">
-                            <a href="{{ url_for('listar_vendedores') }}" class="btn btn-outline-primary w-100">
-                                Vendedores
-                            </a>
-                        </div>
-                        <div class="col-md-4">
-                            <a href="{{ url_for('listar_propostas') }}" class="btn btn-outline-primary w-100">
-                                Propostas
-                            </a>
-                        </div>
-                        <div class="col-md-4">
-                            <a href="{{ url_for('listar_concessionarias') }}" class="btn btn-outline-primary w-100">
-                                Concessionárias
-                            </a>
-                        </div>
-                        <div class="col-md-4">
-                            <a href="{{ url_for('listar_fornecedores_kit') }}" class="btn btn-outline-primary w-100">
-                                Fornecedores
-                            </a>
-                        </div>
-                        <div class="col-md-4">
-                            <a href="{{ url_for('listar_centros_custos') }}"
-                                class="btn btn-outline-secondary w-100">
-                                Cadastro de Cliente
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Consórcios -->
-        <div class="accordion-item">
-            <h2 class="accordion-header" id="headingConsorcios">
-                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseConsorcios" aria-expanded="false" aria-controls="collapseConsorcios">
-                    👥 Gestão de Consórcios
-                </button>
-            </h2>
-            <div id="collapseConsorcios" class="accordion-collapse collapse" aria-labelledby="headingConsorcios" data-bs-parent="#accordionGrupos">
-                <div class="accordion-body">
-                    <div class="row g-3">
-                        <div class="col-md-4">
-                            <a href="{{ url_for('listar_clientes') }}" class="btn btn-outline-primary w-100">Clientes</a>
-                        </div>
-                        <div class="col-md-4">
-                            <a href="{{ url_for('listar_rateios') }}" class="btn btn-outline-primary w-100">Rateios</a>
-                        </div>
-                        <div class="col-md-4">
-                            <a href="{{ url_for('faturamento') }}" class="btn btn-outline-primary w-100">Faturamento</a>
-                        </div>
-                        <div class="col-md-4">
-                            <a href="{{ url_for('baixar_fatura') }}" class="btn btn-outline-primary w-100">Baixar Fatura</a>
-                        </div>
-                        <div class="col-md-4">
-                            <a href="{{ url_for('listar_injecoes_mensais') }}" class="btn btn-outline-primary w-100">Cadastrar Injeção</a>
-                        </div>
-                        <div class="col-md-4">
-                            <a href="{{ url_for('relatorio_cliente') }}" class="btn btn-outline-primary w-100">Relatório</a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Financeiro da Empresa -->
-        <div class="accordion-item">
-            <h2 class="accordion-header" id="headingFinanceiroEmpresa">
-                <button
-                class="accordion-button {% if request.args.get('aba') == 'financeiro_empresa' %}{% else %}collapsed{% endif %}"
-                type="button"
-                data-bs-toggle="collapse"
-                data-bs-target="#collapseFinanceiroEmpresa"
-                aria-expanded="{% if request.args.get('aba') == 'financeiro_empresa' %}true{% else %}false{% endif %}"
-                aria-controls="collapseFinanceiroEmpresa">
-                💼 Financeiro da Empresa
-                </button>
-            </h2>
-
-            <div id="collapseFinanceiroEmpresa"
-                class="accordion-collapse collapse {% if request.args.get('aba') == 'financeiro_empresa' %}show{% endif %}"
-                aria-labelledby="headingFinanceiroEmpresa"
-                data-bs-parent="#accordionGrupos">
-                <div class="accordion-body">
-                    <div class="row g-3">
-
-                        <!-- Atalhos principais -->
-                        <div class="col-md-4">
-                            <a href="{{ url_for('listar_empresas_operacional') }}" class="btn btn-outline-primary w-100">
-                                Grupo
-                            </a>
-                        </div>
-
-                        <div class="col-md-4">
-                            <a href="{{ url_for('listar_clientes_operacionais') }}"
-                                class="btn btn-outline-primary w-100">
-                                Clientes Empresa
-                            </a>
-                        </div>
-
-                        <!-- Financeiro Empresa -->
-                        <div class="col-md-4">
-                            <a href="{{ url_for('empresa_financeiro_listar') }}"
-                                class="btn btn-outline-primary w-100">
-                                Títulos
-                            </a>
-                        </div>
-
-                        <!-- Rotas sugeridas (crie quando quiser) -->
-                        <div class="col-md-4">
-                            <a href="{{ url_for('listar_centros_custos') }}"
-                                class="btn btn-outline-secondary w-100">
-                                Clientes
-                            </a>
-                        </div>
-
-                        <div class="col-md-4">
-                            <a href="{{ url_for('listar_planos_financeiros') }}"
-                                class="btn btn-outline-secondary w-100">
-                                Plano Financeiro
-                            </a>
-                        </div>
-
-                        <div class="col-md-4">
-                            <a href="{{ url_for('empresa_contas_listar') }}"
-                                class="btn btn-outline-secondary w-100">
-                                Bancos
-                            </a>
-                        </div>
-
-                        <div class="col-md-4">
-                            <a href="{{ url_for('listar_empresas_operacional') }}"
-                                class="btn btn-outline-secondary w-100">
-                                Fluxo de Caixa (Empresa)
-                            </a>
-                        </div>
-
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Financeiro Usinas -->
-        <div class="accordion-item">
-            <h2 class="accordion-header" id="headingFinanceiro">
-                <button class="accordion-button {% if request.args.get('aba') == 'financeiro' %} {% else %}collapsed{% endif %}" 
-                        type="button" 
-                        data-bs-toggle="collapse" 
-                        data-bs-target="#collapseFinanceiro" 
-                        aria-expanded="{% if request.args.get('aba') == 'financeiro' %}true{% else %}false{% endif %}" 
-                        aria-controls="collapseFinanceiro">
-                    💰 Financeiro Usinas
-                </button>
-            </h2>
-            <div id="collapseFinanceiro" 
-                 class="accordion-collapse collapse {% if request.args.get('aba') == 'financeiro' %}show{% endif %}" 
-                 aria-labelledby="headingFinanceiro" 
-                 data-bs-parent="#accordionGrupos">
-                <div class="accordion-body">
-                    <div class="row g-3">
-                        <div class="col-md-4">
-                            <a href="{{ url_for('financeiro') }}" class="btn btn-outline-primary w-100">Caixas e Bancos</a>
-                        </div>                      
-                        <div class="col-md-4">
-                            <a href="{{ url_for('registrar_despesa') }}" class="btn btn-outline-primary w-100">Cadastrar Despesas</a>
-                        </div>
-                        <div class="col-md-4">
-                            <a href="{{ url_for('listar_faturas') }}" class="btn btn-outline-primary w-100">Faturas Cadastradas</a>
-                        </div>
-                        <div class="col-md-4">
-                            <a href="{{ url_for('upload_boleto') }}" class="btn btn-outline-primary w-100">Upload de Boletos</a>
-                        </div>
-                        <div class="col-md-4">
-                            <a href="{{ url_for('cadastrar_credor') }}" class="btn btn-outline-primary w-100">Cadastrar Credor</a>
-                        </div>
-                        <div class="col-md-4">
-                            <a href="{{ url_for('receitas_avulsas') }}" class="btn btn-outline-primary w-100">Receita Avulsa</a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <!-- Investidores -->
-         {% if current_user.email in ['master@admin.com', 'nuza@cgrenergia.com.br'] %}
-        <div class="accordion-item">
-            <h2 class="accordion-header" id="headingInvestidores">
-                <button class="accordion-button {% if request.args.get('aba') == 'investidores' %} {% else %}collapsed{% endif %}" 
-                        type="button" 
-                        data-bs-toggle="collapse" 
-                        data-bs-target="#collapseInvestidores" 
-                        aria-expanded="{% if request.args.get('aba') == 'investidores' %}true{% else %}false{% endif %}" 
-                        aria-controls="collapseInvestidores">
-                    🏢 Investidores
-                </button>
-
-            </h2>
-            <div id="collapseInvestidores" 
-                class="accordion-collapse collapse {% if request.args.get('aba') == 'investidores' %}show{% endif %}" 
-                aria-labelledby="headingInvestidores" 
-                data-bs-parent="#accordionGrupos">
-
-                <div class="accordion-body">
-                    <div class="row g-3">
-
-                        <div class="col-md-4">
-                            <a href="{{ url_for('cadastrar_empresa') }}" class="btn btn-outline-primary w-100">
-                                Cadastrar Empresas
-                            </a>
-                        </div>
-
-                        <div class="col-md-4">
-                            <a href="{{ url_for('cadastrar_acionista') }}" class="btn btn-outline-primary w-100">
-                                Cadastrar Acionistas
-                            </a>
-                        </div>
-
-                        <div class="col-md-4">
-                            <a href="{{ url_for('vincular_empresa_usina') }}" class="btn btn-outline-primary w-100">
-                                Vincular Empresas às Usinas
-                            </a>
-                        </div>
-
-                        <div class="col-md-4">
-                            <a href="{{ url_for('cadastrar_financeiro_empresa') }}" class="btn btn-outline-primary w-100">
-                                Lançar Despesas/Receitas Empresa
-                            </a>
-                        </div>
-
-                        <div class="col-md-4">
-                            <a href="{{ url_for('menu_relatorios') }}" class="btn btn-outline-primary w-100">
-                                Relatório
-                            </a>
-                        </div>
-
-                        <div class="col-md-4">
-                            <a href="{{ url_for('listar_empresas') }}" class="btn btn-outline-primary w-100">
-                                Empresas Cadastradas
-                            </a>
-                        </div>
-
-                        <div class="col-md-4">
-                            <a href="{{ url_for('listar_acionistas') }}" class="btn btn-outline-primary w-100">
-                                Acionistas Cadastrados
-                            </a>
-                        </div>
-
-                        <div class="col-md-4">
-                            <a href="{{ url_for('cadastrar_participacao_direta') }}" class="btn btn-outline-primary w-100">
-                                Vincular Acionistas às Usinas
-                            </a>
-                        </div>
-
-                    </div>
-                </div>
-            </div>
-        </div>
+    <nav class="flex-grow-1">
+        <button class="nav-link-custom active" data-target="geracao"><i class="bi bi-lightning-charge"></i> Geração</button>
+        <button class="nav-link-custom" data-target="monitoramento"><i class="bi bi-activity"></i> Monitoramento</button>
+        <button class="nav-link-custom" data-target="comercial"><i class="bi bi-cart3"></i> Comercial</button>
+        <button class="nav-link-custom" data-target="consorcios"><i class="bi bi-people"></i> Consórcios</button>
+        <button class="nav-link-custom" data-target="financeiro_empresa"><i class="bi bi-briefcase"></i> Finan. Empresa</button>
+        <button class="nav-link-custom" data-target="financeiro_usinas"><i class="bi bi-cash-stack"></i> Finan. Usinas</button>
+        
+        {% if current_user.email in ['master@admin.com', 'nuza@cgrenergia.com.br'] %}
+        <button class="nav-link-custom" data-target="investidores"><i class="bi bi-building-up"></i> Investidores</button>
         {% endif %}
 
-        <!-- Usuários (Somente Master) -->
         {% if current_user.email == 'master@admin.com' %}
-        <div class="accordion-item">
-            <h2 class="accordion-header" id="headingUsuarios">
-                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseUsuarios" aria-expanded="false" aria-controls="collapseUsuarios">
-                    👤 Administração de Usuários
-                </button>
-            </h2>
-            <div id="collapseUsuarios" class="accordion-collapse collapse" aria-labelledby="headingUsuarios" data-bs-parent="#accordionGrupos">
-                <div class="accordion-body">
-                    <a href="{{ url_for('cadastrar_usuario') }}" class="btn btn-outline-primary w-100">Gerenciar Usuários</a>
-                </div>
-            </div>
-        </div>
+        <button class="nav-link-custom" data-target="admin"><i class="bi bi-shield-lock"></i> Administração</button>
         {% endif %}
+    </nav>
 
+    <div class="user-profile d-flex align-items-center gap-3">
+        <div class="avatar bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 35px; height: 35px; font-size: 0.9rem;">
+            {{ current_user.nome[0] | upper }}
+        </div>
+        <div class="overflow-hidden">
+            <p class="small fw-bold mb-0 text-truncate">{{ current_user.nome }}</p>
+            <a href="{{ url_for('logout') }}" class="text-danger text-decoration-none" style="font-size: 0.7rem;">Sair</a>
+        </div>
     </div>
-</div>
+</aside>
+
+<main class="main-content">
+    
+    <section id="geracao" class="active-section">
+        <h2 class="section-title">⚡ Geração</h2>
+        <div class="row g-3">
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('cadastrar_usina') }}" class="card-menu"><div class="icon-box"><i class="bi bi-plus-circle"></i></div><h5>Cadastrar Usina</h5><p>Nova unidade</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('cadastrar_geracao') }}" class="card-menu"><div class="icon-box"><i class="bi bi-sun"></i></div><h5>Cadastrar Geração</h5><p>Lançar produção</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('consulta') }}" class="card-menu"><div class="icon-box"><i class="bi bi-search"></i></div><h5>Consulta de Geração</h5><p>Históricos</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('portal_usinas') }}" class="card-menu"><div class="icon-box"><i class="bi bi-link"></i></div><h5>Vincular Solis</h5><p>API Solis</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('vincular_usinas_sungrow') }}" class="card-menu"><div class="icon-box"><i class="bi bi-cpu"></i></div><h5>Vincular Sungrow</h5><p>API Sungrow</p></a></div>
+        </div>
+    </section>
+
+    <section id="monitoramento">
+        <h2 class="section-title">🛰️ Monitoramento</h2>
+        <div class="row g-3">
+            <div class="col-md-4"><a href="{{ url_for('monitoramento_index') }}" class="card-menu"><div class="icon-box"><i class="bi bi-speedometer2"></i></div><h5>Monitorar Usinas</h5><p>Status atual</p></a></div>
+            <div class="col-md-4"><a href="{{ url_for('monitoramento_index') }}" class="card-menu"><div class="icon-box"><i class="bi bi-graph-up"></i></div><h5>Inserir Geração / Análise</h5><p>Relatório diário</p></a></div>
+        </div>
+    </section>
+
+    <section id="comercial">
+        <h2 class="section-title">🛒 Comercial</h2>
+        <div class="row g-3">
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('listar_vendedores') }}" class="card-menu"><div class="icon-box"><i class="bi bi-people"></i></div><h5>Vendedores</h5><p>Equipe</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('listar_propostas') }}" class="card-menu"><div class="icon-box"><i class="bi bi-file-text"></i></div><h5>Propostas</h5><p>Orçamentos</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('listar_concessionarias') }}" class="card-menu"><div class="icon-box"><i class="bi bi-geo"></i></div><h5>Concessionárias</h5><p>Empresas</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('listar_fornecedores_kit') }}" class="card-menu"><div class="icon-box"><i class="bi bi-box-seam"></i></div><h5>Fornecedores</h5><p>Kits</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('listar_centros_custos') }}" class="card-menu"><div class="icon-box"><i class="bi bi-person-add"></i></div><h5>Cadastro de Cliente</h5><p>Novo registro</p></a></div>
+        </div>
+    </section>
+
+    <section id="consorcios">
+        <h2 class="section-title">👥 Gestão de Consórcios</h2>
+        <div class="row g-3">
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('listar_clientes') }}" class="card-menu"><div class="icon-box"><i class="bi bi-person-badge"></i></div><h5>Clientes</h5><p>Gestão</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('listar_rateios') }}" class="card-menu"><div class="icon-box"><i class="bi bi-pie-chart"></i></div><h5>Rateios</h5><p>Distribuição</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('faturamento') }}" class="card-menu"><div class="icon-box"><i class="bi bi-calculator"></i></div><h5>Faturamento</h5><p>Cálculos</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('baixar_fatura') }}" class="card-menu"><div class="icon-box"><i class="bi bi-download"></i></div><h5>Baixar Fatura</h5><p>Arquivos</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('listar_injecoes_mensais') }}" class="card-menu"><div class="icon-box"><i class="bi bi-plus-square"></i></div><h5>Cadastrar Injeção</h5><p>Mensal</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('relatorio_cliente') }}" class="card-menu"><div class="icon-box"><i class="bi bi-file-earmark-bar-graph"></i></div><h5>Relatório</h5><p>Geral</p></a></div>
+        </div>
+    </section>
+
+    <section id="financeiro_empresa">
+        <h2 class="section-title">💼 Financeiro da Empresa</h2>
+        <div class="row g-3">
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('listar_empresas_operacional') }}" class="card-menu"><div class="icon-box"><i class="bi bi-diagram-3"></i></div><h5>Grupo</h5><p>Estrutura</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('listar_clientes_operacionais') }}" class="card-menu"><div class="icon-box"><i class="bi bi-people-fill"></i></div><h5>Clientes Empresa</h5><p>Base</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('empresa_financeiro_listar') }}" class="card-menu"><div class="icon-box"><i class="bi bi-ticket-perforated"></i></div><h5>Títulos</h5><p>Listagem</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('listar_centros_custos') }}" class="card-menu"><div class="icon-box"><i class="bi bi-person-check"></i></div><h5>Clientes</h5><p>Cadastro</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('listar_planos_financeiros') }}" class="card-menu"><div class="icon-box"><i class="bi bi-journal-text"></i></div><h5>Plano Financeiro</h5><p>Contas</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('empresa_contas_listar') }}" class="card-menu"><div class="icon-box"><i class="bi bi-bank"></i></div><h5>Bancos</h5><p>Contas bancárias</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('listar_empresas_operacional') }}" class="card-menu"><div class="icon-box"><i class="bi bi-currency-dollar"></i></div><h5>Fluxo de Caixa</h5><p>Empresa</p></a></div>
+        </div>
+    </section>
+
+    <section id="financeiro_usinas">
+        <h2 class="section-title">💰 Financeiro Usinas</h2>
+        <div class="row g-3">
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('financeiro') }}" class="card-menu"><div class="icon-box"><i class="bi bi-wallet2"></i></div><h5>Caixas e Bancos</h5><p>Saldos</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('registrar_despesa') }}" class="card-menu"><div class="icon-box"><i class="bi bi-cart-dash"></i></div><h5>Cadastrar Despesas</h5><p>Saídas</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('listar_faturas') }}" class="card-menu"><div class="icon-box"><i class="bi bi-list-check"></i></div><h5>Faturas Cadastradas</h5><p>Histórico</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('upload_boleto') }}" class="card-menu"><div class="icon-box"><i class="bi bi-upload"></i></div><h5>Upload de Boletos</h5><p>Arquivos</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('cadastrar_credor') }}" class="card-menu"><div class="icon-box"><i class="bi bi-person-gear"></i></div><h5>Cadastrar Credor</h5><p>Fornecedores</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('receitas_avulsas') }}" class="card-menu"><div class="icon-box"><i class="bi bi-plus-circle-dotted"></i></div><h5>Receita Avulsa</h5><p>Extras</p></a></div>
+        </div>
+    </section>
+
+    {% if current_user.email in ['master@admin.com', 'nuza@cgrenergia.com.br'] %}
+    <section id="investidores">
+        <h2 class="section-title">🏢 Investidores</h2>
+        <div class="row g-3">
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('cadastrar_empresa') }}" class="card-menu"><div class="icon-box"><i class="bi bi-building"></i></div><h5>Cadastrar Empresas</h5><p>Novas</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('cadastrar_acionista') }}" class="card-menu"><div class="icon-box"><i class="bi bi-person-vcard"></i></div><h5>Cadastrar Acionistas</h5><p>Membros</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('vincular_empresa_usina') }}" class="card-menu"><div class="icon-box"><i class="bi bi-link"></i></div><h5>Vincular Empresas</h5><p>Usina</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('cadastrar_financeiro_empresa') }}" class="card-menu"><div class="icon-box"><i class="bi bi-cash"></i></div><h5>Lançar Despesas/Receitas</h5><p>Empresa</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('menu_relatorios') }}" class="card-menu"><div class="icon-box"><i class="bi bi-bar-chart"></i></div><h5>Relatório</h5><p>Geral</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('listar_empresas') }}" class="card-menu"><div class="icon-box"><i class="bi bi-list-ul"></i></div><h5>Empresas Cadastradas</h5><p>Lista</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('listar_acionistas') }}" class="card-menu"><div class="icon-box"><i class="bi bi-people-fill"></i></div><h5>Acionistas Cadastrados</h5><p>Lista</p></a></div>
+            <div class="col-md-4 col-lg-3"><a href="{{ url_for('cadastrar_participacao_direta') }}" class="card-menu"><div class="icon-box"><i class="bi bi-share"></i></div><h5>Vincular Acionistas</h5><p>Usina</p></a></div>
+        </div>
+    </section>
+    {% endif %}
+
+    {% if current_user.email == 'master@admin.com' %}
+    <section id="admin">
+        <h2 class="section-title">👤 Administração</h2>
+        <div class="row g-3">
+            <div class="col-md-4"><a href="{{ url_for('cadastrar_usuario') }}" class="card-menu"><div class="icon-box"><i class="bi bi-shield-lock"></i></div><h5>Gerenciar Usuários</h5><p>Acessos e permissões</p></a></div>
+        </div>
+    </section>
+    {% endif %}
+
+</main>
+
+<script>
+    document.querySelectorAll('.nav-link-custom').forEach(link => {
+        link.addEventListener('click', function() {
+            document.querySelectorAll('.nav-link-custom').forEach(l => l.classList.remove('active'));
+            this.classList.add('active');
+            document.querySelectorAll('main section').forEach(s => s.classList.remove('active-section'));
+            document.getElementById(this.dataset.target).classList.add('active-section');
+        });
+    });
+</script>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>

@@ -1,63 +1,224 @@
 {% extends 'base.html' %}
 
-{% block title %}Proposta {{ proposta.numero }}{% endblock %}
+{% block title %}Proposta Comercial - {{ proposta.numero }}{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="card shadow border-0">
-        <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <div>
-                    <h2 class="text-primary mb-1">Proposta {{ proposta.numero }}</h2>
-                    <div class="text-muted">
-                        Centro de custo: {{ proposta.centro_custo.codigo }} - {{ proposta.centro_custo.nome }}
-                    </div>
-                    <div class="text-muted">
-                        Vendedor: {{ proposta.vendedor.nome }}
-                    </div>
-                </div>
-                <button type="button" class="btn btn-danger" onclick="window.print()">
-                    Imprimir
-                </button>
-            </div>
+<style>
+    :root {
+        --cgr-dark: #0f5c5c; /* Verde Petróleo oficial do PDF */
+        --cgr-light: #f8f9fa;
+        --cgr-accent: #198754;
+    }
 
-            <hr>
+    body { background-color: #f4f6f9; font-family: 'Segoe UI', Roboto, sans-serif; }
 
-            <h5 class="text-secondary">Conta de Energia</h5>
-            <p><strong>Grupo:</strong> {{ proposta.grupo_tarifario }}</p>
-            <p><strong>Consumo:</strong> {{ proposta.consumo_kwh }} kWh</p>
-            <p><strong>Valor total conta:</strong> R$ {{ proposta.valor_total_conta }}</p>
-            <p><strong>Concessionária:</strong> {{ proposta.concessionaria.nome if proposta.concessionaria else '-' }}</p>
+    /* Container Principal */
+    .proposta-container { 
+        max-width: 1050px; 
+        margin: auto; 
+        background: white; 
+        padding: 50px; 
+        border-radius: 0; 
+        box-shadow: 0 0 30px rgba(0,0,0,0.1); 
+    }
+    
+    /* Cabeçalho */
+    .header-pdf { border-bottom: 4px solid var(--cgr-dark); margin-bottom: 35px; padding-bottom: 20px; }
+    
+    /* Títulos de Seção Estilo Faixa PDF */
+    .section-title { 
+        background: var(--cgr-dark); 
+        color: white; 
+        padding: 12px 20px; 
+        text-transform: uppercase; 
+        font-size: 0.95rem; 
+        font-weight: bold;
+        letter-spacing: 1.5px; 
+        margin-top: 40px; 
+        margin-bottom: 25px; 
+    }
 
-            <hr>
+    /* KPIs de Projeto */
+    .kpi-box { border: 1px solid #e0e0e0; padding: 20px; text-align: center; border-radius: 8px; height: 100%; background: #fff; }
+    .kpi-icon { color: var(--cgr-dark); font-size: 1.8rem; margin-bottom: 8px; }
+    .kpi-value { font-size: 1.4rem; font-weight: bold; color: #222; display: block; }
+    .kpi-label { font-size: 0.7rem; color: #777; text-transform: uppercase; font-weight: 600; }
 
-            <h5 class="text-secondary">Local de Instalação</h5>
-            <p><strong>Latitude:</strong> {{ proposta.latitude }}</p>
-            <p><strong>Longitude:</strong> {{ proposta.longitude }}</p>
-            <p><strong>Telhado:</strong> {{ proposta.tipo_telhado }}</p>
+    /* Tabela de Investimento */
+    .table-investimento { width: 100%; border-collapse: collapse; }
+    .table-investimento td { padding: 18px; border: 1px solid #dee2e6; font-size: 1.05rem; }
+    .bg-cgr-total { background-color: var(--cgr-dark) !important; color: white !important; }
 
-            <hr>
+    /* SEÇÃO QUEM SOMOS (Estilo Imagem Enviada) */
+    .quem-somos-block { background-color: var(--cgr-dark); color: white; border-radius: 4px; overflow: hidden; margin-top: 50px; }
+    .mosaico-lateral { display: flex; flex-direction: column; height: 100%; }
+    .mosaico-lateral img { width: 100%; height: 100px; object-fit: cover; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .content-texto { padding: 40px; }
+    .text-justify { text-align: justify; font-size: 0.95rem; line-height: 1.6; opacity: 0.9; }
+    .icon-kpi { font-size: 2.2rem; margin-right: 15px; }
 
-            <h5 class="text-secondary">Gerador Selecionado</h5>
-            <p><strong>Fornecedor:</strong> {{ proposta.fornecedor.nome if proposta.fornecedor else '-' }}</p>
-            <p><strong>Tipo de inversor:</strong> {{ proposta.tipo_inversor }}</p>
-            <p><strong>Módulo:</strong>
-                {% if proposta.modulo %}
-                    {{ proposta.modulo.fabricante }} - {{ proposta.modulo.modelo }} - {{ proposta.modulo.potencia_wp }} Wp
-                {% else %}
-                    -
-                {% endif %}
-            </p>
+    /* Impressão */
+    @media print {
+        body { background: white; padding: 0; }
+        .no-print { display: none !important; }
+        .proposta-container { box-shadow: none; padding: 20px; width: 100%; max-width: 100%; }
+        .section-title { -webkit-print-color-adjust: exact; background-color: var(--cgr-dark) !important; color: white !important; }
+        .quem-somos-block { -webkit-print-color-adjust: exact; background-color: var(--cgr-dark) !important; color: white !important; }
+    }
+</style>
 
-            <hr>
+<div class="container py-4 no-print text-end">
+    <a href="{{ url_for('listar_propostas') }}" class="btn btn-outline-secondary px-4 me-2">Voltar</a>
+    <button class="btn btn-primary px-4" onclick="window.print()">
+        <i class="bi bi-printer me-2"></i>Imprimir / Salvar PDF
+    </button>
+</div>
 
-            <h5 class="text-secondary">Resumo Inicial</h5>
-            <p><strong>Potência sugerida:</strong> {{ proposta.potencia_sugerida_kwp }} kWp</p>
-            <p><strong>Qtd. módulos:</strong> {{ proposta.quantidade_modulos }}</p>
-            <p><strong>Área estimada:</strong> {{ proposta.area_estimada_m2 }} m²</p>
-            <p><strong>Geração estimada:</strong> {{ proposta.geracao_estimada_kwh_mes }} kWh/mês</p>
-            <p><strong>Valor estimado:</strong> R$ {{ proposta.valor_estimado_proposta }}</p>
+<div class="proposta-container mb-5">
+    
+    <div class="header-pdf d-flex justify-content-between align-items-end">
+        <div>
+            <h1 class="fw-bold mb-0" style="color: var(--cgr-dark); font-size: 2.5rem;">PROPOSTA COMERCIAL</h1>
+            <p class="text-muted mb-0">Referência: <strong>#{{ proposta.numero }}</strong> | Emissão: {{ proposta.data_criacao.strftime('%d/%m/%Y') if proposta.data_criacao else '--/--/----' }}</p>
+        </div>
+        <div class="text-end">
+            <h5 class="fw-bold mb-1 text-uppercase">{{ proposta.centro_custo.nome }}</h5>
+            <span class="badge bg-secondary">Cód: {{ proposta.codigo_instalacao or 'N/A' }}</span>
         </div>
     </div>
+
+    <div class="section-title">Sobre o Projeto</div>
+    <div class="row g-3">
+        <div class="col-md-3 col-6">
+            <div class="kpi-box">
+                <i class="bi bi-lightning-charge-fill kpi-icon"></i>
+                <span class="kpi-value">{{ proposta.potencia_sugerida_kwp }} kWp</span>
+                <span class="kpi-label">Potência do Sistema [cite: 45]</span>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="kpi-box">
+                <i class="bi bi-sun-fill kpi-icon"></i>
+                <span class="kpi-value">{{ proposta.geracao_estimada_kwh_mes }} kWh</span>
+                <span class="kpi-label">Geração Média Mensal [cite: 62]</span>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="kpi-box">
+                <i class="bi bi-textarea-resize kpi-icon"></i>
+                <span class="kpi-value">{{ proposta.area_estimada_m2 }} m²</span>
+                <span class="kpi-label">Área Útil Necessária [cite: 51]</span>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="kpi-box">
+                <i class="bi bi-tools kpi-icon"></i>
+                <span class="kpi-value">{{ proposta.tipo_telhado }}</span>
+                <span class="kpi-label">Tipo de Fixação [cite: 52]</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="section-title">Equipamentos e Garantias</div>
+    <div class="row px-3">
+        <div class="col-md-6 border-end py-2">
+            <h6 class="fw-bold text-success small mb-3"><i class="bi bi-cpu-fill me-2"></i>MÓDULOS [cite: 92]</h6>
+            <p class="mb-1"><strong>Modelo:</strong> {{ proposta.modulo.fabricante if proposta.modulo else 'Risen 700W ou Similar' }} [cite: 94]</p>
+            <p class="mb-1"><strong>Quantidade:</strong> {{ proposta.quantidade_modulos }} unidades [cite: 93]</p>
+            <p class="mb-0"><strong>Garantia:</strong> 12 anos (Produto) / 30 anos (Linear) [cite: 95, 96]</p>
+        </div>
+        <div class="col-md-6 ps-md-4 py-2">
+            <h6 class="fw-bold text-success small mb-3"><i class="bi bi-box-seam-fill me-2"></i>INVERSORES [cite: 98]</h6>
+            <p class="mb-1"><strong>Tecnologia:</strong> {{ proposta.tipo_inversor|capitalize }} [cite: 100]</p>
+            <p class="mb-1"><strong>Fabricante:</strong> {{ proposta.fornecedor.nome if proposta.fornecedor else 'Hoymiles' }} [cite: 102]</p>
+            <p class="mb-0"><strong>Garantia:</strong> 15 anos de fábrica [cite: 103]</p>
+        </div>
+    </div>
+
+    <div class="section-title">Investimento e Condições</div>
+    <div class="table-responsive rounded shadow-sm">
+        <table class="table-investimento">
+            <tr class="bg-cgr-total">
+                <td class="fw-bold">VALOR DO INVESTIMENTO À VISTA [cite: 115]</td>
+                <td class="text-end fw-bold fs-3">R$ {{ proposta.valor_estimado_proposta }}</td>
+            </tr>
+            <tr>
+                <td><strong>Entrada (70%)</strong> - Aceite e Início do Projeto [cite: 117]</td>
+                <td class="text-end text-muted">R$ {{ (proposta.valor_estimado_proposta|float * 0.7)|round(2) }}</td>
+            </tr>
+            <tr>
+                <td><strong>Finalização (30%)</strong> - Conclusão da Instalação [cite: 117]</td>
+                <td class="text-end text-muted">R$ {{ (proposta.valor_estimado_proposta|float * 0.3)|round(2) }}</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="quem-somos-block d-flex row g-0">
+        <div class="col-md-3 d-none d-md-block">
+            <div class="mosaico-lateral">
+                <img src="https://via.placeholder.com/300x150/0f5c5c/ffffff?text=CGR+Obra+1" alt="Obra">
+                <img src="https://via.placeholder.com/300x150/0f5c5c/ffffff?text=CGR+Obra+2" alt="Obra">
+                <img src="https://via.placeholder.com/300x150/0f5c5c/ffffff?text=CGR+Obra+3" alt="Obra">
+                <img src="https://via.placeholder.com/300x150/0f5c5c/ffffff?text=CGR+Obra+4" alt="Obra">
+            </div>
+        </div>
+        <div class="col-md-9 content-texto">
+            <h2 class="fw-bold mb-4">QUEM SOMOS? [cite: 2]</h2>
+            <p class="text-justify mb-4">
+                Atuamos desde 2018 no setor solar, no nosso primeiro ano construímos o primeiro Park Solar com Geração compartilhada do DF de 3,5MWp[cite: 3]. 
+                A nossa equipe é composta por engenheiros, especialistas jurídicos e profissionais de vendas, todos com experiência em soluções renováveis[cite: 4]. 
+                Em Brasília e em regiões próximas, as nossas usinas solares proporcionam uma redução imediata nos custos com energia elétrica[cite: 6]. 
+                CGR Energia: sua energia é nosso compromisso[cite: 8].
+            </p>
+            <div class="row g-3">
+                <div class="col-4 border-end border-light border-opacity-25">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-award icon-kpi"></i>
+                        <div>
+                            <div class="fw-bold fs-5">+200MWp [cite: 9]</div>
+                            <small class="opacity-75 text-uppercase" style="font-size: 0.6rem;">Instalados</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-4 border-end border-light border-opacity-25">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-check-circle icon-kpi"></i>
+                        <div>
+                            <div class="fw-bold fs-5">+700 [cite: 10]</div>
+                            <small class="opacity-75 text-uppercase" style="font-size: 0.6rem;">Projetos</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-graph-up-arrow icon-kpi"></i>
+                        <div>
+                            <div class="fw-bold fs-5">+17MWp [cite: 12]</div>
+                            <small class="opacity-75 text-uppercase" style="font-size: 0.6rem;">Contratados</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-5 pt-4 border-top">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <ul class="list-unstyled small text-muted mb-0">
+                    <li><i class="bi bi-info-circle me-2"></i>Validade da Proposta: <strong>7 dias corridos</strong> [cite: 131, 132]</li>
+                    <li><i class="bi bi-shield-check me-2"></i>Garantia de Instalação: <strong>1 ano</strong> [cite: 120]</li>
+                    <li><i class="bi bi-exclamation-triangle me-2"></i>Estimativa sujeita a visita técnica e variações climáticas [cite: 138, 141]</li>
+                </ul>
+            </div>
+            <div class="col-md-4 text-end">
+                <div class="p-3 border rounded bg-light d-inline-block">
+                    <p class="mb-0 fw-bold text-dark">{{ proposta.vendedor.nome }}</p>
+                    <small class="text-muted text-uppercase" style="font-size: 0.65rem;">Diretoria Comercial - CGR Energia [cite: 145]</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </div>
 {% endblock %}
