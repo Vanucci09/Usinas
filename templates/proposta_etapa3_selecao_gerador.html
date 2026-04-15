@@ -24,11 +24,34 @@
                 <h6 class="text-uppercase text-secondary fw-bold mb-3 small">Parâmetros de Busca</h6>
                 <div class="row g-3">
                     <div class="col-md-3">
+                        <label class="form-label fw-semibold">Fabricante do Inversor</label>
+                        <select name="fabricante_inversor" class="form-select shadow-sm">
+                            <option value="">Todos</option>
+                            {% for f in fabricantes_inversores %}
+                                <option value="{{ f }}" {{ 'selected' if fabricante_inversor_selecionado == f }}>
+                                    {{ f }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">Fabricante do Módulo</label>
+                        <select name="fabricante_modulo" class="form-select shadow-sm">
+                            <option value="">Todos</option>
+                            {% for f in fabricantes_modulos %}
+                                <option value="{{ f }}" {{ 'selected' if fabricante_modulo_selecionado == f }}>
+                                    {{ f }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
                         <label class="form-label fw-semibold">Tipo de Inversor</label>
-                        <select name="tipo_inversor" class="form-select shadow-sm" required>
+                        <select name="tipo_inversor" id="tipo_inversor" class="form-select shadow-sm" required>
                             <option value="">Selecione</option>
                             <option value="string" {{ 'selected' if tipo_inversor_selecionado == 'string' }}>String</option>
                             <option value="microinversor" {{ 'selected' if tipo_inversor_selecionado == 'microinversor' }}>Microinversor</option>
+                            <option value="hibrido" {{ 'selected' if tipo_inversor_selecionado == 'hibrido' }}>Híbrido</option>
                         </select>
                     </div>
                     <div class="col-md-3">
@@ -56,6 +79,23 @@
                             <input type="text" name="valor_frete" class="form-control" 
                                    value="{{ valor_frete_digitado if valor_frete_digitado is defined else (proposta.valor_frete or '') }}">
                         </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">Valor Baterias (R$)</label>
+                        <input type="text" name="valor_baterias" id="valor_baterias"
+                            class="form-control shadow-sm" style="display:none;">
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">Valor por kWp (R$)</label>
+                        <input type="text" name="valor_kwp" id="valor_kwp"
+                            class="form-control shadow-sm" style="display:none;">
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">Ajuste Final (R$)</label>
+                        <input type="text" name="ajuste_final"
+                            class="form-control shadow-sm">
                     </div>
                     <div class="col-md-12">
                         <label class="form-label fw-semibold">Observações na Proposta</label>
@@ -92,7 +132,7 @@
                                 <div class="col-lg-4 border-end">
                                     <h6 class="text-muted small text-uppercase fw-bold">Equipamentos</h6>
                                     <p class="mb-1"><strong>Módulos:</strong> {{ kit.qtd_modulos }}x {{ kit.modulo.fabricante }} ({{ kit.modulo.potencia_wp }}Wp)</p>
-                                    <p class="mb-1"><strong>Inversor:</strong> {{ kit.qtd_inversores }}x {{ kit.inversor.nome }} ({{ kit.inversor.potencia_inversor }}kW)</p>
+                                    <p class="mb-1"><strong>Inversor:</strong> {{ kit.qtd_inversores }}x {{ kit.inversor.fabricante }} - {{ kit.inversor.modelo }} ({{ kit.inversor.potencia_inversor }}kW)</p>
                                     <p class="mb-0"><strong>Estrutura:</strong> {{ proposta.tipo_telhado }}</p>
                                 </div>
                                 <div class="col-lg-4 border-end">
@@ -161,4 +201,20 @@
     .kit-card:hover { transform: translateY(-3px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important; }
     .form-check-input:checked + .form-check-label { color: #198754; }
 </style>
+<script>
+document.querySelector('[name="tipo_inversor"]').addEventListener('change', function() {
+    const tipo = this.value;
+
+    document.getElementById('valor_baterias').style.display = 'none';
+    document.getElementById('valor_kwp').style.display = 'none';
+
+    if (tipo === 'hibrido') {
+        document.getElementById('valor_baterias').style.display = 'block';
+    }
+
+    if (tipo === 'string') {
+        document.getElementById('valor_kwp').style.display = 'block';
+    }
+});
+</script>
 {% endblock %}

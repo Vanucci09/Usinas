@@ -245,13 +245,44 @@
 </main>
 
 <script>
+    // Função para trocar a seção (centralizada para ser reusada)
+    function switchSection(targetId) {
+        const targetSection = document.getElementById(targetId);
+        if (!targetSection) return;
+
+        // 1. Remove classes ativas de todos os links e seções
+        document.querySelectorAll('.nav-link-custom').forEach(l => l.classList.remove('active'));
+        document.querySelectorAll('main section').forEach(s => s.classList.remove('active-section'));
+
+        // 2. Ativa a seção alvo
+        targetSection.classList.add('active-section');
+
+        // 3. Ativa o link correspondente no menu
+        const activeLink = document.querySelector(`.nav-link-custom[data-target="${targetId}"]`);
+        if (activeLink) {
+            activeLink.classList.add('active');
+        }
+
+        // 4. Scroll suave até o título da seção
+        targetSection.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // Evento de clique manual nos links do menu
     document.querySelectorAll('.nav-link-custom').forEach(link => {
         link.addEventListener('click', function() {
-            document.querySelectorAll('.nav-link-custom').forEach(l => l.classList.remove('active'));
-            this.classList.add('active');
-            document.querySelectorAll('main section').forEach(s => s.classList.remove('active-section'));
-            document.getElementById(this.dataset.target).classList.add('active-section');
+            switchSection(this.dataset.target);
         });
+    });
+
+    // Lógica ao carregar a página (Verifica parâmetro ?aba=)
+    document.addEventListener("DOMContentLoaded", function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const abaAtiva = urlParams.get('aba');
+
+        if (abaAtiva === 'financeiro') {
+            // Chama a função passando o ID da sua seção financeira
+            switchSection('financeiro_usinas');
+        }
     });
 </script>
 

@@ -1,374 +1,387 @@
 {% extends 'base.html' %}
-{% block title %}Produtos do Fornecedor{% endblock %}
+
+{% block title %}Gestão de Equipamentos - {{ fornecedor.nome }}{% endblock %}
 
 {% block content %}
 <style>
-    /* Estilos Gerais */
-    .form-label {
-        margin-bottom: .25rem;
-        font-size: .85rem;
-        font-weight: 700;
-        color: #495057;
+    :root {
+        --primary-color: #0d6efd;
+        --success-color: #198754;
+        --bg-light: #f8f9fa;
+        --text-muted: #6c757d;
     }
 
-    /* Container de Edição (O que abre ao clicar em editar) */
+    /* Estilos de Formulário */
+    .form-label {
+        margin-bottom: .25rem;
+        font-size: .75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: var(--text-muted);
+    }
+
+    .form-control-sm, .form-select-sm {
+        border-radius: 6px;
+        border: 1px solid #dee2e6;
+    }
+
+    /* Container de Edição em Linha */
     .container-edicao {
         background-color: #f1f3f5;
         border-radius: 8px;
-        border-left: 5px solid #0d6efd;
+        border-left: 5px solid var(--primary-color);
         padding: 1.5rem;
         margin: 10px 0;
         box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
     }
+    .container-edicao-modulo { border-left-color: var(--success-color); }
+    .container-edicao-inversor { border-left-color: var(--primary-color); }
 
-    .container-edicao-modulo { border-left-color: #198754; }
-    .container-edicao-inversor { border-left-color: #0d6efd; }
+    /* Cards e Tabelas */
+    .card-custom {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
 
-    /* Ajuste de tabela para não quebrar layout */
-    .table-responsive { overflow: visible; }
-    
-    .btn-edit-active {
-        background-color: #e9ecef;
-        border-color: #dee2e6;
+    .table thead th {
+        background-color: #f8f9fa;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-muted);
+    }
+
+    .btn-group-sm > .btn {
+        padding: .25rem .5rem;
     }
 </style>
 
 <div class="container-fluid mt-4 px-4">
-    <div class="card shadow border-0">
+    <div class="card card-custom mb-4">
         <div class="card-body">
-
-            <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div>
                     <h2 class="text-primary mb-0 fw-bold">Gestão de Equipamentos</h2>
-                    <div class="text-muted">
-                        <strong>Fornecedor:</strong> {{ fornecedor.nome }}
+                    <div class="text-muted small">
+                        <i class="bi bi-box-seam"></i> <strong>Fornecedor:</strong> {{ fornecedor.nome }}
                         {% if fornecedor.empresa %}
-                            | <strong>Empresa:</strong> {{ fornecedor.empresa.nome }}
+                            | <i class="bi bi-building"></i> <strong>Empresa:</strong> {{ fornecedor.empresa.nome }}
                         {% endif %}
                     </div>
                 </div>
-                <a href="{{ url_for('listar_fornecedores_kit') }}" class="btn btn-outline-secondary">
+                <a href="{{ url_for('listar_fornecedores_kit') }}" class="btn btn-outline-secondary shadow-sm">
                     <i class="bi bi-arrow-left"></i> Voltar
                 </a>
             </div>
+        </div>
+    </div>
 
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ 'warning' if category == 'message' else category }} alert-dismissible fade show shadow-sm" role="alert">
-                            {{ message }}
-                            <button class="btn-close" data-bs-dismiss="alert" type="button"></button>
-                        </div>
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
-
-            <div class="row g-4 mb-5">
-                <div class="col-lg-6">
-                    <div class="card border-0 bg-light shadow-sm h-100">
-                        <div class="card-body">
-                            <h5 class="text-success mb-3 fw-bold"><i class="bi bi-plus-lg"></i> Novo Módulo (Catálogo)</h5>
-                            <form method="POST" action="{{ url_for('novo_modulo_fornecedor', id=fornecedor.id) }}" class="row g-2">
-                                <div class="col-md-6">
-                                    <label class="form-label text-muted small uppercase">Fabricante</label>
-                                    <input type="text" name="fabricante" class="form-control form-control-sm" required>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label text-muted small uppercase">Modelo</label>
-                                    <input type="text" name="modelo" class="form-control form-control-sm" required>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label text-muted small uppercase">Potência (Wp)</label>
-                                    <input type="text" name="potencia_wp" class="form-control form-control-sm" required>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label text-muted small uppercase">Largura (m)</label>
-                                    <input type="text" name="largura_m" class="form-control form-control-sm">
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label text-muted small uppercase">Altura (m)</label>
-                                    <input type="text" name="altura_m" class="form-control form-control-sm">
-                                </div>
-                                <div class="col-12 mt-3">
-                                    <button type="submit" class="btn btn-success btn-sm w-100 fw-bold">CADASTRAR NO CATÁLOGO</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'warning' if category == 'message' else category }} alert-dismissible fade show shadow-sm" role="alert">
+                    {{ message }}
+                    <button class="btn-close" data-bs-dismiss="alert" type="button"></button>
                 </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
 
-                <div class="col-lg-6">
-                    <div class="card border-0 bg-light shadow-sm h-100">
-                        <div class="card-body">
-                            <h5 class="text-primary mb-3 fw-bold"><i class="bi bi-plus-lg"></i> Novo Inversor (Catálogo)</h5>
-                            <form method="POST" action="{{ url_for('novo_inversor_fornecedor', id=fornecedor.id) }}" class="row g-2">
-                                <div class="col-md-7">
-                                    <label class="form-label text-muted small uppercase">Nome/Modelo</label>
-                                    <input type="text" name="nome" class="form-control form-control-sm" required>
-                                </div>
-                                <div class="col-md-5">
-                                    <label class="form-label text-muted small uppercase">Tipo</label>
-                                    <select name="tipo_inversor" class="form-select form-select-sm">
-                                        <option value="microinversor">Microinversor</option>
-                                        <option value="string">String</option>
-                                        <option value="hibrido">Híbrido</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="form-label text-muted small uppercase">Potência (kW)</label>
-                                    <input type="text" name="potencia_inversor" class="form-control form-control-sm">
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="form-label text-muted small uppercase">MPPT</label>
-                                    <input type="number" name="quantidade_mppt" class="form-control form-control-sm">
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="form-label text-muted small uppercase">Fase</label>
-                                    <select name="fase" class="form-select form-select-sm">
-                                        <option value="monofasico">Mono</option>
-                                        <option value="bifasico">Bifásico</option>
-                                        <option value="trifasico">Trifásico</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="form-label text-muted small uppercase">Tensão</label>
-                                    <select name="tensao" class="form-select form-select-sm">
-                                        <option value="127/220v">127/220V</option>
-                                        <option value="220/380v">220/380V</option>
-                                    </select>
-                                </div>
-                                <div class="col-12 mt-3">
-                                    <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold">CADASTRAR NO CATÁLOGO</button>
-                                </div>
-                            </form>
+    <div class="row g-4 mb-5">
+        <div class="col-lg-6">
+            <div class="card card-custom bg-light h-100 border-0">
+                <div class="card-body">
+                    <h5 class="text-success mb-3 fw-bold"><i class="bi bi-plus-circle-fill"></i> Novo Módulo (Catálogo)</h5>
+                    <form method="POST" action="{{ url_for('novo_modulo_fornecedor', id=fornecedor.id) }}" class="row g-2">
+                        <div class="col-md-6">
+                            <label class="form-label">Fabricante</label>
+                            <input type="text" name="fabricante" class="form-control form-control-sm" placeholder="Ex: Jinko" required>
                         </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Modelo</label>
+                            <input type="text" name="modelo" class="form-control form-control-sm" placeholder="Ex: Tiger Pro" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Potência (Wp)</label>
+                            <input type="text" name="potencia_wp" class="form-control form-control-sm" placeholder="550">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Largura (m)</label>
+                            <input type="text" name="largura_m" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Altura (m)</label>
+                            <input type="text" name="altura_m" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-12 mt-3">
+                            <button type="submit" class="btn btn-success btn-sm w-100 fw-bold">ADICIONAR AO CATÁLOGO</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card card-custom bg-light h-100 border-0">
+                <div class="card-body">
+                    <h5 class="text-primary mb-3 fw-bold"><i class="bi bi-plus-circle-fill"></i> Novo Inversor (Catálogo)</h5>
+                    <form method="POST" action="{{ url_for('novo_inversor_fornecedor', id=fornecedor.id) }}" class="row g-2">
+                        <div class="col-md-6">
+                            <label class="form-label">Fabricante</label>
+                            <input type="text" name="fabricante" class="form-control form-control-sm" placeholder="Ex: Deye" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Modelo</label>
+                            <input type="text" name="modelo" class="form-control form-control-sm" placeholder="Ex: SUN-2000" required>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label">Tipo</label>
+                            <select name="tipo_inversor" class="form-select form-select-sm">
+                                <option value="microinversor">Microinversor</option>
+                                <option value="string">String</option>
+                                <option value="hibrido">Híbrido</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Potência (kW)</label>
+                            <input type="text" name="potencia_inversor" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">MPPT</label>
+                            <input type="number" name="quantidade_mppt" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Fase</label>
+                            <select name="fase" class="form-select form-select-sm">
+                                <option value="monofasico">Mono</option>
+                                <option value="bifasico">Bifásico</option>
+                                <option value="trifasico">Trifásico</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Tensão</label>
+                            <select name="tensao" class="form-select form-select-sm">
+                                <option value="127/220v">127/220V</option>
+                                <option value="220/380v">220/380V</option>
+                            </select>
+                        </div>
+                        <div class="col-12 mt-3">
+                            <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold">ADICIONAR AO CATÁLOGO</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="card card-custom h-100">
+                <div class="card-body">
+                    <h5 class="text-success mb-4 fw-bold border-bottom pb-2">Módulos no Fornecedor</h5>
+                    <form method="POST" action="{{ url_for('vincular_modulo_fornecedor_kit', id=fornecedor.id) }}" class="row g-2 mb-4 bg-light p-2 rounded">
+                        <div class="col-md-7">
+                            <select name="modulo_id" class="form-select form-select-sm" required>
+                                <option value="">Buscar no catálogo...</option>
+                                {% for m in modulos_disponiveis %}
+                                    <option value="{{ m.id }}">{{ m.fabricante }} - {{ m.modelo }} ({{ m.potencia_wp }}Wp)</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <input type="text" name="valor" class="form-control form-control-sm" placeholder="R$ Preço">
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-success btn-sm w-100">Vincular</button>
+                        </div>
+                    </form>
+
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle small">
+                            <thead>
+                                <tr>
+                                    <th>Equipamento</th>
+                                    <th class="text-center">Potência</th>
+                                    <th class="text-center">Valor</th>
+                                    <th class="text-end">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in modulos_vinculados %}
+                                <tr>
+                                    <td>
+                                        <div class="fw-bold">{{ item.modulo.fabricante }}</div>
+                                        <div class="text-muted small">{{ item.modulo.modelo }}</div>
+                                    </td>
+                                    <td class="text-center">{{ item.modulo.potencia_wp }}Wp</td>
+                                    <td class="text-center fw-bold text-success">R$ {{ "%.2f"|format(item.valor or 0)|replace('.', ',') }}</td>
+                                    <td class="text-end">
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-secondary" onclick="toggleEditModulo({{ item.modulo.id }})"><i class="bi bi-pencil"></i></button>
+                                            <form method="POST" action="{{ url_for('desvincular_modulo_fornecedor_kit', id=fornecedor.id, vinculo_id=item.id) }}">
+                                                <button type="submit" class="btn btn-outline-danger" onclick="return confirm('Remover?')"><i class="bi bi-trash"></i></button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr id="edit-modulo-{{ item.modulo.id }}" style="display:none;">
+                                    <td colspan="4" class="p-0 border-0">
+                                        <div class="container-edicao container-edicao-modulo">
+                                            <form method="POST" action="{{ url_for('editar_modulo_vinculo', vinculo_id=item.id) }}" class="row g-2">
+                                                <div class="col-md-4">
+                                                    <label class="form-label">Fabricante</label>
+                                                    <input type="text" name="fabricante" class="form-control form-control-sm" value="{{ item.modulo.fabricante }}">
+                                                </div>
+                                                <div class="col-md-5">
+                                                    <label class="form-label">Modelo</label>
+                                                    <input type="text" name="modelo" class="form-control form-control-sm" value="{{ item.modulo.modelo }}">
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label">Potência</label>
+                                                    <input type="text" name="potencia_wp" class="form-control form-control-sm" value="{{ item.modulo.potencia_wp }}">
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label">Preço de Venda</label>
+                                                    <input type="text" name="valor_vinculo" class="form-control form-control-sm fw-bold border-success" value="{{ item.valor or '' }}">
+                                                </div>
+                                                <div class="col-md-8 d-flex align-items-end justify-content-end gap-2">
+                                                    <button type="button" class="btn btn-sm btn-secondary" onclick="toggleEditModulo({{ item.modulo.id }})">Fechar</button>
+                                                    <button type="submit" class="btn btn-sm btn-success">Salvar</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <hr class="my-5">
-
-            <div class="row g-4">
-                
-                <div class="col-lg-6 bloco-produto">
-                    <div class="card shadow-sm border-0">
-                        <div class="card-body">
-                            <h4 class="text-success mb-4 fw-bold border-bottom pb-2">Módulos do Fornecedor</h4>
-
-                            <form method="POST" action="{{ url_for('vincular_modulo_fornecedor_kit', id=fornecedor.id) }}" class="row g-2 mb-4 bg-light p-2 rounded">
-                                <div class="col-md-7">
-                                    <label class="form-label small">Selecionar Módulo</label>
-                                    <select name="modulo_id" class="form-select form-select-sm" required>
-                                        <option value="">Buscar no catálogo...</option>
-                                        {% for m in modulos_disponiveis %}
-                                            <option value="{{ m.id }}">{{ m.fabricante }} - {{ m.modelo }} ({{ m.potencia_wp }}Wp)</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="form-label small">Preço (R$)</label>
-                                    <input type="text" name="valor" class="form-control form-control-sm" placeholder="0,00">
-                                </div>
-                                <div class="col-md-2 d-flex align-items-end">
-                                    <button type="submit" class="btn btn-success btn-sm w-100">Vincular</button>
-                                </div>
-                            </form>
-
-                            <div class="table-responsive">
-                                <table class="table table-hover align-middle">
-                                    <thead class="table-light small">
-                                        <tr>
-                                            <th>Equipamento</th>
-                                            <th class="text-center">Potência</th>
-                                            <th class="text-center">Valor</th>
-                                            <th class="text-end">Ações</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for item in modulos_vinculados %}
-                                        <tr>
-                                            <td>
-                                                <strong>{{ item.modulo.fabricante }}</strong><br>
-                                                <small class="text-muted">{{ item.modulo.modelo }}</small>
-                                            </td>
-                                            <td class="text-center">{{ item.modulo.potencia_wp }}Wp</td>
-                                            <td class="text-center fw-bold text-success">
-                                                {% if item.valor %} R$ {{ "%.2f"|format(item.valor)|replace('.', ',') }} {% else %} - {% endif %}
-                                            </td>
-                                            <td class="text-end">
-                                                <div class="btn-group">
-                                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleEditModulo({{ item.modulo.id }})">Editar</button>
-                                                    <form method="POST" action="{{ url_for('desvincular_modulo_fornecedor_kit', id=fornecedor.id, vinculo_id=item.id) }}" onsubmit="return confirm('Desvincular?');">
-                                                        <button type="submit" class="btn btn-sm btn-outline-danger border-start-0">Remover</button>
-                                                    </form>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                        <tr id="edit-modulo-{{ item.modulo.id }}" style="display:none;">
-                                            <td colspan="4" class="p-0 border-0">
-                                                <div class="container-edicao container-edicao-modulo">
-                                                    <h6 class="fw-bold text-success mb-3"><i class="bi bi-pencil"></i> Editar Dados do Módulo</h6>
-                                                    <form method="POST" action="{{ url_for('editar_modulo_vinculo', vinculo_id=item.id) }}">
-                                                        <div class="row g-3">
-                                                            <div class="col-md-4">
-                                                                <label class="form-label">Fabricante</label>
-                                                                <input type="text" name="fabricante" class="form-control form-control-sm" value="{{ item.modulo.fabricante }}" required>
-                                                            </div>
-                                                            <div class="col-md-5">
-                                                                <label class="form-label">Modelo</label>
-                                                                <input type="text" name="modelo" class="form-control form-control-sm" value="{{ item.modulo.modelo }}" required>
-                                                            </div>
-                                                            <div class="col-md-3">
-                                                                <label class="form-label">Potência (Wp)</label>
-                                                                <input type="text" name="potencia_wp" class="form-control form-control-sm" value="{{ item.modulo.potencia_wp }}" required>
-                                                            </div>
-                                                            <div class="col-md-3">
-                                                                <label class="form-label">Preço Venda (R$)</label>
-                                                                <input type="text" name="valor_vinculo" class="form-control form-control-sm fw-bold text-success border-success" value="{{ item.valor if item.valor is not none else '' }}">
-                                                            </div>
-                                                            <div class="col-md-3">
-                                                                <label class="form-label text-muted">Largura (m)</label>
-                                                                <input type="text" name="largura_m" class="form-control form-control-sm" value="{{ item.modulo.largura_m or '' }}">
-                                                            </div>
-                                                            <div class="col-md-3">
-                                                                <label class="form-label text-muted">Altura (m)</label>
-                                                                <input type="text" name="altura_m" class="form-control form-control-sm" value="{{ item.modulo.altura_m or '' }}">
-                                                            </div>
-                                                            <div class="col-md-3 d-flex align-items-end justify-content-end gap-2">
-                                                                <button type="button" class="btn btn-sm btn-secondary" onclick="toggleEditModulo({{ item.modulo.id }})">Cancelar</button>
-                                                                <button type="submit" class="btn btn-sm btn-success px-4">SALVAR</button>
-                                                            </div>
-                                                        </div>
-                                                    </form>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                        {% else %}
-                                        <tr><td colspan="4" class="text-center text-muted py-3">Nenhum módulo vinculado.</td></tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
+        <div class="col-lg-6">
+            <div class="card card-custom h-100">
+                <div class="card-body">
+                    <h5 class="text-primary mb-4 fw-bold border-bottom pb-2">Inversores no Fornecedor</h5>
+                    <form method="POST" action="{{ url_for('vincular_inversor_fornecedor_kit', id=fornecedor.id) }}" class="row g-2 mb-4 bg-light p-2 rounded">
+                        <div class="col-md-7">
+                            <select name="inversor_id" class="form-select form-select-sm" required>
+                                <option value="">Buscar no catálogo...</option>
+                                {% for i in inversores_disponiveis %}
+                                    <option value="{{ i.id }}">{{ i.fabricante }} - {{ i.modelo }} ({{ i.potencia_inversor }}kW)</option>
+                                {% endfor %}
+                            </select>
                         </div>
+                        <div class="col-md-3">
+                            <input type="text" name="valor" class="form-control form-control-sm" placeholder="R$ Preço">
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-primary btn-sm w-100">Vincular</button>
+                        </div>
+                    </form>
+
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle small">
+                            <thead>
+                                <tr>
+                                    <th>Equipamento</th>
+                                    <th class="text-center">Potência</th>
+                                    <th class="text-center">Valor</th>
+                                    <th class="text-end">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in inversores_vinculados %}
+                                <tr>
+                                    <td>
+                                        <div class="fw-bold">{{ item.inversor.fabricante }}</div>
+                                        <div class="text-muted small">{{ item.inversor.modelo }}</div>
+                                        <span class="badge bg-soft-primary text-primary" style="font-size: 0.6rem; background: #eef5ff;">{{ item.inversor.tipo_inversor|capitalize }}</span>
+                                    </td>
+                                    <td class="text-center">{{ item.inversor.potencia_inversor }}kW</td>
+                                    <td class="text-center fw-bold text-primary">R$ {{ "%.2f"|format(item.valor or 0)|replace('.', ',') }}</td>
+                                    <td class="text-end">
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-secondary" onclick="toggleEditInversor({{ item.inversor.id }})"><i class="bi bi-pencil"></i></button>
+                                            <form method="POST" action="{{ url_for('desvincular_inversor_fornecedor_kit', id=fornecedor.id, vinculo_id=item.id) }}">
+                                                <button type="submit" class="btn btn-outline-danger" onclick="return confirm('Remover?')"><i class="bi bi-trash"></i></button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr id="edit-inversor-{{ item.inversor.id }}" style="display:none;">
+                                    <td colspan="4" class="p-0 border-0">
+                                        <div class="container-edicao container-edicao-inversor">
+                                            <form method="POST" action="{{ url_for('editar_inversor_vinculo', vinculo_id=item.id) }}">
+                                                <div class="row g-3">
+                                                    <div class="col-md-3">
+                                                        <label class="form-label">Fabricante</label>
+                                                        <input type="text" name="fabricante" class="form-control form-control-sm" value="{{ item.inversor.fabricante }}" required>
+                                                    </div>
+                                                    <div class="col-md-5">
+                                                        <label class="form-label">Modelo/Nome</label>
+                                                        <input type="text" name="modelo" class="form-control form-control-sm" value="{{ item.inversor.modelo }}" required>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <label class="form-label text-primary">Preço de Venda (R$)</label>
+                                                        <input type="text" name="valor_vinculo" class="form-control form-control-sm fw-bold border-primary" value="{{ item.valor or '' }}">
+                                                    </div>
+
+                                                    <div class="col-md-3">
+                                                        <label class="form-label">Tipo</label>
+                                                        <select name="tipo_inversor" class="form-select form-select-sm">
+                                                            <option value="microinversor" {% if item.inversor.tipo_inversor == 'microinversor' %}selected{% endif %}>Microinversor</option>
+                                                            <option value="string" {% if item.inversor.tipo_inversor == 'string' %}selected{% endif %}>String</option>
+                                                            <option value="hibrido" {% if item.inversor.tipo_inversor == 'hibrido' %}selected{% endif %}>Híbrido</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-2">
+                                                        <label class="form-label">Potência (kW)</label>
+                                                        <input type="text" name="potencia_inversor" class="form-control form-control-sm" value="{{ item.inversor.potencia_inversor or '' }}">
+                                                    </div>
+                                                    <div class="col-md-2">
+                                                        <label class="form-label">MPPT</label>
+                                                        <input type="number" name="quantidade_mppt" class="form-control form-control-sm" value="{{ item.inversor.quantidade_mppt or '' }}">
+                                                    </div>
+                                                    <div class="col-md-2">
+                                                        <label class="form-label">Fase</label>
+                                                        <select name="fase" class="form-select form-select-sm">
+                                                            <option value="monofasico" {% if item.inversor.fase == 'monofasico' %}selected{% endif %}>Mono</option>
+                                                            <option value="bifasico" {% if item.inversor.fase == 'bifasico' %}selected{% endif %}>Bifásico</option>
+                                                            <option value="trifasico" {% if item.inversor.fase == 'trifasico' %}selected{% endif %}>Trifásico</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="form-label">Tensão</label>
+                                                        <select name="tensao" class="form-select form-select-sm">
+                                                            <option value="127/220v" {% if item.inversor.tensao == '127/220v' %}selected{% endif %}>127/220V</option>
+                                                            <option value="220/380v" {% if item.inversor.tensao == '220/380v' %}selected{% endif %}>220/380V</option>
+                                                        </select>
+                                                    </div>
+
+                                                    <div class="col-12 d-flex align-items-end justify-content-end gap-2 mt-2">
+                                                        <button type="button" class="btn btn-sm btn-secondary" onclick="toggleEditInversor({{ item.inversor.id }})">Fechar</button>
+                                                        <button type="submit" class="btn btn-sm btn-primary px-4 shadow-sm">SALVAR ALTERAÇÕES</button>
+                                                    </div>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
-
-                <div class="col-lg-6 bloco-produto">
-                    <div class="card shadow-sm border-0 h-100">
-                        <div class="card-body">
-                            <h4 class="text-primary mb-4 fw-bold border-bottom pb-2">Inversores do Fornecedor</h4>
-
-                            <form method="POST" action="{{ url_for('vincular_inversor_fornecedor_kit', id=fornecedor.id) }}" class="row g-2 mb-4 bg-light p-2 rounded">
-                                <div class="col-md-7">
-                                    <label class="form-label small">Selecionar Inversor</label>
-                                    <select name="inversor_id" class="form-select form-select-sm" required>
-                                        <option value="">Buscar no catálogo...</option>
-                                        {% for i in inversores_disponiveis %}
-                                            <option value="{{ i.id }}">{{ i.nome }} ({{ i.potencia_inversor }}kW)</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="form-label small">Preço (R$)</label>
-                                    <input type="text" name="valor" class="form-control form-control-sm" placeholder="0,00">
-                                </div>
-                                <div class="col-md-2 d-flex align-items-end">
-                                    <button type="submit" class="btn btn-primary btn-sm w-100">Vincular</button>
-                                </div>
-                            </form>
-
-                            <div class="table-responsive">
-                                <table class="table table-hover align-middle">
-                                    <thead class="table-light small">
-                                        <tr>
-                                            <th>Nome / Tipo</th>
-                                            <th class="text-center">kW</th>
-                                            <th class="text-center">Valor</th>
-                                            <th class="text-end">Ações</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for item in inversores_vinculados %}
-                                        <tr>
-                                            <td>
-                                                <strong>{{ item.inversor.nome }}</strong><br>
-                                                <small class="text-primary">{{ item.inversor.tipo_inversor|capitalize }}</small>
-                                            </td>
-                                            <td class="text-center">{{ item.inversor.potencia_inversor or '-' }}kW</td>
-                                            <td class="text-center fw-bold text-primary">
-                                                {% if item.valor %} R$ {{ "%.2f"|format(item.valor)|replace('.', ',') }} {% else %} - {% endif %}
-                                            </td>
-                                            <td class="text-end">
-                                                <div class="btn-group">
-                                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleEditInversor({{ item.inversor.id }})">Editar</button>
-                                                    <form method="POST" action="{{ url_for('desvincular_inversor_fornecedor_kit', id=fornecedor.id, vinculo_id=item.id) }}" onsubmit="return confirm('Desvincular?');">
-                                                        <button type="submit" class="btn btn-sm btn-outline-danger border-start-0">Remover</button>
-                                                    </form>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                        <tr id="edit-inversor-{{ item.inversor.id }}" style="display:none;">
-                                            <td colspan="4" class="p-0 border-0">
-                                                <div class="container-edicao container-edicao-inversor">
-                                                    <h6 class="fw-bold text-primary mb-3"><i class="bi bi-pencil"></i> Editar Dados do Inversor</h6>
-                                                    <form method="POST" action="{{ url_for('editar_inversor_vinculo', vinculo_id=item.id) }}">
-                                                        <div class="row g-3">
-                                                            <div class="col-md-5">
-                                                                <label class="form-label">Nome</label>
-                                                                <input type="text" name="nome" class="form-control form-control-sm" value="{{ item.inversor.nome }}" required>
-                                                            </div>
-                                                            <div class="col-md-4">
-                                                                <label class="form-label">Tipo</label>
-                                                                <select name="tipo_inversor" class="form-select form-select-sm">
-                                                                    <option value="microinversor" {% if item.inversor.tipo_inversor == 'microinversor' %}selected{% endif %}>Microinversor</option>
-                                                                    <option value="string" {% if item.inversor.tipo_inversor == 'string' %}selected{% endif %}>String</option>
-                                                                    <option value="hibrido" {% if item.inversor.tipo_inversor == 'hibrido' %}selected{% endif %}>Híbrido</option>
-                                                                </select>
-                                                            </div>
-                                                            <div class="col-md-3">
-                                                                <label class="form-label">Preço Venda (R$)</label>
-                                                                <input type="text" name="valor_vinculo" class="form-control form-control-sm fw-bold text-primary border-primary" value="{{ item.valor if item.valor is not none else '' }}">
-                                                            </div>
-                                                            <div class="col-md-3">
-                                                                <label class="form-label">Potência (kW)</label>
-                                                                <input type="text" name="potencia_inversor" class="form-control form-control-sm" value="{{ item.inversor.potencia_inversor or '' }}">
-                                                            </div>
-                                                            <div class="col-md-2">
-                                                                <label class="form-label">MPPT</label>
-                                                                <input type="number" name="quantidade_mppt" class="form-control form-control-sm" value="{{ item.inversor.quantidade_mppt or '' }}">
-                                                            </div>
-                                                            <div class="col-md-3">
-                                                                <label class="form-label small">Fase</label>
-                                                                <select name="fase" class="form-select form-select-sm">
-                                                                    <option value="monofasico" {% if item.inversor.fase == 'monofasico' %}selected{% endif %}>Mono</option>
-                                                                    <option value="bifasico" {% if item.inversor.fase == 'bifasico' %}selected{% endif %}>Bifásico</option>
-                                                                    <option value="trifasico" {% if item.inversor.fase == 'trifasico' %}selected{% endif %}>Trifásico</option>
-                                                                </select>
-                                                            </div>
-                                                            <div class="col-md-4 d-flex align-items-end justify-content-end gap-2 mt-2">
-                                                                <button type="button" class="btn btn-sm btn-secondary" onclick="toggleEditInversor({{ item.inversor.id }})">Cancelar</button>
-                                                                <button type="submit" class="btn btn-sm btn-primary px-4">SALVAR</button>
-                                                            </div>
-                                                        </div>
-                                                    </form>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                        {% else %}
-                                        <tr><td colspan="4" class="text-center text-muted py-3">Nenhum inversor vinculado.</td></tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-            </div> </div>
+            </div>
+        </div>
     </div>
 </div>
 
 <script>
+// Funções para exibir/ocultar os formulários de edição na tabela
 function toggleEditModulo(id) {
     const el = document.getElementById('edit-modulo-' + id);
     el.style.display = (el.style.display === 'none') ? 'table-row' : 'none';
@@ -379,4 +392,6 @@ function toggleEditInversor(id) {
     el.style.display = (el.style.display === 'none') ? 'table-row' : 'none';
 }
 </script>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.min.css">
 {% endblock %}

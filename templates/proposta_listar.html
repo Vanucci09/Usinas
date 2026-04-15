@@ -5,204 +5,276 @@
 {% block content %}
 
 {% macro moeda(valor) -%}
-  {% if valor is not none %}
-    R$ {{ "{:,.2f}".format(valor).replace(",", "X").replace(".", ",").replace("X", ".") }}
-  {% else %}
-    <span class="text-muted">-</span>
-  {% endif %}
+{% if valor is not none %}
+R$ {{ "{:,.2f}".format(valor).replace(",", "X").replace(".", ",").replace("X", ".") }}
+{% else %} <span class="text-muted">-</span>
+{% endif %}
 {%- endmacro %}
 
 {% macro formato_numero(valor) -%}
-  {% if valor is not none %}
-    {{ "{:,.2f}".format(valor).replace(",", "X").replace(".", ",").replace("X", ".") }}
-  {% else %}
-    0,00
-  {% endif %}
+{% if valor is not none %}
+{{ "{:,.2f}".format(valor).replace(",", "X").replace(".", ",").replace("X", ".") }}
+{% else %}
+0,00
+{% endif %}
 {%- endmacro %}
 
 <div class="container-fluid py-4 px-4">
 
-    <div class="row align-items-center mb-4">
-        <div class="col-md-6">
-            <h2 class="fw-bold text-dark mb-1">Gestão de Propostas</h2>
-            <p class="text-muted small mb-0">Visualize e gerencie propostas.</p>
-        </div>
-        <div class="col-md-6 text-end">
-            <a href="{{ url_for('nova_proposta_etapa1') }}" class="btn btn-primary">
-                + Nova Proposta
-            </a>
-        </div>
+```
+<div class="row align-items-center mb-4">
+    <div class="col-md-6">
+        <h2 class="fw-bold text-dark mb-1">Gestão de Propostas</h2>
+        <p class="text-muted small mb-0">Visualize e gerencie propostas.</p>
     </div>
+    <div class="col-md-6 text-end">
+        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary me-2">
+            ← Voltar
+        </a>
+        <a href="{{ url_for('nova_proposta_etapa1') }}" class="btn btn-primary">
+            + Nova Proposta
+        </a>
+    </div>
+</div>
 
-    <div class="card shadow-sm">
-        <div class="card-body p-0">
+<div class="card shadow-sm">
+    <div class="card-body p-0">
+        <div class="p-3 border-bottom bg-light">
 
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
+            <form method="GET" class="row g-2">
 
-                    <thead class="bg-light">
-                        <tr>
-                            <th>Nº</th>
-                            <th>Centro</th>
-                            <th>Vendedor</th>
-                            <th>Consumo</th>
-                            <th>Valor</th>
-                            <th>Status</th>
-                            <th>Data</th>
-                            <th>Vistoria</th>
-                            <th class="text-end">Ações</th>
-                        </tr>
-                    </thead>
+                <!-- Busca -->
+                <div class="col-md-3">
+                    <input type="text" name="busca" class="form-control"
+                        placeholder="Buscar por cliente, número..."
+                        value="{{ request.args.get('busca', '') }}">
+                </div>
 
-                    <tbody>
-                        {% for p in propostas %}
-                        <tr>
+                <!-- Tipo de Serviço -->
+                <div class="col-md-2">
+                    <select name="tipo_servico" class="form-select">
+                        <option value="">Tipo Serviço</option>
+                        <option value="bess" {{ 'selected' if request.args.get('tipo_servico') == 'bess' }}>UFV BESS</option>
+                        <option value="solo" {{ 'selected' if request.args.get('tipo_servico') == 'solo' }}>UFV SOLO</option>
+                        <option value="kit" {{ 'selected' if request.args.get('tipo_servico') == 'kit' }}>KIT FV</option>
+                    </select>
+                </div>
 
-                            <td>#{{ p.numero }}</td>
+                <!-- Status -->
+                <div class="col-md-2">
+                    <select name="status" class="form-select">
+                        <option value="">Status</option>
+                        <option value="edicao" {{ 'selected' if request.args.get('status') == 'edicao' }}>Em edição</option>
+                        <option value="gerada" {{ 'selected' if request.args.get('status') == 'gerada' }}>Gerada</option>
+                        <option value="aprovada" {{ 'selected' if request.args.get('status') == 'aprovada' }}>Aprovada</option>
+                    </select>
+                </div>
 
-                            <td>
-                                <b>{{ p.centro_custo.codigo }}</b><br>
-                                <small>{{ p.centro_custo.nome }}</small>
-                            </td>
+                <!-- Vendedor -->
+                <div class="col-md-2">
+                    <select name="vendedor_id" class="form-select">
+                        <option value="">Vendedor</option>
+                        {% for v in vendedores %}
+                            <option value="{{ v.id }}"
+                                {{ 'selected' if request.args.get('vendedor_id') == v.id|string }}>
+                                {{ v.nome }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
 
-                            <td>{{ p.vendedor.nome }}</td>
+                <!-- Botões -->
+                <div class="col-md-3 d-flex gap-2">
+                    <button class="btn btn-primary w-100">Filtrar</button>
+                    <a href="{{ url_for('listar_propostas') }}" class="btn btn-outline-secondary w-100">Limpar</a>
+                </div>
 
-                            <td>{{ formato_numero(p.consumo_kwh) }} kWh</td>
+            </form>
 
-                            <td>{{ moeda(p.valor_estimado_proposta) }}</td>
+        </div>
 
-                            <!-- STATUS -->
-                            <td>
-                                {% if p.vistoria %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
 
-                                    {% if p.vistoria.status == 'aprovada' %}
-                                        <span class="badge bg-success-subtle text-success border px-3 py-2">
-                                            <i class="bi bi-check-circle me-1"></i> Aprovada
-                                        </span>
+                <thead class="bg-light">
+                    <tr>
+                        <th>Nº</th>
+                        <th>Cliente</th>
+                        <th>Vendedor</th>
+                        <th>Consumo</th>
+                        <th>Valor</th>
+                        <th>Tipo de Serviço</th>
+                        <th>Status</th>
+                        <th>Data</th>
+                        <th>Vistoria</th>
+                        <th class="text-end">Ações</th>
+                    </tr>
+                </thead>
 
-                                    {% elif p.vistoria.status == 'reprovada' %}
-                                        <span class="badge bg-danger-subtle text-danger border px-3 py-2">
-                                            <i class="bi bi-x-circle me-1"></i> Reprovada
-                                        </span>
+                <tbody>
+                    {% for p in propostas %}
+                    <tr>
 
-                                    {% else %}
-                                        <span class="badge bg-primary-subtle text-primary border px-3 py-2">
-                                            <i class="bi bi-calendar-check me-1"></i> Vistoria Agendada
-                                        </span>
-                                    {% endif %}
+                        <td>#{{ p.numero }}</td>
 
-                                {% elif p.status == 'aprovada' %}
+                        <td>
+                            <b>{{ p.centro_custo.codigo }}</b><br>
+                            <small>{{ p.centro_custo.nome }}</small>
+                        </td>
+
+                        <td>{{ p.vendedor.nome }}</td>
+
+                        <td>{{ formato_numero(p.consumo_kwh) }} kWh</td>
+
+                        <td>{{ moeda(p.valor_estimado_proposta) }}</td>
+
+                        <!-- 🔥 NOVA COLUNA -->
+                        <td>
+                            {% if p.tipo_inversor and p.tipo_inversor|lower == 'hibrido' %}
+                                <span class="badge bg-dark-subtle text-dark border px-3 py-2">
+                                    UFV BESS
+                                </span>
+
+                            {% elif p.tipo_telhado and p.tipo_telhado|lower == 'solo' %}
+                                <span class="badge bg-success-subtle text-success border px-3 py-2">
+                                    UFV SOLO
+                                </span>
+
+                            {% else %}
+                                <span class="badge bg-primary-subtle text-primary border px-3 py-2">
+                                    KIT FV
+                                </span>
+                            {% endif %}
+                        </td>
+
+                        <!-- STATUS -->
+                        <td>
+                            {% if p.vistoria %}
+
+                                {% if p.vistoria.status == 'aprovada' %}
                                     <span class="badge bg-success-subtle text-success border px-3 py-2">
-                                        <i class="bi bi-check-all me-1"></i> Proposta Aprovada
+                                        <i class="bi bi-check-circle me-1"></i> Aprovada
                                     </span>
 
-                                {% elif p.status == 'gerada' %}
-                                    <span class="badge bg-info-subtle text-info border px-3 py-2">
-                                        Gerada
+                                {% elif p.vistoria.status == 'reprovada' %}
+                                    <span class="badge bg-danger-subtle text-danger border px-3 py-2">
+                                        <i class="bi bi-x-circle me-1"></i> Reprovada
                                     </span>
 
                                 {% else %}
-                                    <span class="badge bg-warning-subtle text-warning border px-3 py-2">
-                                        Em edição
+                                    <span class="badge bg-primary-subtle text-primary border px-3 py-2">
+                                        <i class="bi bi-calendar-check me-1"></i> Vistoria Agendada
                                     </span>
                                 {% endif %}
-                            </td>
 
-                            <td>
-                                {{ p.criado_em.strftime('%d/%m/%Y') if p.criado_em else '-' }}
-                            </td>
+                            {% elif p.status == 'aprovada' %}
+                                <span class="badge bg-success-subtle text-success border px-3 py-2">
+                                    <i class="bi bi-check-all me-1"></i> Proposta Aprovada
+                                </span>
 
-                            <!-- NOVA COLUNA -->
-                            <td>
-                                {% if p.vistoria %}
-                                    {{ p.vistoria.data_sugerida.strftime('%d/%m/%Y') if p.vistoria.data_sugerida else '-' }}
-                                    <br>
-                                    <small>{{ p.vistoria.periodo }}</small>
-                                {% else %}
-                                    -
-                                {% endif %}
-                            </td>
+                            {% elif p.status == 'gerada' %}
+                                <span class="badge bg-info-subtle text-info border px-3 py-2">
+                                    Gerada
+                                </span>
 
-                            <!-- AÇÕES -->
-                            <td class="text-end">
+                            {% else %}
+                                <span class="badge bg-warning-subtle text-warning border px-3 py-2">
+                                    Em edição
+                                </span>
+                            {% endif %}
+                        </td>
 
-                                <div class="btn-group">
+                        <td>
+                            {{ p.criado_em.strftime('%d/%m/%Y') if p.criado_em else '-' }}
+                        </td>
 
-                                    <!-- visualizar -->
-                                    <a href="{{ url_for('visualizar_proposta', proposta_id=p.id) }}"
-                                       class="btn btn-sm btn-light border">
-                                        👁
+                        <td>
+                            {% if p.vistoria %}
+                                {{ p.vistoria.data_sugerida.strftime('%d/%m/%Y') if p.vistoria.data_sugerida else '-' }}
+                                <br>
+                                <small>{{ p.vistoria.periodo }}</small>
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+
+                        <!-- AÇÕES -->
+                        <td class="text-end">
+
+                            <div class="btn-group">
+
+                                <a href="{{ url_for('visualizar_proposta', proposta_id=p.id) }}"
+                                   class="btn btn-sm btn-light border">
+                                    👁
+                                </a>
+
+                                {% if p.vistoria and p.vistoria.status == 'aprovada' %}
+                                    <a href="{{ url_for('contrato_proposta', proposta_id=p.id) }}"
+                                    class="btn btn-sm btn-dark"
+                                    title="Abrir Contrato">
+                                        <i class="bi bi-file-earmark-text"></i>
                                     </a>
+                                {% endif %}
 
-                                    {% if p.vistoria and p.vistoria.status == 'aprovada' %}
-                                        <a href="{{ url_for('contrato_proposta', proposta_id=p.id) }}"
-                                        class="btn btn-sm btn-dark"
-                                        title="Abrir Contrato">
+                                {% if not p.vistoria %}
+                                <a href="{{ url_for('agendar_vistoria', proposta_id=p.id) }}"
+                                   class="btn btn-sm btn-light border">
+                                    📅
+                                </a>
+                                {% endif %}
+
+                                {% if p.vistoria %}
+
+                                    {% if p.vistoria.status in ['aprovada', 'reprovada'] %}
+                                        <a href="{{ url_for('relatorio_vistoria', vistoria_id=p.vistoria.id) }}"
+                                        class="btn btn-sm btn-success"
+                                        title="Ver Relatório">
                                             <i class="bi bi-file-earmark-text"></i>
+                                        </a>
+                                    {% else %}
+                                        <a href="{{ url_for('vistoria_fotos', vistoria_id=p.vistoria.id) }}"
+                                        class="btn btn-sm btn-primary"
+                                        title="Abrir Vistoria">
+                                            <i class="bi bi-camera"></i>
                                         </a>
                                     {% endif %}
 
-                                    <!-- agendar -->
-                                    {% if not p.vistoria %}
-                                    <a href="{{ url_for('agendar_vistoria', proposta_id=p.id) }}"
-                                       class="btn btn-sm btn-light border">
-                                        📅
-                                    </a>
-                                    {% endif %}
+                                {% endif %}
 
-                                    <!-- abrir vistoria -->
-                                    {% if p.vistoria %}
+                                {% if p.status != 'aprovada' %}
+                                <a href="{{ url_for('editar_proposta_etapa1', proposta_id=p.id) }}"
+                                   class="btn btn-sm btn-light border">
+                                    ✏️
+                                </a>
 
-                                        {% if p.vistoria.status in ['aprovada', 'reprovada'] %}
-                                            <a href="{{ url_for('relatorio_vistoria', vistoria_id=p.vistoria.id) }}"
-                                            class="btn btn-sm btn-success"
-                                            title="Ver Relatório">
-                                                <i class="bi bi-file-earmark-text"></i>
-                                            </a>
-                                        {% else %}
-                                            <a href="{{ url_for('vistoria_fotos', vistoria_id=p.vistoria.id) }}"
-                                            class="btn btn-sm btn-primary"
-                                            title="Abrir Vistoria">
-                                                <i class="bi bi-camera"></i>
-                                            </a>
-                                        {% endif %}
+                                <a href="{{ url_for('aprovar_proposta', proposta_id=p.id) }}"
+                                   class="btn btn-sm btn-success">
+                                    ✔
+                                </a>
+                                {% else %}
+                                <button class="btn btn-sm btn-secondary" disabled>🔒</button>
+                                {% endif %}
 
-                                    {% endif %}
+                            </div>
 
-                                    <!-- editar -->
-                                    {% if p.status != 'aprovada' %}
-                                    <a href="{{ url_for('editar_proposta_etapa1', proposta_id=p.id) }}"
-                                       class="btn btn-sm btn-light border">
-                                        ✏️
-                                    </a>
+                        </td>
 
-                                    <a href="{{ url_for('aprovar_proposta', proposta_id=p.id) }}"
-                                       class="btn btn-sm btn-success">
-                                        ✔
-                                    </a>
-                                    {% else %}
-                                    <button class="btn btn-sm btn-secondary" disabled>🔒</button>
-                                    {% endif %}
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="10" class="text-center py-4">
+                            Nenhuma proposta encontrada
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
 
-                                </div>
-
-                            </td>
-
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="9" class="text-center py-4">
-                                Nenhuma proposta encontrada
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-
-                </table>
-            </div>
-
+            </table>
         </div>
+
     </div>
+</div>
+```
 
 </div>
 

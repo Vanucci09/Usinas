@@ -3,182 +3,240 @@
 {% block title %}Financeiro - Balancete{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <h2 class="mb-4 text-primary">Caixas e Bancos</h2>
+<style>
+    :root {
+        --bs-table-accent-bg: transparent; /* Remove sombreamento padrão para customizar */
+    }
+    .card-dashboard {
+        border: none;
+        border-radius: 12px;
+        transition: transform 0.2s ease;
+    }
+    .card-dashboard:hover {
+        transform: translateY(-3px);
+    }
+    .table thead th {
+        background-color: #f8f9fa;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.5px;
+        font-weight: 700;
+        border-bottom: 2px solid #dee2e6;
+    }
+    .btn-action-group .btn {
+        border-radius: 8px;
+        margin-right: 5px;
+        margin-bottom: 5px;
+    }
+    .badge-receita { background-color: #d1e7dd; color: #0f5132; }
+    .badge-despesa { background-color: #f8d7da; color: #842029; }
+    .sort-link { color: #adb5bd; transition: color 0.2s; }
+    .sort-link:hover { color: #0d6efd; }
+    .form-floating > .form-control, .form-floating > .form-select { height: calc(3.5rem + 2px); }
+</style>
 
-    {# Macro para ordenar colunas com setinhas alinhadas #}
+<div class="container-fluid px-4 mt-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+        <div>
+            <h2 class="fw-bold text-dark mb-0">Caixas e Bancos</h2>
+            <p class="text-muted mb-0">Gestão financeira e balancete das usinas</p>
+        </div>
+        <div class="btn-action-group">
+            <a href="{{ url_for('relatorio_financeiro') }}" class="btn btn-outline-primary btn-sm shadow-sm">📄 Período</a>
+            <a href="{{ url_for('relatorio_consolidado') }}" class="btn btn-outline-primary btn-sm shadow-sm">🏭 Usina</a>
+            <a href="{{ url_for('relatorio_categoria') }}" class="btn btn-outline-primary btn-sm shadow-sm">🗂️ Categoria</a>
+            <a href="{{ url_for('relatorio_cliente') }}" class="btn btn-outline-primary btn-sm shadow-sm">👥 Cliente</a>
+            <a href="{{ url_for('relatorio_gestao_usina') }}" class="btn btn-dark btn-sm shadow-sm">📊 Gestão (Geração x Rec.)</a>
+        </div>
+    </div>
+
+    {# Macro para ordenar colunas #}
     {% macro th_sort(label, col_key) %}
         <th>
             <div class="d-flex align-items-center">
                 <span>{{ label }}</span>
-                <div class="ms-2 d-flex flex-column" style="line-height: 0.8;">
-                    <a href="{{ url_for('financeiro', usina_id=usina_id, mes=mes, ano=ano, tipo=tipo, categoria_id=categoria_id, sort=col_key, direction='asc') }}" class="text-decoration-none" style="font-size: 0.75rem;">&#9650;</a>
-                    <a href="{{ url_for('financeiro', usina_id=usina_id, mes=mes, ano=ano, tipo=tipo, categoria_id=categoria_id, sort=col_key, direction='desc') }}" class="text-decoration-none" style="font-size: 0.75rem;">&#9660;</a>
+                <div class="ms-auto d-flex flex-column ms-2">
+                    <a href="{{ url_for('financeiro', usina_id=usina_id, mes=mes, ano=ano, tipo=tipo, categoria_id=categoria_id, sort=col_key, direction='asc') }}" class="sort-link mb-n1"><i class="bi bi-caret-up-fill" style="font-size: 10px;"></i></a>
+                    <a href="{{ url_for('financeiro', usina_id=usina_id, mes=mes, ano=ano, tipo=tipo, categoria_id=categoria_id, sort=col_key, direction='desc') }}" class="sort-link"><i class="bi bi-caret-down-fill" style="font-size: 10px;"></i></a>
                 </div>
             </div>
         </th>
     {% endmacro %}
 
-    <!-- Links para Relatórios -->
-    <div class="mb-4">
-        <div class="btn-group" role="group">
-            <a href="{{ url_for('relatorio_financeiro') }}" class="btn btn-outline-primary btn-sm">📄 Relatório por Período</a>
-            <a href="{{ url_for('relatorio_consolidado') }}" class="btn btn-outline-primary btn-sm">🏭 Consolidado por Usina</a>
-            <a href="{{ url_for('relatorio_categoria') }}" class="btn btn-outline-primary btn-sm">🗂️ Por Categoria</a>
-            <a href="{{ url_for('relatorio_cliente') }}" class="btn btn-outline-primary btn-sm">👥 Por Cliente</a>
-            <a href="{{ url_for('relatorio_gestao_usina') }}" class="btn btn-outline-dark btn-sm">📊 Gestão por Usina (Geração x Recebido)</a>
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-body bg-light rounded-3">
+            <form class="row g-3" method="get">
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold small text-muted">Usina</label>
+                    <select name="usina_id" class="form-select border-0 shadow-sm">
+                        <option value="" {% if not usina_id %}selected{% endif %}>Todas as Usinas</option>
+                        {% for u in usinas %}
+                            <option value="{{ u.id }}" {% if u.id == usina_id %}selected{% endif %}>{{ u.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label fw-semibold small text-muted">Mês</label>
+                    <select name="mes" class="form-select border-0 shadow-sm">
+                        <option value="" {% if not mes %}selected{% endif %}>Todos</option>
+                        {% for m in range(1, 13) %}
+                            <option value="{{ m }}" {% if m == mes %}selected{% endif %}>{{ "%02d"|format(m) }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label fw-semibold small text-muted">Ano</label>
+                    <input type="number" name="ano" class="form-control border-0 shadow-sm" placeholder="Ex: 2024" value="{{ ano or '' }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label fw-semibold small text-muted">Tipo de Lançamento</label>
+                    <select name="tipo" class="form-select border-0 shadow-sm">
+                        <option value="" {% if not tipo %}selected{% endif %}>Todos os Tipos</option>
+                        <option value="receita" {% if tipo == 'receita' %}selected{% endif %}>Receitas</option>
+                        <option value="despesa" {% if tipo == 'despesa' %}selected{% endif %}>Despesas</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold small text-muted">Plano Financeiro</label>
+                    <select name="categoria_id" class="form-select border-0 shadow-sm">
+                        <option value="" {% if not categoria_id %}selected{% endif %}>Todas as Categorias</option>
+                        {% for c in categorias %}
+                            <option value="{{ c.id }}" {% if c.id == categoria_id %}selected{% endif %}>{{ c.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100 shadow-sm fw-bold">
+                        <i class="bi bi-filter"></i> Filtrar Dados
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 
-    <!-- Filtros -->
-    <form class="row g-3 mb-4" method="get">
-        <div class="col-md-2">
-            <label for="usina_id" class="form-label">Usina</label>
-            <select id="usina_id" name="usina_id" class="form-select">
-                <option value="" {% if not usina_id %}selected{% endif %}>Todas</option>
-                {% for u in usinas %}
-                    <option value="{{ u.id }}" {% if u.id == usina_id %}selected{% endif %}>{{ u.nome }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-1">
-            <label for="mes" class="form-label">Mês</label>
-            <select id="mes" name="mes" class="form-select">
-                <option value="" {% if not mes %}selected{% endif %}>Todos</option>
-                {% for m in range(1, 13) %}
-                    <option value="{{ m }}" {% if m == mes %}selected{% endif %}>{{ "%02d"|format(m) }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-1">
-            <label for="ano" class="form-label">Ano</label>
-            <input type="number" id="ano" name="ano" class="form-control" placeholder="Todos" value="{{ ano or '' }}">
-        </div>
-        <div class="col-md-2">            
-            <label for="tipo" class="form-label">Tipo</label>
-            <select id="tipo" name="tipo" class="form-select">
-                <option value="" {% if not tipo %}selected{% endif %}>Todos</option>
-                <option value="receita" {% if tipo == 'receita' %}selected{% endif %}>Receitas</option>
-                <option value="despesa" {% if tipo == 'despesa' %}selected{% endif %}>Despesas</option>
-            </select>
-        </div>
-        <div class="col-md-3">
-            <label for="categoria_id" class="form-label">Plano Financeiro</label>
-            <select id="categoria_id" name="categoria_id" class="form-select">
-                <option value="" {% if not categoria_id %}selected{% endif %}>Todas</option>
-                {% for c in categorias %}
-                    <option value="{{ c.id }}" {% if c.id == categoria_id %}selected{% endif %}>{{ c.nome }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-2 align-self-end">
-            <button type="submit" class="btn btn-primary w-100">Filtrar</button>
-        </div>
-    </form>
-
-    <!-- Tabela -->
-    <div class="table-responsive">
-        <table class="table table-bordered table-striped align-middle">
-            <thead class="table-light">
-                <tr>
-                    <th>ID</th>
-                    {{ th_sort('Tipo', 'tipo') }}
-                    {{ th_sort('Usina', 'usina') }}
-                    {{ th_sort('Descrição', 'descricao') }}
-                    {{ th_sort('Plano Financeiro', 'categoria') }}
-                    {{ th_sort('Valor (R$)', 'valor') }}
-                    {{ th_sort('Juros (R$)', 'juros') }}
-                    {{ th_sort('Referência', 'referencia') }}
-                    {{ th_sort('Data Pagamento', 'data_pagamento') }}
-                    <th>Autorização</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in financeiro %}
-                <tr class="{% if item.tipo == 'receita' %}table-success{% else %}table-danger{% endif %}">
-                    <td>{{ item.id }}</td>
-                    <td>{{ item.tipo.title() }}</td>
-                    <td>{{ item.usina }}</td>
-                    <td>
-                        {% if item.credor and item.credor != '-' %}
-                            {{ item.credor }}
-                        {% else %}
-                            {{ item.descricao }}
-                        {% endif %}
-                    </td>
-                    <td>{{ item.categoria }}</td>
-                    <td style="white-space: nowrap;">{{ item.valor | formato_brasileiro }}</td>
-                    <td>{{ item.juros | default(0) | formato_brasileiro }}</td>
-                    <td>{{ item.referencia }}</td>
-                    <td>
-                        {% if item.data_pagamento %}
-                            <div class="d-flex align-items-center gap-2">
-                                <input type="date"
-                                       value="{{ item.data_pagamento.isoformat() }}"
-                                       class="form-control form-control-sm"
-                                       style="max-width: 140px;" disabled>
-                                <span class="text-success">&#10004;</span>
-                            </div>
-                        {% else %}
-                            <form method="POST"
-                                  action="{{ url_for('atualizar_pagamento', id=item.id) }}"
-                                  class="d-flex flex-wrap gap-1">
-                                <input type="date" name="data_pagamento"
-                                       class="form-control form-control-sm"
-                                       style="max-width: 140px;" required>
-                                {% if item.tipo == 'receita' %}
-                                    <input type="number" step="0.01" name="juros"
-                                           class="form-control form-control-sm"
-                                           placeholder="Juros"
-                                           style="max-width: 100px;">
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-3">ID</th>
+                        {{ th_sort('Tipo', 'tipo') }}
+                        {{ th_sort('Usina', 'usina') }}
+                        {{ th_sort('Descrição / Credor', 'descricao') }}
+                        {{ th_sort('Plano Financeiro', 'categoria') }}
+                        {{ th_sort('Valor (R$)', 'valor') }}
+                        {{ th_sort('Juros', 'juros') }}
+                        {{ th_sort('Referência', 'referencia') }}
+                        {{ th_sort('Data Pagamento', 'data_pagamento') }}
+                        <th class="text-center">Ação</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in financeiro %}
+                    <tr>
+                        <td class="ps-3 text-muted small">#{{ item.id }}</td>
+                        <td>
+                            <span class="badge rounded-pill {% if item.tipo == 'receita' %}badge-receita{% else %}badge-despesa{% endif %} px-3">
+                                {{ item.tipo.title() }}
+                            </span>
+                        </td>
+                        <td class="fw-semibold text-dark" style="font-size: 0.9rem;">{{ item.usina }}</td>
+                        <td>
+                            <div class="d-flex flex-column">
+                                <span class="text-dark fw-medium">
+                                    {% if item.credor and item.credor != '-' %}
+                                        {{ item.credor }}
+                                    {% else %}
+                                        {# Pega apenas a parte antes da primeira barra vertical | #}
+                                        {{ item.descricao.split('|')[0] }}
+                                    {% endif %}
+                                </span>
+                                
+                                {% if item.credor and item.credor != '-' %}
+                                    {# Se houver credor, mostra a descrição resumida abaixo em cinza #}
+                                    <small class="text-muted">{{ item.descricao.split('|')[0] }}</small>
                                 {% endif %}
-                                <button type="submit" class="btn btn-sm btn-primary">Salvar</button>
-                            </form>
-                        {% endif %}
-                    </td>
-                    <td class="text-center">
-                        {% if item.tipo == 'despesa' %}
-                        <a href="{{ url_for('autorizacao_pagamento', item_id=item.id) }}"
-                           target="_blank"
-                           class="btn btn-outline-secondary btn-sm">
-                            🖨️ Autorizar
-                        </a>
-                        {% else %}
-                            &mdash;
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                            </div>
+                        </td>
+                        <td class="text-muted small">{{ item.categoria }}</td>
+                        <td class="fw-bold {% if item.tipo == 'receita' %}text-success{% else %}text-danger{% endif %}">
+                            {{ item.valor | formato_brasileiro }}
+                        </td>
+                        <td class="text-muted small">{{ item.juros | default(0) | formato_brasileiro }}</td>
+                        <td><span class="badge bg-light text-dark border">{{ item.referencia }}</span></td>
+                        <td>
+                            {% if item.data_pagamento %}
+                                <div class="d-flex align-items-center text-success fw-medium small">
+                                    <i class="bi bi-check-circle-fill me-1"></i>
+                                    {{ item.data_pagamento.strftime('%d/%m/%Y') }}
+                                </div>
+                            {% else %}
+                                <form method="POST" action="{{ url_for('atualizar_pagamento', id=item.id) }}" class="row g-1">
+                                    <div class="col-auto">
+                                        <input type="date" name="data_pagamento" class="form-control form-control-sm" required>
+                                    </div>
+                                    {% if item.tipo == 'receita' %}
+                                    <div class="col-auto">
+                                        <input type="number" step="0.01" name="juros" class="form-control form-control-sm" placeholder="Juros" style="width: 80px;">
+                                    </div>
+                                    {% endif %}
+                                    <div class="col-auto">
+                                        <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-save"></i></button>
+                                    </div>
+                                </form>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if item.tipo == 'despesa' %}
+                            <a href="{{ url_for('autorizacao_pagamento', item_id=item.id) }}" target="_blank" class="btn btn-link btn-sm text-secondary p-0">
+                                <i class="bi bi-printer fs-5"></i>
+                            </a>
+                            {% else %}
+                                &mdash;
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 
-    <!-- Resumo -->
-    <div class="row mt-4">
-        <div class="col-md-6">
-            <div class="alert alert-success">
-                <strong>Total de Receitas:</strong> {{ total_receitas | formato_brasileiro }}
+    <div class="row g-3 mb-5">
+        <div class="col-md-4">
+            <div class="card card-dashboard bg-white shadow-sm border-start border-success border-4">
+                <div class="card-body">
+                    <h6 class="text-muted mb-1 small uppercase fw-bold">Total de Receitas</h6>
+                    <h4 class="text-success fw-bold mb-0">{{ total_receitas | formato_brasileiro }}</h4>
+                </div>
             </div>
         </div>
-        <div class="col-md-6">
-            <div class="alert alert-danger">
-                <strong>Total de Despesas:</strong> {{ total_despesas | formato_brasileiro }}
+        <div class="col-md-4">
+            <div class="card card-dashboard bg-white shadow-sm border-start border-danger border-4">
+                <div class="card-body">
+                    <h6 class="text-muted mb-1 small uppercase fw-bold">Total de Despesas</h6>
+                    <h4 class="text-danger fw-bold mb-0">{{ total_despesas | formato_brasileiro }}</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            {% set saldo = total_receitas - total_despesas %}
+            <div class="card card-dashboard {% if saldo >= 0 %}bg-primary text-white{% else %}bg-danger text-white{% endif %} shadow-sm border-0">
+                <div class="card-body">
+                    <h6 class="opacity-75 mb-1 small uppercase fw-bold text-white">Saldo Líquido</h6>
+                    <h4 class="fw-bold mb-0 text-white">{{ saldo | formato_brasileiro }}</h4>
+                </div>
             </div>
         </div>
     </div>
 
-    <div class="alert alert-info">
-        <strong>Saldo:</strong>
-        {% set saldo = total_receitas - total_despesas %}
-        {% if saldo >= 0 %}
-            <span class="text-success">{{ saldo | formato_brasileiro }}</span>
-        {% else %}
-            <span class="text-danger">{{ saldo | formato_brasileiro }}</span>
-        {% endif %}
-    </div>
-
-    <div class="text-center mt-4">
-        <a href="{{ url_for('index') }}?aba=financeiro" class="btn btn-secondary">Voltar</a>
+    <div class="text-center pb-5">
+        <a href="{{ url_for('index') }}?aba=financeiro" class="btn btn-secondary px-5 shadow-sm">
+            <i class="bi bi-arrow-left"></i> Voltar ao Painel
+        </a>
     </div>
 </div>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+
 {% endblock %}

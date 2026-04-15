@@ -811,13 +811,21 @@ class FabricanteInversor(db.Model):
     __tablename__ = 'fabricantes_inversor'
 
     id = db.Column(db.Integer, primary_key=True)
-    nome = db.Column(db.String(150), nullable=False, unique=True)
+
+    fabricante = db.Column(db.String(150), nullable=False)
+    modelo = db.Column(db.String(150), nullable=False)
+
     potencia_inversor = db.Column(db.Numeric(10, 2), nullable=True)
     tipo_inversor = db.Column(db.String(30), nullable=True)  # microinversor, string, hibrido
     quantidade_mppt = db.Column(db.Integer, nullable=True)
     fase = db.Column(db.String(20), nullable=True)
     tensao = db.Column(db.String(30), nullable=True)
+
     ativo = db.Column(db.Boolean, nullable=False, default=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('fabricante', 'modelo', name='uq_fabricante_modelo'),
+    )
     
 class Vistoria(db.Model):
     __tablename__ = 'vistorias'
@@ -11643,7 +11651,16 @@ def excluir_vendedor(vendedor_id):
 
     return redirect(url_for('listar_vendedores'))
 
-def encontrar_melhor_kit_fornecedor_com_inversor(proposta, fornecedor_id, inversor_id, valor_frete=0):
+def encontrar_melhor_kit_fornecedor_com_inversor(
+    proposta,
+    fornecedor_id,
+    inversor_id,
+    valor_frete=0,
+    fabricante_modulo=None,
+    valor_baterias=0,
+    valor_kwp=None,
+    ajuste_final=0
+):
     geracao_solicitada = float(proposta.valor_tusd_fio_b or 0)
     consumo = float(proposta.consumo_kwh or 0)
     valor_frete = float(valor_frete or 0)
@@ -11663,20 +11680,30 @@ def encontrar_melhor_kit_fornecedor_com_inversor(proposta, fornecedor_id, invers
         fator_divisao = 130.0
     elif tipo_normalizado == 'string':
         fator_divisao = 118.0
+    elif tipo_normalizado == 'hibrido':
+        fator_divisao = 120.0  # pode ajustar depois
     else:
         return None, 'Tipo de inversor inválido para cálculo.'
 
     potencia_necessaria_kwp = energia_base / fator_divisao
 
-    vinculos_modulos = (
+    # QUERY AJUSTADA COM FILTRO
+    query_modulos = (
         FornecedorKitModulo.query
         .join(ModuloFotovoltaico, FornecedorKitModulo.modulo_fotovoltaico_id == ModuloFotovoltaico.id)
         .filter(
             FornecedorKitModulo.fornecedor_kit_id == fornecedor_id,
             ModuloFotovoltaico.ativo.is_(True)
         )
-        .all()
     )
+
+    # FILTRO NOVO
+    if fabricante_modulo:
+        query_modulos = query_modulos.filter(
+            ModuloFotovoltaico.fabricante == fabricante_modulo
+        )
+
+    vinculos_modulos = query_modulos.all()
 
     vinculo_inversor = (
         FornecedorKitInversor.query
@@ -11688,7 +11715,7 @@ def encontrar_melhor_kit_fornecedor_com_inversor(proposta, fornecedor_id, invers
     )
 
     if not vinculos_modulos:
-        return None, 'Fornecedor sem módulos vinculados.'
+        return None, 'Fornecedor sem módulos compatíveis com o filtro.'
 
     if not vinculo_inversor:
         return None, 'Fornecedor sem esse inversor vinculado.'
@@ -11726,10 +11753,16 @@ def encontrar_melhor_kit_fornecedor_com_inversor(proposta, fornecedor_id, invers
             qtd_inversores = 1
 
         potencia_total_inversores = qtd_inversores * potencia_unitaria_inversor_kw
-        overload_maximo_kwp = potencia_total_inversores * 1.20
+        if tipo_normalizado == 'hibrido':
+            # híbrido é mais flexível (ou ignora limite)
+            overload_maximo_kwp = potencia_total_inversores * 1.5
+        else:
+            overload_maximo_kwp = potencia_total_inversores * 1.2
 
         if potencia_total_modulos > overload_maximo_kwp:
             continue
+        print("Potência módulos:", potencia_total_modulos)
+        print("Máximo inversor:", overload_maximo_kwp)
 
         area_modulo = 0.0
         if modulo.largura_m and modulo.altura_m:
@@ -11738,9 +11771,19 @@ def encontrar_melhor_kit_fornecedor_com_inversor(proposta, fornecedor_id, invers
         area_total = qtd_modulos * area_modulo
 
         valor_modulos = float(vinc_mod.valor or 0) * qtd_modulos
-        valor_inversores = float(vinculo_inversor.valor or 0) * qtd_inversores
+        if tipo_normalizado == 'string' and valor_kwp is not None:
+            valor_inversores = float(valor_kwp) * potencia_total_modulos
+        else:
+            valor_inversores = float(vinculo_inversor.valor or 0) * qtd_inversores
 
         base_equipamentos = valor_modulos + valor_inversores
+        
+        print("tipo:", tipo_normalizado)
+        print("valor_kwp:", valor_kwp)
+        print("potencia_total_modulos:", potencia_total_modulos)
+
+        if tipo_normalizado == 'hibrido':
+            base_equipamentos += float(valor_baterias or 0)
         valor_projeto = max(potencia_necessaria_kwp * 50.0, 500.0)
         valor_instalacao = max(potencia_necessaria_kwp * 220.0, 950.0)
         valor_restante_material = base_equipamentos * 0.10
@@ -11760,9 +11803,7 @@ def encontrar_melhor_kit_fornecedor_com_inversor(proposta, fornecedor_id, invers
 
         valor_imposto_material = base_equipamentos * 0.075
         valor_imposto_servico = (
-            valor_projeto
-            + valor_instalacao
-            + valor_extras
+            valor_projeto + valor_instalacao + valor_extras
         ) * 0.075
 
         valor_subtotal = (
@@ -11773,7 +11814,30 @@ def encontrar_melhor_kit_fornecedor_com_inversor(proposta, fornecedor_id, invers
         )
 
         valor_bdi = valor_subtotal * 0.26
-        valor_total_final = valor_subtotal + valor_bdi
+        # REGRA ESPECIAL PARA STRING COM VALOR POR KWP
+        if tipo_normalizado == 'string' and valor_kwp is not None:
+            valor_total_final = float(valor_kwp) * potencia_total_modulos
+
+            # opcional: aplicar ajuste manual
+            valor_total_final += float(ajuste_final or 0)
+
+            # zera os outros valores (pra não confundir no front)
+            valor_modulos = 0
+            valor_inversores = valor_total_final
+            valor_projeto = 0
+            valor_instalacao = 0
+            valor_restante_material = 0
+            valor_extras = 0
+            valor_comissao_vendedor = 0
+            valor_imposto_material = 0
+            valor_imposto_servico = 0
+            valor_bdi = 0
+            valor_subtotal = valor_total_final
+
+        else:
+            valor_total_final = valor_subtotal + valor_bdi
+            valor_total_final += float(ajuste_final or 0)
+        valor_total_final += float(ajuste_final or 0)
 
         opcao = {
             'fornecedor_id': fornecedor_id,
@@ -11802,23 +11866,26 @@ def encontrar_melhor_kit_fornecedor_com_inversor(proposta, fornecedor_id, invers
             'valor_total_final': valor_total_final,
         }
 
-        if melhor_opcao is None:
+        if melhor_opcao is None or opcao['valor_total_final'] < melhor_opcao['valor_total_final']:
             melhor_opcao = opcao
-        else:
-            sobra_atual = opcao['potencia_total_inversores'] - opcao['potencia_total_modulos']
-            sobra_melhor = melhor_opcao['potencia_total_inversores'] - melhor_opcao['potencia_total_modulos']
-
-            if opcao['valor_total_final'] < melhor_opcao['valor_total_final']:
-                melhor_opcao = opcao
-            elif opcao['valor_total_final'] == melhor_opcao['valor_total_final'] and sobra_atual < sobra_melhor:
-                melhor_opcao = opcao
 
     if melhor_opcao is None:
         return None, 'Nenhuma combinação atende esse fornecedor.'
 
     return melhor_opcao, None
 
-def encontrar_kits_por_fornecedor_tipo(proposta, empresa_id, tipo_inversor, valor_frete=0):
+def encontrar_kits_por_fornecedor_tipo(
+    proposta,
+    empresa_id,
+    tipo_inversor,
+    valor_frete=0,
+    fabricante_inversor=None,
+    fabricante_modulo=None,
+    valor_baterias=0,
+    valor_kwp=None,
+    ajuste_final=0
+):
+
     fornecedores = (
         FornecedorKit.query
         .filter_by(empresa_id=empresa_id, ativo=True)
@@ -11830,7 +11897,7 @@ def encontrar_kits_por_fornecedor_tipo(proposta, empresa_id, tipo_inversor, valo
 
     for fornecedor in fornecedores:
 
-        inversores = (
+        query_inv = (
             FornecedorKitInversor.query
             .join(FabricanteInversor)
             .filter(
@@ -11838,8 +11905,12 @@ def encontrar_kits_por_fornecedor_tipo(proposta, empresa_id, tipo_inversor, valo
                 FabricanteInversor.tipo_inversor.ilike(tipo_inversor),
                 FabricanteInversor.ativo.is_(True)
             )
-            .all()
         )
+
+        if fabricante_inversor:
+            query_inv = query_inv.filter(FabricanteInversor.fabricante == fabricante_inversor)
+
+        inversores = query_inv.all()
 
         melhor_kit = None
 
@@ -11849,7 +11920,11 @@ def encontrar_kits_por_fornecedor_tipo(proposta, empresa_id, tipo_inversor, valo
                 proposta=proposta,
                 fornecedor_id=fornecedor.id,
                 inversor_id=vinc_inv.fabricante_inversor_id,
-                valor_frete=valor_frete
+                valor_frete=valor_frete,
+                fabricante_modulo=fabricante_modulo,
+                valor_baterias=valor_baterias,
+                valor_kwp=valor_kwp,
+                ajuste_final=ajuste_final
             )
 
             if not kit:
@@ -11857,9 +11932,7 @@ def encontrar_kits_por_fornecedor_tipo(proposta, empresa_id, tipo_inversor, valo
 
             kit['fornecedor'] = fornecedor
 
-            if melhor_kit is None:
-                melhor_kit = kit
-            elif kit['valor_total_final'] < melhor_kit['valor_total_final']:
+            if melhor_kit is None or kit['valor_total_final'] < melhor_kit['valor_total_final']:
                 melhor_kit = kit
 
         if melhor_kit:
@@ -12185,6 +12258,14 @@ def editar_proposta_etapa3(proposta_id):
 
     kits_recomendados = []
 
+    fabricantes_inversores = [
+        f[0] for f in db.session.query(FabricanteInversor.fabricante).distinct().all()
+    ]
+
+    fabricantes_modulos = [
+        f[0] for f in db.session.query(ModuloFotovoltaico.fabricante).distinct().all()
+    ]
+
     if request.method == 'POST':
         acao = request.form.get('acao')
 
@@ -12193,29 +12274,52 @@ def editar_proposta_etapa3(proposta_id):
         tensao_inversor = request.form.get('tensao_inversor')
         observacoes = request.form.get('observacoes')
 
+        fabricante_inversor = request.form.get('fabricante_inversor')
+        fabricante_modulo = request.form.get('fabricante_modulo')
+
         valor_frete = decimal_proposta(request.form.get('valor_frete')) or Decimal('0.00')
 
-        # 🔥 Validação do tipo de inversor
-        if tipo_inversor not in ['string', 'microinversor']:
+        # NOVOS CAMPOS
+        valor_baterias = decimal_proposta(request.form.get('valor_baterias')) or Decimal('0.00')
+        valor_kwp_raw = request.form.get('valor_kwp')
+
+        valor_kwp = None
+        if valor_kwp_raw:
+            valor_kwp = float(
+                valor_kwp_raw
+                .replace('R$', '')
+                .replace('.', '')
+                .replace(',', '.')
+                .strip()
+            )
+        ajuste_final = decimal_proposta(request.form.get('ajuste_final')) or Decimal('0.00')
+
+        if tipo_inversor not in ['string', 'microinversor', 'hibrido']:
             flash('Selecione um tipo de inversor.', 'danger')
             return render_template(
                 'proposta_etapa3_selecao_gerador.html',
                 proposta=proposta,
-                kits_recomendados=[]
+                kits_recomendados=[],
+                fabricantes_inversores=fabricantes_inversores,
+                fabricantes_modulos=fabricantes_modulos
             )
 
-        # 🔎 Buscar kits por fornecedor
         if acao == 'buscar_kits':
 
             kits_recomendados = encontrar_kits_por_fornecedor_tipo(
                 proposta=proposta,
                 empresa_id=empresa_id,
                 tipo_inversor=tipo_inversor,
-                valor_frete=valor_frete
+                valor_frete=valor_frete,
+                fabricante_inversor=fabricante_inversor,
+                fabricante_modulo=fabricante_modulo,
+                valor_baterias=valor_baterias,
+                valor_kwp=valor_kwp,
+                ajuste_final=ajuste_final
             )
 
             if not kits_recomendados:
-                flash('Nenhum fornecedor possui kit compatível com esse tipo de inversor.', 'warning')
+                flash('Nenhum kit encontrado com esses filtros.', 'warning')
 
             return render_template(
                 'proposta_etapa3_selecao_gerador.html',
@@ -12225,64 +12329,54 @@ def editar_proposta_etapa3(proposta_id):
                 fase_inversor_selecionada=fase_inversor,
                 tensao_inversor_selecionada=tensao_inversor,
                 observacoes_digitadas=observacoes,
-                valor_frete_digitado=valor_frete
+                valor_frete_digitado=valor_frete,
+                fabricantes_inversores=fabricantes_inversores,
+                fabricantes_modulos=fabricantes_modulos,
+                fabricante_inversor_selecionado=fabricante_inversor,
+                fabricante_modulo_selecionado=fabricante_modulo
             )
 
-        # Confirmar kit escolhido
         if acao == 'confirmar_kit':
 
             fornecedor_escolhido_id = request.form.get('fornecedor_escolhido_id', type=int)
 
-            if not fornecedor_escolhido_id:
-                flash('Selecione um kit para confirmar.', 'danger')
-
-                kits_recomendados = encontrar_kits_por_fornecedor_tipo(
-                    proposta=proposta,
-                    empresa_id=empresa_id,
-                    tipo_inversor=tipo_inversor,
-                    valor_frete=valor_frete
-                )
-
-                return render_template(
-                    'proposta_etapa3_selecao_gerador.html',
-                    proposta=proposta,
-                    kits_recomendados=kits_recomendados,
-                    tipo_inversor_selecionado=tipo_inversor,
-                    fase_inversor_selecionada=fase_inversor,
-                    tensao_inversor_selecionada=tensao_inversor,
-                    observacoes_digitadas=observacoes,
-                    valor_frete_digitado=valor_frete
-                )
-
-            # Recalcula lista (garante consistência)
             kits_recomendados = encontrar_kits_por_fornecedor_tipo(
                 proposta=proposta,
                 empresa_id=empresa_id,
                 tipo_inversor=tipo_inversor,
-                valor_frete=valor_frete
+                valor_frete=valor_frete,
+                fabricante_inversor=fabricante_inversor,
+                fabricante_modulo=fabricante_modulo,
+                valor_baterias=valor_baterias,
+                valor_kwp=valor_kwp,
+                ajuste_final=ajuste_final
             )
 
-            kit_escolhido = None
-
-            for kit in kits_recomendados:
-                if kit['fornecedor'].id == fornecedor_escolhido_id:
-                    kit_escolhido = kit
-                    break
-
-            if not kit_escolhido:
-                flash('Kit selecionado não encontrado.', 'danger')
+            if not fornecedor_escolhido_id:
+                flash('Selecione um kit.', 'danger')
                 return render_template(
                     'proposta_etapa3_selecao_gerador.html',
                     proposta=proposta,
                     kits_recomendados=kits_recomendados,
-                    tipo_inversor_selecionado=tipo_inversor,
-                    fase_inversor_selecionada=fase_inversor,
-                    tensao_inversor_selecionada=tensao_inversor,
-                    observacoes_digitadas=observacoes,
-                    valor_frete_digitado=valor_frete
+                    fabricantes_inversores=fabricantes_inversores,
+                    fabricantes_modulos=fabricantes_modulos
                 )
 
-            # Aplicar kit na proposta
+            kit_escolhido = next(
+                (k for k in kits_recomendados if k['fornecedor'].id == fornecedor_escolhido_id),
+                None
+            )
+
+            if not kit_escolhido:
+                flash('Kit não encontrado.', 'danger')
+                return render_template(
+                    'proposta_etapa3_selecao_gerador.html',
+                    proposta=proposta,
+                    kits_recomendados=kits_recomendados,
+                    fabricantes_inversores=fabricantes_inversores,
+                    fabricantes_modulos=fabricantes_modulos
+                )
+
             aplicar_kit_na_proposta(
                 proposta=proposta,
                 kit=kit_escolhido,
@@ -12293,21 +12387,16 @@ def editar_proposta_etapa3(proposta_id):
 
             db.session.commit()
 
-            flash(
-                f"Kit confirmado: {kit_escolhido['fornecedor'].nome} | "
-                f"{kit_escolhido['qtd_modulos']} módulos | "
-                f"{kit_escolhido['qtd_inversores']} inversores | "
-                f"Valor: R$ {kit_escolhido['valor_total_final']:.2f}",
-                'success'
-            )
+            flash('Kit confirmado com sucesso!', 'success')
 
             return redirect(url_for('visualizar_proposta', proposta_id=proposta.id))
 
-    # GET inicial
     return render_template(
         'proposta_etapa3_selecao_gerador.html',
         proposta=proposta,
-        kits_recomendados=[]
+        kits_recomendados=[],
+        fabricantes_inversores=fabricantes_inversores,
+        fabricantes_modulos=fabricantes_modulos
     )
 
 @app.route('/propostas/<int:proposta_id>')
@@ -12367,14 +12456,68 @@ def editar_proposta_etapa1(proposta_id):
 @app.route('/propostas')
 @login_required
 def listar_propostas():
-    propostas = (
-        PropostaKitSolar.query
-        .options(joinedload(PropostaKitSolar.vistoria))
-        .order_by(PropostaKitSolar.criado_em.desc())
-        .all()
-    )
 
-    return render_template('proposta_listar.html', propostas=propostas)
+    busca = request.args.get('busca')
+    tipo_servico = request.args.get('tipo_servico')
+    status = request.args.get('status')
+    vendedor_id = request.args.get('vendedor_id', type=int)
+
+    query = PropostaKitSolar.query.options(joinedload(PropostaKitSolar.vistoria))
+
+    # Busca geral
+    if busca:
+        query = query.join(CentroCusto).filter(
+            db.or_(
+                PropostaKitSolar.numero.ilike(f"%{busca}%"),
+                CentroCusto.nome.ilike(f"%{busca}%")
+            )
+        )
+
+    # Tipo de serviço
+    if tipo_servico == 'bess':
+        query = query.filter(PropostaKitSolar.tipo_inversor.ilike('hibrido'))
+
+    elif tipo_servico == 'solo':
+        query = query.filter(
+            PropostaKitSolar.tipo_inversor != 'hibrido',
+            PropostaKitSolar.tipo_telhado.ilike('solo')
+        )
+
+    elif tipo_servico == 'kit':
+        query = query.filter(
+            db.or_(
+                PropostaKitSolar.tipo_inversor != 'hibrido',
+                PropostaKitSolar.tipo_inversor.is_(None)
+            ),
+            db.or_(
+                PropostaKitSolar.tipo_telhado != 'solo',
+                PropostaKitSolar.tipo_telhado.is_(None)
+            )
+        )
+
+    # Status
+    if status == 'aprovada':
+        query = query.filter(PropostaKitSolar.status == 'aprovada')
+
+    elif status == 'gerada':
+        query = query.filter(PropostaKitSolar.status == 'gerada')
+
+    elif status == 'edicao':
+        query = query.filter(PropostaKitSolar.status == 'em_edicao')
+
+    # Vendedor
+    if vendedor_id:
+        query = query.filter(PropostaKitSolar.vendedor_id == vendedor_id)
+
+    propostas = query.order_by(PropostaKitSolar.criado_em.desc()).all()
+
+    vendedores = Vendedor.query.order_by(Vendedor.nome).all()
+
+    return render_template(
+        'proposta_listar.html',
+        propostas=propostas,
+        vendedores=vendedores
+    )
 
 @app.route('/concessionarias')
 @login_required
@@ -12567,7 +12710,10 @@ def produtos_fornecedor_kit(id):
         db.session.query(FornecedorKitInversor)
         .join(FabricanteInversor, FornecedorKitInversor.fabricante_inversor_id == FabricanteInversor.id)
         .filter(FornecedorKitInversor.fornecedor_kit_id == fornecedor.id)
-        .order_by(FabricanteInversor.nome.asc())
+        .order_by(
+            FabricanteInversor.fabricante.asc(),
+            FabricanteInversor.modelo.asc()
+        )
         .all()
     )
 
@@ -12581,7 +12727,10 @@ def produtos_fornecedor_kit(id):
     inversores_disponiveis = (
         FabricanteInversor.query
         .filter_by(ativo=True)
-        .order_by(FabricanteInversor.nome.asc())
+        .order_by(
+            FabricanteInversor.fabricante.asc(),
+            FabricanteInversor.modelo.asc()
+        )
         .all()
     )
 
@@ -12729,22 +12878,47 @@ def novo_modulo_fornecedor(id):
 @login_required
 def novo_inversor_fornecedor(id):
 
-    nome = request.form.get('nome')
+    fabricante = request.form.get('fabricante', '').strip()
+    modelo = request.form.get('modelo', '').strip()
     tipo = request.form.get('tipo_inversor')
     potencia = request.form.get('potencia_inversor')
     mppt = request.form.get('quantidade_mppt')
     fase = request.form.get('fase')
     tensao = request.form.get('tensao')
 
-    if not nome:
-        flash('Informe o nome do inversor.', 'warning')
+    # validações
+    if not fabricante or not modelo:
+        flash('Informe fabricante e modelo do inversor.', 'warning')
         return redirect(url_for('produtos_fornecedor_kit', id=id))
 
+    # evitar duplicidade
+    existe = FabricanteInversor.query.filter_by(
+        fabricante=fabricante,
+        modelo=modelo
+    ).first()
+
+    if existe:
+        flash('Esse inversor já está cadastrado.', 'warning')
+        return redirect(url_for('produtos_fornecedor_kit', id=id))
+
+    # tratamento de valores
+    try:
+        potencia_valor = float(potencia.replace(',', '.')) if potencia else None
+    except:
+        potencia_valor = None
+
+    try:
+        mppt_valor = int(mppt) if mppt else None
+    except:
+        mppt_valor = None
+
+    # criação correta
     novo = FabricanteInversor(
-        nome=nome,
+        fabricante=fabricante,
+        modelo=modelo,
         tipo_inversor=tipo,
-        potencia_inversor=float(potencia.replace(',', '.')) if potencia else None,
-        quantidade_mppt=int(mppt) if mppt else None,
+        potencia_inversor=potencia_valor,
+        quantidade_mppt=mppt_valor,
         fase=fase,
         tensao=tensao,
         ativo=True
@@ -12762,7 +12936,11 @@ def editar_inversor_vinculo(vinculo_id):
     vinculo = FornecedorKitInversor.query.get_or_404(vinculo_id)
     inversor = vinculo.inversor
 
-    nome = request.form.get('nome', '').strip()
+    # Capturando os dados do formulário
+    # Ajustado para capturar fabricante e modelo separadamente conforme o padrão
+    fabricante = request.form.get('fabricante', '').strip()
+    modelo = request.form.get('modelo', '').strip()
+    
     tipo_inversor = request.form.get('tipo_inversor', '').strip()
     potencia_inversor = request.form.get('potencia_inversor', '').strip()
     quantidade_mppt = request.form.get('quantidade_mppt', '').strip()
@@ -12770,20 +12948,44 @@ def editar_inversor_vinculo(vinculo_id):
     tensao = request.form.get('tensao', '').strip()
     valor_vinculo = request.form.get('valor_vinculo', '').strip()
 
-    if not nome:
-        flash('O nome do inversor é obrigatório.', 'warning')
+    # Validação mínima
+    if not fabricante or not modelo:
+        flash('Fabricante e Modelo são obrigatórios.', 'warning')
         return redirect(request.referrer or url_for('produtos_fornecedor_kit', id=vinculo.fornecedor_kit_id))
 
-    inversor.nome = nome
-    inversor.tipo_inversor = tipo_inversor or None
-    inversor.potencia_inversor = float(potencia_inversor.replace(',', '.')) if potencia_inversor else None
-    inversor.quantidade_mppt = int(quantidade_mppt) if quantidade_mppt else None
-    inversor.fase = fase or None
-    inversor.tensao = tensao or None
-    vinculo.valor = float(valor_vinculo.replace('.', '').replace(',', '.')) if valor_vinculo else None
+    try:
+        # Atualização dos dados do Equipamento (Tabela FabricanteInversor)
+        inversor.fabricante = fabricante
+        inversor.modelo = modelo
+        inversor.tipo_inversor = tipo_inversor or None
+        inversor.fase = fase or None
+        inversor.tensao = tensao or None
+        
+        # Conversão de tipos numéricos com tratamento
+        if potencia_inversor:
+            inversor.potencia_inversor = float(potencia_inversor.replace(',', '.'))
+        
+        if quantidade_mppt:
+            inversor.quantidade_mppt = int(quantidade_mppt)
 
-    db.session.commit()
-    flash('Inversor e valor do vínculo atualizados com sucesso.', 'success')
+        # Atualização do Valor no Vínculo (Tabela FornecedorKitInversor)
+        # Tratando formato brasileiro (1.200,50 -> 1200.50)
+        if valor_vinculo:
+            valor_limpo = valor_vinculo.replace('R$', '').replace('.', '').replace(',', '.').strip()
+            vinculo.valor = float(valor_limpo)
+        else:
+            vinculo.valor = None
+
+        db.session.commit()
+        flash('Dados do inversor e valor de venda atualizados!', 'success')
+
+    except ValueError:
+        db.session.rollback()
+        flash('Erro ao processar valores numéricos. Verifique os campos de potência e preço.', 'danger')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro inesperado: {str(e)}', 'danger')
+
     return redirect(url_for('produtos_fornecedor_kit', id=vinculo.fornecedor_kit_id))
 
 @app.route('/fornecedores-kit/modulo-vinculo/<int:vinculo_id>/editar', methods=['POST'])

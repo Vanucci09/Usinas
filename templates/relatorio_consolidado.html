@@ -3,81 +3,151 @@
 {% block title %}Relatório Consolidado por Usina{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <h2 class="mb-4 text-primary">Conciliação Bancária - {{ "%02d"|format(mes) }}/{{ ano }}</h2>
+<style>
+    .report-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        transition: transform 0.2s;
+    }
+    .summary-icon {
+        font-size: 2rem;
+        opacity: 0.3;
+        position: absolute;
+        right: 15px;
+        top: 15px;
+    }
+    .table-hover tbody tr:hover {
+        background-color: #f8fbff;
+        cursor: pointer;
+    }
+    .filter-bg {
+        background-color: #f1f4f9;
+        border-radius: 15px;
+        padding: 20px;
+    }
+    .val-pill {
+        padding: 4px 12px;
+        border-radius: 50px;
+        font-weight: 600;
+        text-decoration: none;
+    }
+</style>
 
-    <form class="row g-3 mb-4" method="get">
-        <div class="col-md-2">
-            <label for="mes" class="form-label">Mês</label>
-            <select id="mes" name="mes" class="form-select">
-                {% for m in range(1, 13) %}
-                    <option value="{{ m }}" {% if m == mes %}selected{% endif %}>{{ "%02d"|format(m) }}</option>
-                {% endfor %}
-            </select>
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="text-primary fw-bold mb-0">Conciliação Bancária</h2>
+            <p class="text-muted">Consolidado por Usina — {{ "%02d"|format(mes) }}/{{ ano }}</p>
         </div>
-        <div class="col-md-2">
-            <label for="ano" class="form-label">Ano</label>
-            <input type="number" id="ano" name="ano" class="form-control" value="{{ ano }}">
-        </div>
-        <div class="col-md-2 align-self-end">
-            <button type="submit" class="btn btn-primary w-100">Filtrar</button>
-        </div>
-    </form>
+        <a href="{{ url_for('financeiro') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+    </div>
 
-    <table class="table table-bordered table-striped">
-        <thead class="table-light">
-            <tr>
-                <th>Usina</th>
-                <th>Total Receitas (R$)</th>
-                <th>Total Despesas (R$)</th>
-                <th>Saldo Mês (R$)</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for r in resultado %}
-            <tr>
-                <td>{{ r.usina }}</td>
-                <td>{{ r.receitas | formato_brasileiro }}</td>
-                <td>{{ r.despesas | formato_brasileiro }}</td>
-                <td>
-                    <a href="{{ url_for('extrato_usina', usina_id=r.usina_id, mes=mes, ano=ano) }}">
-                        {% if r.saldo >= 0 %}
-                            <span class="text-success">{{ r.saldo | formato_brasileiro }}</span>
-                        {% else %}
-                            <span class="text-danger">{{ r.saldo | formato_brasileiro }}</span>
-                        {% endif %}
-                    </a>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-        <tfoot>
-            <tr class="table-secondary">
-                <th>Total Geral</th>
-                <th>{{ total_receitas | formato_brasileiro }}</th>
-                <th>{{ total_despesas | formato_brasileiro }}</th>
-                <th>
-                    <a href="#">
-                        {% if total_saldo >= 0 %}
-                            <span class="text-success">{{ total_saldo | formato_brasileiro }}</span>
-                        {% else %}
-                            <span class="text-danger">{{ total_saldo | formato_brasileiro }}</span>
-                        {% endif %}
-                    </a>
-                </th>
-                <th>
-                    {% if total_saldo_acum >= 0 %}
-                        <span class="text-success">{{ total_saldo_acum | formato_brasileiro }}</span>
-                    {% else %}
-                        <span class="text-danger">{{ total_saldo_acum | formato_brasileiro }}</span>
-                    {% endif %}
-                </th>
-            </tr>
-        </tfoot>
-    </table>
+    <div class="filter-bg mb-4">
+        <form class="row g-3 align-items-end" method="get">
+            <div class="col-md-3">
+                <label for="mes" class="form-label fw-bold small">Mês de Referência</label>
+                <select id="mes" name="mes" class="form-select border-0 shadow-sm">
+                    {% for m in range(1, 13) %}
+                        <option value="{{ m }}" {% if m == mes %}selected{% endif %}>{{ "%02d"|format(m) }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="ano" class="form-label fw-bold small">Ano</label>
+                <input type="number" id="ano" name="ano" class="form-control border-0 shadow-sm" value="{{ ano }}">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100 shadow-sm fw-bold">
+                    <i class="bi bi-search"></i> Filtrar
+                </button>
+            </div>
+        </form>
+    </div>
 
-    <div class="text-center mt-4">
-        <a href="{{ url_for('financeiro') }}" class="btn btn-secondary">Voltar</a>
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card report-card border-start border-success border-4 h-100">
+                <div class="card-body">
+                    <h6 class="text-muted small uppercase fw-bold">Total Receitas</h6>
+                    <h3 class="text-success fw-bold">{{ total_receitas | formato_brasileiro }}</h3>
+                    <i class="bi bi-cash-stack summary-icon text-success"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card report-card border-start border-danger border-4 h-100">
+                <div class="card-body">
+                    <h6 class="text-muted small uppercase fw-bold">Total Despesas</h6>
+                    <h3 class="text-danger fw-bold">{{ total_despesas | formato_brasileiro }}</h3>
+                    <i class="bi bi-cart-dash summary-icon text-danger"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card report-card {% if total_saldo >= 0 %}bg-primary{% else %}bg-danger{% endif %} text-white h-100">
+                <div class="card-body">
+                    <h6 class="text-white-50 small uppercase fw-bold">Saldo Consolidado</h6>
+                    <h3 class="fw-bold">{{ total_saldo | formato_brasileiro }}</h3>
+                    <i class="bi bi-wallet2 summary-icon text-white"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card report-card">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0 fw-bold"><i class="bi bi-buildings me-2"></i>Performance por Unidade</h5>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="bg-light">
+                    <tr>
+                        <th class="ps-4">Usina</th>
+                        <th class="text-end">Receitas</th>
+                        <th class="text-end">Despesas</th>
+                        <th class="text-center">Saldo Mês</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in resultado %}
+                    <tr onclick="window.location='{{ url_for('extrato_usina', usina_id=r.usina_id, mes=mes, ano=ano) }}'">
+                        <td class="ps-4 fw-bold text-dark">{{ r.usina }}</td>
+                        <td class="text-end text-success">{{ r.receitas | formato_brasileiro }}</td>
+                        <td class="text-end text-danger">{{ r.despesas | formato_brasileiro }}</td>
+                        <td class="text-center">
+                            <span class="val-pill {% if r.saldo >= 0 %}bg-success-subtle text-success{% else %}bg-danger-subtle text-danger{% endif %}">
+                                {{ r.saldo | formato_brasileiro }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="table-light fw-bold">
+                    <tr>
+                        <td class="ps-4">TOTAL GERAL</td>
+                        <td class="text-end text-success">{{ total_receitas | formato_brasileiro }}</td>
+                        <td class="text-end text-danger">{{ total_despesas | formato_brasileiro }}</td>
+                        <td class="text-center">
+                             <span class="badge rounded-pill {% if total_saldo >= 0 %}bg-success{% else %}bg-danger{% endif %} px-3 py-2">
+                                {{ total_saldo | formato_brasileiro }}
+                             </span>
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <div class="mt-4 p-3 bg-dark text-white rounded-3 d-flex justify-content-between align-items-center shadow">
+        <span class="text-uppercase small fw-bold opacity-75">Saldo Acumulado (Histórico Geral):</span>
+        <h4 class="mb-0 fw-bold {% if total_saldo_acum >= 0 %}text-info{% else %}text-warning{% endif %}">
+            {{ total_saldo_acum | formato_brasileiro }}
+        </h4>
     </div>
 </div>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
 {% endblock %}
