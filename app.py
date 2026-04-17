@@ -1781,18 +1781,18 @@ def faturamento():
                     desconto_pct = float(rateio.desconto_percentual or 0.0)
 
                     if getattr(rateio, "usar_tarifa_neoenergia", False):
-                        # Base preferencial: tarifa_neoenergia da fatura cadastrada neste POST
-                        tarifa_base = fatura.tarifa_neoenergia
 
-                        # Fallback: tarifa fixa armazenada no rateio
-                        if tarifa_base is None:
-                            tarifa_base = rateio.tarifa_kwh
+                        tarifa_base = _dec(fatura.tarifa_neoenergia, default="0.00")
 
-                        # Fallback final: 1.00
-                        if tarifa_base is None:
-                            tarifa_base = 1.00
+                        # APLICA REGRA DE ICMS (igual relatório)
+                        if fatura.icms == 0:
+                            tarifa_base = tarifa_base * Decimal('1.2625')
+                        elif fatura.icms == 20:
+                            tarifa_base = tarifa_base
+                        else:
+                            tarifa_base = tarifa_base * Decimal('1.1023232323')
 
-                        tarifa_base_dec = _dec(tarifa_base, default="1.00")
+                        tarifa_base_dec = tarifa_base
                         fator_dec = (Decimal("1.00") - (Decimal(str(desconto_pct)) / Decimal("100.00")))
                         tarifa_cliente_aplicada = (tarifa_base_dec * fator_dec).quantize(
                             Decimal("0.0000001"), rounding=ROUND_HALF_UP
@@ -2326,17 +2326,16 @@ def relatorio_fatura(fatura_id):
         desconto_pct = float(getattr(rateio_obj, "desconto_percentual", 0) or 0.0)
 
         if usar_neo:
-            tarifa_base = getattr(fatura_obj, "tarifa_neoenergia", None)
 
-            if tarifa_base is None:
-                tarifa_base = getattr(rateio_obj, "tarifa_kwh", None)
+            # AGORA USA TARIFA CORRIGIDA COM ICMS
+            tarifa_base_dec = _dec(tarifa_neoenergia_aplicada, default="1.00")
 
-            if tarifa_base is None:
-                tarifa_base = 1.00
-
-            tarifa_base_dec = _dec(tarifa_base, default="1.00")
             fator = (Decimal("1.00") - (Decimal(str(desconto_pct)) / Decimal("100.00")))
-            return (tarifa_base_dec * fator).quantize(Decimal("0.0000001"), rounding=ROUND_HALF_UP)
+
+            return (tarifa_base_dec * fator).quantize(
+                Decimal("0.0000001"),
+                rounding=ROUND_HALF_UP
+            )
 
         # modo fixo
         return _dec(getattr(rateio_obj, "tarifa_kwh", None), default="1.00").quantize(
@@ -2713,32 +2712,20 @@ def excluir_fatura(id):
     fatura = FaturaMensal.query.get_or_404(id)
 
     try:
-        cliente = fatura.cliente
-
-        # mês/ano da receita = mês seguinte ao da fatura
-        data_base = date(fatura.ano_referencia, fatura.mes_referencia, 1)
-        proximo_mes = (data_base + timedelta(days=32)).replace(day=1)
-        ref_mes = proximo_mes.month
-        ref_ano = proximo_mes.year
-
-        # mesma descrição usada na criação/edição da receita
-        descricao_receita = f"Fatura {fatura.identificador} - {cliente.nome}"
-
-        # apaga TODAS as receitas vinculadas a essa fatura
+        # Remove TODAS as receitas ligadas à fatura
         receitas = FinanceiroUsina.query.filter(
             FinanceiroUsina.usina_id == fatura.usina_id,
             FinanceiroUsina.tipo == 'receita',
-            FinanceiroUsina.referencia_mes == ref_mes,
-            FinanceiroUsina.referencia_ano == ref_ano,
-            FinanceiroUsina.descricao == descricao_receita
+            FinanceiroUsina.descricao.contains(f"Fatura {fatura.identificador}")
         ).all()
 
         for rec in receitas:
             db.session.delete(rec)
 
-        # por fim, apaga a fatura
+        # Remove a fatura
         db.session.delete(fatura)
         db.session.commit()
+
         flash('Fatura e receitas vinculadas excluídas com sucesso.', 'success')
 
     except Exception as e:

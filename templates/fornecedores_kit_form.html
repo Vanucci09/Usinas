@@ -24,7 +24,7 @@
                     <div class="col-md-6">
                         <label class="form-label">Nome</label>
                         <input type="text" name="nome" class="form-control"
-                               value="{{ inversor.fabricante }} - {{ inversor.modelo }}" required>
+                               value="{{ fornecedor.nome if fornecedor else '' }}" required>
                     </div>
 
                     <div class="col-12">
