@@ -200,63 +200,63 @@ R$ {{ "{:,.2f}".format(valor).replace(",", "X").replace(".", ",").replace("X", "
 
                         <!-- AÇÕES -->
                         <td class="text-end">
-
-                            <div class="btn-group">
-
+                            <div class="btn-group shadow-sm">
+                                
                                 <a href="{{ url_for('visualizar_proposta', proposta_id=p.id) }}"
-                                   class="btn btn-sm btn-light border">
+                                class="btn btn-sm btn-light border" title="Visualizar">
                                     👁
+                                </a>
+
+                                <a href="{{ url_for('enviar_whatsapp_proposta', proposta_id=p.id) }}" 
+                                target="_blank" class="btn btn-sm btn-outline-success" title="Enviar via WhatsApp">
+                                    <i class="bi bi-whatsapp"></i>
+                                </a>
+
+                                <a href="{{ url_for('enviar_email_proposta', proposta_id=p.id) }}" 
+                                class="btn btn-sm btn-outline-primary" title="Enviar via E-mail">
+                                    <i class="bi bi-envelope"></i>
                                 </a>
 
                                 {% if p.vistoria and p.vistoria.status == 'aprovada' %}
                                     <a href="{{ url_for('contrato_proposta', proposta_id=p.id) }}"
-                                    class="btn btn-sm btn-dark"
-                                    title="Abrir Contrato">
+                                    class="btn btn-sm btn-dark" title="Abrir Contrato">
                                         <i class="bi bi-file-earmark-text"></i>
                                     </a>
                                 {% endif %}
 
                                 {% if not p.vistoria %}
-                                <a href="{{ url_for('agendar_vistoria', proposta_id=p.id) }}"
-                                   class="btn btn-sm btn-light border">
-                                    📅
-                                </a>
-                                {% endif %}
-
-                                {% if p.vistoria %}
-
+                                    <a href="{{ url_for('agendar_vistoria', proposta_id=p.id) }}"
+                                    class="btn btn-sm btn-light border" title="Agendar Vistoria">
+                                        📅
+                                    </a>
+                                {% else %}
                                     {% if p.vistoria.status in ['aprovada', 'reprovada'] %}
                                         <a href="{{ url_for('relatorio_vistoria', vistoria_id=p.vistoria.id) }}"
-                                        class="btn btn-sm btn-success"
-                                        title="Ver Relatório">
+                                        class="btn btn-sm btn-success" title="Ver Relatório">
                                             <i class="bi bi-file-earmark-text"></i>
                                         </a>
                                     {% else %}
                                         <a href="{{ url_for('vistoria_fotos', vistoria_id=p.vistoria.id) }}"
-                                        class="btn btn-sm btn-primary"
-                                        title="Abrir Vistoria">
+                                        class="btn btn-sm btn-primary" title="Abrir Vistoria">
                                             <i class="bi bi-camera"></i>
                                         </a>
                                     {% endif %}
-
                                 {% endif %}
 
                                 {% if p.status != 'aprovada' %}
-                                <a href="{{ url_for('editar_proposta_etapa1', proposta_id=p.id) }}"
-                                   class="btn btn-sm btn-light border">
-                                    ✏️
-                                </a>
-
-                                <a href="{{ url_for('aprovar_proposta', proposta_id=p.id) }}"
-                                   class="btn btn-sm btn-success">
-                                    ✔
-                                </a>
+                                    <a href="{{ url_for('editar_proposta_etapa1', proposta_id=p.id) }}"
+                                    class="btn btn-sm btn-light border" title="Editar">
+                                        ✏️
+                                    </a>
+                                    <a href="{{ url_for('aprovar_proposta', proposta_id=p.id) }}"
+                                    class="btn btn-sm btn-success" title="Aprovar">
+                                        ✔
+                                    </a>
                                 {% else %}
-                                <button class="btn btn-sm btn-secondary" disabled>🔒</button>
+                                    <button class="btn btn-sm btn-secondary" disabled title="Proposta Trancada">🔒</button>
                                 {% endif %}
 
                             </div>
-
                         </td>
 
                     </tr>

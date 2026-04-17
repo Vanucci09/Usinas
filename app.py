@@ -11748,8 +11748,6 @@ def encontrar_melhor_kit_fornecedor_com_inversor(
 
         if potencia_total_modulos > overload_maximo_kwp:
             continue
-        print("Potência módulos:", potencia_total_modulos)
-        print("Máximo inversor:", overload_maximo_kwp)
 
         area_modulo = 0.0
         if modulo.largura_m and modulo.altura_m:
@@ -13351,6 +13349,72 @@ def contrato_proposta(proposta_id):
         ano_atual=datetime.now().year
     )
     
+@app.route('/propostas/<int:proposta_id>/whatsapp')
+@login_required
+def enviar_whatsapp_proposta(proposta_id):
+    proposta = PropostaKitSolar.query.get_or_404(proposta_id)
+    centro = proposta.centro_custo # Assume-se que há um relationship configurado
+
+    # Prioriza o telefone do representante, se não houver, usa o do centro
+    telefone = centro.representante_telefone or centro.telefone
+
+    if not telefone:
+        flash('Nenhum telefone cadastrado para este cliente.', 'warning')
+        return redirect(url_for('listar_propostas'))
+
+    # Limpa o telefone
+    telefone_clean = ''.join(filter(str.isdigit, telefone))
+    
+    # Se o número não tiver DDI (55), adiciona Brasil por padrão
+    if len(telefone_clean) <= 11:
+        telefone_clean = f"55{telefone_clean}"
+
+    link_proposta = url_for('visualizar_proposta', proposta_id=proposta.id, _external=True)
+
+    mensagem = (
+        f"Olá, {centro.nome}! "
+        f"Segue o link da sua proposta técnica de energia solar (Nº {proposta.numero}). "
+        f"Acesse aqui: {link_proposta}"
+    )
+
+    wa_url = f"https://wa.me/{telefone_clean}?text={quote_plus(mensagem)}"
+    return redirect(wa_url)
+
+@app.route('/propostas/<int:proposta_id>/email')
+@login_required
+def enviar_email_proposta(proposta_id):
+    proposta = PropostaKitSolar.query.get_or_404(proposta_id)
+    centro = proposta.centro_custo
+    
+    # Prioriza email do representante, senão o do centro
+    email_destino = centro.representante_email or centro.email
+
+    if not email_destino:
+        flash('Nenhum e-mail cadastrado para este cliente.', 'warning')
+        return redirect(url_for('listar_propostas'))
+    
+    link_proposta = url_for('visualizar_proposta', proposta_id=proposta.id, _external=True)
+
+    # Renderiza o HTML usando o template que criamos
+    html_body = render_template('email_proposta.html', 
+                                proposta=proposta, 
+                                centro=centro, 
+                                link_proposta=link_proposta)
+
+    msg = Message(
+        subject=f'Proposta Técnica de Energia Solar - Nº {proposta.numero}',
+        recipients=[email_destino],
+        html=html_body
+    )
+
+    try:
+        mail.send(msg)
+        flash('E-mail da proposta enviado com sucesso!', 'success')
+    except Exception as e:
+        flash(f'Erro ao enviar e-mail: {e}', 'danger')
+
+    return redirect(url_for('listar_propostas'))
+
 
 if __name__ == "__main__":
     with app.app_context():

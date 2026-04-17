@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proposta Comercial - Usinas</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f7fc;">
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="padding: 20px 0;">
+        <tr>
+            <td align="center">
+                <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+                    
+                    <tr>
+                        <td align="center" style="padding: 40px 0; background-color: #4A90E2;">
+                            <h1 style="color: #ffffff; margin: 0; font-size: 24px; text-transform: uppercase; letter-spacing: 2px;">Proposta Técnica</h1>
+                            <p style="color: #eef5ff; margin: 5px 0 0; font-size: 14px;">Energia Solar Fotovoltaica</p>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td style="padding: 40px 30px;">
+                            <h2 style="color: #333333; font-size: 20px; margin-top: 0;">Olá, {{ centro.nome }}!</h2>
+                            <p style="color: #555555; font-size: 16px; line-height: 1.6;">
+                                É um prazer apresentar nossa proposta para o seu projeto de energia solar. Estamos prontos para ajudar você a reduzir custos e gerar sua própria energia limpa.
+                            </p>
+                            
+                            <div style="background-color: #f9f9f9; border-radius: 6px; padding: 20px; margin: 25px 0;">
+                                <table width="100%" border="0" cellspacing="0" cellpadding="5">
+                                    <tr>
+                                        <td width="40%" style="color: #888888; font-size: 14px; font-weight: bold;">Número da Proposta:</td>
+                                        <td style="color: #333333; font-size: 14px;">#{{ proposta.numero }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="color: #888888; font-size: 14px; font-weight: bold;">Data de Emissão:</td>
+                                        <td style="color: #333333; font-size: 14px;">{{ proposta.criado_em.strftime('%d/%m/%Y') }}</td>
+                                    </tr>
+                                    {% if proposta.consumo_kwh %}
+                                    <tr>
+                                        <td style="color: #888888; font-size: 14px; font-weight: bold;">Consumo Referência:</td>
+                                        <td style="color: #333333; font-size: 14px;">{{ "{:,.0f}".format(proposta.consumo_kwh).replace(",", ".") }} kWh</td>
+                                    </tr>
+                                    {% endif %}
+                                </table>
+                            </div>
+
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="center" style="padding: 20px 0;">
+                                        <a href="{{ link_proposta }}" target="_blank" style="background-color: #27ae60; color: #ffffff; padding: 15px 35px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 18px; display: inline-block; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                                            VISUALIZAR PROPOSTA COMPLETA
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="color: #555555; font-size: 14px; line-height: 1.6; margin-top: 30px;">
+                                Se tiver qualquer dúvida, basta responder a este e-mail ou entrar em contato diretamente com seu vendedor: <strong>{{ proposta.vendedor.nome }}</strong>.
+                            </p>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td style="padding: 20px 30px; background-color: #f1f1f1; text-align: center;">
+                            <p style="color: #999999; font-size: 12px; margin: 0;">
+                                &copy; 2026 <strong>{{ current_user.empresa.nome if current_user.empresa else 'Usinas' }}</strong><br>
+                                Brasília - Distrito Federal
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
