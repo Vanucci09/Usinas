@@ -699,6 +699,7 @@ class PropostaKitSolar(db.Model):
     centro_custo_id = db.Column(db.Integer, db.ForeignKey('centros_custos.id'), nullable=False)
     vendedor_id = db.Column(db.Integer, db.ForeignKey('vendedores.id'), nullable=False)
     comercial_id = db.Column(db.Integer, db.ForeignKey('comercial.id'), nullable=True)
+    slug = db.Column(db.String(200), unique=True, index=True)
 
     numero = db.Column(db.String(30), nullable=False, unique=True)
     status = db.Column(db.String(30), nullable=False, default='em_edicao')
@@ -766,7 +767,7 @@ class PropostaKitSolar(db.Model):
     modulo = db.relationship('ModuloFotovoltaico', backref='propostas_solares')
     fabricante_inversor = db.relationship('FabricanteInversor', backref='propostas_solares')
     
-    vistoria = db.relationship('Vistoria', backref='proposta', uselist=False)
+    vistoria = db.relationship('Vistoria', backref='proposta', uselist=True)
 
     __table_args__ = (
         Index('ix_propostas_empresa_centro', 'empresa_id', 'centro_custo_id'),
@@ -11762,10 +11763,6 @@ def encontrar_melhor_kit_fornecedor_com_inversor(
             valor_inversores = float(vinculo_inversor.valor or 0) * qtd_inversores
 
         base_equipamentos = valor_modulos + valor_inversores
-        
-        print("tipo:", tipo_normalizado)
-        print("valor_kwp:", valor_kwp)
-        print("potencia_total_modulos:", potencia_total_modulos)
 
         if tipo_normalizado == 'hibrido':
             base_equipamentos += float(valor_baterias or 0)
@@ -12188,6 +12185,11 @@ def nova_proposta_etapa1():
         )
 
         db.session.add(proposta)
+        db.session.commit()  # gera o ID
+
+        nome_cliente = proposta.centro_custo.nome if proposta.centro_custo else "cliente"
+        proposta.slug = f"{gerar_slug(nome_cliente)}-{proposta.id}"
+
         db.session.commit()
 
         flash('Etapa 1 salva com sucesso.', 'success')
@@ -12374,7 +12376,12 @@ def editar_proposta_etapa3(proposta_id):
 
             flash('Kit confirmado com sucesso!', 'success')
 
-            return redirect(url_for('visualizar_proposta', proposta_id=proposta.id))
+            if not proposta.slug:
+                nome = proposta.centro_custo.nome if proposta.centro_custo else "cliente"
+                proposta.slug = f"{gerar_slug(nome)}-{proposta.id}"
+                db.session.commit()
+
+            return redirect(url_for('visualizar_proposta', slug=proposta.slug))
 
     return render_template(
         'proposta_etapa3_selecao_gerador.html',
@@ -12383,12 +12390,31 @@ def editar_proposta_etapa3(proposta_id):
         fabricantes_inversores=fabricantes_inversores,
         fabricantes_modulos=fabricantes_modulos
     )
+    
+def gerar_slug(texto):
+    texto = texto.lower()
+    texto = re.sub(r'[^a-z0-9]+', '-', texto)
+    return texto.strip('-')
 
-@app.route('/propostas/<int:proposta_id>')
-@login_required
-def visualizar_proposta(proposta_id):
-    proposta = PropostaKitSolar.query.get_or_404(proposta_id)
-    return render_template('proposta_visualizar.html', proposta=proposta)
+@app.route('/proposta/<slug>')
+def visualizar_proposta_slug(slug):
+
+    proposta = PropostaKitSolar.query.filter_by(slug=slug).first_or_404()
+
+    return render_template(
+        'proposta_visualizar.html',
+        proposta=proposta
+    )
+
+@app.route('/proposta/<slug>')
+def visualizar_proposta(slug):
+
+    proposta = PropostaKitSolar.query.filter_by(slug=slug).first_or_404()
+
+    return render_template(
+        'proposta_visualizar.html',
+        proposta=proposta
+    )
 
 @app.route('/propostas/<int:proposta_id>/editar', methods=['GET', 'POST'])
 @login_required
@@ -13369,7 +13395,11 @@ def enviar_whatsapp_proposta(proposta_id):
     if len(telefone_clean) <= 11:
         telefone_clean = f"55{telefone_clean}"
 
-    link_proposta = url_for('visualizar_proposta', proposta_id=proposta.id, _external=True)
+    link_proposta = url_for(
+        'visualizar_proposta',
+        slug=proposta.slug,
+        _external=True
+    )
 
     mensagem = (
         f"Olá, {centro.nome}! "
@@ -13393,7 +13423,11 @@ def enviar_email_proposta(proposta_id):
         flash('Nenhum e-mail cadastrado para este cliente.', 'warning')
         return redirect(url_for('listar_propostas'))
     
-    link_proposta = url_for('visualizar_proposta', proposta_id=proposta.id, _external=True)
+    link_proposta = url_for(
+        'visualizar_proposta',
+        slug=proposta.slug,
+        _external=True
+    )
 
     # Renderiza o HTML usando o template que criamos
     html_body = render_template('email_proposta.html', 

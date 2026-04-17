@@ -21,7 +21,6 @@ R$ {{ "{:,.2f}".format(valor).replace(",", "X").replace(".", ",").replace("X", "
 
 <div class="container-fluid py-4 px-4">
 
-```
 <div class="row align-items-center mb-4">
     <div class="col-md-6">
         <h2 class="fw-bold text-dark mb-1">Gestão de Propostas</h2>
@@ -200,60 +199,67 @@ R$ {{ "{:,.2f}".format(valor).replace(",", "X").replace(".", ",").replace("X", "
 
                         <!-- AÇÕES -->
                         <td class="text-end">
-                            <div class="btn-group shadow-sm">
-                                
-                                <a href="{{ url_for('visualizar_proposta', proposta_id=p.id) }}"
-                                class="btn btn-sm btn-light border" title="Visualizar">
-                                    👁
-                                </a>
+                            <div class="d-flex justify-content-end gap-1 flex-wrap">
+
+                                {% if p.slug %}
+                                    <a href="{{ url_for('visualizar_proposta', slug=p.slug) }}" target="_blank"
+                                    class="btn btn-sm btn-outline-secondary" title="Abrir Proposta">
+                                        <i class="bi bi-link-45deg"></i>
+                                    </a>
+                                {% endif %}
 
                                 <a href="{{ url_for('enviar_whatsapp_proposta', proposta_id=p.id) }}" 
-                                target="_blank" class="btn btn-sm btn-outline-success" title="Enviar via WhatsApp">
+                                target="_blank" class="btn btn-sm btn-outline-success" title="WhatsApp">
                                     <i class="bi bi-whatsapp"></i>
                                 </a>
 
                                 <a href="{{ url_for('enviar_email_proposta', proposta_id=p.id) }}" 
-                                class="btn btn-sm btn-outline-primary" title="Enviar via E-mail">
+                                class="btn btn-sm btn-outline-primary" title="E-mail">
                                     <i class="bi bi-envelope"></i>
                                 </a>
 
                                 {% if p.vistoria and p.vistoria.status == 'aprovada' %}
                                     <a href="{{ url_for('contrato_proposta', proposta_id=p.id) }}"
-                                    class="btn btn-sm btn-dark" title="Abrir Contrato">
+                                    class="btn btn-sm btn-dark" title="Contrato">
                                         <i class="bi bi-file-earmark-text"></i>
                                     </a>
                                 {% endif %}
 
                                 {% if not p.vistoria %}
                                     <a href="{{ url_for('agendar_vistoria', proposta_id=p.id) }}"
-                                    class="btn btn-sm btn-light border" title="Agendar Vistoria">
-                                        📅
+                                    class="btn btn-sm btn-outline-secondary" title="Agendar">
+                                        <i class="bi bi-calendar"></i>
                                     </a>
                                 {% else %}
                                     {% if p.vistoria.status in ['aprovada', 'reprovada'] %}
                                         <a href="{{ url_for('relatorio_vistoria', vistoria_id=p.vistoria.id) }}"
-                                        class="btn btn-sm btn-success" title="Ver Relatório">
-                                            <i class="bi bi-file-earmark-text"></i>
+                                        class="btn btn-sm btn-success" title="Relatório">
+                                            <i class="bi bi-file-earmark-check"></i>
                                         </a>
                                     {% else %}
-                                        <a href="{{ url_for('vistoria_fotos', vistoria_id=p.vistoria.id) }}"
-                                        class="btn btn-sm btn-primary" title="Abrir Vistoria">
-                                            <i class="bi bi-camera"></i>
-                                        </a>
+                                        {% if p.vistoria %}
+                                            <a href="{{ url_for('vistoria_fotos', vistoria_id=p.vistoria[0].id) }}"
+                                            class="btn btn-sm btn-outline-info" title="Fotos">
+                                                <i class="bi bi-image"></i>
+                                            </a>
+                                        {% endif %}
                                     {% endif %}
                                 {% endif %}
 
                                 {% if p.status != 'aprovada' %}
                                     <a href="{{ url_for('editar_proposta_etapa1', proposta_id=p.id) }}"
-                                    class="btn btn-sm btn-light border" title="Editar">
-                                        ✏️
+                                    class="btn btn-sm btn-outline-warning" title="Editar">
+                                        <i class="bi bi-pencil"></i>
                                     </a>
+
                                     <a href="{{ url_for('aprovar_proposta', proposta_id=p.id) }}"
                                     class="btn btn-sm btn-success" title="Aprovar">
-                                        ✔
+                                        <i class="bi bi-check-lg"></i>
                                     </a>
                                 {% else %}
-                                    <button class="btn btn-sm btn-secondary" disabled title="Proposta Trancada">🔒</button>
+                                    <button class="btn btn-sm btn-secondary" disabled title="Bloqueado">
+                                        <i class="bi bi-lock"></i>
+                                    </button>
                                 {% endif %}
 
                             </div>
