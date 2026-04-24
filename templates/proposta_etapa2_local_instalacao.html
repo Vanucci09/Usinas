@@ -57,7 +57,7 @@
                             <div class="col-12">
                                 <label class="form-label fw-semibold">Endereço Confirmado</label>
                                 <textarea id="endereco_instalacao" name="endereco_instalacao" class="form-control" 
-                                          rows="3" placeholder="O endereço aparecerá aqui após a seleção no mapa">{{ proposta.endereco_instalacao or '' }}</textarea>
+                                          rows="3" placeholder="O endereço aparecerá aqui após a seleção no mapa">{{ proposta.endereco_instalacao or proposta.centro_custo.endereco or '' }}</textarea>
                             </div>
 
                             <div class="col-12">

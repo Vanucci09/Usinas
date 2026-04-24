@@ -1,8 +1,18 @@
-{% extends 'base.html' %}
+{% if not publico %}
+    {% extends 'base.html' %}
+{% endif %}
 
-{% block title %}Contrato {{ proposta.id }}{% endblock %}
+{% if publico %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Contrato - {{ proposta.numero }}</title>
 
-{% block content %}
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+{% endif %}
 <style>
     /* Estilos Visuais no Navegador */
     .folha-contrato {
@@ -244,16 +254,41 @@
         <h5>CONDIÇÃO DE PAGAMENTO</h5>
         <p><strong>Valor Total do sistema:</strong> R$ {{ "{:,.2f}".format(proposta.valor_estimado_proposta or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}</p>
 
-        {% if parcelas %}
-            {% for parcela in parcelas %}
+        {% if condicao %}
+
+            <p><strong>Forma de pagamento:</strong> 
+                {{ 'À vista' if condicao.forma_pagamento == 'avista' else 'Parcelado' }}
+            </p>
+
+            <p><strong>Tipo:</strong> {{ condicao.tipo_pagamento|capitalize }}</p>
+
+            {% if condicao.tipo_pagamento == 'financiamento' and condicao.financiadora %}
+                <p><strong>Instituição financeira:</strong> {{ condicao.financiadora }}</p>
+            {% endif %}
+
+            {% if condicao.valor_entrada %}
                 <p>
-                    <strong>{{ parcela.descricao.split(' - ')[-1] }}:</strong> 
-                    R$ {{ "{:,.2f}".format(parcela.valor).replace(',', 'X').replace('.', ',').replace('X', '.') }} 
-                    - Vencimento: {{ parcela.data_vencimento.strftime('%d/%m/%Y') }}
+                    <strong>Entrada:</strong> 
+                    R$ {{ "{:,.2f}".format(condicao.valor_entrada).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                    {% if condicao.data_pagamento %}
+                        - Vencimento: {{ condicao.data_pagamento.strftime('%d/%m/%Y') }}
+                    {% endif %}
                 </p>
-            {% endfor %}
+            {% endif %}
+
+            {% if condicao.forma_pagamento == 'parcelado' %}
+                <p>
+                    <strong>Parcelamento:</strong> {{ condicao.parcelas }}x
+                    {% if condicao.data_primeira_parcela %}
+                        - Início em {{ condicao.data_primeira_parcela.strftime('%d/%m/%Y') }}
+                    {% endif %}
+                </p>
+            {% endif %}
+
         {% else %}
-            <p><em>As condições de pagamento detalhadas serão definidas após a aprovação financeira.</em></p>
+            <p>
+                <em>As condições de pagamento serão definidas após a aprovação da proposta.</em>
+            </p>
         {% endif %}
 
         <h5 class="mt-4">CLÁUSULAS CONTRATUAIS PADRÃO</h5>
@@ -504,4 +539,7 @@
         <i class="bi bi-printer"></i> Gerar Documento para Assinatura
     </button>
 </div>
-{% endblock %}
+{% if publico %}
+</body>
+</html>
+{% endif %}

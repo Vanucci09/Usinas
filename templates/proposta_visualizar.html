@@ -349,6 +349,39 @@
             style="max-height: 500px; object-fit: cover;">
     </div>
 
+    <div class="mt-5 text-center no-print">
+
+        <h5 class="mb-3 fw-bold">Deseja prosseguir com esta proposta?</h5>
+
+        {% if proposta.status == 'aprovada' %}
+            <div class="alert alert-success text-center mt-4">
+                <strong>✔ Cliente validou esta proposta</strong>
+            </div>
+
+        {% elif proposta.status == 'recusada' %}
+            <div class="alert alert-danger text-center mt-4">
+                <strong>✖ Cliente recusou esta proposta</strong>
+            </div>
+
+        {% else %}
+            <!-- 👇 Só aparece se ainda NÃO respondeu -->
+            <div class="d-flex justify-content-center gap-3">
+
+                <a href="{{ url_for('aceitar_proposta', slug=proposta.slug) }}"
+                class="btn btn-success btn-lg px-4">
+                    <i class="bi bi-check-circle me-2"></i> Aceitar Proposta
+                </a>
+
+                <a href="{{ url_for('recusar_proposta', slug=proposta.slug) }}"
+                class="btn btn-danger btn-lg px-4">
+                    <i class="bi bi-x-circle me-2"></i> Recusar Proposta
+                </a>
+
+            </div>
+        {% endif %}
+
+    </div>
+
     <div class="mt-5 pt-4 border-top">
         <div class="row align-items-center">
             <div class="col-md-8">

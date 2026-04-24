@@ -660,6 +660,26 @@ class Vendedor(db.Model):
     def __repr__(self):
         return f'<Vendedor {self.nome}>'
     
+class CondicaoPagamentoProposta(db.Model):
+    __tablename__ = 'condicoes_pagamento_proposta'
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    proposta_id = db.Column(db.Integer, db.ForeignKey('propostas_kit_solar.id'), nullable=False)
+
+    forma_pagamento = db.Column(db.String(20))  # avista / parcelado
+    tipo_pagamento = db.Column(db.String(30))   # pix, cartao, financiamento, etc
+
+    parcelas = db.Column(db.Integer)
+    valor_entrada = db.Column(db.Numeric(12,2))
+    percentual_desconto = db.Column(db.Numeric(5,2))
+
+    data_pagamento = db.Column(db.Date)
+    data_primeira_parcela = db.Column(db.Date)
+    financiadora = db.Column(db.String(100))
+
+    criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+    
 class FornecedorKitModulo(db.Model):
     __tablename__ = 'fornecedores_kits_modulos'
 
@@ -700,6 +720,8 @@ class PropostaKitSolar(db.Model):
     vendedor_id = db.Column(db.Integer, db.ForeignKey('vendedores.id'), nullable=False)
     comercial_id = db.Column(db.Integer, db.ForeignKey('comercial.id'), nullable=True)
     slug = db.Column(db.String(200), unique=True, index=True)
+    data_resposta = db.Column(db.DateTime)
+    data_envio_contrato = db.Column(db.DateTime)
 
     numero = db.Column(db.String(30), nullable=False, unique=True)
     status = db.Column(db.String(30), nullable=False, default='em_edicao')
@@ -774,6 +796,12 @@ class PropostaKitSolar(db.Model):
         Index('ix_propostas_empresa_vendedor', 'empresa_id', 'vendedor_id'),
     )
     
+    condicoes_pagamento = db.relationship(
+        'CondicaoPagamentoProposta',
+        backref='proposta',
+        lazy=True
+    )
+    
 class Concessionaria(db.Model):
     __tablename__ = 'concessionarias'
 
@@ -834,7 +862,7 @@ class Vistoria(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     proposta_id = db.Column(db.Integer, db.ForeignKey('propostas_kit_solar.id'), nullable=False)
 
-    data_sugerida = db.Column(db.Date, nullable=False)
+    data_sugerida = db.Column(db.Date, nullable=True)
     periodo = db.Column(db.String(20))
     observacoes = db.Column(db.Text)
     status = db.Column(db.String(20), default='pendente')
@@ -9662,12 +9690,18 @@ def excluir_empresa_operacional(empresa_id):
     flash('Empresa excluída com sucesso.', 'success')
     return redirect(url_for('listar_empresas_operacional'))
 
-def _parse_decimal_br(s):
-    if not s: return None
+def _parse_decimal_br(valor):
+    if not valor:
+        return 0
+
+    valor = str(valor).replace('%', '').strip()
+
     try:
-        return Decimal(s.replace('.', '').replace(',', '.'))
-    except InvalidOperation:
-        return None
+        return float(
+            valor.replace('.', '').replace(',', '.')
+        )
+    except:
+        return 0
 
 def _parse_date(s):
     try:
@@ -12381,7 +12415,12 @@ def editar_proposta_etapa3(proposta_id):
                 proposta.slug = f"{gerar_slug(nome)}-{proposta.id}"
                 db.session.commit()
 
-            return redirect(url_for('visualizar_proposta', slug=proposta.slug))
+            return f"""
+            <script>
+                window.open('/proposta/{proposta.slug}', '_blank');
+                window.location.href = '/propostas';
+            </script>
+            """
 
     return render_template(
         'proposta_etapa3_selecao_gerador.html',
@@ -12505,6 +12544,8 @@ def listar_propostas():
                 PropostaKitSolar.tipo_telhado.is_(None)
             )
         )
+        
+    propostas = PropostaKitSolar.query.all()
 
     # Status
     if status == 'aprovada':
@@ -12515,6 +12556,11 @@ def listar_propostas():
 
     elif status == 'edicao':
         query = query.filter(PropostaKitSolar.status == 'em_edicao')
+        
+    for p in propostas:
+        p.condicao_pagamento = CondicaoPagamentoProposta.query.filter_by(
+            proposta_id=p.id
+        ).order_by(CondicaoPagamentoProposta.id.desc()).first()
 
     # Vendedor
     if vendedor_id:
@@ -13027,29 +13073,116 @@ def editar_modulo_vinculo(vinculo_id):
     flash('Módulo e valor do vínculo atualizados com sucesso.', 'success')
     return redirect(url_for('produtos_fornecedor_kit', id=vinculo.fornecedor_kit_id))
 
+@app.route('/propostas/<int:proposta_id>/condicoes', methods=['GET', 'POST'])
+@login_required
+def definir_condicoes_pagamento(proposta_id):
+    proposta = PropostaKitSolar.query.get_or_404(proposta_id)
+
+    if request.method == 'POST':
+
+        # 🔥 PEGA DESCONTO CORRETAMENTE
+        percentual_desconto = request.form.get('percentual_desconto', type=float) or 0
+
+        # 🔥 VALIDAÇÃO
+        if percentual_desconto > 9:
+            flash('Desconto máximo permitido é 9%', 'danger')
+            return redirect(url_for('definir_condicoes_pagamento', proposta_id=proposta.id))
+
+        # 🔥 BUSCA CONDIÇÃO EXISTENTE (NÃO DUPLICA)
+        condicao = CondicaoPagamentoProposta.query.filter_by(
+            proposta_id=proposta.id
+        ).first()
+
+        if condicao:
+            # 🔥 ATUALIZA
+            condicao.forma_pagamento = request.form.get('forma_pagamento')
+            condicao.tipo_pagamento = request.form.get('tipo_pagamento')
+            condicao.parcelas = request.form.get('parcelas', type=int)
+            condicao.valor_entrada = _parse_decimal_br(request.form.get('valor_entrada'))
+            condicao.data_pagamento = _parse_date(request.form.get('data_pagamento'))
+            condicao.data_primeira_parcela = _parse_date(request.form.get('data_primeira_parcela'))
+            condicao.financiadora = request.form.get('financiadora')
+            condicao.percentual_desconto = percentual_desconto
+        else:
+            # 🔥 CRIA (SÓ SE NÃO EXISTIR)
+            condicao = CondicaoPagamentoProposta(
+                proposta_id=proposta.id,
+                forma_pagamento=request.form.get('forma_pagamento'),
+                tipo_pagamento=request.form.get('tipo_pagamento'),
+                parcelas=request.form.get('parcelas', type=int),
+                valor_entrada=_parse_decimal_br(request.form.get('valor_entrada')),
+                data_pagamento=_parse_date(request.form.get('data_pagamento')),
+                data_primeira_parcela=_parse_date(request.form.get('data_primeira_parcela')),
+                financiadora=request.form.get('financiadora'),
+                percentual_desconto=percentual_desconto
+            )
+            db.session.add(condicao)
+
+        db.session.commit()
+
+        flash('Condição de pagamento salva com sucesso.', 'success')
+        return redirect(url_for('listar_propostas'))
+
+    # 🔥 CARREGA CONDIÇÃO EXISTENTE PARA EDIÇÃO (IMPORTANTE)
+    condicao = CondicaoPagamentoProposta.query.filter_by(
+        proposta_id=proposta.id
+    ).first()
+
+    return render_template(
+        'condicoes_pagamento.html',
+        proposta=proposta,
+        condicao=condicao 
+    )
+
 @app.route('/propostas/<int:proposta_id>/aprovar', methods=['GET', 'POST'])
 @login_required
 def aprovar_proposta(proposta_id):
     proposta = PropostaKitSolar.query.get_or_404(proposta_id)
 
+    condicao = CondicaoPagamentoProposta.query.filter_by(
+        proposta_id=proposta.id
+    ).order_by(CondicaoPagamentoProposta.id.desc()).first()
+
     if request.method == 'POST':
-        forma_pagamento = (request.form.get('forma_pagamento') or '').strip().lower()
+
+        forma_pagamento = request.form.get('forma_pagamento')
         parcelas = request.form.get('parcelas', type=int) or 1
         data_pagamento = _parse_date(request.form.get('data_pagamento'))
         data_primeira_parcela = _parse_date(request.form.get('data_primeira_parcela'))
         valor_entrada = _parse_decimal_br(request.form.get('valor_entrada')) or Decimal('0.00')
 
+        # fallback condicao
+        if not forma_pagamento and condicao:
+            forma_pagamento = condicao.forma_pagamento
+
+        if not parcelas and condicao:
+            parcelas = condicao.parcelas or 1
+
         if forma_pagamento not in ['avista', 'parcelado']:
             flash('Informe uma forma de pagamento válida.', 'danger')
             return redirect(url_for('aprovar_proposta', proposta_id=proposta.id))
 
-        valor_total = Decimal(str(proposta.valor_estimado_proposta or 0)).quantize(Decimal('0.01'))
+        #  VALOR BASE
+        valor_base = Decimal(str(proposta.valor_estimado_proposta or 0)).quantize(Decimal('0.01'))
+
+        #  DESCONTO
+        desconto = Decimal('0.00')
+        if condicao and condicao.percentual_desconto:
+            desconto = Decimal(str(condicao.percentual_desconto))
+
+        #  VALOR FINAL COM DESCONTO
+        valor_total = valor_base - (valor_base * (desconto / Decimal('100')))
+        valor_total = valor_total.quantize(Decimal('0.01'))
+
         if valor_total <= 0:
-            flash('A proposta não possui valor válido para lançamento.', 'danger')
+            flash('Valor inválido após aplicar desconto.', 'danger')
             return redirect(url_for('aprovar_proposta', proposta_id=proposta.id))
 
         try:
+
+            # À VISTA
             if forma_pagamento == 'avista':
+
                 if not data_pagamento:
                     flash('Informe a data do pagamento.', 'danger')
                     return redirect(url_for('aprovar_proposta', proposta_id=proposta.id))
@@ -13058,19 +13191,19 @@ def aprovar_proposta(proposta_id):
                     empresa_id=proposta.empresa_id,
                     data=date.today(),
                     tipo='receita',
-                    descricao=f"Proposta Solar {proposta.numero} - À vista",
+                    descricao=f"Proposta Solar {proposta.numero} - À vista ({desconto}% desc.)",
                     valor=valor_total,
                     status='pendente',
                     data_vencimento=data_pagamento,
                     numero_documento=proposta.numero,
-                    cliente_operacional_id=None,
-                    plano_financeiro_id=None,
                     centro_custo_id=proposta.centro_custo_id,
                     aprovado=False
                 )
                 db.session.add(titulo)
 
+            # PARCELADO
             else:
+
                 if parcelas < 1:
                     parcelas = 1
 
@@ -13079,39 +13212,38 @@ def aprovar_proposta(proposta_id):
                     return redirect(url_for('aprovar_proposta', proposta_id=proposta.id))
 
                 if valor_entrada < 0:
-                    flash('O valor da entrada não pode ser negativo.', 'danger')
+                    flash('Entrada não pode ser negativa.', 'danger')
                     return redirect(url_for('aprovar_proposta', proposta_id=proposta.id))
 
                 if valor_entrada >= valor_total:
-                    flash('O valor da entrada deve ser menor que o valor total da proposta.', 'danger')
+                    flash('Entrada deve ser menor que o total.', 'danger')
                     return redirect(url_for('aprovar_proposta', proposta_id=proposta.id))
 
-                # lança a entrada, se houver
+                #  ENTRADA
                 if valor_entrada > 0:
                     titulo_entrada = FinanceiroEmpresa(
                         empresa_id=proposta.empresa_id,
                         data=date.today(),
                         tipo='receita',
-                        descricao=f"Proposta Solar {proposta.numero} - Entrada",
+                        descricao=f"Proposta Solar {proposta.numero} - Entrada ({desconto}% desc.)",
                         valor=valor_entrada.quantize(Decimal('0.01')),
                         status='pendente',
                         data_vencimento=data_primeira_parcela,
                         numero_documento=proposta.numero,
-                        cliente_operacional_id=None,
-                        plano_financeiro_id=None,
                         centro_custo_id=proposta.centro_custo_id,
                         aprovado=False
                     )
                     db.session.add(titulo_entrada)
 
+                #  SALDO COM DESCONTO
                 saldo_restante = (valor_total - valor_entrada).quantize(Decimal('0.01'))
 
-                valor_base = (saldo_restante / Decimal(parcelas)).quantize(Decimal('0.01'))
-                valores_parcelas = [valor_base] * parcelas
-                diferenca = saldo_restante - sum(valores_parcelas)
+                valor_parcela = (saldo_restante / Decimal(parcelas)).quantize(Decimal('0.01'))
+                valores = [valor_parcela] * parcelas
 
+                diferenca = saldo_restante - sum(valores)
                 if diferenca != Decimal('0.00'):
-                    valores_parcelas[-1] = (valores_parcelas[-1] + diferenca).quantize(Decimal('0.01'))
+                    valores[-1] += diferenca
 
                 for i in range(parcelas):
                     data_venc = data_primeira_parcela + timedelta(days=30 * i)
@@ -13120,22 +13252,21 @@ def aprovar_proposta(proposta_id):
                         empresa_id=proposta.empresa_id,
                         data=date.today(),
                         tipo='receita',
-                        descricao=f"Proposta Solar {proposta.numero} ({i+1}/{parcelas})",
-                        valor=valores_parcelas[i],
+                        descricao=f"Proposta Solar {proposta.numero} ({i+1}/{parcelas}) ({desconto}% desc.)",
+                        valor=valores[i],
                         status='pendente',
                         data_vencimento=data_venc,
                         numero_documento=proposta.numero,
-                        cliente_operacional_id=None,
-                        plano_financeiro_id=None,
                         centro_custo_id=proposta.centro_custo_id,
                         aprovado=False
                     )
                     db.session.add(titulo)
 
-            proposta.status = 'aprovada'
+            #  STATUS FINAL
+            proposta.status = 'financeiro_enviado'
             db.session.commit()
 
-            flash('Proposta aprovada e lançada no financeiro com sucesso.', 'success')
+            flash('Proposta aprovada e lançada no financeiro com desconto aplicado.', 'success')
             return redirect(url_for('empresa_financeiro_listar'))
 
         except Exception as e:
@@ -13146,7 +13277,8 @@ def aprovar_proposta(proposta_id):
 
     return render_template(
         'aprovar_proposta.html',
-        proposta=proposta
+        proposta=proposta,
+        condicao=condicao
     )
 
 @app.route('/propostas/<int:proposta_id>/vistoria', methods=['GET', 'POST'])
@@ -13163,18 +13295,35 @@ def agendar_vistoria(proposta_id):
         periodo = request.form.get('periodo')
         observacoes = request.form.get('observacoes')
 
-        nova_vistoria = Vistoria(
-            proposta_id=proposta.id,
-            data_sugerida=data_sugerida,
-            periodo=periodo,
-            observacoes=observacoes
+        #  BUSCA VISTORIA EXISTENTE (ÚLTIMA)
+        vistoria = (
+            db.session.query(Vistoria)
+            .filter_by(proposta_id=proposta.id)
+            .order_by(Vistoria.id.desc())
+            .first()
         )
 
-        db.session.add(nova_vistoria)
+        if vistoria:
+            # ATUALIZA (NÃO CRIA)
+            vistoria.data_sugerida = data_sugerida
+            vistoria.periodo = periodo
+            vistoria.observacoes = observacoes
+            vistoria.status = 'agendado'
+
+        else:
+            # cria somente se não existir
+            nova_vistoria = Vistoria(
+                proposta_id=proposta.id,
+                data_sugerida=data_sugerida,
+                periodo=periodo,
+                observacoes=observacoes,
+                status='agendado'
+            )
+            db.session.add(nova_vistoria)
+
         db.session.commit()
 
-        # REDIRECIONA PARA listar propostas
-        return redirect(url_for('listar_propostas', vistoria_id=nova_vistoria.id))
+        return redirect(url_for('listar_propostas'))
 
     return render_template(
         'agendar_vistoria.html',
@@ -13356,23 +13505,55 @@ def salvar_dados_tecnicos(vistoria_id):
 @app.route('/propostas/<int:proposta_id>/contrato')
 @login_required
 def contrato_proposta(proposta_id):
-    proposta = db.session.get(PropostaKitSolar, proposta_id) #
+    proposta = db.session.get(PropostaKitSolar, proposta_id)
     if not proposta:
         abort(404)
 
-    # Busca as parcelas que contêm o número da proposta na descrição
-    parcelas = FinanceiroEmpresa.query.filter(
-        FinanceiroEmpresa.descricao.like(f"%{proposta.numero}%"), # 
-        FinanceiroEmpresa.tipo == 'receita' #
-    ).order_by(FinanceiroEmpresa.data_vencimento.asc()).all() #
+    # pega a vistoria correta (mais recente)
+    vistoria = (
+        db.session.query(Vistoria)
+        .filter_by(proposta_id=proposta.id)
+        .order_by(Vistoria.id.desc())
+        .first()
+    )
+
+    # condição de pagamento
+    condicao = CondicaoPagamentoProposta.query.filter_by(
+        proposta_id=proposta.id
+    ).order_by(CondicaoPagamentoProposta.id.desc()).first()
 
     return render_template(
         'contrato.html',
         proposta=proposta,
-        vistoria=proposta.vistoria,
+        vistoria=vistoria, 
         centro=proposta.centro_custo,
-        parcelas=parcelas, 
+        condicao=condicao,
         ano_atual=datetime.now().year
+    )
+    
+@app.route('/contrato/<slug>')
+def contrato_publico(slug):
+    proposta = PropostaKitSolar.query.filter_by(slug=slug).first_or_404()
+
+    vistoria = (
+        db.session.query(Vistoria)
+        .filter_by(proposta_id=proposta.id)
+        .order_by(Vistoria.id.desc())
+        .first()
+    )
+
+    condicao = CondicaoPagamentoProposta.query.filter_by(
+        proposta_id=proposta.id
+    ).order_by(CondicaoPagamentoProposta.id.desc()).first()
+
+    return render_template(
+        'contrato.html',
+        proposta=proposta,
+        vistoria=vistoria,
+        centro=proposta.centro_custo,
+        condicao=condicao,
+        ano_atual=datetime.now().year,
+        publico=True
     )
     
 @app.route('/propostas/<int:proposta_id>/whatsapp')
@@ -13407,6 +13588,9 @@ def enviar_whatsapp_proposta(proposta_id):
         f"Acesse aqui: {link_proposta}"
     )
 
+    proposta.status = 'enviado'
+    db.session.commit()
+
     wa_url = f"https://wa.me/{telefone_clean}?text={quote_plus(mensagem)}"
     return redirect(wa_url)
 
@@ -13429,7 +13613,7 @@ def enviar_email_proposta(proposta_id):
         _external=True
     )
 
-    # Renderiza o HTML usando o template que criamos
+    # Renderiza o HTML usando o template
     html_body = render_template('email_proposta.html', 
                                 proposta=proposta, 
                                 centro=centro, 
@@ -13440,6 +13624,9 @@ def enviar_email_proposta(proposta_id):
         recipients=[email_destino],
         html=html_body
     )
+    
+    proposta.status = 'enviado'
+    db.session.commit()
 
     try:
         mail.send(msg)
@@ -13448,6 +13635,123 @@ def enviar_email_proposta(proposta_id):
         flash(f'Erro ao enviar e-mail: {e}', 'danger')
 
     return redirect(url_for('listar_propostas'))
+
+@app.route('/propostas/<int:proposta_id>/email-contrato')
+@login_required
+def enviar_email_contrato(proposta_id):
+    proposta = PropostaKitSolar.query.get_or_404(proposta_id)
+    centro = proposta.centro_custo
+
+    # condição
+    condicao = CondicaoPagamentoProposta.query.filter_by(
+        proposta_id=proposta.id
+    ).order_by(CondicaoPagamentoProposta.id.desc()).first()
+
+    if not condicao:
+        flash('Defina a condição de pagamento antes de enviar o contrato.', 'warning')
+        return redirect(url_for('listar_propostas'))
+
+    # vistoria mais recente
+    vistoria = (
+        db.session.query(Vistoria)
+        .filter_by(proposta_id=proposta.id)
+        .order_by(Vistoria.id.desc())
+        .first()
+    )
+
+    if not vistoria:
+        flash('Nenhuma vistoria encontrada.', 'warning')
+        return redirect(url_for('listar_propostas'))
+
+    if vistoria.status != 'aprovada':
+        flash(f'Vistoria ainda não aprovada (status: {vistoria.status}).', 'warning')
+        return redirect(url_for('listar_propostas'))
+
+    # email
+    email_destino = centro.representante_email or centro.email
+
+    if not email_destino:
+        flash('Nenhum e-mail cadastrado para este cliente.', 'warning')
+        return redirect(url_for('listar_propostas'))
+
+    # link
+    link_contrato = url_for(
+        'contrato_publico',
+        slug=proposta.slug,
+        _external=True
+    )
+
+    # template
+    try:
+        html_body = render_template(
+            'email_contrato.html',
+            proposta=proposta,
+            centro=centro,
+            link_contrato=link_contrato
+        )
+    except Exception as e:
+        print("ERRO TEMPLATE:", e)
+        flash(f'Erro ao gerar e-mail: {e}', 'danger')
+        return redirect(url_for('listar_propostas'))
+
+    # CRIA A MENSAGEM (ANTES!)
+    msg = Message(
+        subject=f'Contrato - Proposta Nº {proposta.numero}',
+        recipients=[email_destino],
+        html=html_body
+    )
+
+    # ENVIO + BANCO
+    try:
+        mail.send(msg)
+
+        proposta.status = 'contrato_enviado'
+        proposta.data_envio_contrato = datetime.now()
+
+        db.session.commit()
+
+        print("EMAIL CONTRATO ENVIADO")
+        flash('Contrato enviado com sucesso!', 'success')
+
+    except Exception as e:
+        print("ERRO AO ENVIAR EMAIL:", e)
+        flash(f'Erro ao enviar contrato: {e}', 'danger')
+
+    return redirect(url_for('listar_propostas'))
+
+@app.route('/proposta/<slug>/aceitar')
+def aceitar_proposta(slug):
+    proposta = PropostaKitSolar.query.filter_by(slug=slug).first_or_404()
+
+    if proposta.status not in ['aprovada', 'recusada']:
+        proposta.status = 'aprovada'
+        proposta.data_resposta = datetime.now()
+
+        # Atualizar ou criar vistoria
+        if proposta.vistoria:
+            proposta.vistoria[0].status = 'pendente'
+        else:
+            nova_vistoria = Vistoria(
+                proposta_id=proposta.id,
+                status='pendente'
+            )
+            db.session.add(nova_vistoria)
+
+        db.session.commit()
+
+    return render_template('resposta_cliente.html', tipo='aceita')
+
+@app.route('/proposta/<slug>/recusar')
+def recusar_proposta(slug):
+    proposta = PropostaKitSolar.query.filter_by(slug=slug).first_or_404()
+
+    if proposta.status not in ['aprovada', 'recusada']:
+        proposta.status = 'recusada'
+        proposta.data_resposta = datetime.now()
+
+        db.session.commit()
+
+    return render_template('resposta_cliente.html', tipo='recusada')
 
 
 if __name__ == "__main__":

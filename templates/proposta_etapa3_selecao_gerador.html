@@ -188,7 +188,8 @@
             </a>
 
             {% if kits_recomendados %}
-            <button type="submit" class="btn btn-success btn-lg px-5 shadow" onclick="this.form.acao.value='confirmar_kit'">
+            <button type="submit" class="btn btn-success btn-lg px-5 shadow"
+                    onclick="abrirProposta(event)">
                 Confirmar e Gerar Proposta <i class="bi bi-file-earmark-pdf ms-2"></i>
             </button>
             {% endif %}
@@ -216,5 +217,18 @@ document.querySelector('[name="tipo_inversor"]').addEventListener('change', func
         document.getElementById('valor_kwp').style.display = 'block';
     }
 });
+
+function abrirProposta(e) {
+    e.preventDefault();
+
+    const form = document.getElementById('formKits');
+    form.acao.value = 'confirmar_kit';
+
+    // abre nova aba com a proposta (link público)
+    window.open("/proposta/{{ proposta.slug }}", "_blank");
+
+    // envia o form (salva e redireciona)
+    form.submit();
+}
 </script>
 {% endblock %}

@@ -26,6 +26,12 @@
                 </a>
             </div>
 
+            {% if condicao %}
+                <div class="alert alert-info">
+                    Condição de pagamento já definida. Você pode editar antes de confirmar.
+                </div>
+            {% endif %}
+
             <div class="row mb-4">
                 <div class="col-md-4">
                     <div class="border rounded p-3 bg-light h-100">
@@ -53,7 +59,22 @@
                 <h4 class="mb-0">
                     Valor Total da Proposta<br>
                     <strong style="font-size: 1.5rem;">
-                        {{ moeda(proposta.valor_estimado_proposta) }}
+                        {% set valor_base = proposta.valor_estimado_proposta %}
+                        {% set desconto = condicao.percentual_desconto if condicao else 0 %}
+                        {% set valor_final = valor_base - (valor_base * (desconto / 100)) %}
+
+                        {{ moeda(valor_final) }}
+
+                        {% if desconto > 0 %}
+                            <br>
+                            <small class="text-danger">
+                                Desconto: {{ desconto }}%
+                            </small>
+                            <br>
+                            <small class="text-muted">
+                                De: {{ moeda(valor_base) }}
+                            </small>
+                        {% endif %}
                     </strong>
                 </h4>
             </div>
@@ -61,48 +82,59 @@
             <form method="POST" id="formAprovacao">
                 <div class="row">
 
+                    <!-- FORMA PAGAMENTO -->
                     <div class="col-md-6 mb-3">
                         <label class="form-label">Forma de Pagamento</label>
                         <select name="forma_pagamento" id="forma_pagamento" class="form-select" required>
                             <option value="">Selecione</option>
-                            <option value="avista">À vista</option>
-                            <option value="parcelado">Parcelado</option>
+                            <option value="avista" {% if condicao and condicao.forma_pagamento == 'avista' %}selected{% endif %}>
+                                À vista
+                            </option>
+                            <option value="parcelado" {% if condicao and condicao.forma_pagamento == 'parcelado' %}selected{% endif %}>
+                                Parcelado
+                            </option>
                         </select>
                     </div>
 
+                    <!-- DATA PAGAMENTO -->
                     <div class="col-md-6 mb-3 d-none" id="blocoDataPagamento">
                         <label class="form-label">Data do Pagamento</label>
                         <input type="date"
                                name="data_pagamento"
                                id="data_pagamento"
-                               class="form-control">
+                               class="form-control"
+                               value="{{ condicao.data_pagamento.strftime('%Y-%m-%d') if condicao and condicao.data_pagamento else '' }}">
                     </div>
 
+                    <!-- PARCELAS -->
                     <div class="col-md-4 mb-3 d-none" id="blocoParcelas">
                         <label class="form-label">Quantidade de Parcelas</label>
                         <input type="number"
                                name="parcelas"
                                id="parcelas"
                                class="form-control"
-                               value="1"
+                               value="{{ condicao.parcelas if condicao and condicao.parcelas else 1 }}"
                                min="1">
                     </div>
 
+                    <!-- PRIMEIRA PARCELA -->
                     <div class="col-md-4 mb-3 d-none" id="blocoPrimeiraParcela">
                         <label class="form-label">Data da Primeira Parcela</label>
                         <input type="date"
                                name="data_primeira_parcela"
                                id="data_primeira_parcela"
-                               class="form-control">
+                               class="form-control"
+                               value="{{ condicao.data_primeira_parcela.strftime('%Y-%m-%d') if condicao and condicao.data_primeira_parcela else '' }}">
                     </div>
 
+                    <!-- VALOR ENTRADA -->
                     <div class="col-md-4 mb-3 d-none" id="blocoValorEntrada">
                         <label class="form-label">Valor da Entrada</label>
                         <input type="text"
                                name="valor_entrada"
                                id="valor_entrada"
                                class="form-control"
-                               value="0,00">
+                               value="{{ '{:,.2f}'.format(condicao.valor_entrada).replace(',', 'X').replace('.', ',').replace('X', '.') if condicao and condicao.valor_entrada else '0,00' }}">
                     </div>
 
                 </div>
@@ -176,6 +208,8 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     formaPagamento.addEventListener('change', atualizarCampos);
+
+    // IMPORTANTE: já aplica ao carregar (preenchimento automático)
     atualizarCampos();
 });
 </script>

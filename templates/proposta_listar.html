@@ -125,9 +125,21 @@ R$ {{ "{:,.2f}".format(valor).replace(",", "X").replace(".", ",").replace("X", "
 
                         <td>{{ formato_numero(p.consumo_kwh) }} kWh</td>
 
-                        <td>{{ moeda(p.valor_estimado_proposta) }}</td>
+                        <td>
+                            {% set valor_base = (p.valor_estimado_proposta or 0) | float %}
+                            {% set desconto = ((p.condicao_pagamento.percentual_desconto if p.condicao_pagamento else 0) or 0) | float %}
+                            {% set valor_final = valor_base - (valor_base * (desconto / 100)) %}
 
-                        <!-- 🔥 NOVA COLUNA -->
+                            {{ moeda(valor_final) }}
+
+                            {% if desconto > 0 %}
+                                <br>
+                                <small class="text-danger">
+                                    -{{ desconto }}%
+                                </small>
+                            {% endif %}
+                        </td>
+
                         <td>
                             {% if p.tipo_inversor and p.tipo_inversor|lower == 'hibrido' %}
                                 <span class="badge bg-dark-subtle text-dark border px-3 py-2">
@@ -148,36 +160,59 @@ R$ {{ "{:,.2f}".format(valor).replace(",", "X").replace(".", ",").replace("X", "
 
                         <!-- STATUS -->
                         <td>
-                            {% if p.vistoria %}
-
-                                {% if p.vistoria.status == 'aprovada' %}
-                                    <span class="badge bg-success-subtle text-success border px-3 py-2">
-                                        <i class="bi bi-check-circle me-1"></i> Aprovada
-                                    </span>
-
-                                {% elif p.vistoria.status == 'reprovada' %}
-                                    <span class="badge bg-danger-subtle text-danger border px-3 py-2">
-                                        <i class="bi bi-x-circle me-1"></i> Reprovada
-                                    </span>
-
-                                {% else %}
-                                    <span class="badge bg-primary-subtle text-primary border px-3 py-2">
-                                        <i class="bi bi-calendar-check me-1"></i> Vistoria Agendada
-                                    </span>
-                                {% endif %}
-
-                            {% elif p.status == 'aprovada' %}
-                                <span class="badge bg-success-subtle text-success border px-3 py-2">
-                                    <i class="bi bi-check-all me-1"></i> Proposta Aprovada
+                            {% set bloqueado = p.status in ['contrato_enviado', 'financeiro_enviado'] %}
+                            {% if p.status == 'enviado' %}
+                                <span class="badge bg-primary text-white px-3 py-2">
+                                    <i class="bi bi-send me-1"></i> Proposta enviada
                                 </span>
 
                             {% elif p.status == 'gerada' %}
-                                <span class="badge bg-info-subtle text-info border px-3 py-2">
+                                <span class="badge bg-info-subtle text-info px-3 py-2">
                                     Gerada
                                 </span>
 
+                            {% elif p.status == 'contrato_enviado' %}
+                                <span class="badge bg-secondary text-white px-3 py-2">
+                                    <i class="bi bi-send-check"></i> Contrato enviado
+                                </span>
+
+                                {% if p.data_envio_contrato %}
+                                    <br>
+                                    <small class="text-muted">
+                                        {{ p.data_envio_contrato.strftime('%d/%m/%Y %H:%M') }}
+                                    </small>
+                                {% endif %}
+
+                            {% elif p.status == 'financeiro_enviado' %}
+                                <span class="badge bg-success text-white px-3 py-2">
+                                    <i class="bi bi-cash-coin"></i> Pós Venda
+                                </span>
+
+                            {% elif p.status == 'aprovada' %}
+                                {% if p.condicao_pagamento %}
+                                    <span class="badge bg-dark text-white px-3 py-2">
+                                        <i class="bi bi-file-earmark-text"></i> Enviar contrato
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-success text-white px-3 py-2">
+                                        <i class="bi bi-check-circle"></i> Cliente validou
+                                    </span>
+                                {% endif %}
+
+                                {% if p.data_resposta %}
+                                    <br>
+                                    <small class="text-muted">
+                                        {{ p.data_resposta.strftime('%d/%m/%Y %H:%M') }}
+                                    </small>
+                                {% endif %}
+
+                            {% elif p.status == 'recusada' %}
+                                <span class="badge bg-danger text-white px-3 py-2">
+                                    <i class="bi bi-x-circle"></i> Cliente recusou
+                                </span>
+
                             {% else %}
-                                <span class="badge bg-warning-subtle text-warning border px-3 py-2">
+                                <span class="badge bg-warning-subtle text-warning px-3 py-2">
                                     Em edição
                                 </span>
                             {% endif %}
@@ -188,13 +223,50 @@ R$ {{ "{:,.2f}".format(valor).replace(",", "X").replace(".", ",").replace("X", "
                         </td>
 
                         <td>
-                            {% if p.vistoria %}
-                                {{ p.vistoria.data_sugerida.strftime('%d/%m/%Y') if p.vistoria.data_sugerida else '-' }}
-                                <br>
-                                <small>{{ p.vistoria.periodo }}</small>
+
+                            {% if p.status == 'aprovada' and (
+                                not p.vistoria or 
+                                (p.vistoria and p.vistoria[0].status == 'pendente' and not p.vistoria[0].data_sugerida)
+                            ) %}
+                                <span class="badge bg-warning text-dark px-3 py-2">
+                                    <i class="bi bi-calendar-plus"></i> Agendar vistoria
+                                </span>
+
+                            {% elif p.vistoria and p.vistoria[0].status == 'aprovada' %}
+                                <span class="badge bg-success px-3 py-2">
+                                    ✔ Vistoria aprovada
+                                </span>
+
+                            {% elif p.vistoria and p.vistoria[0].status == 'reprovada' %}
+                                <span class="badge bg-danger px-3 py-2">
+                                    ✖ Vistoria reprovada
+                                </span>
+
+                            {% elif p.vistoria %}
+
+                                {% if p.vistoria[0].data_sugerida %}
+                                    <span class="badge bg-primary px-3 py-2">
+                                        📅 Vistoria agendada
+                                    </span>
+
+                                    <br>
+                                    <small class="text-muted">
+                                        {{ p.vistoria[0].data_sugerida.strftime('%d/%m/%Y') }}
+                                        {% if p.vistoria[0].periodo %}
+                                            - {{ p.vistoria[0].periodo }}
+                                        {% endif %}
+                                    </small>
+
+                                {% else %}
+                                    <span class="badge bg-warning text-dark px-3 py-2">
+                                        <i class="bi bi-hourglass-split"></i> Aguardando agendamento
+                                    </span>
+                                {% endif %}
+
                             {% else %}
                                 -
                             {% endif %}
+
                         </td>
 
                         <!-- AÇÕES -->
@@ -208,59 +280,98 @@ R$ {{ "{:,.2f}".format(valor).replace(",", "X").replace(".", ",").replace("X", "
                                     </a>
                                 {% endif %}
 
-                                <a href="{{ url_for('enviar_whatsapp_proposta', proposta_id=p.id) }}" 
-                                target="_blank" class="btn btn-sm btn-outline-success" title="WhatsApp">
-                                    <i class="bi bi-whatsapp"></i>
-                                </a>
+                                <!-- WhatsApp e Email (somem após contrato enviado) -->
+                                {% if not bloqueado and p.status != 'aprovada' %}
+                                    <a href="{{ url_for('enviar_whatsapp_proposta', proposta_id=p.id) }}" 
+                                    class="btn btn-sm btn-outline-success">
+                                        <i class="bi bi-whatsapp"></i>
+                                    </a>
 
-                                <a href="{{ url_for('enviar_email_proposta', proposta_id=p.id) }}" 
-                                class="btn btn-sm btn-outline-primary" title="E-mail">
-                                    <i class="bi bi-envelope"></i>
-                                </a>
-
-                                {% if p.vistoria and p.vistoria.status == 'aprovada' %}
-                                    <a href="{{ url_for('contrato_proposta', proposta_id=p.id) }}"
-                                    class="btn btn-sm btn-dark" title="Contrato">
-                                        <i class="bi bi-file-earmark-text"></i>
+                                    <a href="{{ url_for('enviar_email_proposta', proposta_id=p.id) }}" 
+                                    class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-envelope"></i>
                                     </a>
                                 {% endif %}
 
-                                {% if not p.vistoria %}
-                                    <a href="{{ url_for('agendar_vistoria', proposta_id=p.id) }}"
-                                    class="btn btn-sm btn-outline-secondary" title="Agendar">
-                                        <i class="bi bi-calendar"></i>
+                                <!-- Contrato -->
+                                {% if p.vistoria and p.vistoria[0].status == 'aprovada' and p.condicao_pagamento %}
+                                    <a href="{{ url_for('contrato_publico', slug=p.slug) }}" 
+                                    target="_blank"
+                                    class="btn btn-sm btn-dark" 
+                                    title="Contrato">
+                                        <i class="bi bi-file-earmark-text"></i>
                                     </a>
-                                {% else %}
-                                    {% if p.vistoria.status in ['aprovada', 'reprovada'] %}
-                                        <a href="{{ url_for('relatorio_vistoria', vistoria_id=p.vistoria.id) }}"
-                                        class="btn btn-sm btn-success" title="Relatório">
-                                            <i class="bi bi-file-earmark-check"></i>
+
+                                    {% if p.vistoria and p.vistoria[0].status == 'aprovada' 
+                                        and p.condicao_pagamento 
+                                        and not bloqueado %}
+                                        
+                                        <a href="{{ url_for('enviar_email_contrato', proposta_id=p.id) }}"
+                                        class="btn btn-sm btn-dark">
+                                            <i class="bi bi-send-check"></i>
                                         </a>
-                                    {% else %}
-                                        {% if p.vistoria %}
-                                            <a href="{{ url_for('vistoria_fotos', vistoria_id=p.vistoria[0].id) }}"
-                                            class="btn btn-sm btn-outline-info" title="Fotos">
-                                                <i class="bi bi-image"></i>
-                                            </a>
-                                        {% endif %}
                                     {% endif %}
                                 {% endif %}
 
-                                {% if p.status != 'aprovada' %}
+                                <!-- Vistoria -->
+                                {% if p.status == 'aprovada' and (
+                                    not p.vistoria or 
+                                    (p.vistoria and p.vistoria[0].status == 'pendente' and not p.vistoria[0].data_sugerida)
+                                ) %}
+                                    <a href="{{ url_for('agendar_vistoria', proposta_id=p.id) }}"
+                                    class="btn btn-sm btn-outline-warning" title="Agendar">
+                                        <i class="bi bi-calendar-plus"></i>
+                                    </a>
+
+                                {% elif p.vistoria and p.vistoria[0].status in ['aprovada', 'reprovada'] %}
+                                    <a href="{{ url_for('relatorio_vistoria', vistoria_id=p.vistoria[0].id) }}"
+                                    class="btn btn-sm btn-success" title="Relatório">
+                                        <i class="bi bi-file-earmark-check"></i>
+                                    </a>
+
+                                {% elif p.vistoria %}
+                                    <a href="{{ url_for('vistoria_fotos', vistoria_id=p.vistoria[0].id) }}"
+                                    class="btn btn-sm btn-outline-info" title="Fotos">
+                                        <i class="bi bi-image"></i>
+                                    </a>
+                                {% endif %}
+
+                                <!-- AÇÕES POR STATUS (CORRETO) -->
+                                {% if p.status == 'gerada' %}
+
+                                    <!-- Editar -->
                                     <a href="{{ url_for('editar_proposta_etapa1', proposta_id=p.id) }}"
                                     class="btn btn-sm btn-outline-warning" title="Editar">
                                         <i class="bi bi-pencil"></i>
                                     </a>
 
+                                {% elif p.status == 'contrato_enviado' %}
+
+                                    <!-- Aprovar (somente aqui) -->
                                     <a href="{{ url_for('aprovar_proposta', proposta_id=p.id) }}"
                                     class="btn btn-sm btn-success" title="Aprovar">
                                         <i class="bi bi-check-lg"></i>
                                     </a>
+
+                                {% elif p.status == 'aprovada' 
+                                    and p.vistoria 
+                                    and p.vistoria|length > 0 
+                                    and p.vistoria[0].status == 'aprovada' %}
+
+                                <!-- Condição de pagamento -->
+                                {% if p.condicao_pagamento %}
+                                    <a href="{{ url_for('definir_condicoes_pagamento', proposta_id=p.id) }}"
+                                    class="btn btn-sm btn-outline-primary" title="Editar Condição">
+                                        <i class="bi bi-cash-coin"></i>
+                                    </a>
                                 {% else %}
-                                    <button class="btn btn-sm btn-secondary" disabled title="Bloqueado">
-                                        <i class="bi bi-lock"></i>
-                                    </button>
+                                    <a href="{{ url_for('definir_condicoes_pagamento', proposta_id=p.id) }}"
+                                    class="btn btn-sm btn-warning" title="Definir Condição">
+                                        <i class="bi bi-exclamation-circle"></i>
+                                    </a>
                                 {% endif %}
+
+                            {% endif %}
 
                             </div>
                         </td>

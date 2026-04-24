@@ -1,0 +1,212 @@
+{% extends 'base.html' %}
+
+{% block title %}Pagamento da Proposta{% endblock %}
+
+{% block content %}
+<div class="container mt-4 pb-5">
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white border-0 pt-4 px-4">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h3 class="text-success fw-bold mb-0">Configurar Pagamento</h3>
+                    <p class="text-muted small">Defina as condições comerciais para a proposta #{{ proposta.numero }}</p>
+                </div>
+                <a href="{{ url_for('listar_propostas') }}" class="btn btn-sm btn-outline-secondary rounded-pill px-3">
+                    <i class="bi bi-arrow-left"></i> Voltar
+                </a>
+            </div>
+        </div>
+
+        <div class="card-body px-4">
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <div class="p-3 border rounded bg-light">
+                        <label class="text-uppercase fw-bold text-muted small d-block">Cliente</label>
+                        <span class="h6 mb-0">{{ proposta.centro_custo.nome }}</span>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="p-3 border rounded bg-light">
+                        <label class="text-uppercase fw-bold text-muted small d-block">Valor Base do Kit</label>
+                        <span id="valor_kit_base" class="h6 mb-0 text-dark fw-bold">
+                            {{ "{:,.2f}".format(proposta.valor_estimado_proposta).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                        </span>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="p-3 border rounded bg-success bg-opacity-10 border-success border-opacity-25">
+                        <label class="text-uppercase fw-bold text-success small d-block">Valor Final Calculado</label>
+                        <span id="valor_final_display" class="h5 mb-0 text-success fw-bold">R$ 0,00</span>
+                    </div>
+                </div>
+            </div>
+
+            <hr class="my-4 opacity-25">
+
+            <form method="POST" id="formPagamento">
+                
+                <div class="row g-3 mb-4 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold text-dark">Desconto Comercial (%)</label>
+                        <div class="input-group">
+                            <input type="number" 
+                                   name="percentual_desconto" 
+                                   id="percentual_desconto"
+                                   class="form-control form-control-lg border-success"
+                                   placeholder="0.00"
+                                   min="0"
+                                   max="9"
+                                   step="0.01"
+                                   value="{{ condicao.percentual_desconto if condicao else 0 }}">
+                            <span class="input-group-text bg-success text-white border-success">%</span>
+                        </div>
+                        <div class="form-text">Máximo permitido: 9.00%</div>
+                    </div>
+                    
+                    <div class="col-md-8">
+                        <div class="p-3 rounded border border-danger border-opacity-25 bg-danger bg-opacity-10 d-flex justify-content-between align-items-center">
+                            <span class="text-danger fw-bold"><i class="bi bi-graph-down-arrow"></i> Economia para o cliente:</span>
+                            <span id="valor_desconto_moeda" class="h6 mb-0 text-danger fw-bold">R$ 0,00</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Forma de Pagamento</label>
+                        <select name="forma_pagamento" id="forma_pagamento" class="form-select" required>
+                            <option value="avista" {% if condicao and condicao.forma_pagamento == 'avista' %}selected{% endif %}>À vista</option>
+                            <option value="parcelado" {% if condicao and condicao.forma_pagamento == 'parcelado' %}selected{% endif %}>Parcelado</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Tipo de Pagamento</label>
+                        <select name="tipo_pagamento" id="tipo_pagamento" class="form-select" required>
+                            {% for val, label in [('pix', 'Pix'), ('cartao', 'Cartão'), ('boleto', 'Boleto'), ('transferencia', 'Transferência'), ('financiamento', 'Financiamento')] %}
+                            <option value="{{ val }}" {% if condicao and condicao.tipo_pagamento == val %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-12 d-none" id="blocoFinanciadora">
+                        <label class="form-label fw-bold">Instituição Financeira / Banco</label>
+                        <input type="text" name="financiadora" id="financiadora" 
+                               class="form-control" placeholder="Ex: Santander, BNDES..."
+                               value="{{ condicao.financiadora if condicao else '' }}">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold" id="label_valor_entrada">Valor (R$)</label>
+                        <input type="text" name="valor_entrada" id="valor_entrada" 
+                               class="form-control" 
+                               value="{{ condicao.valor_entrada if condicao else '' }}">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Data do Pagamento/Entrada</label>
+                        <input type="date" name="data_pagamento" class="form-control"
+                               value="{{ condicao.data_pagamento.strftime('%Y-%m-%d') if condicao and condicao.data_pagamento else '' }}">
+                    </div>
+
+                    <div class="col-md-2 d-none" id="blocoParcelas">
+                        <label class="form-label fw-bold">Parcelas</label>
+                        <input type="number" name="parcelas" id="parcelas" 
+                               class="form-control" min="1" 
+                               value="{{ condicao.parcelas if condicao else 1 }}">
+                    </div>
+
+                    <div class="col-md-2 d-none" id="blocoDataPrimeiraParcela">
+                        <label class="form-label fw-bold">1ª Parcela em</label>
+                        <input type="date" name="data_primeira_parcela" id="data_primeira_parcela" class="form-control"
+                               value="{{ condicao.data_primeira_parcela.strftime('%Y-%m-%d') if condicao and condicao.data_primeira_parcela else '' }}">
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end mt-5 border-top pt-4">
+                    <button type="submit" class="btn btn-success btn-lg px-5 shadow-sm">
+                        <i class="bi bi-check-lg"></i> Salvar Condições
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    const selectors = {
+        valorKit: document.getElementById('valor_kit_base'),
+        inputDesconto: document.getElementById('percentual_desconto'),
+        displayFinal: document.getElementById('valor_final_display'),
+        displayEconomia: document.getElementById('valor_desconto_moeda'),
+        formaPgto: document.getElementById('forma_pagamento'),
+        tipoPgto: document.getElementById('tipo_pagamento'),
+        inputEntrada: document.getElementById('valor_entrada'),
+        labelEntrada: document.getElementById('label_valor_entrada'),
+        blocos: {
+            parcelas: document.getElementById('blocoParcelas'),
+            dataParcela: document.getElementById('blocoDataPrimeiraParcela'),
+            financiadora: document.getElementById('blocoFinanciadora')
+        }
+    };
+
+    function parseValorBR(valor) {
+        if (!valor) return 0;
+        // Limpa R$, espaços e ajusta separadores decimais
+        let limpo = valor.toString().replace(/[R$\s.]/g, '').replace(',', '.');
+        return parseFloat(limpo) || 0;
+    }
+
+    function formatarMoeda(valor) {
+        return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function atualizarCalculos() {
+        const valorBase = parseValorBR(selectors.valorKit.innerText);
+        let percentual = parseFloat(selectors.inputDesconto.value) || 0;
+
+        if (percentual > 9) {
+            percentual = 9;
+            selectors.inputDesconto.value = 9;
+        }
+
+        const economia = valorBase * (percentual / 100);
+        const valorFinal = valorBase - economia;
+
+        selectors.displayFinal.innerText = formatarMoeda(valorFinal);
+        selectors.displayEconomia.innerText = formatarMoeda(economia);
+
+        return valorFinal;
+    }
+
+    function gerenciarInterface() {
+        const valorComDesconto = atualizarCalculos();
+        const eParcelado = selectors.formaPgto.value === 'parcelado';
+        const eFinanciamento = selectors.tipoPgto.value === 'financiamento';
+
+        // Toggle Blocos Parcelamento
+        selectors.blocos.parcelas.classList.toggle('d-none', !eParcelado);
+        selectors.blocos.dataParcela.classList.toggle('d-none', !eParcelado);
+        
+        // Toggle Bloco Financiadora
+        selectors.blocos.financiadora.classList.toggle('d-none', !eFinanciamento);
+
+        // Ajuste de Labels e Valores Automáticos
+        if (eParcelado) {
+            selectors.labelEntrada.innerText = 'Valor de Entrada (R$)';
+            // Não sobrescreve o valor de entrada se for parcelado (deixa o usuário decidir)
+        } else {
+            selectors.labelEntrada.innerText = 'Valor Total (R$)';
+            selectors.inputEntrada.value = valorComDesconto.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+    }
+
+    // Event Listeners
+    selectors.inputDesconto.addEventListener('input', gerenciarInterface);
+    selectors.formaPgto.addEventListener('change', gerenciarInterface);
+    selectors.tipoPgto.addEventListener('change', gerenciarInterface);
+
+    // Init
+    document.addEventListener('DOMContentLoaded', gerenciarInterface);
+</script>
+{% endblock %}
