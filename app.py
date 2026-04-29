@@ -476,6 +476,7 @@ class FinanceiroEmpresa(db.Model):
     juros = db.Column(db.Numeric(12, 2), default=0)     # juros ou multa aplicados
     
     credor_id = db.Column(db.Integer, db.ForeignKey('credores.id'), nullable=True)
+    grupo_lancamento = db.Column(db.String(100), index=True)
 
     plano_financeiro = db.relationship('PlanoFinanceiro', lazy='joined')
     centro_custo = db.relationship('CentroCusto', lazy='joined')
@@ -9933,6 +9934,8 @@ def empresa_financeiro_lancar():
         try:
             criados = 0
             partes_por_plano = len(centros_ids) * parcelas_qtd
+            
+            grupo = str(uuid.uuid4())
 
             # Para anexar só no primeiro título, capture este id:
             first_titulo_id = None
@@ -9965,7 +9968,8 @@ def empresa_financeiro_lancar():
                             cliente_operacional_id=(cliente_operacional.id if cliente_operacional else None),
                             aprovado=False,
                             numero_documento=numero_documento,
-                            comprovante_arquivo=first_filename  # compat com campo único
+                            comprovante_arquivo=first_filename,
+                            grupo_lancamento=grupo 
                         )
                         db.session.add(titulo)
                         db.session.flush()  # garante titulo.id
@@ -10017,6 +10021,23 @@ def empresa_financeiro_lancar():
         credores_all=credores_all,
         clientes_operacionais_all=clientes_op_all,  # para select de cliente em receitas (opcional)
     )
+    
+@app.route('/empresa/financeiro/parcelas/<grupo>')
+@login_required
+def buscar_parcelas_grupo(grupo):
+    itens = FinanceiroEmpresa.query.filter_by(
+        grupo_lancamento=grupo
+    ).order_by(FinanceiroEmpresa.data_vencimento.asc()).all()
+
+    return jsonify([
+        {
+            "vencimento": i.data_vencimento.strftime('%d/%m/%Y') if i.data_vencimento else '',
+            "descricao": i.descricao,
+            "status": i.status,
+            "valor": float((i.valor or 0) + (i.juros or 0))
+        }
+        for i in itens
+    ])
     
 @app.route('/empresa/financeiro/<int:lanc_id>/editar', methods=['GET', 'POST'], endpoint='empresa_financeiro_editar')
 @login_required
@@ -10311,35 +10332,48 @@ def download_anexo(anexo_id):
     mime, _ = mimetypes.guess_type(fpath)
 
     # Entrega inline (navegador tenta abrir)
-    return send_from_directory(base_dir, safe_name, as_attachment=False, mimetype=mime)
-    
+    return send_from_directory(base_dir, safe_name, as_attachment=False, mimetype=mime)    
+
 @app.route('/empresa/financeiro', methods=['GET'], endpoint='empresa_financeiro_listar')
 @login_required
 def empresa_financeiro_listar():
-    # Filtros (querystring)
+    # 1. CAPTURA DE FILTROS BÁSICOS
     empresa_id = request.args.get('empresa_id', type=int)
-    tipo = (request.args.get('tipo') or '').lower()            # receita|despesa
-    status = (request.args.get('status') or '').lower()          # pendente|pago|recebido
-    aprovado = request.args.get('aprovado')                        # 'sim'|'nao'|None
+    tipo = (request.args.get('tipo') or '').lower()           # receita|despesa
+    status = (request.args.get('status') or '').lower()         # pendente|pago|recebido
+    aprovado = request.args.get('aprovado')                      # 'sim'|'nao'|None
     plano_id = request.args.get('plano_id', type=int)
     centro_id = request.args.get('centro_id', type=int)
-    data_ini = _parse_date(request.args.get('data_ini'))
-    data_fim = _parse_date(request.args.get('data_fim'))           # inclusive
     q = (request.args.get('q') or '').strip()
 
-    # Ordenação
+    # 2. LÓGICA DE DATA AUTOMÁTICA (POR VENCIMENTO)
+    # Garantimos o formato string YYYY-MM-DD para que o HTML entenda os inputs
+    raw_ini = request.args.get('data_ini')
+    raw_fim = request.args.get('data_fim')
+
+    if not raw_ini and not raw_fim and not q:
+        hoje = date.today()
+        d_ini_obj = hoje.replace(day=1)
+        d_fim_obj = hoje.replace(day=calendar.monthrange(hoje.year, hoje.month)[1])
+        data_ini = d_ini_obj.strftime('%Y-%m-%d')
+        data_fim = d_fim_obj.strftime('%Y-%m-%d')
+    else:
+        data_ini = raw_ini
+        data_fim = raw_fim
+
+    # 3. ORDENAÇÃO
     sort = (request.args.get('sort') or '').strip()
     dir_ = (request.args.get('dir')  or 'desc').lower()
     if dir_ not in ('asc', 'desc'):
         dir_ = 'desc'
 
-    # Listas auxiliares
+    # 4. LISTAS AUXILIARES
     empresas = Empresa.query.order_by(Empresa.nome.asc()).all()
     planos_all = PlanoFinanceiro.query.filter_by(ativo=True).order_by(PlanoFinanceiro.nome.asc()).all()
     centros_all = CentroCusto.query.order_by(CentroCusto.empresa_id.asc(), CentroCusto.codigo.asc()).all()
     contas_all = CaixaBanco.query.order_by(CaixaBanco.nome.asc()).all()
 
-    # Query base com onclause explícito (evita AmbiguousForeignKeysError)
+    # 5. QUERY PRINCIPAL (EAGER LOADING)
     qry = (
         db.session.query(FinanceiroEmpresa)
         .join(Empresa, Empresa.id == FinanceiroEmpresa.empresa_id)
@@ -10358,7 +10392,7 @@ def empresa_financeiro_listar():
         )
     )
 
-    # Aplicar filtros
+    # 6. APLICAÇÃO DOS FILTROS (CONVERSÃO DE TIPOS PARA O BANCO)
     if empresa_id:
         qry = qry.filter(FinanceiroEmpresa.empresa_id == empresa_id)
     if tipo in ('receita', 'despesa'):
@@ -10369,95 +10403,69 @@ def empresa_financeiro_listar():
         qry = qry.filter(FinanceiroEmpresa.aprovado.is_(True))
     elif aprovado == 'nao':
         qry = qry.filter(FinanceiroEmpresa.aprovado.is_(False))
-    if plano_id:
-        qry = qry.filter(FinanceiroEmpresa.plano_financeiro_id == plano_id)
-    if centro_id:
-        qry = qry.filter(FinanceiroEmpresa.centro_custo_id == centro_id)
+    
+    # Filtro de Data por Vencimento (Convertendo String -> Date)
     if data_ini:
-        qry = qry.filter(FinanceiroEmpresa.data >= data_ini)
+        try:
+            dt_ini_obj = datetime.strptime(data_ini, '%Y-%m-%d').date()
+            qry = qry.filter(FinanceiroEmpresa.data_vencimento >= dt_ini_obj)
+        except (ValueError, TypeError): pass
     if data_fim:
-        qry = qry.filter(FinanceiroEmpresa.data <= data_fim)
+        try:
+            dt_fim_obj = datetime.strptime(data_fim, '%Y-%m-%d').date()
+            qry = qry.filter(FinanceiroEmpresa.data_vencimento <= dt_fim_obj)
+        except (ValueError, TypeError): pass
+    
     if q:
         like = f'%{q}%'
         qry = qry.filter(or_(
             FinanceiroEmpresa.descricao.ilike(like),
             FinanceiroEmpresa.numero_documento.ilike(like),
-            Credor.nome.ilike(like),
-            FinanceiroAnexo.original_name.ilike(like),
-            FinanceiroAnexo.filename.ilike(like)
+            Credor.nome.ilike(like)
         )).distinct()
 
-    # Ordenação
-    # Whitelist de colunas
+    # 7. LOGICA DE ORDENAÇÃO
     colmap = {
         'data_vencimento': FinanceiroEmpresa.data_vencimento,
         'valor': FinanceiroEmpresa.valor,
         'status': FinanceiroEmpresa.status,
-        'aprovado': FinanceiroEmpresa.aprovado,
     }
     order_col = colmap.get(sort)
-
     if order_col is None:
-        # padrão: por data_vencimento DESC (NULLS LAST), depois id DESC
-        qry = qry.order_by(
-            FinanceiroEmpresa.data_vencimento.desc().nullslast(),
-            FinanceiroEmpresa.id.desc()
-        )
+        qry = qry.order_by(FinanceiroEmpresa.data_vencimento.desc().nullslast(), FinanceiroEmpresa.id.desc())
     else:
-        if dir_ == 'asc':
-            primary = order_col.asc()
-        else:
-            primary = order_col.desc()
+        primary = order_col.asc() if dir_ == 'asc' else order_col.desc()
+        qry = qry.order_by(primary.nullslast() if sort == 'data_vencimento' else primary, FinanceiroEmpresa.id.desc())
 
-        # Para data_vencimento, manter NULLS LAST para leitura mais natural
-        if order_col.key == 'data_vencimento':
-            primary = primary.nullslast()
-
-        # amarra desempate por id desc/asc
-        secondary = FinanceiroEmpresa.id.asc() if dir_ == 'asc' else FinanceiroEmpresa.id.desc()
-
-        qry = qry.order_by(primary, secondary)
-
-    # Execução
-    itens = qry.all()
-
-    # TOTAIS (mesmos filtros)
-    base_receita = db.session.query(func.coalesce(func.sum(
-        case((FinanceiroEmpresa.tipo == 'receita', FinanceiroEmpresa.valor), else_=0)
-    ), 0))
-    base_despesa = db.session.query(func.coalesce(func.sum(
-        case((FinanceiroEmpresa.tipo == 'despesa', FinanceiroEmpresa.valor), else_=0)
-    ), 0))
-
-    def aplicar_filtros(base_q):
+    # 8. TOTAIS (MESMOS FILTROS DE DATA)
+    def aplicar_filtros_totais(base_q):
         if empresa_id: base_q = base_q.filter(FinanceiroEmpresa.empresa_id == empresa_id)
         if tipo in ('receita','despesa'): base_q = base_q.filter(FinanceiroEmpresa.tipo == tipo)
         if status in ('pendente','pago','recebido'): base_q = base_q.filter(FinanceiroEmpresa.status == status)
-        if aprovado == 'sim': base_q = base_q.filter(FinanceiroEmpresa.aprovado.is_(True))
-        elif aprovado == 'nao': base_q = base_q.filter(FinanceiroEmpresa.aprovado.is_(False))
-        if plano_id: base_q = base_q.filter(FinanceiroEmpresa.plano_financeiro_id == plano_id)
-        if centro_id: base_q = base_q.filter(FinanceiroEmpresa.centro_custo_id == centro_id)
-        if data_ini: base_q = base_q.filter(FinanceiroEmpresa.data >= data_ini)
-        if data_fim: base_q = base_q.filter(FinanceiroEmpresa.data <= data_fim)
-        if q:
-            like = f'%{q}%'
-            base_q = base_q.filter(or_(
-                FinanceiroEmpresa.descricao.ilike(like),
-                FinanceiroEmpresa.numero_documento.ilike(like)
-            ))
+        if data_ini:
+            try: base_q = base_q.filter(FinanceiroEmpresa.data_vencimento >= datetime.strptime(data_ini, '%Y-%m-%d').date())
+            except: pass
+        if data_fim:
+            try: base_q = base_q.filter(FinanceiroEmpresa.data_vencimento <= datetime.strptime(data_fim, '%Y-%m-%d').date())
+            except: pass
         return base_q
 
-    total_receitas = aplicar_filtros(base_receita).scalar()
-    total_despesas = aplicar_filtros(base_despesa).scalar()
+    base_receita = db.session.query(func.coalesce(func.sum(case((FinanceiroEmpresa.tipo == 'receita', FinanceiroEmpresa.valor), else_=0)), 0))
+    base_despesa = db.session.query(func.coalesce(func.sum(case((FinanceiroEmpresa.tipo == 'despesa', FinanceiroEmpresa.valor), else_=0)), 0))
+
+    total_receitas = aplicar_filtros_totais(base_receita).scalar()
+    total_despesas = aplicar_filtros_totais(base_despesa).scalar()
     saldo = (total_receitas or 0) - (total_despesas or 0)
 
+    # 9. RENDERIZAÇÃO
     return render_template(
         'empresa_financeiro_listar.html',
-        itens=itens,
+        itens=qry.all(),
         empresas=empresas, planos_all=planos_all, centros_all=centros_all,
         contas_all=contas_all,
         empresa_id=empresa_id, tipo=tipo, status=status, aprovado=aprovado,
-        plano_id=plano_id, centro_id=centro_id, data_ini=data_ini, data_fim=data_fim,
+        plano_id=plano_id, centro_id=centro_id, 
+        data_ini=data_ini, data_fim=data_fim,
         q=q, sort=sort, dir=dir_,
         total_receitas=total_receitas, total_despesas=total_despesas, saldo=saldo
     )
@@ -12302,8 +12310,6 @@ def editar_proposta_etapa3(proposta_id):
     if request.method == 'POST':
         acao = request.form.get('acao')
 
-        print("FORM COMPLETO:", request.form)
-
         tipo_inversor = (request.form.get('tipo_inversor') or '').strip().lower()
         fase_inversor = request.form.get('fase_inversor')
         tensao_inversor = request.form.get('tensao_inversor')
@@ -12344,22 +12350,15 @@ def editar_proposta_etapa3(proposta_id):
                 ativo=True
             ).all()
 
-            print("====== DEBUG FORNECEDORES ======")
             for f in fornecedores:
                 print(f.id, f.nome, f.api, f.api_tipo)
-            print("================================")
 
             for fornecedor in fornecedores:
 
-                print(f" Analisando fornecedor: {fornecedor.nome}")
-
                 # FORTLEV (API)
                 if fornecedor.api and fornecedor.api_tipo == 'fortlev':
-                    print(f" Chamando Fortlev para {fornecedor.nome}")
 
                     kits_api = buscar_kits_fortlev(proposta, fornecedor, tipo_inversor)
-
-                    print(" Retorno Fortlev:", kits_api)
 
                     kits_recomendados.extend(kits_api)
 
@@ -12396,8 +12395,6 @@ def editar_proposta_etapa3(proposta_id):
 
         # CONFIRMAR KIT
         if acao == 'confirmar_kit':
-
-            print("\n================ DEBUG CONFIRMAR KIT ================")
 
             kit_index = request.form.get('kit_index', type=int)
             print("kit_index recebido:", kit_index)
@@ -12615,11 +12612,8 @@ def buscar_kits_fortlev(proposta, fornecedor, tipo_inversor=None):
     user = os.getenv("FORTLEV_SOLAR_USERNAME")
     pwd = os.getenv("FORTLEV_SOLAR_PWD")
 
-    print("FORTLEV USER:", user)
-    print("FORTLEV PWD:", "OK" if pwd else None)
-
     if not user or not pwd:
-        print("❌ Credenciais Fortlev ausentes no Render")
+        print("Credenciais Fortlev ausentes no Render")
         return []
 
     client.authenticate(
@@ -12773,16 +12767,12 @@ def buscar_kits_fortlev(proposta, fornecedor, tipo_inversor=None):
             "prioridade": prioridade
         })
 
-    print(" Kits Fortlev gerados:", len(kits))
-
     if not kits:
         return []
 
     # ordena por preço (menor primeiro)
     kits.sort(key=lambda x: x['valor_total_final'])
     melhor_kit = kits[0]
-
-    print("💰 Melhor kit escolhido:", melhor_kit['preco'], melhor_kit['inversor'])
 
     return [melhor_kit]
 
