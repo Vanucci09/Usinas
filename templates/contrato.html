@@ -267,9 +267,21 @@
             {% endif %}
 
             {% if condicao.valor_entrada %}
+                {% set valor_base = (condicao.valor_entrada or 0) | float %}
+                {% set desconto = (condicao.percentual_desconto or 0) | float %}
+                {% set valor_final = valor_base - (valor_base * (desconto / 100)) %}
+
                 <p>
                     <strong>Entrada:</strong> 
-                    R$ {{ "{:,.2f}".format(condicao.valor_entrada).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                    R$ {{ "{:,.2f}".format(valor_final).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+
+                    {% if desconto > 0 %}
+                        <br>
+                        <small class="text-danger">
+                            Desconto: {{ desconto }}%
+                        </small>
+                    {% endif %}
+
                     {% if condicao.data_pagamento %}
                         - Vencimento: {{ condicao.data_pagamento.strftime('%d/%m/%Y') }}
                     {% endif %}

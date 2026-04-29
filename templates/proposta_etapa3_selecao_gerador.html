@@ -4,25 +4,32 @@
 
 {% block content %}
 {% macro moeda_br(valor) -%}
-    R$ {{ "{:,.2f}".format(valor).replace(",", "X").replace(".", ",").replace("X", ".") }}
+    R$ {{ "{:,.2f}".format(valor or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
 {%- endmacro %}
 
 <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="text-primary fw-bold mb-0">Configuração do Sistema</h2>
-            <p class="text-muted">Etapa 3: Escolha do Kit Fotovoltaico</p>
+            <p class="text-muted mb-0">Etapa 3: Escolha do Kit Fotovoltaico</p>
         </div>
-        <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2">Passo 3 de 3</span>
+
+        <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2">
+            Passo 3 de 3
+        </span>
     </div>
 
     <form method="POST" id="formKits">
-        <input type="hidden" name="acao" value="">
+        <input type="hidden" id="acao_hidden" value="">
 
         <div class="card shadow-sm border-0 mb-4">
             <div class="card-body bg-light rounded">
-                <h6 class="text-uppercase text-secondary fw-bold mb-3 small">Parâmetros de Busca</h6>
+                <h6 class="text-uppercase text-secondary fw-bold mb-3 small">
+                    Parâmetros de Busca
+                </h6>
+
                 <div class="row g-3">
+
                     <div class="col-md-3">
                         <label class="form-label fw-semibold">Fabricante do Inversor</label>
                         <select name="fabricante_inversor" class="form-select shadow-sm">
@@ -34,6 +41,7 @@
                             {% endfor %}
                         </select>
                     </div>
+
                     <div class="col-md-3">
                         <label class="form-label fw-semibold">Fabricante do Módulo</label>
                         <select name="fabricante_modulo" class="form-select shadow-sm">
@@ -45,135 +53,310 @@
                             {% endfor %}
                         </select>
                     </div>
+
                     <div class="col-md-3">
                         <label class="form-label fw-semibold">Tipo de Inversor</label>
-                        <select name="tipo_inversor" id="tipo_inversor" class="form-select shadow-sm" required>
-                            <option value="">Selecione</option>
-                            <option value="string" {{ 'selected' if tipo_inversor_selecionado == 'string' }}>String</option>
-                            <option value="microinversor" {{ 'selected' if tipo_inversor_selecionado == 'microinversor' }}>Microinversor</option>
-                            <option value="hibrido" {{ 'selected' if tipo_inversor_selecionado == 'hibrido' }}>Híbrido</option>
+                        <select name="tipo_inversor" id="tipo_inversor" class="form-select shadow-sm">
+                            <option value="" disabled {{ 'selected' if not tipo_inversor_selecionado }}>
+                                Selecione
+                            </option>
+
+                            <option value="string"
+                                {{ 'selected' if tipo_inversor_selecionado == 'string' else '' }}>
+                                String
+                            </option>
+
+                            <option value="microinversor"
+                                {{ 'selected' if tipo_inversor_selecionado == 'microinversor' else '' }}>
+                                Microinversor
+                            </option>
+
+                            <option value="hibrido"
+                                {{ 'selected' if tipo_inversor_selecionado == 'hibrido' else '' }}>
+                                Híbrido
+                            </option>
                         </select>
                     </div>
+
                     <div class="col-md-3">
                         <label class="form-label fw-semibold">Fase do Inversor</label>
                         <select name="fase_inversor" class="form-select shadow-sm">
                             <option value="">Selecione</option>
                             {% for f in ['Monofásico', 'Bifásico', 'Trifásico'] %}
-                                <option value="{{ f }}" {{ 'selected' if fase_inversor_selecionada == f or (not fase_inversor_selecionada and proposta.fase_inversor == f) }}>{{ f }}</option>
+                                <option value="{{ f }}" {{ 'selected' if fase_inversor_selecionada == f or (not fase_inversor_selecionada and proposta.fase_inversor == f) }}>
+                                    {{ f }}
+                                </option>
                             {% endfor %}
                         </select>
                     </div>
+
                     <div class="col-md-3">
                         <label class="form-label fw-semibold">Tensão</label>
                         <select name="tensao_inversor" class="form-select shadow-sm">
                             <option value="">Selecione</option>
                             {% for t in ['127/220V', '220/380V', '380V'] %}
-                                <option value="{{ t }}" {{ 'selected' if tensao_inversor_selecionada == t or (not tensao_inversor_selecionada and proposta.tensao_inversor == t) }}>{{ t }}</option>
+                                <option value="{{ t }}" {{ 'selected' if tensao_inversor_selecionada == t or (not tensao_inversor_selecionada and proposta.tensao_inversor == t) }}>
+                                    {{ t }}
+                                </option>
                             {% endfor %}
                         </select>
                     </div>
+
                     <div class="col-md-3">
                         <label class="form-label fw-semibold">Valor do Frete</label>
                         <div class="input-group shadow-sm">
                             <span class="input-group-text">R$</span>
-                            <input type="text" name="valor_frete" class="form-control" 
+                            <input type="text"
+                                   name="valor_frete"
+                                   class="form-control"
                                    value="{{ valor_frete_digitado if valor_frete_digitado is defined else (proposta.valor_frete or '') }}">
                         </div>
                     </div>
-                    <div class="col-md-3">
+
+                    <div class="col-md-3 campo-baterias">
                         <label class="form-label fw-semibold">Valor Baterias (R$)</label>
-                        <input type="text" name="valor_baterias" id="valor_baterias"
-                            class="form-control shadow-sm" style="display:none;">
+                        <div class="input-group shadow-sm">
+                            <span class="input-group-text">R$</span>
+                            <input type="text"
+                                   name="valor_baterias"
+                                   id="valor_baterias"
+                                   class="form-control"
+                                   value="{{ valor_baterias_digitado if valor_baterias_digitado is defined else (proposta.valor_baterias or '') }}">
+                        </div>
                     </div>
 
-                    <div class="col-md-3">
+                    <div class="col-md-3 campo-kwp">
                         <label class="form-label fw-semibold">Valor por kWp (R$)</label>
-                        <input type="text" name="valor_kwp" id="valor_kwp"
-                            class="form-control shadow-sm" style="display:none;">
+                        <div class="input-group shadow-sm">
+                            <span class="input-group-text">R$</span>
+                            <input type="text"
+                                   name="valor_kwp"
+                                   id="valor_kwp"
+                                   class="form-control"
+                                   value="{{ valor_kwp_digitado if valor_kwp_digitado is defined else (proposta.valor_kwp or '') }}">
+                        </div>
                     </div>
 
                     <div class="col-md-3">
                         <label class="form-label fw-semibold">Ajuste Final (R$)</label>
-                        <input type="text" name="ajuste_final"
-                            class="form-control shadow-sm">
+                        <div class="input-group shadow-sm">
+                            <span class="input-group-text">R$</span>
+                            <input type="text"
+                                   name="ajuste_final"
+                                   class="form-control"
+                                   value="{{ ajuste_final_digitado if ajuste_final_digitado is defined else (proposta.ajuste_final or '') }}">
+                        </div>
                     </div>
+
                     <div class="col-md-12">
                         <label class="form-label fw-semibold">Observações na Proposta</label>
-                        <textarea name="observacoes" class="form-control shadow-sm" rows="2" placeholder="Notas que aparecerão no PDF final...">{{ observacoes_digitadas if observacoes_digitadas is defined else (proposta.observacoes or '') }}</textarea>
+                        <textarea name="observacoes"
+                                  class="form-control shadow-sm"
+                                  rows="2"
+                                  placeholder="Notas que aparecerão no PDF final...">{{ observacoes_digitadas if observacoes_digitadas is defined else (proposta.observacoes or '') }}</textarea>
                     </div>
+
                     <div class="col-md-12 text-end">
-                        <button type="submit" class="btn btn-primary px-4 shadow-sm" onclick="this.form.acao.value='buscar_kits'">
+                        <button type="submit"
+                                name="acao"
+                                value="buscar_kits"
+                                class="btn btn-primary px-4 shadow-sm">
                             <i class="bi bi-search me-2"></i>Calcular e Buscar Kits
                         </button>
                     </div>
+
                 </div>
             </div>
         </div>
 
         {% if kits_recomendados %}
         <div class="mb-4">
-            <h5 class="text-secondary fw-bold mb-3"><i class="bi bi-cpu me-2"></i>Kits Encontrados</h5>
+            <h5 class="text-secondary fw-bold mb-3">
+                <i class="bi bi-cpu me-2"></i>Kits Encontrados
+            </h5>
+
             <div class="row">
                 {% for kit in kits_recomendados %}
                 <div class="col-12 mb-4">
-                    <div class="card border-0 shadow-sm kit-card {{ 'border-start border-success border-4' if loop.first }}">
+                    <div class="card border-0 shadow-sm kit-card {{ 'border-start border-success border-4' if loop.first }}"
+                         onclick="selecionarKit('{{ kit.fornecedor.id }}')">
+
                         <div class="card-header bg-white py-3">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <h5 class="mb-0 fw-bold text-success">{{ kit.fornecedor.nome }}</h5>
+                            <div class="d-flex justify-content-between align-items-center gap-3">
+                                <h5 class="mb-0 fw-bold text-success">
+                                    {{ kit.fornecedor.nome }}
+                                </h5>
+
                                 <div class="form-check form-switch m-0">
-                                    <input class="form-check-input" type="radio" name="fornecedor_escolhido_id" 
-                                           value="{{ kit.fornecedor.id }}" id="kit_{{ kit.fornecedor.id }}" {{ 'checked' if loop.first }}>
-                                    <label class="form-check-label fw-bold" for="kit_{{ kit.fornecedor.id }}">Selecionar este Kit</label>
+                                    <input class="form-check-input"
+                                           type="radio"
+                                           name="fornecedor_escolhido_id"
+                                           value="{{ kit.fornecedor.id }}"
+                                           id="kit_{{ kit.fornecedor.id }}"
+                                           {{ 'checked' if loop.first }}
+                                           onclick="event.stopPropagation(); atualizarCardSelecionado();">
+
+                                    <label class="form-check-label fw-bold"
+                                           for="kit_{{ kit.fornecedor.id }}"
+                                           onclick="event.stopPropagation();">
+                                        Selecionar este Kit
+                                    </label>
                                 </div>
                             </div>
                         </div>
+
                         <div class="card-body">
                             <div class="row">
+
                                 <div class="col-lg-4 border-end">
-                                    <h6 class="text-muted small text-uppercase fw-bold">Equipamentos</h6>
-                                    <p class="mb-1"><strong>Módulos:</strong> {{ kit.qtd_modulos }}x {{ kit.modulo.fabricante }} ({{ kit.modulo.potencia_wp }}Wp)</p>
-                                    <p class="mb-1"><strong>Inversor:</strong> {{ kit.qtd_inversores }}x {{ kit.inversor.fabricante }} - {{ kit.inversor.modelo }} ({{ kit.inversor.potencia_inversor }}kW)</p>
-                                    <p class="mb-0"><strong>Estrutura:</strong> {{ proposta.tipo_telhado }}</p>
+                                    <h6 class="text-muted small text-uppercase fw-bold">
+                                        Equipamentos
+                                    </h6>
+
+                                    {% if kit.api %}
+                                        <p><strong>Módulos:</strong> {{ kit.modulos }}</p>
+                                        <p><strong>Inversor:</strong> {{ kit.inversor }}</p>
+                                    {% else %}
+                                        <p class="mb-1">
+                                            <strong>Módulos:</strong>
+                                            {{ kit.qtd_modulos }}x {{ kit.modulo.fabricante }}
+                                            ({{ kit.modulo.potencia_wp }}Wp)
+                                        </p>
+
+                                        <p class="mb-1">
+                                            <strong>Inversor:</strong>
+                                            {{ kit.qtd_inversores }}x {{ kit.inversor.fabricante }}
+                                            - {{ kit.inversor.modelo }}
+                                            ({{ kit.inversor.potencia_inversor }}kW)
+                                        </p>
+                                    {% endif %}
+
+                                    <p class="mb-0">
+                                        <strong>Estrutura:</strong>
+                                        {{ proposta.tipo_telhado }}
+                                    </p>
                                 </div>
+
                                 <div class="col-lg-4 border-end">
-                                    <h6 class="text-muted small text-uppercase fw-bold">Performance Estimada</h6>
-                                    <div class="d-flex justify-content-between mb-1">
-                                        <span>Potência do Sistema:</span>
-                                        <span class="fw-bold">{{ "%.2f"|format(kit.potencia_total_modulos) }} kWp</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between mb-1">
-                                        <span>Geração Mensal:</span>
-                                        <span class="fw-bold text-primary">{{ "%.2f"|format(kit.geracao_estimada) }} kWh/mês</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between">
-                                        <span>Área Necessária:</span>
-                                        <span class="fw-bold">{{ "%.2f"|format(kit.area_total) }} m²</span>
-                                    </div>
+                                    <h6 class="text-muted small text-uppercase fw-bold">
+                                        Performance Estimada
+                                    </h6>
+
+                                    {% if kit.api %}
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span>Potência do Sistema:</span>
+                                            <span class="fw-bold">
+                                                {{ "%.2f"|format(kit.potencia) }} kWp
+                                            </span>
+                                        </div>
+
+                                        <p class="text-muted small mt-2">
+                                            Dados detalhados não disponíveis para este fornecedor.
+                                        </p>
+                                    {% else %}
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span>Potência do Sistema:</span>
+                                            <span class="fw-bold">
+                                                {{ "%.2f"|format(kit.potencia) }} kWp
+                                            </span>
+                                        </div>
+
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span>Geração Mensal:</span>
+                                            <span class="fw-bold text-primary">
+                                                {{ "%.2f"|format(kit.geracao_estimada) }} kWh/mês
+                                            </span>
+                                        </div>
+
+                                        <div class="d-flex justify-content-between">
+                                            <span>Área Necessária:</span>
+                                            <span class="fw-bold">
+                                                {{ "%.2f"|format(kit.area_total) }} m²
+                                            </span>
+                                        </div>
+                                    {% endif %}
                                 </div>
+
                                 <div class="col-lg-4 text-center d-flex flex-column justify-content-center bg-light-subtle">
-                                    <h6 class="text-muted small text-uppercase fw-bold">Investimento Total</h6>
-                                    <h2 class="text-success fw-bold mb-0">{{ moeda_br(kit.valor_total_final) }}</h2>
-                                    <small class="text-muted">Incluso impostos e BDI</small>
+                                    <h6 class="text-muted small text-uppercase fw-bold">
+                                        Investimento Total
+                                    </h6>
+
+                                    <h2 class="text-success fw-bold mb-0">
+                                        {% if kit.api %}
+                                            {{ moeda_br(kit.valor_total_final) }}
+                                        {% else %}
+                                            {{ moeda_br(kit.valor_total_final) }}
+                                        {% endif %}
+                                    </h2>
+
+                                    <small class="text-muted">
+                                        Incluso impostos e BDI
+                                    </small>
                                 </div>
+
                             </div>
 
                             <div class="mt-3">
-                                <button class="btn btn-sm btn-link text-decoration-none p-0" type="button" data-bs-toggle="collapse" data-bs-target="#custos_{{ kit.fornecedor.id }}">
-                                    <i class="bi bi-plus-circle me-1"></i> Ver detalhamento de custos
+                                <button class="btn btn-sm btn-link text-decoration-none p-0"
+                                        type="button"
+                                        data-bs-toggle="collapse"
+                                        data-bs-target="#custos_{{ kit.fornecedor.id }}"
+                                        onclick="event.stopPropagation();">
+                                    <i class="bi bi-plus-circle me-1"></i>
+                                    Ver detalhamento de custos
                                 </button>
-                                <div class="collapse mt-3" id="custos_{{ kit.fornecedor.id }}">
+
+                                {% if not kit.api %}
+                                <div class="collapse mt-3"
+                                     id="custos_{{ kit.fornecedor.id }}">
                                     <div class="row g-2 p-3 bg-light rounded border">
-                                        <div class="col-md-3 small"><strong>Módulos:</strong> {{ moeda_br(kit.valor_modulos) }}</div>
-                                        <div class="col-md-3 small"><strong>Inversores:</strong> {{ moeda_br(kit.valor_inversores) }}</div>
-                                        <div class="col-md-3 small"><strong>Projeto:</strong> {{ moeda_br(kit.valor_projeto) }}</div>
-                                        <div class="col-md-3 small"><strong>Instalação:</strong> {{ moeda_br(kit.valor_instalacao) }}</div>
-                                        <div class="col-md-3 small"><strong>Frete:</strong> {{ moeda_br(kit.valor_frete) }}</div>
-                                        <div class="col-md-3 small"><strong>BDI:</strong> {{ moeda_br(kit.valor_bdi) }}</div>
-                                        <div class="col-md-3 small"><strong>Comissão:</strong> {{ moeda_br(kit.valor_comissao_vendedor) }}</div>
-                                        <div class="col-md-3 small"><strong>Impostos:</strong> {{ moeda_br(kit.valor_imposto_material + kit.valor_imposto_servico) }}</div>
+
+                                        <div class="col-md-3 small">
+                                            <strong>Módulos:</strong>
+                                            {{ moeda_br(kit.valor_modulos) }}
+                                        </div>
+
+                                        <div class="col-md-3 small">
+                                            <strong>Inversores:</strong>
+                                            {{ moeda_br(kit.valor_inversores) }}
+                                        </div>
+
+                                        <div class="col-md-3 small">
+                                            <strong>Projeto:</strong>
+                                            {{ moeda_br(kit.valor_projeto) }}
+                                        </div>
+
+                                        <div class="col-md-3 small">
+                                            <strong>Instalação:</strong>
+                                            {{ moeda_br(kit.valor_instalacao) }}
+                                        </div>
+
+                                        <div class="col-md-3 small">
+                                            <strong>Frete:</strong>
+                                            {{ moeda_br(kit.valor_frete) }}
+                                        </div>
+
+                                        <div class="col-md-3 small">
+                                            <strong>BDI:</strong>
+                                            {{ moeda_br(kit.valor_bdi) }}
+                                        </div>
+
+                                        <div class="col-md-3 small">
+                                            <strong>Comissão:</strong>
+                                            {{ moeda_br(kit.valor_comissao_vendedor) }}
+                                        </div>
+
+                                        <div class="col-md-3 small">
+                                            <strong>Impostos:</strong>
+                                            {{ moeda_br(proposta.valor_imposto_material + proposta.valor_imposto_servico) }}
+                                        </div>
+
                                     </div>
                                 </div>
+                                {% endif %}
                             </div>
+
                         </div>
                     </div>
                 </div>
@@ -183,14 +366,19 @@
         {% endif %}
 
         <div class="mt-5 d-flex justify-content-between align-items-center border-top pt-4">
-            <a href="{{ url_for('editar_proposta_etapa2', proposta_id=proposta.id) }}" class="btn btn-outline-secondary px-4">
+            <a href="{{ url_for('editar_proposta_etapa2', proposta_id=proposta.id) }}"
+               class="btn btn-outline-secondary px-4">
                 <i class="bi bi-arrow-left me-2"></i>Voltar
             </a>
 
             {% if kits_recomendados %}
-            <button type="submit" class="btn btn-success btn-lg px-5 shadow"
-                    onclick="abrirProposta(event)">
-                Confirmar e Gerar Proposta <i class="bi bi-file-earmark-pdf ms-2"></i>
+            <button type="submit"
+                name="acao"
+                value="confirmar_kit"
+                class="btn btn-success btn-lg px-5 shadow"
+                onclick="this.form.noValidate = true; return validarKitSelecionado(event)">
+                Confirmar e Gerar Proposta
+                <i class="bi bi-file-earmark-pdf ms-2"></i>
             </button>
             {% endif %}
         </div>
@@ -198,37 +386,123 @@
 </div>
 
 <style>
-    .kit-card { transition: transform 0.2s, box-shadow 0.2s; border: 2px solid transparent !important; }
-    .kit-card:hover { transform: translateY(-3px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important; }
-    .form-check-input:checked + .form-check-label { color: #198754; }
-</style>
-<script>
-document.querySelector('[name="tipo_inversor"]').addEventListener('change', function() {
-    const tipo = this.value;
-
-    document.getElementById('valor_baterias').style.display = 'none';
-    document.getElementById('valor_kwp').style.display = 'none';
-
-    if (tipo === 'hibrido') {
-        document.getElementById('valor_baterias').style.display = 'block';
+    .kit-card {
+        transition: transform 0.2s, box-shadow 0.2s, border 0.2s;
+        border: 2px solid transparent !important;
+        cursor: pointer;
     }
 
-    if (tipo === 'string') {
-        document.getElementById('valor_kwp').style.display = 'block';
+    .kit-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 .5rem 1rem rgba(0,0,0,.15) !important;
+    }
+
+    .kit-card.kit-selecionado {
+        border-left: 5px solid #198754 !important;
+        box-shadow: 0 .5rem 1rem rgba(25,135,84,.18) !important;
+    }
+
+    .form-check-input:checked + .form-check-label {
+        color: #198754;
+    }
+
+    .campo-baterias,
+    .campo-kwp {
+        display: none;
+    }
+
+    @media (max-width: 991px) {
+        .border-end {
+            border-right: 0 !important;
+            border-bottom: 1px solid #dee2e6;
+            padding-bottom: 1rem;
+            margin-bottom: 1rem;
+        }
+    }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    atualizarCamposExtras();
+    atualizarCardSelecionado();
+
+    const tipoSelect = document.getElementById('tipo_inversor');
+
+    if (tipoSelect) {
+        tipoSelect.addEventListener('change', atualizarCamposExtras);
     }
 });
 
-function abrirProposta(e) {
-    e.preventDefault();
+function getFormKits() {
+    return document.getElementById('formKits');
+}
 
-    const form = document.getElementById('formKits');
-    form.acao.value = 'confirmar_kit';
+function definirAcaoBuscar() {
+    const form = getFormKits();
 
-    // abre nova aba com a proposta (link público)
-    window.open("/proposta/{{ proposta.slug }}", "_blank");
+    if (form) {
+        form.querySelector('[name="acao"]').value = 'buscar_kits';
+    }
+}
 
-    // envia o form (salva e redireciona)
-    form.submit();
+function atualizarCamposExtras() {
+    const tipoSelect = document.getElementById('tipo_inversor');
+    const campoBaterias = document.querySelector('.campo-baterias');
+    const campoKwp = document.querySelector('.campo-kwp');
+
+    if (!tipoSelect || !campoBaterias || !campoKwp) {
+        return;
+    }
+
+    campoBaterias.style.display = 'none';
+    campoKwp.style.display = 'none';
+
+    if (tipoSelect.value === 'hibrido') {
+        campoBaterias.style.display = 'block';
+    }
+
+    if (tipoSelect.value === 'string') {
+        campoKwp.style.display = 'block';
+    }
+}
+
+function selecionarKit(fornecedorId) {
+    const radio = document.getElementById('kit_' + fornecedorId);
+
+    if (radio) {
+        radio.checked = true;
+        atualizarCardSelecionado();
+    }
+}
+
+function atualizarCardSelecionado() {
+    const cards = document.querySelectorAll('.kit-card');
+
+    cards.forEach(function (card) {
+        card.classList.remove('kit-selecionado');
+    });
+
+    const selecionado = document.querySelector('input[name="fornecedor_escolhido_id"]:checked');
+
+    if (selecionado) {
+        const card = selecionado.closest('.kit-card');
+
+        if (card) {
+            card.classList.add('kit-selecionado');
+        }
+    }
+}
+
+function validarKitSelecionado(e) {
+    const kitSelecionado = document.querySelector('input[name="fornecedor_escolhido_id"]:checked');
+
+    if (!kitSelecionado) {
+        alert("Por favor, selecione um kit antes de confirmar.");
+        e.preventDefault();
+        return false;
+    }
+
+    return true;
 }
 </script>
 {% endblock %}

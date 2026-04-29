@@ -33,6 +33,25 @@
                                    {% if not fornecedor or fornecedor.ativo %}checked{% endif %}>
                             <label class="form-check-label" for="ativo">Ativo</label>
                         </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Usa API?</label>
+                            <select name="api" id="apiSelect" class="form-select">
+                                <option value="0" {% if fornecedor and not fornecedor.api %}selected{% endif %}>Não</option>
+                                <option value="1" {% if fornecedor and fornecedor.api %}selected{% endif %}>Sim</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Tipo da API</label>
+                            <select name="api_tipo" id="apiTipoSelect" class="form-select">
+                                <option value="">Selecione</option>
+                                <option value="fortlev" {% if fornecedor and fornecedor.api_tipo == 'fortlev' %}selected{% endif %}>Fortlev</option>
+                                <option value="solis">Solis</option>
+                                <option value="deye">Deye</option>
+                                <option value="sungrow">Sungrow</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
