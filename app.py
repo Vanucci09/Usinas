@@ -12612,9 +12612,19 @@ def buscar_kits_fortlev(proposta, fornecedor, tipo_inversor=None):
 
     client = FortlevSolarClient(env="DEV")
 
+    user = os.getenv("FORTLEV_SOLAR_USERNAME")
+    pwd = os.getenv("FORTLEV_SOLAR_PWD")
+
+    print("FORTLEV USER:", user)
+    print("FORTLEV PWD:", "OK" if pwd else None)
+
+    if not user or not pwd:
+        print("❌ Credenciais Fortlev ausentes no Render")
+        return []
+
     client.authenticate(
-        username=os.getenv("FORTLEV_SOLAR_USERNAME"),
-        pwd=os.getenv("FORTLEV_SOLAR_PWD")
+        username=user,
+        pwd=pwd
     )
 
     # 1. Base de consumo
