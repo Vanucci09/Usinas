@@ -202,6 +202,26 @@
             </div>
         </div>
 
+        {% if total_atrasados > 0 or total_pendentes_mes > 0 %}
+        <div class="alert alert-warning d-flex align-items-center shadow-sm mb-3">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+
+            <div>
+                {% if total_atrasados > 0 %}
+                    <strong class="text-danger">{{ total_atrasados }}</strong> atrasados
+                    {% if meses_atrasados %}
+                        ({{ meses_atrasados|join(', ') }})
+                    {% endif %}
+                {% endif %}
+
+                {% if total_pendentes_mes > 0 %}
+                    {% if total_atrasados > 0 %} | {% endif %}
+                    <strong>{{ total_pendentes_mes }}</strong> pendentes este mês
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Tabela -->
         <div class="table-container">
             <div class="table-responsive">

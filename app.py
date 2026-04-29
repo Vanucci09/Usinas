@@ -10456,6 +10456,55 @@ def empresa_financeiro_listar():
     total_receitas = aplicar_filtros_totais(base_receita).scalar()
     total_despesas = aplicar_filtros_totais(base_despesa).scalar()
     saldo = (total_receitas or 0) - (total_despesas or 0)
+    
+    # NOVO BLOCO AQUI
+    hoje = date.today()
+
+    # ATRASADOS (contagem real)
+    atrasados_base = db.session.query(FinanceiroEmpresa).filter(
+        FinanceiroEmpresa.status == 'pendente',
+        FinanceiroEmpresa.data_vencimento < hoje
+    )
+
+    if empresa_id:
+        atrasados_base = atrasados_base.filter(FinanceiroEmpresa.empresa_id == empresa_id)
+
+    total_atrasados = atrasados_base.count()
+
+    # MESES DOS ATRASADOS
+    atrasados_query = db.session.query(
+        extract('month', FinanceiroEmpresa.data_vencimento).label('mes'),
+        extract('year', FinanceiroEmpresa.data_vencimento).label('ano')
+    ).filter(
+        FinanceiroEmpresa.status == 'pendente',
+        FinanceiroEmpresa.data_vencimento < hoje
+    )
+
+    if empresa_id:
+        atrasados_query = atrasados_query.filter(FinanceiroEmpresa.empresa_id == empresa_id)
+
+    atrasados_meses = atrasados_query.distinct().all()
+
+    # PENDENTES DO MÊS
+    pendentes_mes = db.session.query(FinanceiroEmpresa).filter(
+        FinanceiroEmpresa.status == 'pendente',
+        FinanceiroEmpresa.data_vencimento >= hoje,
+        extract('month', FinanceiroEmpresa.data_vencimento) == hoje.month,
+        extract('year', FinanceiroEmpresa.data_vencimento) == hoje.year
+    )
+
+    if empresa_id:
+        pendentes_mes = pendentes_mes.filter(FinanceiroEmpresa.empresa_id == empresa_id)
+
+    total_pendentes_mes = pendentes_mes.count()
+    
+    meses_pt = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+            'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+
+    meses_atrasados_str = [
+        f"{meses_pt[int(m.mes)-1]}/{int(m.ano)}"
+        for m in atrasados_meses
+    ]
 
     # 9. RENDERIZAÇÃO
     return render_template(
@@ -10467,7 +10516,10 @@ def empresa_financeiro_listar():
         plano_id=plano_id, centro_id=centro_id, 
         data_ini=data_ini, data_fim=data_fim,
         q=q, sort=sort, dir=dir_,
-        total_receitas=total_receitas, total_despesas=total_despesas, saldo=saldo
+        total_receitas=total_receitas, total_despesas=total_despesas, saldo=saldo,
+        total_atrasados=total_atrasados,
+        total_pendentes_mes=total_pendentes_mes,
+        meses_atrasados=meses_atrasados_str
     )
     
 @app.route('/empresa/financeiro/<int:lanc_id>/atualizar-status-data', methods=['POST'], endpoint='empresa_financeiro_atualizar_status_data')
