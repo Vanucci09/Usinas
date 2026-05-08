@@ -10031,6 +10031,11 @@ def buscar_parcelas_grupo(grupo):
 
     return jsonify([
         {
+            "id": i.id,  # CRITICAL: Necessário para vincular o data-id no JS
+            # Formato ISO (YYYY-MM-DD) é OBRIGATÓRIO para o <input type="date">
+            "vencimento_iso": i.data_vencimento.strftime('%Y-%m-%d') if i.data_vencimento else '',
+            "aprovado": i.aprovado,
+            # Mantemos o formato BR caso queira exibir texto em algum lugar
             "vencimento": i.data_vencimento.strftime('%d/%m/%Y') if i.data_vencimento else '',
             "descricao": i.descricao,
             "status": i.status,
@@ -10674,6 +10679,57 @@ def empresa_financeiro_toggle_aprovado(lanc_id):
 
     next_url = request.form.get('next') or request.referrer or url_for('empresa_financeiro_listar')
     return redirect(next_url)
+
+@app.route('/financeiro/atualizar-vencimento/<int:id>', methods=['POST'])
+@login_required
+def atualizar_vencimento(id):
+    """
+    Atualiza a data de vencimento de uma parcela específica.
+    Permite alteração apenas se o status atual for 'pendente'.
+    """
+    # 1. Busca o registro no banco
+    item = FinanceiroEmpresa.query.get_or_404(id)
+    
+    # NOVA REGRA: Se aprovado for True, bloqueia a edição
+    if item.aprovado: 
+        return jsonify({
+            'status': 'error', 
+            'message': 'Não é permitido alterar o vencimento de um lançamento já aprovado.'
+        }), 403 
+    
+    nova_data_str = request.form.get('data_vencimento')
+    
+    if not nova_data_str:
+        return jsonify({
+            'status': 'error', 
+            'message': 'Nenhuma data foi fornecida.'
+        }), 400
+        
+    try:
+        # 3. Converte e atualiza
+        item.data_vencimento = datetime.strptime(nova_data_str, '%Y-%m-%d').date()
+        
+        # 4. Comita a alteração
+        db.session.commit()
+        
+        return jsonify({
+            'status': 'success', 
+            'message': 'Vencimento atualizado com sucesso!',
+            'novo_vencimento': item.data_vencimento.strftime('%d/%m/%Y')
+        }), 200
+
+    except ValueError:
+        return jsonify({
+            'status': 'error', 
+            'message': 'Formato de data inválido.'
+        }), 400
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'status': 'error', 
+            'message': f'Erro interno: {str(e)}'
+        }), 500
 
 @app.route('/clientes_operacionais/novo', methods=['GET', 'POST'])
 @login_required

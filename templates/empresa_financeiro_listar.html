@@ -6,81 +6,136 @@
     :root {
         --glass-bg: rgba(255, 255, 255, 0.95);
         --border-color: #e9ecef;
+        --primary-soft: #f1f8ff;
     }
 
     /* Layout Geral */
-    .finance-container { background-color: #f8f9fa; min-height: 100vh; padding-bottom: 2rem; }
+    .finance-container { 
+        background-color: #f8f9fa; 
+        min-height: 100vh; 
+        padding-bottom: 2rem; 
+    }
     
-    /* Stats Cards */
+    /* Stats Cards - Compactos */
     .stat-card {
         border: none;
-        border-radius: 12px;
+        border-radius: 10px;
         transition: transform 0.2s;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.05);
     }
     .stat-card:hover { transform: translateY(-3px); }
     .icon-shape {
-        width: 48px;
-        height: 48px;
+        width: 40px; /* Reduzido de 48px */
+        height: 40px;
         background-image: linear-gradient(135deg, #6c757d 0%, #495057 100%);
         display: flex;
         align-items: center;
         justify-content: center;
-        border-radius: 10px;
+        border-radius: 8px;
         color: white;
     }
 
-    /* Tabela Estilizada */
+    /* Tabela Estilizada de Alta Densidade */
     .table-container {
         background: white;
-        border-radius: 15px;
+        border-radius: 12px;
         box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
         overflow: hidden;
     }
-    .table-modern { margin-bottom: 0; }
+    .table-modern { margin-bottom: 0; width: 100%; }
+    
+    /* Cabeçalho Fixo e Compacto */
     .table-modern thead th {
         background-color: #f8f9fa;
         text-transform: uppercase;
-        font-size: 0.75rem;
-        letter-spacing: 0.05em;
+        font-size: 0.7rem; /* Reduzido de 0.75rem */
+        letter-spacing: 0.03em;
         color: #6c757d;
         border-top: none;
-        padding: 1rem 0.75rem;
+        padding: 0.75rem 0.5rem;
         position: sticky;
         top: 0;
         z-index: 10;
+        border-bottom: 2px solid var(--border-color);
     }
-    .table-modern td { padding: 1rem 0.75rem; vertical-align: middle; border-bottom: 1px solid var(--border-color); }
+
+    /* Células Compactas */
+    .table-modern td { 
+        padding: 0.4rem 0.5rem; /* Reduzido drasticamente de 1rem */
+        vertical-align: middle; 
+        border-bottom: 1px solid var(--border-color);
+        font-size: 0.85rem;
+    }
+
+    /* Efeito de Hover para não se perder nas linhas juntas */
+    .table-modern tbody tr:hover {
+        background-color: var(--primary-soft) !important;
+    }
     
     /* Colunas Personalizadas */
-    .col-data { width: 100px; }
-    .col-tipo { width: 110px; }
-    .col-valor { font-weight: 600; width: 140px; }
-    .col-status-wide { min-width: 480px; }
+    .col-data { width: 90px; }
+    .col-tipo { width: 100px; }
+    .col-valor { font-weight: 600; width: 130px; white-space: nowrap; }
+    .col-status-wide { min-width: 280px; }
     
-    /* Grid de Baixa dentro da Tabela */
+    /* Grid de Baixa Inline - Ultra Compacto */
     .form-baixa-inline {
         display: grid;
-        grid-template-columns: 100px 115px 85px 120px 40px;
-        gap: 4px;
+        grid-template-columns: 90px 105px 80px 100px 35px; /* Ajustado para economia de espaço */
+        gap: 3px;
         align-items: center;
         background: #f1f3f5;
-        padding: 6px;
-        border-radius: 8px;
+        padding: 4px;
+        border-radius: 6px;
     }
     .input-baixa {
-        font-size: 0.75rem !important;
-        padding: 0.25rem 0.4rem !important;
+        height: 26px !important; /* Altura reduzida */
+        font-size: 0.7rem !important;
+        padding: 0.15rem 0.3rem !important;
         border-radius: 4px !important;
         border: 1px solid #ced4da;
     }
-
-    /* Utilitários */
-    .text-truncate-2 {
-        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-        overflow: hidden; font-size: 0.88rem;
-        line-height: 1.4;
+    .btn-baixa-small {
+        height: 26px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
-    .badge-type { font-size: 0.65rem; padding: 4px 8px; text-transform: uppercase; font-weight: 700; }
+
+    /* Utilitários de Texto */
+    .text-truncate-1 {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: block;
+    }
+    
+    .text-truncate-2 {
+        display: -webkit-box; 
+        -webkit-line-clamp: 1; /* Alterado de 2 para 1 para ganhar espaço vertical */
+        -webkit-box-orient: vertical;
+        overflow: hidden; 
+        font-size: 0.82rem;
+        line-height: 1.2;
+    }
+
+    .badge-type { 
+        font-size: 0.6rem; 
+        padding: 2px 6px; 
+        text-transform: uppercase; 
+        font-weight: 700; 
+        border-radius: 4px;
+    }
+
+    /* Cores de Status Compactas */
+    .status-dot {
+        height: 8px;
+        width: 8px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 5px;
+    }
 </style>
 
 <div class="finance-container">
@@ -232,7 +287,7 @@
                             <th class="col-tipo">Tipo</th>
                             <th>Descrição Detalhada</th>
                             <th class="text-center">Docs</th>
-                            <th class="col-status-wide">Status / Baixa de Pagamento</th>
+                            <th class="col-status-wide">Status / Baixa de Pag</th>
                             <th class="text-end">Valor Final</th>
                             <th class="text-end">Ações</th>
                         </tr>
@@ -347,7 +402,7 @@
                                             <button class="btn btn-sm btn-success p-1" title="Confirmar Baixa"><i class="bi bi-check-lg"></i></button>
                                         </form>
                                     {% else %}
-                                        <span class="badge bg-warning text-dark px-3 py-2 rounded-pill"><i class="bi bi-hourglass me-1"></i>PENDENTE APROVAÇÃO</span>
+                                        <span class="badge bg-warning text-dark px-3 py-2 rounded-pill"><i class="bi bi-hourglass me-1"></i>PENDENTE APR</span>
                                     {% endif %}
                                 </td>
 
@@ -395,22 +450,25 @@
 <div class="modal fade" id="modalParcelas" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <div class="modal-header bg-light">
-                <h5 class="modal-title fw-bold" id="tituloModalParcelas">Conciliação de Parcelas</h5>
+            <div class="modal-header bg-light py-2"> <!-- py-2 para cabeçalho mais fino -->
+                <h5 class="modal-title fw-bold fs-6" id="tituloModalParcelas">Conciliação de Parcelas</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-0">
-                        <thead class="table-light text-muted small uppercase">
+                    <!-- table-hover ajuda a identificar a linha que está sendo editada -->
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead class="table-light text-muted" style="font-size: 0.7rem; text-transform: uppercase;">
                             <tr>
-                                <th class="ps-3">Vencimento</th>
+                                <th class="ps-3" style="width: 160px;">Vencimento</th>
                                 <th>Descrição</th>
-                                <th>Status</th>
-                                <th class="text-end pe-3">Valor</th>
+                                <th style="width: 100px;">Status</th>
+                                <th class="text-end pe-3" style="width: 140px;">Valor</th>
                             </tr>
                         </thead>
-                        <tbody id="corpoTabelaParcelas"></tbody>
+                        <tbody id="corpoTabelaParcelas" style="font-size: 0.85rem;">
+                            <!-- O JavaScript preencherá aqui com os inputs editáveis -->
+                        </tbody>
                     </table>
                 </div>
             </div>
@@ -421,7 +479,7 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
     (function() {
-        // 1. LOGICA DE ATRASO (EXECUTADA AO CARREGAR)
+        // 1. LOGICA DE ATRASO (MANTIDA)
         const hojeIso = new Date().toISOString().slice(0, 10);
         document.querySelectorAll('#tabela-financeiro tbody tr').forEach(tr => {
             const status = (tr.getAttribute('data-status') || '').toLowerCase();
@@ -441,60 +499,101 @@
             }
         });
 
-        // 2. LOGICA DO MODAL (DELEGAÇÃO DE EVENTO)
+        // 2. LOGICA DO MODAL
         const modalEl = document.getElementById('modalParcelas');
-        if (!modalEl) {
-            console.error("ERRO: Elemento 'modalParcelas' não encontrado no HTML.");
-            return;
-        }
+        if (!modalEl) return;
+        
         const modalObj = new bootstrap.Modal(modalEl);
         const corpoTabela = document.getElementById('corpoTabelaParcelas');
         const tituloModal = document.getElementById('tituloModalParcelas');
 
-        // Escuta cliques no documento inteiro (Delegação)
         document.addEventListener('click', function(e) {
-          console.log("CLICK DETECTADO"); // DEBUG
-        const btn = e.target.closest('.btn-ver-parcelas');
-        if (!btn) return;
+            const btn = e.target.closest('.btn-ver-parcelas');
+            if (!btn) return;
 
-         console.log("BOTÃO ENCONTRADO", btn); // DEBUG
+            e.preventDefault();
+            const grupo = btn.getAttribute('data-grupo');
 
-        e.preventDefault();
+            if (!grupo) {
+                alert("Este lançamento não possui grupo.");
+                return;
+            }
 
-        const grupo = btn.getAttribute('data-grupo');
+            tituloModal.textContent = "Conciliação de Parcelas";
+            corpoTabela.innerHTML = '<tr class="text-center"><td colspan="4">Carregando...</td></tr>';
 
-        if (!grupo) {
-            alert("Este lançamento não possui grupo.");
-            return;
-        }
+            fetch(`/empresa/financeiro/parcelas/${grupo}`)
+                .then(res => res.json())
+                .then(data => {
+                    corpoTabela.innerHTML = '';
+                    data.forEach(item => {
+                        // Pode editar APENAS se aprovado for false
+                        const podeEditar = item.aprovado === false;
 
-        tituloModal.textContent = "Conciliação de Parcelas";
-        corpoTabela.innerHTML = '';
-
-        fetch(`/empresa/financeiro/parcelas/${grupo}`)
-          .then(res => res.json())
-          .then(data => {
-
-              corpoTabela.innerHTML = '';
-
-              data.forEach(item => {
-                  const row = `
-                      <tr>
-                          <td class="ps-3 fw-bold">${item.vencimento}</td>
-                          <td><small class="text-muted">${item.descricao}</small></td>
-                          <td>${item.status}</td>
-                          <td class="text-end pe-3 fw-bold">
-                              R$ ${Number(item.valor || 0).toFixed(2).replace('.', ',')}
-                          </td>
-                      </tr>
-                  `;
-
-                  corpoTabela.innerHTML += row;
-              });
-          });
+                        const row = `
+                            <tr>
+                                <td class="ps-3">
+                                    <input type="date" 
+                                        class="form-control form-control-sm border-0 bg-transparent fw-bold ${podeEditar ? 'input-edit-vencimento' : 'text-muted'}" 
+                                        value="${item.vencimento_iso}" 
+                                        data-id="${item.id}"
+                                        ${podeEditar ? '' : 'disabled'}
+                                        style="width: 135px; cursor: ${podeEditar ? 'pointer' : 'default'};">
+                                </td>
+                                <td><small class="text-muted">${item.descricao}</small></td>
+                                <td>
+                                    <span class="badge border ${podeEditar ? 'text-dark bg-light' : 'text-white bg-success'}">
+                                        ${item.aprovado ? 'APROVADO' : 'PENDENTE'}
+                                    </span>
+                                </td>
+                                <td class="text-end pe-3 fw-bold">
+                                    R$ ${Number(item.valor || 0).toFixed(2).replace('.', ',')}
+                                </td>
+                            </tr>
+                        `;
+                        corpoTabela.innerHTML += row;
+                    });
+                });
 
         modalObj.show();
-    });
+        });
+
+        // 3. LOGICA CORRIGIDA: ESCUTAR MUDANÇA NA DATA (AUTO-SAVE)
+        document.addEventListener('change', function(e) {
+            if (e.target.classList.contains('input-edit-vencimento')) {
+                const input = e.target;
+                const id = input.getAttribute('data-id');
+                const novaData = input.value; // CORREÇÃO: .value em vez de .val()
+
+                if (!novaData) return;
+
+                // Efeito visual de salvamento
+                input.style.opacity = '0.5';
+
+                // Usando URLSearchParams para garantir que o Flask receba como Form Data
+                const formData = new URLSearchParams();
+                formData.append('data_vencimento', novaData);
+
+                fetch(`/financeiro/atualizar-vencimento/${id}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: formData.toString()
+                })
+                .then(res => {
+                    input.style.opacity = '1';
+                    if (!res.ok) throw new Error();
+                    
+                    // Feedback visual de sucesso
+                    input.classList.add('text-success');
+                    setTimeout(() => input.classList.remove('text-success'), 1500);
+                })
+                .catch(err => {
+                    input.style.opacity = '1';
+                    alert('Erro ao atualizar vencimento no servidor.');
+                    console.error("Erro no fetch:", err);
+                });
+            }
+        });
     })();
 </script>
 {% endblock %}
