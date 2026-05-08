@@ -257,26 +257,67 @@
 
                                 <!-- Descrição Ampliada -->
                                 <td>
-                                    <div class="text-truncate-2 fw-medium text-dark" title="{{ it.descricao }}">{{ it.descricao }}</div>
+                                    <!-- 1. Credor acima e em negrito -->
+                                    <div class="text-dark fw-bold text-truncate" title="{{ it.credor.nome if it.credor else 'Sem credor' }}">
+                                        <i class="bi bi-person me-1"></i>{{ it.credor.nome if it.credor else 'Sem credor' }}
+                                    </div>
+
+                                    <!-- 2. Descrição abaixo -->
+                                    <div class="text-truncate-2 fw-medium text-muted mt-1" title="{{ it.descricao }}">
+                                        {{ it.descricao }}
+                                    </div>
+
+                                    <!-- 3. Plano financeiro (opcional: mantive abaixo para manter a hierarquia) -->
                                     <div class="small text-muted mt-1">
-                                        <i class="bi bi-person me-1"></i>{{ it.credor.nome if it.credor else 'Sem credor' }} 
-                                        <span class="mx-1">|</span>
                                         <i class="bi bi-tag me-1"></i>{{ it.plano_financeiro.nome if it.plano_financeiro else '-' }}
                                     </div>
                                 </td>
 
                                 <!-- Documentos -->
                                 <td class="text-center">
-                                    {% if it.comprovante_arquivo or it.comprovante_baixa_arquivo or it.anexos %}
-                                        <div class="dropdown">
-                                            <button class="btn btn-sm btn-light border" data-bs-toggle="dropdown"><i class="bi bi-paperclip"></i></button>
-                                            <ul class="dropdown-menu shadow border-0">
-                                                {% if it.comprovante_arquivo %}<li><a class="dropdown-item small" href="{{ url_for('download_comprovante', filename=it.comprovante_arquivo) }}" target="_blank">📄 Documento/NF</a></li>{% endif %}
-                                                {% if it.comprovante_baixa_arquivo %}<li><a class="dropdown-item small" href="{{ url_for('download_comprovante', filename=it.comprovante_baixa_arquivo) }}" target="_blank">🧾 Comprovante Baixa</a></li>{% endif %}
-                                                {% for ax in it.anexos %}<li><a class="dropdown-item small" href="{{ url_for('download_anexo', anexo_id=ax.id) }}" target="_blank">📎 {{ ax.original_name }}</a></li>{% endfor %}
-                                            </ul>
+
+                                    {% set anexos = it.anexos or [] %}
+                                    {% set tem_anexos = anexos|length > 0 %}
+
+                                    {% if it.comprovante_arquivo %}
+                                        <a class="btn btn-sm btn-link text-decoration-none"
+                                        href="{{ url_for('download_comprovante', filename=it.comprovante_arquivo) }}"
+                                        target="_blank"
+                                        rel="noopener"
+                                        title="Abrir Documento/NF">
+                                            📄
+                                        </a>
+                                    {% endif %}
+
+                                    {% if it.comprovante_baixa_arquivo %}
+                                        <a class="btn btn-sm btn-link text-decoration-none"
+                                        href="{{ url_for('download_comprovante', filename=it.comprovante_baixa_arquivo) }}"
+                                        target="_blank"
+                                        rel="noopener"
+                                        title="Abrir Comprovante Baixa">
+                                            🧾
+                                        </a>
+                                    {% endif %}
+
+                                    {% if tem_anexos %}
+                                        <div class="mt-1 text-start" style="max-width:260px;">
+                                            {% for ax in anexos %}
+                                                <div class="small text-truncate" title="{{ ax.original_name or ax.filename }}">
+                                                    <a class="text-muted text-decoration-none"
+                                                    href="{{ url_for('download_anexo', anexo_id=ax.id) }}"
+                                                    target="_blank"
+                                                    rel="noopener">
+                                                        📎 {{ ax.original_name or ax.filename }}
+                                                    </a>
+                                                </div>
+                                            {% endfor %}
                                         </div>
-                                    {% else %}<span class="text-muted small">—</span>{% endif %}
+                                    {% endif %}
+
+                                    {% if not it.comprovante_arquivo and not it.comprovante_baixa_arquivo and not tem_anexos %}
+                                        <span class="text-muted small">—</span>
+                                    {% endif %}
+
                                 </td>
 
                                 <!-- Status / Baixa -->
@@ -443,7 +484,7 @@
                           <td><small class="text-muted">${item.descricao}</small></td>
                           <td>${item.status}</td>
                           <td class="text-end pe-3 fw-bold">
-                              R$ ${item.valor.toFixed(2).replace('.', ',')}
+                              R$ ${Number(item.valor || 0).toFixed(2).replace('.', ',')}
                           </td>
                       </tr>
                   `;
