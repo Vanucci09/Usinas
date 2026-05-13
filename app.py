@@ -18,6 +18,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from flask_mail import Mail, Message
 from urllib.parse import urlparse, quote_plus, urljoin, parse_qs
 import base64, shutil
+from sqlalchemy import cast
 from sqlalchemy.orm import joinedload
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -10895,69 +10896,251 @@ def empresa_financeiro_listar():
     centros_all = CentroCusto.query.order_by(CentroCusto.empresa_id.asc(), CentroCusto.codigo.asc()).all()
     contas_all = CaixaBanco.query.order_by(CaixaBanco.nome.asc()).all()
 
-    # 5. QUERY PRINCIPAL (EAGER LOADING)
-    qry = (
-        db.session.query(FinanceiroEmpresa)
-        .join(Empresa, Empresa.id == FinanceiroEmpresa.empresa_id)
-        .outerjoin(PlanoFinanceiro, PlanoFinanceiro.id == FinanceiroEmpresa.plano_financeiro_id)
-        .outerjoin(CentroCusto, CentroCusto.id == FinanceiroEmpresa.centro_custo_id)
-        .outerjoin(CaixaBanco, CaixaBanco.id == FinanceiroEmpresa.conta_id)
-        .outerjoin(Credor, Credor.id == FinanceiroEmpresa.credor_id)
-        .outerjoin(FinanceiroAnexo, FinanceiroAnexo.titulo_id == FinanceiroEmpresa.id)
-        .options(
-            joinedload(FinanceiroEmpresa.empresa),
-            joinedload(FinanceiroEmpresa.plano_financeiro),
-            joinedload(FinanceiroEmpresa.centro_custo),
-            joinedload(FinanceiroEmpresa.conta),
-            joinedload(FinanceiroEmpresa.credor),
-            joinedload(FinanceiroEmpresa.anexos)
+    # 5. SUBQUERY TOTAL DO GRUPO
+    sub_total_grupo = (
+        db.session.query(
+            FinanceiroEmpresa.grupo_lancamento.label('grp'),
+            func.coalesce(
+                func.sum(FinanceiroEmpresa.valor),
+                0
+            ).label('valor_total_grupo')
         )
+
+        .group_by(
+            FinanceiroEmpresa.grupo_lancamento
+        )
+        .subquery()
+    )
+    
+    # SUBQUERY ANEXOS DO GRUPO
+    sub_anexos = (
+        db.session.query(
+            FinanceiroEmpresa.grupo_lancamento.label('grp'),
+            func.string_agg(
+                cast(FinanceiroAnexo.id, db.String),
+                '||'
+            ).label('anexos_ids')
+        )
+
+        .join(
+            FinanceiroAnexo,
+            FinanceiroAnexo.titulo_id
+            ==
+            FinanceiroEmpresa.id
+        )
+
+        .group_by(
+            FinanceiroEmpresa.grupo_lancamento
+        )
+        .subquery()
+
     )
 
-    # 6. APLICAÇÃO DOS FILTROS (CONVERSÃO DE TIPOS PARA O BANCO)
+    # 6. QUERY CONSOLIDADA
+    qry = (
+        db.session.query(
+            # CAMPOS BASE
+            func.min(FinanceiroEmpresa.id).label('id'),
+            FinanceiroEmpresa.grupo_lancamento.label('grupo_lancamento'),
+            FinanceiroEmpresa.data_vencimento.label('data_vencimento'),
+            FinanceiroEmpresa.tipo.label('tipo'),
+            FinanceiroEmpresa.status.label('status'),
+            FinanceiroEmpresa.aprovado.label('aprovado'),
+            func.regexp_replace(
+                FinanceiroEmpresa.descricao,
+                r'\s*\(\d+/\d+\)$',
+                ''
+            ).label('descricao'),
+            func.substring(
+                FinanceiroEmpresa.descricao,
+                r'\(\d+/\d+\)'
+            ).label('parcela_label'),
+            FinanceiroEmpresa.credor_id.label('credor_id'),
+            Credor.nome.label('credor_nome'),
+            ClienteOperacional.nome.label(
+                'cliente_operacional_nome'
+            ),
+            FinanceiroEmpresa.conta_id.label('conta_id'),
+            sub_anexos.c.anexos_ids.label(
+                'anexos_ids'
+            ),
+            FinanceiroEmpresa.data_liquidado.label('data_liquidado'),
+            FinanceiroEmpresa.juros.label('juros'),
+
+            # VALOR DA PARCELA
+            func.coalesce(
+                func.sum(FinanceiroEmpresa.valor),
+                0
+            ).label('valor'),
+
+            # TOTAL DO GRUPO
+            sub_total_grupo.c.valor_total_grupo.label(
+                'valor_total_grupo'
+            ),
+
+            # QUANTIDADE DE APROPRIAÇÕES
+            func.count(
+                FinanceiroEmpresa.id
+            ).label('qtd_apropriacoes')
+        )
+
+        .join(
+            Empresa,
+            Empresa.id == FinanceiroEmpresa.empresa_id
+        )
+        .outerjoin(
+            Credor,
+            Credor.id == FinanceiroEmpresa.credor_id
+        )
+        .outerjoin(
+            ClienteOperacional,
+            ClienteOperacional.id == FinanceiroEmpresa.cliente_operacional_id
+        )
+        
+        .outerjoin(
+        sub_anexos,
+        sub_anexos.c.grp
+        ==
+        FinanceiroEmpresa.grupo_lancamento
+
+    )
+        .outerjoin(
+            sub_total_grupo,
+            sub_total_grupo.c.grp
+            ==
+            FinanceiroEmpresa.grupo_lancamento
+        )
+
+    )
+
+    # FILTROS
     if empresa_id:
-        qry = qry.filter(FinanceiroEmpresa.empresa_id == empresa_id)
+        qry = qry.filter(
+            FinanceiroEmpresa.empresa_id == empresa_id
+        )
     if tipo in ('receita', 'despesa'):
-        qry = qry.filter(FinanceiroEmpresa.tipo == tipo)
+        qry = qry.filter(
+            FinanceiroEmpresa.tipo == tipo
+        )
     if status in ('pendente', 'pago', 'recebido'):
-        qry = qry.filter(FinanceiroEmpresa.status == status)
+        qry = qry.filter(
+            FinanceiroEmpresa.status == status
+        )
     if aprovado == 'sim':
-        qry = qry.filter(FinanceiroEmpresa.aprovado.is_(True))
+        qry = qry.filter(
+            FinanceiroEmpresa.aprovado.is_(True)
+        )
     elif aprovado == 'nao':
-        qry = qry.filter(FinanceiroEmpresa.aprovado.is_(False))
-    
-    # Filtro de Data por Vencimento (Convertendo String -> Date)
+        qry = qry.filter(
+            FinanceiroEmpresa.aprovado.is_(False)
+        )
+
+    # DATA
     if data_ini:
         try:
-            dt_ini_obj = datetime.strptime(data_ini, '%Y-%m-%d').date()
-            qry = qry.filter(FinanceiroEmpresa.data_vencimento >= dt_ini_obj)
-        except (ValueError, TypeError): pass
+            dt_ini_obj = datetime.strptime(
+                data_ini,
+                '%Y-%m-%d'
+            ).date()
+            qry = qry.filter(
+                FinanceiroEmpresa.data_vencimento >= dt_ini_obj
+            )
+        except:
+            pass
+
     if data_fim:
         try:
-            dt_fim_obj = datetime.strptime(data_fim, '%Y-%m-%d').date()
-            qry = qry.filter(FinanceiroEmpresa.data_vencimento <= dt_fim_obj)
-        except (ValueError, TypeError): pass
-    
+            dt_fim_obj = datetime.strptime(
+                data_fim,
+                '%Y-%m-%d'
+            ).date()
+            qry = qry.filter(
+                FinanceiroEmpresa.data_vencimento <= dt_fim_obj
+            )
+
+        except:
+            pass
+
+    # BUSCA
     if q:
         like = f'%{q}%'
-        qry = qry.filter(or_(
-            FinanceiroEmpresa.descricao.ilike(like),
-            FinanceiroEmpresa.numero_documento.ilike(like),
-            Credor.nome.ilike(like)
-        )).distinct()
+        qry = qry.filter(
+            or_(
+                FinanceiroEmpresa.descricao.ilike(like),
+                FinanceiroEmpresa.numero_documento.ilike(like),
+                Credor.nome.ilike(like)
+            )
+        )
 
-    # 7. LOGICA DE ORDENAÇÃO
-    colmap = {
-        'data_vencimento': FinanceiroEmpresa.data_vencimento,
-        'valor': FinanceiroEmpresa.valor,
-        'status': FinanceiroEmpresa.status,
-    }
-    order_col = colmap.get(sort)
-    if order_col is None:
-        qry = qry.order_by(FinanceiroEmpresa.data_vencimento.desc().nullslast(), FinanceiroEmpresa.id.desc())
+    # GROUP BY
+    qry = qry.group_by(
+        FinanceiroEmpresa.grupo_lancamento,
+        FinanceiroEmpresa.data_vencimento,
+        FinanceiroEmpresa.tipo,
+        FinanceiroEmpresa.status,
+        FinanceiroEmpresa.aprovado,
+        func.regexp_replace(
+            FinanceiroEmpresa.descricao,
+            r'\s*\(\d+/\d+\)$',
+            ''
+        ),
+        func.substring(
+            FinanceiroEmpresa.descricao,
+            r'\(\d+/\d+\)'
+        ),
+        FinanceiroEmpresa.credor_id,
+        Credor.nome,
+        ClienteOperacional.nome,
+        FinanceiroEmpresa.conta_id,
+        FinanceiroEmpresa.data_liquidado,
+        FinanceiroEmpresa.juros,
+        sub_anexos.c.anexos_ids,
+        sub_total_grupo.c.valor_total_grupo
+
+    )
+
+    # ORDENAÇÃO
+    qry = qry.order_by(
+        FinanceiroEmpresa.data_vencimento.desc(),
+        func.min(FinanceiroEmpresa.id).desc()
+    )
+    
+    # 7. ORDENAÇÃO CONSOLIDADA
+
+    if sort == 'valor':
+
+        if dir_ == 'asc':
+
+            qry = qry.order_by(
+                func.sum(FinanceiroEmpresa.valor).asc()
+            )
+
+        else:
+
+            qry = qry.order_by(
+                func.sum(FinanceiroEmpresa.valor).desc()
+            )
+
+    elif sort == 'status':
+
+        if dir_ == 'asc':
+
+            qry = qry.order_by(
+                FinanceiroEmpresa.status.asc()
+            )
+
+        else:
+
+            qry = qry.order_by(
+                FinanceiroEmpresa.status.desc()
+            )
+
     else:
-        primary = order_col.asc() if dir_ == 'asc' else order_col.desc()
-        qry = qry.order_by(primary.nullslast() if sort == 'data_vencimento' else primary, FinanceiroEmpresa.id.desc())
+
+        qry = qry.order_by(
+            FinanceiroEmpresa.data_vencimento.desc(),
+            func.min(FinanceiroEmpresa.id).desc()
+        )
 
     # 8. TOTAIS (MESMOS FILTROS DE DATA)
     def aplicar_filtros_totais(base_q):
@@ -11186,14 +11369,31 @@ def empresa_financeiro_toggle_aprovado(lanc_id):
         return redirect(url_for('empresa_financeiro_listar'))
 
     try:
-        lanc.aprovado = not bool(lanc.aprovado)
+        novo_status = not bool(lanc.aprovado)
+        # APROVA/DESAPROVA TODO O GRUPO
+        if lanc.grupo_lancamento:
+            FinanceiroEmpresa.query.filter(
+                FinanceiroEmpresa.grupo_lancamento == lanc.grupo_lancamento
+            ).update({
+                FinanceiroEmpresa.aprovado: novo_status
+            })
+        else:
+            # fallback segurança
+            lanc.aprovado = novo_status
+
         db.session.commit()
-        flash('Lançamento aprovado.' if lanc.aprovado else 'Lançamento reprovado.', 'success')
+
+        flash(
+            'Grupo aprovado.'
+            if novo_status
+            else 'Grupo reprovado.',
+            'success'
+        )
+
     except Exception as e:
         db.session.rollback()
         print('Erro ao alternar aprovação:', e)
         flash('Erro ao salvar aprovação.', 'danger')
-
     next_url = request.form.get('next') or request.referrer or url_for('empresa_financeiro_listar')
     return redirect(next_url)
 

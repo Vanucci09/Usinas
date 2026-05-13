@@ -324,67 +324,90 @@
                                     </span>
                                 </td>
 
-                                <!-- Descrição Ampliada -->
+                                <!-- Descrição -->
                                 <td>
-                                    <!-- 1. Credor acima e em negrito -->
-                                    <div class="text-dark fw-bold text-truncate" title="{{ it.credor.nome if it.credor else 'Sem credor' }}">
-                                        <i class="bi bi-person me-1"></i>{{ it.credor.nome if it.credor else 'Sem credor' }}
+
+                                    <!-- CREDOR / CLIENTE -->
+                                    <div class="fw-bold text-dark text-truncate">
+
+                                        {% if it.credor_nome %}
+
+                                            <i class="bi bi-building me-1 text-primary"></i>
+
+                                            {{ it.credor_nome }}
+
+                                        {% elif it.cliente_operacional_nome %}
+
+                                            <i class="bi bi-person me-1 text-primary"></i>
+
+                                            {{ it.cliente_operacional_nome }}
+
+                                        {% else %}
+
+                                            <i class="bi bi-file-earmark-text me-1 text-muted"></i>
+
+                                            Sem identificação
+
+                                        {% endif %}
+
                                     </div>
 
-                                    <!-- 2. Descrição abaixo -->
-                                    <div class="text-truncate-2 fw-medium text-muted mt-1" title="{{ it.descricao }}">
-                                        {{ it.descricao }}
-                                    </div>
-
-                                    <!-- 3. Plano financeiro (opcional: mantive abaixo para manter a hierarquia) -->
+                                    <!-- DESCRIÇÃO -->
                                     <div class="small text-muted mt-1">
-                                        <i class="bi bi-tag me-1"></i>{{ it.plano_financeiro.nome if it.plano_financeiro else '-' }}
+
+                                        {{ it.descricao }}
+
+                                        {% if it.parcela_label %}
+                                            <span class="ms-1">
+                                                {{ it.parcela_label }}
+                                            </span>
+                                        {% endif %}
+
+                                        {% if it.qtd_apropriacoes > 1 %}
+
+                                            <span class="ms-2">
+
+                                                <i class="bi bi-diagram-3 me-1"></i>
+
+                                                {{ it.qtd_apropriacoes }} apropriações
+
+                                            </span>
+
+                                        {% endif %}
+
                                     </div>
+
                                 </td>
 
                                 <!-- Documentos -->
                                 <td class="text-center">
 
-                                    {% set anexos = it.anexos or [] %}
-                                    {% set tem_anexos = anexos|length > 0 %}
+                                    {% set anexos_ids = [] %}
 
-                                    {% if it.comprovante_arquivo %}
-                                        <a class="btn btn-sm btn-link text-decoration-none"
-                                        href="{{ url_for('download_comprovante', filename=it.comprovante_arquivo) }}"
-                                        target="_blank"
-                                        rel="noopener"
-                                        title="Abrir Documento/NF">
-                                            📄
-                                        </a>
+                                    {% if it.anexos_ids %}
+                                        {% set anexos_ids = it.anexos_ids.split('||') %}
                                     {% endif %}
 
-                                    {% if it.comprovante_baixa_arquivo %}
-                                        <a class="btn btn-sm btn-link text-decoration-none"
-                                        href="{{ url_for('download_comprovante', filename=it.comprovante_baixa_arquivo) }}"
-                                        target="_blank"
-                                        rel="noopener"
-                                        title="Abrir Comprovante Baixa">
-                                            🧾
-                                        </a>
-                                    {% endif %}
+                                    {% if anexos_ids %}
 
-                                    {% if tem_anexos %}
-                                        <div class="mt-1 text-start" style="max-width:260px;">
-                                            {% for ax in anexos %}
-                                                <div class="small text-truncate" title="{{ ax.original_name or ax.filename }}">
-                                                    <a class="text-muted text-decoration-none"
-                                                    href="{{ url_for('download_anexo', anexo_id=ax.id) }}"
-                                                    target="_blank"
-                                                    rel="noopener">
-                                                        📎 {{ ax.original_name or ax.filename }}
-                                                    </a>
-                                                </div>
-                                            {% endfor %}
-                                        </div>
-                                    {% endif %}
+                                        {% for anexo_id in anexos_ids %}
 
-                                    {% if not it.comprovante_arquivo and not it.comprovante_baixa_arquivo and not tem_anexos %}
+                                            <a
+                                                class="btn btn-sm btn-link text-decoration-none p-0 me-1"
+                                                href="{{ url_for('download_anexo', anexo_id=anexo_id) }}"
+                                                target="_blank"
+                                                rel="noopener">
+
+                                                📄
+
+                                            </a>
+
+                                        {% endfor %}
+
+                                    {% else %}
+
                                         <span class="text-muted small">—</span>
+
                                     {% endif %}
 
                                 </td>
@@ -423,7 +446,7 @@
                                 <!-- Valor -->
                                 <td class="text-end">
                                     <div class="col-valor fs-6 text-dark">R$ {{ '{:,.2f}'.format((it.valor or 0) + (it.juros or 0)).replace(',', 'X').replace('.', ',').replace('X', '.') }}</div>
-                                    <small class="text-muted" style="font-size: 0.65rem;">Base: R$ {{ "{:,.2f}".format(it.valor) }}</small>
+                                    <small class="text-muted" style="font-size: 0.65rem;">Base: R$ {{ '{:,.2f}'.format(it.valor_total_grupo or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}</small>
                                 </td>
 
                                 <!-- Ações -->
