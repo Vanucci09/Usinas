@@ -3,21 +3,20 @@
 
 {% block content %}
 <style>
-  .is-hidden { display:none !important; }
-  .picker-toolbar { gap:.5rem }
-  .list-box {
-    border:1px solid var(--bs-border-color);
-    border-radius:.375rem;
-    padding:.5rem .75rem;
-    height: 180px;
-    overflow:auto;
-    background:#fff;
+
+  .is-hidden {
+    display:none !important;
   }
-  .item-label { user-select:none; }
-  .selected-badges .badge { margin:0 .25rem .25rem 0; }
-  .plan-row { display:flex; align-items:center; gap:.5rem; padding:.25rem 0; }
-  .plan-row input[type="text"].valor-plano { width: 140px; }
-  .sum-hint small { display:block; }
+
+  .picker-toolbar {
+    gap:.5rem;
+  }
+
+  .table td,
+  .table th {
+    vertical-align: middle;
+  }
+
 </style>
 
 <div class="container mt-4">
@@ -118,67 +117,115 @@
         <small class="text-muted">Opcional. Você pode selecionar vários arquivos (até ~10MB cada).</small>
       </div>
 
-      <!-- Planos Financeiros (com valor por plano) -->
-      <div class="col-lg-6">
-        <div class="d-flex justify-content-between align-items-center">
-          <label class="form-label mb-0">Planos Financeiros</label>
-          <div class="sum-hint text-end">
-            <small class="text-muted">Soma dos planos: <strong id="soma_planos">R$ 0,00</strong></small>
-            <small id="aviso_soma" class="text-danger d-none">A soma dos planos precisa bater com o Valor total.</small>
-          </div>
-        </div>
+      <!-- APROPRIAÇÕES -->
+      <div class="col-12">
 
-        <div class="d-flex align-items-center mb-2 picker-toolbar">
-          <input id="busca_planos" class="form-control form-control-sm" placeholder="Pesquisar plano...">
-          <button class="btn btn-sm btn-outline-primary" type="button" id="planos_sel_todos">Selecionar todos (visíveis)</button>
-          <button class="btn btn-sm btn-outline-secondary" type="button" id="planos_limpar">Limpar (visíveis)</button>
-          <button class="btn btn-sm btn-outline-success" type="button" id="planos_distribuir">Distribuir igualmente</button>
-        </div>
+        <div class="card shadow-sm border-0 mt-3">
 
-        <div id="lista_planos" class="list-box">
-          {% for p in planos_all %}
-            <div class="plan-row plano-item" data-text="{{ p.nome|e }}">
-              <input class="form-check-input me-1 ck-plano" type="checkbox" name="planos_financeiros_ids[]" value="{{ p.id }}" id="plano_{{ p.id }}">
-              <label for="plano_{{ p.id }}" class="item-label flex-grow-1">{{ p.nome }}</label>
-              <input
-                type="text"
-                class="form-control form-control-sm valor-plano"
-                name="valor_plano[{{ p.id }}]"
-                placeholder="R$ 0,00"
-                data-plano-id="{{ p.id }}"
-                disabled
-              >
+          <div class="card-header bg-light d-flex justify-content-between align-items-center">
+
+            <div>
+              <h5 class="mb-0">
+                Apropriação Financeira
+              </h5>
+
+              <small class="text-muted">
+                Defina plano financeiro, centro de custo e valor.
+              </small>
             </div>
-          {% endfor %}
+
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              id="btn-add-apropriacao">
+
+              <i class="bi bi-plus-circle me-1"></i>
+              Adicionar Linha
+
+            </button>
+
+          </div>
+
+          <div class="card-body">
+
+            <div class="table-responsive">
+
+              <table class="table table-bordered align-middle">
+
+                <thead class="table-light">
+
+                  <tr>
+
+                    <th width="35%">
+                      Plano Financeiro
+                    </th>
+
+                    <th width="35%">
+                      Centro de Custo
+                    </th>
+
+                    <th width="20%">
+                      Valor
+                    </th>
+
+                    <th width="10%" class="text-center">
+                      Ações
+                    </th>
+
+                  </tr>
+
+                </thead>
+
+                <tbody id="body-apropriacao">
+
+                </tbody>
+
+                <tfoot>
+
+                  <tr>
+
+                    <th colspan="2" class="text-end">
+
+                      Total Apropriado:
+
+                    </th>
+
+                    <th id="total-apropriacoes">
+
+                      R$ 0,00
+
+                    </th>
+
+                    <th></th>
+
+                  </tr>
+
+                  <tr>
+
+                    <td colspan="4">
+
+                      <div
+                        id="aviso-total-apropriacao"
+                        class="alert alert-danger py-2 px-3 mb-0 d-none">
+
+                        A soma das apropriações deve ser igual ao valor total do lançamento.
+
+                      </div>
+
+                    </td>
+
+                  </tr>
+
+                </tfoot>
+
+              </table>
+
+            </div>
+
+          </div>
+
         </div>
 
-        <div class="selected-badges mt-2" id="planos_escolhidos">
-          <span class="text-muted">Nenhum</span>
-        </div>
-      </div>
-
-      <!-- Centros de Custo -->
-      <div class="col-lg-6">
-        <label class="form-label">Centros de Custo</label>
-        <div class="d-flex align-items-center mb-2 picker-toolbar">
-          <input id="busca_centros" class="form-control form-control-sm" placeholder="Pesquisar centro...">
-          <button class="btn btn-sm btn-outline-primary" type="button" id="centros_sel_todos">Selecionar todos (visíveis)</button>
-          <button class="btn btn-sm btn-outline-secondary" type="button" id="centros_limpar">Limpar (visíveis)</button>
-        </div>
-        <div id="lista_centros" class="list-box">
-          {% for cc in centros_all %}
-            <label class="form-check centro-item d-flex align-items-center gap-2 py-1"
-                   data-empresa="{{ cc.empresa_id }}"
-                   data-text="{{ (cc.codigo ~ ' ' ~ cc.nome)|e }}">
-              <input class="form-check-input" type="checkbox" name="centros_custos_ids[]" value="{{ cc.id }}">
-              <span class="item-label">{{ cc.codigo }} — {{ cc.nome }} <small class="text-muted">(Emp. #{{ cc.empresa_id }})</small></span>
-            </label>
-          {% endfor %}
-        </div>
-        <div class="selected-badges mt-2" id="centros_escolhidos">
-          <span class="text-muted">Nenhum</span>
-        </div>
-        <small class="text-muted d-block mt-1">A lista acompanha a empresa selecionada.</small>
       </div>
 
       <!-- Parcelas -->
@@ -234,355 +281,553 @@
 </div>
 
 <script>
-  // -------- utilidades
-  function norm(s){
-    return (s||'').toString().toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  }
+
+  // UTILIDADES
+
   function parseBR(v){
+
     if(!v) return 0;
-    v = v.replace(/\./g,'').replace(',','.');
-    var n = Number(v);
-    return isNaN(n) ? 0 : n;
+
+    v = v.toString()
+      .replace(/\./g,'')
+      .replace(',','.');
+
+    return parseFloat(v) || 0;
   }
-  function fmtBR(n){
-    try{
-      return n.toLocaleString('pt-BR',{style:'currency', currency:'BRL'});
-    }catch(e){
-      return 'R$ ' + (Math.round(n*100)/100).toFixed(2).replace('.',',');
+
+  function fmtBR(v){
+
+    return v.toLocaleString('pt-BR',{
+      style:'currency',
+      currency:'BRL'
+    });
+
+  }
+
+  function norm(s){
+
+    return (s || '')
+      .toString()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g,'');
+
+  }
+
+  // FILTROS POR EMPRESA
+
+  function filterSelectByEmpresa(selectEl){
+
+    var empresaSel = document.getElementById('empresa_id');
+
+    if(!empresaSel || !selectEl) return;
+
+    var emp = empresaSel.value || '';
+
+    Array.from(selectEl.options).forEach(function(opt){
+
+      if(!opt.value){
+
+        opt.hidden = false;
+        opt.disabled = false;
+
+        return;
+      }
+
+      var belongs =
+        (opt.getAttribute('data-empresa') || '') === emp
+        || !opt.hasAttribute('data-empresa');
+
+      opt.hidden = !belongs;
+      opt.disabled = !belongs;
+
+    });
+
+    var cur = selectEl.options[selectEl.selectedIndex];
+
+    if(cur && (cur.hidden || cur.disabled)){
+
+      selectEl.value = '';
+
     }
   }
 
-  // -------- filtros por empresa
-  function filterSelectByEmpresa(selectEl){
-    var empresaSel = document.getElementById('empresa_id');
-    if(!empresaSel || !selectEl) return;
-    var emp = (empresaSel.value||'');
-    Array.from(selectEl.options).forEach(function(opt){
-      if(!opt.value){ opt.hidden=false; opt.disabled=false; return; }
-      var belongs = (opt.getAttribute('data-empresa')||'') === emp || !opt.hasAttribute('data-empresa');
-      opt.hidden = !belongs; opt.disabled = !belongs;
-    });
-    var cur = selectEl.options[selectEl.selectedIndex];
-    if(cur && (cur.hidden || cur.disabled)) selectEl.value='';
-  }
-
   function filterContasByEmpresa(){
-    filterSelectByEmpresa(document.getElementById('conta_id'));
+
+    filterSelectByEmpresa(
+      document.getElementById('conta_id')
+    );
+
   }
+
   function filterCredoresByEmpresa(){
-    filterSelectByEmpresa(document.getElementById('credor_id'));
+
+    filterSelectByEmpresa(
+      document.getElementById('credor_id')
+    );
+
   }
+
   function filterClientesOperByEmpresa(){
-    filterSelectByEmpresa(document.getElementById('cliente_operacional_id'));
+
+    filterSelectByEmpresa(
+      document.getElementById('cliente_operacional_id')
+    );
+
   }
+  // TIPO
 
-  // -------- Credor/Cliente por tipo
-  function toggleTipoDependentes() {
-    const tipo = (document.getElementById('tipo').value || '').toLowerCase();
-    const wrapCredor = document.getElementById('wrap_credor');
-    const selCredor  = document.getElementById('credor_id');
-    const wrapCli    = document.getElementById('wrap_cliente_oper');
-    const selCli     = document.getElementById('cliente_operacional_id');
+  function toggleTipoDependentes(){
 
-    if (tipo === 'despesa') {
+    const tipo =
+      (document.getElementById('tipo').value || '')
+      .toLowerCase();
+
+    const wrapCredor =
+      document.getElementById('wrap_credor');
+
+    const selCredor =
+      document.getElementById('credor_id');
+
+    const wrapCli =
+      document.getElementById('wrap_cliente_oper');
+
+    const selCli =
+      document.getElementById('cliente_operacional_id');
+
+    if(tipo === 'despesa'){
+
       wrapCredor.style.display = '';
+
       selCredor.disabled = false;
-      selCredor.setAttribute('required', 'required');
+
+      selCredor.setAttribute(
+        'required',
+        'required'
+      );
 
       wrapCli.style.display = 'none';
+
       selCli.disabled = true;
+
       selCli.removeAttribute('required');
+
       selCli.value = '';
-    } else { // receita
+
+    }else{
+
       wrapCredor.style.display = 'none';
+
       selCredor.disabled = true;
+
       selCredor.removeAttribute('required');
+
       selCredor.value = '';
 
       wrapCli.style.display = '';
+
       selCli.disabled = false;
-      selCli.setAttribute('required', 'required');
+
+      selCli.setAttribute(
+        'required',
+        'required'
+      );
+
     }
 
-    // Reaplica filtro por empresa quando mostramos selects
     filterCredoresByEmpresa();
+
     filterClientesOperByEmpresa();
+
   }
 
-  // -------- Badge de selecionados
-  function updateBadges(){
-    function build(containerSel, itemSel, outSel){
-      var box = document.querySelector(containerSel);
-      var out = document.querySelector(outSel);
-      if(!box || !out) return;
-      var names = [];
-      box.querySelectorAll(itemSel+' input[type="checkbox"]').forEach(function(ck){
-        if (ck.checked){
-          var lbl = ck.closest(itemSel);
-          var original =
-            lbl.querySelector('.item-label')?.textContent?.trim() ||
-            lbl.getAttribute('data-text') || '';
-          names.push(original);
-        }
-      });
-      out.innerHTML = names.length
-        ? names.map(function(n){ return '<span class="badge bg-primary-subtle text-primary border">'+n+'</span>'; }).join(' ')
-        : '<span class="text-muted">Nenhum</span>';
-    }
-    build('#lista_planos', '.plano-item', '#planos_escolhidos');
-    build('#lista_centros', '.centro-item', '#centros_escolhidos');
-  }
-
-  // -------- Filtros (busca)
-  function centerMatchesEmpresa(el){
-    var empresaSel = document.getElementById('empresa_id');
-    if(!empresaSel) return true;
-    var emp = (empresaSel.value||'');
-    if(!emp) return true;
-    return (el.getAttribute('data-empresa')||'') === emp;
-  }
-
-  function bindSearch({boxSel, itemSel, inputSel, extraFilter}){
-    var box = document.querySelector(boxSel);
-    var input = document.querySelector(inputSel);
-    if(!box || !input) return function(){};
-
-    box.querySelectorAll(itemSel).forEach(function(el){
-      var original =
-        el.querySelector('.item-label')?.textContent?.trim() ||
-        el.getAttribute('data-text') || '';
-      el.setAttribute('data-text-original', original);
-      el.setAttribute('data-text-norm', norm(original));
-    });
-
-    function apply(){
-      var q = norm(input.value);
-      box.querySelectorAll(itemSel).forEach(function(el){
-        var txt = el.getAttribute('data-text-norm') || '';
-        var matchesText = !q || txt.indexOf(q) !== -1;
-        var matchesExtra = extraFilter ? extraFilter(el) : true;
-        el.classList.toggle('is-hidden', !(matchesText && matchesExtra));
-      });
-      updateBadges();
-    }
-    input.addEventListener('input', apply);
-    input.addEventListener('keyup', apply);
-    apply();
-    return apply;
-  }
-
-  function bindBulk(boxSel, itemSel, btnAllId, btnClrId){
-    var box = document.querySelector(boxSel);
-    var btnAll = document.getElementById(btnAllId);
-    var btnClr = document.getElementById(btnClrId);
-    if(!box) return;
-    function isVisible(el){ return !el.classList.contains('is-hidden'); }
-    btnAll && btnAll.addEventListener('click', function(){
-      box.querySelectorAll(itemSel).forEach(function(el){
-        if(!isVisible(el)) return;
-        var ck = el.querySelector('input[type="checkbox"]');
-        if(ck) ck.checked = true;
-        if(el.classList.contains('plano-item')){
-          var inp = el.querySelector('.valor-plano');
-          if(inp){ inp.disabled = !ck.checked; }
-        }
-      });
-      updateBadges();
-      recalcSomaPlanos();
-    });
-    btnClr && btnClr.addEventListener('click', function(){
-      box.querySelectorAll(itemSel).forEach(function(el){
-        if(!isVisible(el)) return;
-        var ck = el.querySelector('input[type="checkbox"]');
-        if(ck) ck.checked = false;
-        if(el.classList.contains('plano-item')){
-          var inp = el.querySelector('.valor-plano');
-          if(inp){ inp.disabled = true; inp.value=''; }
-        }
-      });
-      updateBadges();
-      recalcSomaPlanos();
-    });
-  }
-
-  function filterContasByEmpresa(){
-    var empresaSel = document.getElementById('empresa_id');
-    var contaSel = document.getElementById('conta_id');
-    if(!empresaSel || !contaSel) return;
-    var emp = (empresaSel.value||'');
-    Array.from(contaSel.options).forEach(function(opt){
-      if(!opt.value){ opt.hidden=false; opt.disabled=false; return; }
-      var same = (opt.getAttribute('data-empresa')||'') === emp;
-      opt.hidden = !same; opt.disabled = !same;
-    });
-    var cur = contaSel.options[contaSel.selectedIndex];
-    if(cur && (cur.hidden || cur.disabled)) contaSel.value='';
-  }
+  // DATA
 
   function sugereDataPgtoSeQuitado(){
-    var statusSel = document.getElementById('status');
-    var dtTitulo = document.getElementById('data');
-    var dtVenc = document.getElementById('data_vencimento');
+
+    var statusSel =
+      document.getElementById('status');
+
+    var dtTitulo =
+      document.getElementById('data');
+
+    var dtVenc =
+      document.getElementById('data_vencimento');
+
     if(!statusSel || !dtTitulo || !dtVenc) return;
+
     var s = statusSel.value;
-    if ((s === 'pago' || s === 'recebido') && dtTitulo.value && !dtVenc.value){
+
+    if(
+      (s === 'pago' || s === 'recebido')
+      &&
+      dtTitulo.value
+      &&
+      !dtVenc.value
+    ){
+
       dtVenc.value = dtTitulo.value;
+
     }
   }
 
-  // -------- Valores por Plano (soma / distribuir)
-  function recalcSomaPlanos(){
-    var soma = 0;
-    document.querySelectorAll('.plano-item').forEach(function(row){
-      var ck = row.querySelector('.ck-plano');
-      var inp = row.querySelector('.valor-plano');
-      if(ck && ck.checked && inp && inp.value){
-        soma += parseBR(inp.value);
-      }
+  // APROPRIAÇÕES
+
+  let idxAprop = 0;
+
+  function novaLinhaApropriacao(){
+
+    const tbody =
+      document.getElementById(
+        'body-apropriacao'
+      );
+
+    const tr =
+      document.createElement('tr');
+
+    tr.innerHTML = `
+
+      <td>
+
+        <select
+          name="apropriacoes[${idxAprop}][plano_id]"
+          class="form-select plano-select"
+          required>
+
+          <option value="">Selecione...</option>
+
+          {% for p in planos_all %}
+
+            <option value="{{ p.id }}">
+              {{ p.nome }}
+            </option>
+
+          {% endfor %}
+
+        </select>
+
+      </td>
+
+      <td>
+
+        <select
+          name="apropriacoes[${idxAprop}][centro_id]"
+          class="form-select centro-select"
+          required>
+
+          <option value="">Selecione...</option>
+
+          {% for cc in centros_all %}
+
+            <option
+              value="{{ cc.id }}"
+              data-empresa="{{ cc.empresa_id }}">
+
+              {{ cc.codigo }} - {{ cc.nome }}
+
+            </option>
+
+          {% endfor %}
+
+        </select>
+
+      </td>
+
+      <td>
+
+        <input
+          type="text"
+          name="apropriacoes[${idxAprop}][valor]"
+          class="form-control valor-aprop"
+          placeholder="0,00"
+          required>
+
+      </td>
+
+      <td class="text-center">
+
+        <button
+          type="button"
+          class="btn btn-sm btn-danger btn-remover">
+
+          ✕
+
+        </button>
+
+      </td>
+    `;
+
+    tbody.appendChild(tr);
+
+    idxAprop++;
+
+    atualizarTotal();
+
+    aplicarFiltroEmpresaNasLinhas();
+
+  }
+
+  // TOTAL
+
+  function atualizarTotal(){
+
+    let total = 0;
+
+    document.querySelectorAll('.valor-aprop')
+    .forEach(function(inp){
+
+      total += parseBR(inp.value);
+
     });
-    document.getElementById('soma_planos').textContent = fmtBR(soma);
-    var total = parseBR(document.getElementById('valor').value);
-    var aviso = document.getElementById('aviso_soma');
-    if(total > 0 && Math.abs(soma - total) > 0.005){
+
+    document.getElementById(
+      'total-apropriacoes'
+    ).innerText = fmtBR(total);
+
+    validarTotal();
+
+  }
+
+  // VALIDAR TOTAL
+
+  function validarTotal(){
+
+    let totalTela =
+      parseBR(
+        document.getElementById('valor').value
+      );
+
+    let totalAprop = 0;
+
+    document.querySelectorAll('.valor-aprop')
+    .forEach(function(inp){
+
+      totalAprop += parseBR(inp.value);
+
+    });
+
+    const aviso =
+      document.getElementById(
+        'aviso-total-apropriacao'
+      );
+
+    if(
+      totalTela > 0
+      &&
+      Math.abs(totalTela - totalAprop) > 0.005
+    ){
+
       aviso.classList.remove('d-none');
+
     }else{
+
       aviso.classList.add('d-none');
+
     }
   }
 
-  function distribuirIgualmente(){
-    var total = parseBR(document.getElementById('valor').value);
-    if(total <= 0) return;
-    var ativos = Array.from(document.querySelectorAll('.plano-item'))
-      .filter(function(row){ return row.querySelector('.ck-plano')?.checked; });
-    if(ativos.length === 0) return;
-    var parte = Math.floor((total/ativos.length)*100)/100;
-    var somaParcial = parte * ativos.length;
-    var resto = Math.round((total - somaParcial)*100)/100;
-    ativos.forEach(function(row, idx){
-      var inp = row.querySelector('.valor-plano');
-      var val = parte + (idx === ativos.length-1 ? resto : 0);
-      inp.value = (val.toFixed(2)).replace('.',',');
-    });
-    recalcSomaPlanos();
-  }
+  // FILTRAR CENTROS POR EMPRESA
 
-  // -------- submit guard
-  function bindSubmitGuard(){
-    var form = document.getElementById('form-fin');
-    form.addEventListener('submit', function(e){
-      var tipoSel = (document.getElementById('tipo').value || '').toLowerCase();
+  function aplicarFiltroEmpresaNasLinhas(){
 
-      // obrigatoriedade condicional
-      if (tipoSel === 'despesa') {
-        var credorSel = document.getElementById('credor_id').value;
-        if (!credorSel) {
-          e.preventDefault();
-          alert('Selecione um credor para despesas.');
+    const empresa =
+      document.getElementById('empresa_id').value;
+
+    document.querySelectorAll('.centro-select')
+    .forEach(function(select){
+
+      Array.from(select.options)
+      .forEach(function(opt){
+
+        if(!opt.value){
+
+          opt.hidden = false;
+          opt.disabled = false;
+
           return;
         }
-      } else { // receita
-        var cliSel = document.getElementById('cliente_operacional_id').value;
-        if (!cliSel) {
-          e.preventDefault();
-          alert('Selecione um cliente operacional para receitas.');
-          return;
-        }
-      }
 
-      // soma dos planos deve bater com o total
-      var total = parseBR(document.getElementById('valor').value);
-      var soma = 0;
-      var planosMarcados = 0;
-      document.querySelectorAll('.plano-item').forEach(function(row){
-        var ck = row.querySelector('.ck-plano');
-        var inp = row.querySelector('.valor-plano');
-        if(ck && ck.checked){
-          planosMarcados++;
-          soma += parseBR(inp.value);
-        }
+        const belongs =
+          (opt.getAttribute('data-empresa') || '')
+          === empresa;
+
+        opt.hidden = !belongs;
+
+        opt.disabled = !belongs;
+
       });
-      if(planosMarcados === 0){
-        e.preventDefault();
-        alert('Selecione ao menos um Plano Financeiro.');
-        return;
-      }
-      if(Math.abs(soma - total) > 0.005){
-        e.preventDefault();
-        alert('A soma dos valores por plano ('+fmtBR(soma)+') precisa ser igual ao Valor total ('+fmtBR(total)+').');
-        return;
-      }
+
     });
+
   }
+
+  // REMOVER LINHA
+
+  document.addEventListener('click', function(e){
+
+    if(
+      e.target.classList.contains(
+        'btn-remover'
+      )
+    ){
+
+      e.target.closest('tr').remove();
+
+      atualizarTotal();
+
+    }
+
+  });
+
+  // EVENTO VALORES
+
+  document.addEventListener('input', function(e){
+
+    if(
+      e.target.classList.contains(
+        'valor-aprop'
+      )
+    ){
+
+      atualizarTotal();
+
+    }
+
+  });
+
+  // SUBMIT
+
+  function bindSubmitGuard(){
+
+    var form =
+      document.getElementById('form-fin');
+
+    form.addEventListener('submit', function(e){
+
+      const totalTela =
+        parseBR(
+          document.getElementById('valor').value
+        );
+
+      let totalAprop = 0;
+
+      document.querySelectorAll('.valor-aprop')
+      .forEach(function(inp){
+
+        totalAprop += parseBR(inp.value);
+
+      });
+
+      if(
+        Math.abs(totalTela - totalAprop)
+        > 0.005
+      ){
+
+        e.preventDefault();
+
+        alert(
+          'A soma das apropriações deve ser igual ao valor total.'
+        );
+
+        return;
+      }
+
+      if(
+        document.querySelectorAll(
+          '#body-apropriacao tr'
+        ).length === 0
+      ){
+
+        e.preventDefault();
+
+        alert(
+          'Adicione ao menos uma apropriação.'
+        );
+
+      }
+
+    });
+
+  }
+
+  // INIT
 
   document.addEventListener('DOMContentLoaded', function(){
-    // buscas
-    var applyPlanos  = bindSearch({ boxSel:'#lista_planos',  itemSel:'.plano-item', inputSel:'#busca_planos' });
-    var applyCentros = bindSearch({ boxSel:'#lista_centros', itemSel:'.centro-item', inputSel:'#busca_centros', extraFilter: centerMatchesEmpresa });
 
-    // selecionar/limpar
-    bindBulk('#lista_planos',  '.plano-item',  'planos_sel_todos',  'planos_limpar');
-    bindBulk('#lista_centros', '.centro-item', 'centros_sel_todos', 'centros_limpar');
+    // tipo
 
-    // mudar empresa -> refiltra centros, contas, credores e clientes
-    var empresaSel = document.getElementById('empresa_id');
-    if (empresaSel){
-      empresaSel.addEventListener('change', function(){
-        filterContasByEmpresa();
-        filterCredoresByEmpresa();
-        filterClientesOperByEmpresa();
-        applyCentros();
-      });
-      filterContasByEmpresa();
-      filterCredoresByEmpresa();
-      filterClientesOperByEmpresa();
-      applyCentros();
-    }
+    document.getElementById('tipo')
+    .addEventListener(
+      'change',
+      toggleTipoDependentes
+    );
 
-    // tipo -> mostra/oculta credor/cliente
-    document.getElementById('tipo').addEventListener('change', toggleTipoDependentes);
     toggleTipoDependentes();
 
-    // status -> sugere data
-    document.getElementById('status').addEventListener('change', sugereDataPgtoSeQuitado);
+    // status
 
-    // habilita/desabilita input do valor por plano conforme checkbox
-    document.getElementById('lista_planos').addEventListener('change', function(ev){
-      var target = ev.target;
-      if(target && target.classList.contains('ck-plano')){
-        var row = target.closest('.plano-item');
-        var inp = row.querySelector('.valor-plano');
-        if(inp){
-          inp.disabled = !target.checked;
-          if(!target.checked){ inp.value=''; }
+    document.getElementById('status')
+    .addEventListener(
+      'change',
+      sugereDataPgtoSeQuitado
+    );
+
+    // empresa
+
+    const empresaSel =
+      document.getElementById('empresa_id');
+
+    if(empresaSel){
+
+      empresaSel.addEventListener(
+        'change',
+        function(){
+
+          filterContasByEmpresa();
+
+          filterCredoresByEmpresa();
+
+          filterClientesOperByEmpresa();
+
+          aplicarFiltroEmpresaNasLinhas();
+
         }
-        updateBadges();
-        recalcSomaPlanos();
-      }
-    });
+      );
 
-    // evento digitação nos inputs de valor de plano
-    document.querySelectorAll('.valor-plano').forEach(function(inp){
-      ['input','keyup','change','blur'].forEach(function(ev){
-        inp.addEventListener(ev, recalcSomaPlanos);
-      });
-    });
+      filterContasByEmpresa();
 
-    // valor total também recalcula o aviso
-    ['input','keyup','change','blur'].forEach(function(ev){
-      document.getElementById('valor').addEventListener(ev, recalcSomaPlanos);
-    });
+      filterCredoresByEmpresa();
 
-    // distribuir igualmente
-    document.getElementById('planos_distribuir').addEventListener('click', distribuirIgualmente);
+      filterClientesOperByEmpresa();
 
-    // badges iniciais e soma
-    updateBadges();
-    recalcSomaPlanos();
+    }
 
-    // validação no submit
+    // valor total
+
+    document.getElementById('valor')
+    .addEventListener(
+      'input',
+      validarTotal
+    );
+
+    // adicionar linha
+
+    document.getElementById(
+      'btn-add-apropriacao'
+    ).addEventListener(
+      'click',
+      novaLinhaApropriacao
+    );
+
+    // inicia com uma linha
+
+    novaLinhaApropriacao();
+
+    // submit
+
     bindSubmitGuard();
+
   });
+
 </script>
 {% endblock %}

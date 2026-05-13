@@ -74,7 +74,7 @@
       <div class="col-md-4">
         <label for="valor" class="form-label">Valor (R$) *</label>
         <input type="text" name="valor" id="valor" class="form-control"
-               value="{{ '{:,.2f}'.format(titulo.valor or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}"
+               value="{{ '{:,.2f}'.format(valor_total_grupo or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}"
                required {{ 'readonly disabled' if titulo.aprovado }}>
         <small class="text-muted">Use vírgula como separador decimal (ex.: 1.234,56).</small>
       </div>
@@ -99,31 +99,167 @@
         <small class="text-muted">Obrigatório para despesas.</small>
       </div>
 
-      <!-- Plano Financeiro -->
-      <div class="col-md-6">
-        <label for="plano_financeiro_id" class="form-label">Plano Financeiro</label>
-        <select name="plano_financeiro_id" id="plano_financeiro_id" class="form-select" {{ 'disabled' if titulo.aprovado }}>
-          <option value="">(opcional) selecionar um plano</option>
-          {% for p in planos_all %}
-            <option value="{{ p.id }}" {% if titulo.plano_financeiro_id == p.id %}selected{% endif %}>{{ p.nome }}</option>
-          {% endfor %}
-        </select>
-      </div>
+      <div class="col-md-6" id="wrap_cliente_oper" style="display:none;">
 
-      <!-- Centro de Custo -->
-      <div class="col-md-6">
-        <label for="centro_custo_id" class="form-label">Centro de Custo</label>
-        <select name="centro_custo_id" id="centro_custo_id" class="form-select" {{ 'disabled' if titulo.aprovado }}>
-          <option value="">(opcional) selecionar centro</option>
-          {% for cc in centros_all %}
-            <option value="{{ cc.id }}"
-                    data-empresa="{{ cc.empresa_id }}"
-                    {% if titulo.centro_custo_id == cc.id %}selected{% endif %}>
-              {{ cc.codigo }} — {{ cc.nome }}
-            </option>
-          {% endfor %}
-        </select>
-        <small class="text-muted">A lista é filtrada pela empresa selecionada.</small>
+      <label for="cliente_operacional_id" class="form-label">
+
+        Cliente Operacional *
+
+      </label>
+
+      <select
+        name="cliente_operacional_id"
+        id="cliente_operacional_id"
+        class="form-select"
+        {{ 'disabled' if titulo.aprovado }}>
+
+        <option value="">Selecione...</option>
+
+        {% for cl in clientes_operacionais_all %}
+
+          <option
+            value="{{ cl.id }}"
+            data-empresa="{{ cl.empresa_id }}"
+            {% if titulo.cliente_operacional_id == cl.id %}selected{% endif %}>
+
+            {{ cl.nome }}
+
+          </option>
+
+        {% endfor %}
+
+      </select>
+
+    </div>
+
+      <!-- APROPRIAÇÕES -->
+      <div class="col-12">
+
+        <div class="card shadow-sm border-0 mt-3">
+
+          <div class="card-header bg-light d-flex justify-content-between align-items-center">
+
+            <div>
+
+              <h5 class="mb-0">
+
+                Apropriação Financeira
+
+              </h5>
+
+              <small class="text-muted">
+
+                Defina plano financeiro, centro de custo e valor.
+
+              </small>
+
+            </div>
+
+            {% if not titulo.aprovado %}
+
+              <button
+                type="button"
+                class="btn btn-primary btn-sm"
+                id="btn-add-apropriacao">
+
+                <i class="bi bi-plus-circle me-1"></i>
+
+                Adicionar Linha
+
+              </button>
+
+            {% endif %}
+
+          </div>
+
+          <div class="card-body">
+
+            <div class="table-responsive">
+
+              <table class="table table-bordered align-middle">
+
+                <thead class="table-light">
+
+                  <tr>
+
+                    <th width="35%">
+
+                      Plano Financeiro
+
+                    </th>
+
+                    <th width="35%">
+
+                      Centro de Custo
+
+                    </th>
+
+                    <th width="20%">
+
+                      Valor
+
+                    </th>
+
+                    <th width="10%" class="text-center">
+
+                      Ações
+
+                    </th>
+
+                  </tr>
+
+                </thead>
+
+                <tbody id="body-apropriacao">
+
+                </tbody>
+
+                <tfoot>
+
+                  <tr>
+
+                    <th colspan="2" class="text-end">
+
+                      Total Apropriado:
+
+                    </th>
+
+                    <th id="total-apropriacoes">
+
+                      R$ 0,00
+
+                    </th>
+
+                    <th></th>
+
+                  </tr>
+
+                  <tr>
+
+                    <td colspan="4">
+
+                      <div
+                        id="aviso-total-apropriacao"
+                        class="alert alert-danger py-2 px-3 mb-0 d-none">
+
+                        A soma das apropriações deve ser igual ao valor total do lançamento.
+
+                      </div>
+
+                    </td>
+
+                  </tr>
+
+                </tfoot>
+
+              </table>
+
+            </div>
+
+          </div>
+
+        </div>
+
       </div>
 
       <!-- Status -->
@@ -246,79 +382,608 @@
 </div>
 
 <script>
+
+  // ELEMENTOS
+
   const empresaSel  = document.getElementById('empresa_id');
+
   const contaSel    = document.getElementById('conta_id');
-  const centroSel   = document.getElementById('centro_custo_id');
+
   const statusSel   = document.getElementById('status');
+
   const tipoSel     = document.getElementById('tipo');
+
   const dtVenc      = document.getElementById('data_vencimento');
+
   const helpVenc    = document.getElementById('helpVenc');
+
   const grupoCredor = document.getElementById('grupo-credor');
+
   const credorSel   = document.getElementById('credor_id');
 
-  function filtrarPorEmpresa(selectEl) {
+  const grupoCliente = document.getElementById('wrap_cliente_oper');
+
+  const clienteSel   = document.getElementById('cliente_operacional_id');
+
+  // UTILIDADES
+
+  function parseBR(v){
+
+    if(!v) return 0;
+
+    v = v.toString()
+      .replace(/\./g,'')
+      .replace(',','.');
+
+    return parseFloat(v) || 0;
+  }
+
+  function fmtBR(v){
+
+    return v.toLocaleString('pt-BR',{
+      style:'currency',
+      currency:'BRL'
+    });
+
+  }
+
+  // FILTRO POR EMPRESA
+
+  function filtrarPorEmpresa(selectEl){
+
     if (!empresaSel || !selectEl) return;
-    const emp = (empresaSel.value || '').toString();
-    for (const opt of selectEl.options) {
-      if (!opt.value) { opt.hidden = false; opt.disabled = false; continue; }
-      const eId = (opt.getAttribute('data-empresa') || '').toString();
-      const deveOcultar = !!emp && eId !== emp;
+
+    const emp =
+      (empresaSel.value || '').toString();
+
+    for (const opt of selectEl.options){
+
+      if (!opt.value){
+
+        opt.hidden = false;
+        opt.disabled = false;
+
+        continue;
+      }
+
+      const eId =
+        (opt.getAttribute('data-empresa') || '')
+        .toString();
+
+      const deveOcultar =
+        !!emp && eId !== emp;
+
       opt.hidden = deveOcultar;
+
       opt.disabled = deveOcultar;
     }
-    const cur = selectEl.options[selectEl.selectedIndex];
-    if (cur && (cur.hidden || cur.disabled)) {
+
+    const cur =
+      selectEl.options[selectEl.selectedIndex];
+
+    if(cur && (cur.hidden || cur.disabled)){
+
       let escolhido = '';
-      for (const opt of selectEl.options) {
-        if (opt.value && !opt.hidden && !opt.disabled) { escolhido = opt.value; break; }
+
+      for (const opt of selectEl.options){
+
+        if (
+          opt.value
+          &&
+          !opt.hidden
+          &&
+          !opt.disabled
+        ){
+
+          escolhido = opt.value;
+
+          break;
+        }
       }
+
       selectEl.value = escolhido;
     }
   }
-  function filtrarContas()  { filtrarPorEmpresa(contaSel); }
-  function filtrarCentros() { filtrarPorEmpresa(centroSel); }
 
-  // Mostra/oculta e exige credor quando tipo=despesa
-  function toggleCredor() {
-    const isDespesa = (tipoSel ? tipoSel.value : '{{ titulo.tipo }}') === 'despesa';
-    if (grupoCredor) {
-      grupoCredor.style.display = isDespesa ? '' : 'none';
-    }
-    if (credorSel) {
-      credorSel.required = isDespesa && {{ 'false' if titulo.aprovado else 'true' }};
-      credorSel.disabled = {{ 'true' if titulo.aprovado else 'false' }};
-      if (!isDespesa) credorSel.value = '';
-    }
+  function filtrarContas(){
+
+    filtrarPorEmpresa(contaSel);
+
   }
 
-  // Habilita edição do vencimento somente quando status = pendente e não aprovado
-  function toggleVencimentoEdit() {
-    const aprovado = {{ 'true' if titulo.aprovado else 'false' }};
-    const s = statusSel ? statusSel.value : 'pendente';
-    const canEdit = !aprovado && s === 'pendente';
-    if (dtVenc) {
-      dtVenc.disabled = !canEdit;
-      dtVenc.readOnly = !canEdit;
-    }
-    if (helpVenc) {
-      helpVenc.textContent = canEdit
-        ? 'Editável porque o status está “Pendente”.'
-        : 'Editável apenas quando o status estiver em “Pendente”.';
-    }
+  function filtrarClientes(){
+
+    filtrarPorEmpresa(clienteSel);
+
   }
 
-  document.addEventListener('DOMContentLoaded', () => {
-    filtrarContas(); filtrarCentros();
-    empresaSel && empresaSel.addEventListener('change', () => {
-      filtrarContas(); filtrarCentros();
+  // FILTRO DOS CENTROS NAS LINHAS
+
+  function aplicarFiltroEmpresaNasLinhas(){
+
+    const empresa =
+      empresaSel.value;
+
+    document.querySelectorAll('.centro-select')
+    .forEach(function(select){
+
+      Array.from(select.options)
+      .forEach(function(opt){
+
+        if(!opt.value){
+
+          opt.hidden = false;
+          opt.disabled = false;
+
+          return;
+        }
+
+        const belongs =
+          (opt.getAttribute('data-empresa') || '')
+          === empresa;
+
+        opt.hidden = !belongs;
+
+        opt.disabled = !belongs;
+
+      });
+
     });
 
-    statusSel && statusSel.addEventListener('change', toggleVencimentoEdit);
+  }
+
+  // CREDOR / CLIENTE
+
+  function toggleTipoDependentes(){
+
+    const tipo =
+      (tipoSel ? tipoSel.value : '').toLowerCase();
+
+    const aprovado =
+      {{ 'true' if titulo.aprovado else 'false' }};
+
+    // DESPESA
+
+    if(tipo === 'despesa'){
+
+      if(grupoCredor){
+
+        grupoCredor.style.display = '';
+
+      }
+
+      if(credorSel){
+
+        credorSel.required = !aprovado;
+
+        credorSel.disabled = aprovado;
+
+      }
+
+      if(grupoCliente){
+
+        grupoCliente.style.display = 'none';
+
+      }
+
+      if(clienteSel){
+
+        clienteSel.required = false;
+
+        clienteSel.disabled = true;
+
+        clienteSel.value = '';
+
+      }
+
+    }
+
+    // RECEITA
+
+    else{
+
+      if(grupoCredor){
+
+        grupoCredor.style.display = 'none';
+
+      }
+
+      if(credorSel){
+
+        credorSel.required = false;
+
+        credorSel.disabled = true;
+
+        credorSel.value = '';
+
+      }
+
+      if(grupoCliente){
+
+        grupoCliente.style.display = '';
+
+      }
+
+      if(clienteSel){
+
+        clienteSel.required = !aprovado;
+
+        clienteSel.disabled = aprovado;
+
+      }
+
+    }
+
+    filtrarClientes();
+  }
+
+  // VENCIMENTO
+
+  function toggleVencimentoEdit(){
+
+    const aprovado =
+      {{ 'true' if titulo.aprovado else 'false' }};
+
+    const s =
+      statusSel
+      ? statusSel.value
+      : 'pendente';
+
+    const canEdit =
+      !aprovado && s === 'pendente';
+
+    if(dtVenc){
+
+      dtVenc.disabled = !canEdit;
+
+      dtVenc.readOnly = !canEdit;
+
+    }
+
+    if(helpVenc){
+
+      helpVenc.textContent = canEdit
+
+        ? 'Editável porque o status está “Pendente”.'
+
+        : 'Editável apenas quando o status estiver em “Pendente”.';
+
+    }
+  }
+
+  // APROPRIAÇÕES
+
+  let idxAprop = 0;
+
+  function novaLinhaApropriacao(data=null){
+
+    const tbody =
+      document.getElementById(
+        'body-apropriacao'
+      );
+
+    const tr =
+      document.createElement('tr');
+
+    tr.innerHTML = `
+
+      <td>
+
+        <select
+          name="apropriacoes[${idxAprop}][plano_id]"
+          class="form-select"
+          required>
+
+          <option value="">Selecione...</option>
+
+          {% for p in planos_all %}
+
+            <option
+              value="{{ p.id }}"
+              ${data && data.plano_id == "{{ p.id }}" ? 'selected' : ''}>
+
+              {{ p.nome }}
+
+            </option>
+
+          {% endfor %}
+
+        </select>
+
+      </td>
+
+      <td>
+
+        <select
+          name="apropriacoes[${idxAprop}][centro_id]"
+          class="form-select centro-select"
+          required>
+
+          <option value="">Selecione...</option>
+
+          {% for cc in centros_all %}
+
+            <option
+              value="{{ cc.id }}"
+              data-empresa="{{ cc.empresa_id }}"
+              ${data && data.centro_id == "{{ cc.id }}" ? 'selected' : ''}>
+
+              {{ cc.codigo }} - {{ cc.nome }}
+
+            </option>
+
+          {% endfor %}
+
+        </select>
+
+      </td>
+
+      <td>
+
+        <input
+          type="text"
+          name="apropriacoes[${idxAprop}][valor]"
+          class="form-control valor-aprop"
+          value="${data ? data.valor : ''}"
+          placeholder="0,00"
+          required>
+
+      </td>
+
+      <td class="text-center">
+
+        <button
+          type="button"
+          class="btn btn-sm btn-danger btn-remover">
+
+          ✕
+
+        </button>
+
+      </td>
+    `;
+
+    tbody.appendChild(tr);
+
+    idxAprop++;
+
+    atualizarTotal();
+
+    aplicarFiltroEmpresaNasLinhas();
+  }
+
+  // TOTAL
+
+  function atualizarTotal(){
+
+    let total = 0;
+
+    document.querySelectorAll('.valor-aprop')
+    .forEach(function(inp){
+
+      total += parseBR(inp.value);
+
+    });
+
+    document.getElementById(
+      'total-apropriacoes'
+    ).innerText = fmtBR(total);
+
+    validarTotal();
+  }
+
+  // VALIDAR TOTAL
+
+  function validarTotal(){
+
+    let totalTela =
+      parseBR(
+        document.getElementById('valor').value
+      );
+
+    let totalAprop = 0;
+
+    document.querySelectorAll('.valor-aprop')
+    .forEach(function(inp){
+
+      totalAprop += parseBR(inp.value);
+
+    });
+
+    const aviso =
+      document.getElementById(
+        'aviso-total-apropriacao'
+      );
+
+    if(
+      totalTela > 0
+      &&
+      Math.abs(totalTela - totalAprop) > 0.005
+    ){
+
+      aviso.classList.remove('d-none');
+
+    }else{
+
+      aviso.classList.add('d-none');
+
+    }
+  }
+
+  // REMOVER LINHA
+
+  document.addEventListener('click', function(e){
+
+    if(
+      e.target.classList.contains(
+        'btn-remover'
+      )
+    ){
+
+      e.target.closest('tr').remove();
+
+      atualizarTotal();
+
+    }
+
+  });
+
+  // EVENTO VALOR
+
+  document.addEventListener('input', function(e){
+
+    if(
+      e.target.classList.contains(
+        'valor-aprop'
+      )
+    ){
+
+      atualizarTotal();
+
+    }
+
+  });
+
+  // INIT
+
+  document.addEventListener('DOMContentLoaded', () => {
+
+    filtrarContas();
+
+    filtrarClientes();
+
+    aplicarFiltroEmpresaNasLinhas();
+
+    empresaSel &&
+    empresaSel.addEventListener('change', () => {
+
+      filtrarContas();
+
+      filtrarClientes();
+
+      aplicarFiltroEmpresaNasLinhas();
+
+    });
+
+    statusSel &&
+    statusSel.addEventListener(
+      'change',
+      toggleVencimentoEdit
+    );
+
     toggleVencimentoEdit();
 
-    // Tipo -> mostra/oculta credor
-    tipoSel && tipoSel.addEventListener('change', toggleCredor);
-    toggleCredor();
+    tipoSel &&
+    tipoSel.addEventListener(
+      'change',
+      toggleTipoDependentes
+    );
+
+    toggleTipoDependentes();
+
+    const btnAdd =
+      document.getElementById(
+        'btn-add-apropriacao'
+      );
+
+    if(btnAdd){
+
+      btnAdd.addEventListener(
+        'click',
+        function(){
+
+          novaLinhaApropriacao();
+
+        }
+      );
+
+    }
+
+    // CARREGA APROPRIAÇÕES EXISTENTES
+
+    const apropriacoesExistentes = [
+
+      {% for t in titulos_grupo %}
+
+      {
+        plano_id: "{{ t.plano_financeiro_id }}",
+        centro_id: "{{ t.centro_custo_id }}",
+        valor: "{{ '{:,.2f}'.format(t.valor).replace(',', 'X').replace('.', ',').replace('X', '.') }}"
+      },
+
+      {% endfor %}
+
+    ];
+
+    if(apropriacoesExistentes.length){
+
+      apropriacoesExistentes.forEach(function(item){
+
+        novaLinhaApropriacao(item);
+
+      });
+
+    }else{
+
+      novaLinhaApropriacao();
+
+    }
+
+  // VALIDAÇÃO FINAL SUBMIT
+
+  document.querySelector('form')
+  .addEventListener('submit', function(e){
+
+    let totalTela =
+      parseBR(
+        document.getElementById('valor').value
+      );
+
+    let totalAprop = 0;
+
+    document.querySelectorAll('.valor-aprop')
+    .forEach(function(inp){
+
+      totalAprop += parseBR(inp.value);
+
+    });
+
+    // sem apropriações
+
+    if(
+      document.querySelectorAll(
+        '#body-apropriacao tr'
+      ).length === 0
+    ){
+
+      e.preventDefault();
+
+      alert(
+        'Adicione ao menos uma apropriação.'
+      );
+
+      return;
+    }
+
+    // soma diferente
+
+    if(
+      Math.abs(totalTela - totalAprop)
+      > 0.005
+    ){
+
+      e.preventDefault();
+
+      alert(
+        'A soma das apropriações deve ser igual ao valor total.'
+      );
+
+      return;
+    }
+
   });
+
+  });
+  
 </script>
 {% endblock %}

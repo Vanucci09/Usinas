@@ -136,6 +136,20 @@
         display: inline-block;
         margin-right: 5px;
     }
+
+    .table-responsive {
+    max-height: 600px; /* Ajuste este valor para caber aproximadamente 10 linhas */
+    overflow-y: auto;
+    border-bottom: 1px solid #dee2e6;
+    }
+
+    /* Mantém o cabeçalho fixo enquanto você rola os dados */
+    .table-modern thead th {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background-color: #f8f9fa;
+    }
 </style>
 
 <div class="finance-container">
@@ -547,7 +561,10 @@
                                     </span>
                                 </td>
                                 <td class="text-end pe-3 fw-bold">
-                                    R$ ${Number(item.valor || 0).toFixed(2).replace('.', ',')}
+                                    R$ ${Number(item.valor || 0).toLocaleString('pt-BR', {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2
+                                    })}
                                 </td>
                             </tr>
                         `;
