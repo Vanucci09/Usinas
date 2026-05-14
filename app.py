@@ -11118,137 +11118,334 @@ def empresa_financeiro_listar():
         contas_bancos=contas_bancos
     )
     
-@app.route('/empresa/financeiro/<int:lanc_id>/atualizar-status-data', methods=['POST'], endpoint='empresa_financeiro_atualizar_status_data')
+@app.route(
+    '/empresa/financeiro/<int:lanc_id>/atualizar-status-data',
+    methods=['POST'],
+    endpoint='empresa_financeiro_atualizar_status_data'
+)
 @login_required
 def empresa_financeiro_atualizar_status_data(lanc_id):
+
     titulo = db.session.get(FinanceiroEmpresa, lanc_id)
+
     if not titulo:
         flash('Lançamento não encontrado.', 'warning')
         return redirect(url_for('empresa_financeiro_listar'))
 
+    # MESMA PARCELA / MESMA APROPRIAÇÃO
+    titulos_grupo = FinanceiroEmpresa.query.filter_by(
+        grupo_lancamento=titulo.grupo_lancamento,
+        data_vencimento=titulo.data_vencimento
+    ).all()
+
     if titulo.aprovado is None:
         titulo.aprovado = False
 
-    pode_editar_campos = bool(titulo.aprovado) and ((titulo.status or '').lower() == 'pendente')
+    pode_editar_campos = (
+        bool(titulo.aprovado)
+        and
+        ((titulo.status or '').lower() == 'pendente')
+    )
 
-    novo_status = (request.form.get('status') or '').lower().strip()
+    novo_status = (
+        request.form.get('status') or ''
+    ).lower().strip()
+
     if novo_status not in ('pendente', 'pago', 'recebido'):
         flash('Status inválido.', 'danger')
-        return redirect(request.form.get('next') or url_for('empresa_financeiro_listar'))
+        return redirect(
+            request.form.get('next')
+            or
+            url_for('empresa_financeiro_listar')
+        )
 
-    req_data_liq  = request.form.get('data_liquidado')
-    nova_data_liq = _parse_date(req_data_liq) if req_data_liq else None
+    req_data_liq = request.form.get('data_liquidado')
 
-    req_juros = (request.form.get('juros') or '').strip()
-    novo_juros = _parse_decimal_br(req_juros) if req_juros else None
+    nova_data_liq = (
+        _parse_date(req_data_liq)
+        if req_data_liq
+        else None
+    )
+
+    req_juros = (
+        request.form.get('juros') or ''
+    ).strip()
+
+    novo_juros = (
+        _parse_decimal_br(req_juros)
+        if req_juros
+        else None
+    )
+
     if novo_juros is None:
         novo_juros = Decimal('0.00')
-        
-    conta_id = request.form.get('conta_id', type=int)
 
-    # upload do comprovante de BAIXA (único campo no form)
+    conta_id = request.form.get(
+        'conta_id',
+        type=int
+    )
+
+    # UPLOAD COMPROVANTE
     comp_file = request.files.get('comprovante_pgto')
-    novo_comp_filename, abs_novo_comp, abs_comp_antigo = None, None, None
+
+    novo_comp_filename = None
+    abs_novo_comp = None
+    abs_comp_antigo = None
+
     if comp_file and comp_file.filename:
+
         if not _allowed_file(comp_file.filename):
-            flash('Tipo de arquivo não permitido. Envie PDF/JPG/PNG/GIF/WEBP/HEIC.', 'warning')
-            return redirect(request.form.get('next') or url_for('empresa_financeiro_listar'))
+
+            flash(
+                'Tipo de arquivo não permitido. '
+                'Envie PDF/JPG/PNG/GIF/WEBP/HEIC.',
+                'warning'
+            )
+
+            return redirect(
+                request.form.get('next')
+                or
+                url_for('empresa_financeiro_listar')
+            )
+
         try:
+
             base_dir = _ensure_comprovantes_dir()
-            novo_comp_filename = _unique_name(comp_file.filename)
-            abs_novo_comp = os.path.join(base_dir, novo_comp_filename)
+
+            novo_comp_filename = _unique_name(
+                comp_file.filename
+            )
+
+            abs_novo_comp = os.path.join(
+                base_dir,
+                novo_comp_filename
+            )
+
             comp_file.save(abs_novo_comp)
 
-            # Se já havia comprovante de BAIXA, prepara remoção depois do commit (compat)
-            antigo = getattr(titulo, 'comprovante_baixa_arquivo', None)
-            if antigo:
-                abs_comp_antigo = os.path.join(base_dir, os.path.basename(antigo))
-        except Exception as e:
-            print('Erro ao salvar comprovante de pagamento:', e)
-            flash('Falha ao salvar o comprovante de pagamento.', 'danger')
-            return redirect(request.form.get('next') or url_for('empresa_financeiro_listar'))
+            antigo = getattr(
+                titulo,
+                'comprovante_baixa_arquivo',
+                None
+            )
 
-    # movimento já existente?
-    mov_exist = MovimentoCaixaBanco.query.filter_by(
-        origem='financeiro_empresa', referencia_id=titulo.id
-    ).first()
+            if antigo:
+
+                abs_comp_antigo = os.path.join(
+                    base_dir,
+                    os.path.basename(antigo)
+                )
+
+        except Exception as e:
+
+            print(
+                'Erro ao salvar comprovante de pagamento:',
+                e
+            )
+
+            flash(
+                'Falha ao salvar o comprovante de pagamento.',
+                'danger'
+            )
+
+            return redirect(
+                request.form.get('next')
+                or
+                url_for('empresa_financeiro_listar')
+            )
 
     try:
-        if not pode_editar_campos and novo_status != 'pendente':
-            flash('Não é permitido atualizar este lançamento por aqui.', 'warning')
-            # rollback de arquivo novo salvo, se houve
-            if abs_novo_comp and os.path.isfile(abs_novo_comp):
-                try: os.remove(abs_novo_comp)
-                except Exception: pass
-            return redirect(request.form.get('next') or url_for('empresa_financeiro_listar'))
 
-        titulo.status = novo_status
+        if (
+            not pode_editar_campos
+            and
+            novo_status != 'pendente'
+        ):
 
-        if pode_editar_campos:
-            
-            if conta_id is not None:
-                titulo.conta_id = conta_id
-            if novo_status in ('pago', 'recebido'):
-                titulo.data_liquidado = nova_data_liq or titulo.data
+            flash(
+                'Não é permitido atualizar este lançamento por aqui.',
+                'warning'
+            )
+
+            if (
+                abs_novo_comp
+                and
+                os.path.isfile(abs_novo_comp)
+            ):
+                try:
+                    os.remove(abs_novo_comp)
+                except Exception:
+                    pass
+
+            return redirect(
+                request.form.get('next')
+                or
+                url_for('empresa_financeiro_listar')
+            )
+
+        # ====================================================
+        # ATUALIZA TODOS DA MESMA PARCELA/APROPRIAÇÃO
+        # ====================================================
+
+        for titulo_item in titulos_grupo:
+
+            titulo_item.status = novo_status
+
+            if pode_editar_campos:
+
+                if conta_id is not None:
+                    titulo_item.conta_id = conta_id
+
+                if novo_status in ('pago', 'recebido'):
+
+                    titulo_item.data_liquidado = (
+                        nova_data_liq
+                        or
+                        titulo_item.data
+                    )
+
+                else:
+
+                    titulo_item.data_liquidado = None
+
+                titulo_item.juros = novo_juros
+
+                # COMPROVANTE
+                if novo_comp_filename:
+
+                    titulo_item.comprovante_baixa_arquivo = (
+                        novo_comp_filename
+                    )
+
+                    db.session.add(
+                        FinanceiroAnexo(
+                            titulo_id=titulo_item.id,
+                            tipo='baixa',
+                            filename=novo_comp_filename,
+                            original_name=comp_file.filename
+                        )
+                    )
+
+        # ====================================================
+        # SINCRONIZA MOVIMENTOS
+        # ====================================================
+
+        for titulo_item in titulos_grupo:
+
+            mov_exist = MovimentoCaixaBanco.query.filter_by(
+                origem='financeiro_empresa',
+                referencia_id=titulo_item.id
+            ).first()
+
+            if (
+                titulo_item.status in ('pago', 'recebido')
+                and
+                titulo_item.conta_id
+            ):
+
+                data_mov = (
+                    titulo_item.data_liquidado
+                    or
+                    titulo_item.data
+                )
+
+                valor_total = (
+                    (titulo_item.valor or Decimal('0'))
+                    +
+                    (titulo_item.juros or Decimal('0'))
+                )
+
+                if mov_exist:
+
+                    mov_exist.conta_id = titulo_item.conta_id
+
+                    mov_exist.data = data_mov
+
+                    mov_exist.tipo = (
+                        'saida'
+                        if titulo_item.tipo == 'despesa'
+                        else 'entrada'
+                    )
+
+                    mov_exist.descricao = (
+                        f'{titulo_item.tipo.capitalize()} - '
+                        f'{titulo_item.descricao}'
+                    )
+
+                    mov_exist.valor = valor_total
+
+                else:
+
+                    db.session.add(
+                        MovimentoCaixaBanco(
+                            conta_id=titulo_item.conta_id,
+                            data=data_mov,
+                            tipo=(
+                                'saida'
+                                if titulo_item.tipo == 'despesa'
+                                else 'entrada'
+                            ),
+                            descricao=(
+                                f'{titulo_item.tipo.capitalize()} - '
+                                f'{titulo_item.descricao}'
+                            ),
+                            valor=valor_total,
+                            origem='financeiro_empresa',
+                            referencia_id=titulo_item.id
+                        )
+                    )
+
             else:
-                titulo.data_liquidado = None
-            titulo.juros = novo_juros
 
-            # aplica o novo comprovante de BAIXA no campo compat + registra em financeiro_anexos
-            if novo_comp_filename:
-                titulo.comprovante_baixa_arquivo = novo_comp_filename
-                db.session.add(FinanceiroAnexo(
-                    titulo_id=titulo.id,
-                    tipo='baixa',
-                    filename=novo_comp_filename,
-                    original_name=comp_file.filename
-                ))
-
-        # sincroniza movimento de caixa pelo total (valor + juros)
-        if titulo.status in ('pago', 'recebido') and titulo.conta_id:
-            data_mov = titulo.data_liquidado or titulo.data
-            valor_total = (titulo.valor or Decimal('0')) + (titulo.juros or Decimal('0'))
-            if mov_exist:
-                mov_exist.conta_id = titulo.conta_id
-                mov_exist.data = data_mov
-                mov_exist.tipo = 'saida' if titulo.tipo == 'despesa' else 'entrada'
-                mov_exist.descricao = f'{titulo.tipo.capitalize()} - {titulo.descricao}'
-                mov_exist.valor = valor_total
-            else:
-                db.session.add(MovimentoCaixaBanco(
-                    conta_id=titulo.conta_id,
-                    data=data_mov,
-                    tipo='saida' if titulo.tipo == 'despesa' else 'entrada',
-                    descricao=f'{titulo.tipo.capitalize()} - {titulo.descricao}',
-                    valor=valor_total,
-                    origem='financeiro_empresa',
-                    referencia_id=titulo.id
-                ))
-        else:
-            if mov_exist:
-                db.session.delete(mov_exist)
+                if mov_exist:
+                    db.session.delete(mov_exist)
 
         db.session.commit()
 
-        # remove o comprovante antigo (se foi substituído)
-        if abs_comp_antigo and os.path.isfile(abs_comp_antigo):
-            try: os.remove(abs_comp_antigo)
-            except Exception: pass
+        # REMOVE COMPROVANTE ANTIGO
+        if (
+            abs_comp_antigo
+            and
+            os.path.isfile(abs_comp_antigo)
+        ):
+            try:
+                os.remove(abs_comp_antigo)
+            except Exception:
+                pass
 
-        flash('Status/liquidação/juros atualizados com sucesso.', 'success')
+        flash(
+            'Status/liquidação/juros atualizados com sucesso.',
+            'success'
+        )
 
     except Exception as e:
+
         db.session.rollback()
-        print('Erro ao atualizar status/liquidação/juros:', e)
 
-        # se salvamos arquivo novo e deu erro, apaga-o
-        if abs_novo_comp and os.path.isfile(abs_novo_comp):
-            try: os.remove(abs_novo_comp)
-            except Exception: pass
+        print(
+            'Erro ao atualizar status/liquidação/juros:',
+            e
+        )
 
-        flash('Erro ao atualizar status/liquidação.', 'danger')
+        if (
+            abs_novo_comp
+            and
+            os.path.isfile(abs_novo_comp)
+        ):
+            try:
+                os.remove(abs_novo_comp)
+            except Exception:
+                pass
+        flash(
+            'Erro ao atualizar status/liquidação.',
+            'danger'
+        )
 
-    return redirect(request.form.get('next') or url_for('empresa_financeiro_listar'))
+    return redirect(
+        request.form.get('next')
+        or
+        url_for('empresa_financeiro_listar')
+    )
     
 @app.route('/empresa/financeiro/<int:lanc_id>/toggle-aprovado', methods=['POST'], endpoint='empresa_financeiro_toggle_aprovado')
 @login_required
