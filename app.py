@@ -10375,11 +10375,9 @@ def empresa_financeiro_editar(lanc_id):
     ) or 1
 
     if parcelas_qtd < 1:
-
         parcelas_qtd = 1
 
     # EMPRESA
-
     emp = db.session.get(
         Empresa,
         empresa_id
@@ -10418,27 +10416,21 @@ def empresa_financeiro_editar(lanc_id):
     # DATA
 
     if not data_venc_base:
-
         data_venc_base = data_tit
 
     # CONTA
-
     conta = None
-
     if conta_id:
-
         conta = db.session.get(
             CaixaBanco,
             conta_id
         )
 
         if conta and conta.empresa_id != empresa_id:
-
             flash(
                 'A conta não pertence à empresa.',
                 'danger'
             )
-
             return redirect(
                 url_for(
                     'empresa_financeiro_editar',
@@ -10449,54 +10441,41 @@ def empresa_financeiro_editar(lanc_id):
     # CREDOR / CLIENTE
 
     credor = None
-
     cliente_operacional = None
-
     if tipo == 'despesa':
-
         credor_id = form.get(
             'credor_id',
             type=int
         )
-
         credor = db.session.get(
             Credor,
             credor_id
         )
-
         if not credor:
-
             flash(
                 'Credor inválido.',
                 'danger'
             )
-
             return redirect(
                 url_for(
                     'empresa_financeiro_editar',
                     lanc_id=lanc_id
                 )
             )
-
     elif tipo == 'receita':
-
         cliente_operacional_id = form.get(
             'cliente_operacional_id',
             type=int
         )
-
         cliente_operacional = db.session.get(
             ClienteOperacional,
             cliente_operacional_id
         )
-
         if not cliente_operacional:
-
             flash(
                 'Cliente operacional inválido.',
                 'danger'
             )
-
             return redirect(
                 url_for(
                     'empresa_financeiro_editar',
@@ -10507,82 +10486,60 @@ def empresa_financeiro_editar(lanc_id):
     # APROPRIAÇÕES
 
     apropriacoes = []
-
     idx = 0
-
     while True:
-
         plano_id = form.get(
             f'apropriacoes[{idx}][plano_id]'
         )
-
         centro_id = form.get(
             f'apropriacoes[{idx}][centro_id]'
         )
-
         valor_raw = form.get(
             f'apropriacoes[{idx}][valor]'
         )
-
         if not plano_id:
             break
-
         valor_dec = _q2(
             _parse_decimal_br(valor_raw)
         )
-
         if valor_dec <= 0:
-
             flash(
                 f'Valor inválido na linha {idx+1}.',
                 'danger'
             )
-
             return redirect(
                 url_for(
                     'empresa_financeiro_editar',
                     lanc_id=lanc_id
                 )
             )
-
         apropriacoes.append({
-
             'plano_id': int(plano_id),
-
             'centro_id': int(centro_id),
-
             'valor': valor_dec
-
         })
-
         idx += 1
-
     if not apropriacoes:
-
         flash(
             'Adicione ao menos uma apropriação.',
             'danger'
         )
-
         return redirect(
             url_for(
                 'empresa_financeiro_editar',
                 lanc_id=lanc_id
             )
         )
-
     soma_apropriacoes = sum(
         a['valor']
         for a in apropriacoes
     )
 
     if _q2(soma_apropriacoes) != _q2(Decimal(valor_tot)):
-
         flash(
             'A soma das apropriações deve ser igual ao valor total.',
             'danger'
         )
-
         return redirect(
             url_for(
                 'empresa_financeiro_editar',
@@ -10591,7 +10548,6 @@ def empresa_financeiro_editar(lanc_id):
         )
 
     # UPLOADS
-
     files_up = _getlist_files_either(
         request.files,
         'comprovantes[]',
@@ -10600,144 +10556,98 @@ def empresa_financeiro_editar(lanc_id):
     )
 
     saved_files = _save_multi_files(files_up)
-
     first_filename = (
         saved_files[0]['filename']
         if saved_files else None
     )
 
     # RATEIO
-
     def ratear(total_dec: Decimal, partes: int):
-
         if partes <= 0:
             return []
-
         base = _q2(
             total_dec / Decimal(partes)
         )
-
         lst = [base] * partes
-
         diff = total_dec - sum(lst)
-
         if diff != Decimal('0.00'):
-
             lst[-1] = _q2(
                 lst[-1] + diff
             )
-
         return lst
 
     # SALVAR
-
     try:
-
         # remove movimentos antigos
-
         movimentos_antigos = MovimentoCaixaBanco.query.filter(
             MovimentoCaixaBanco.origem == 'financeiro_empresa',
             MovimentoCaixaBanco.referencia_id.in_(
                 [t.id for t in titulos_grupo]
             )
         ).all()
-
         for mov in movimentos_antigos:
-
             db.session.delete(mov)
 
         # remove anexos antigos
-
         anexos_antigos = FinanceiroAnexo.query.filter(
             FinanceiroAnexo.titulo_id.in_(
                 [t.id for t in titulos_grupo]
             )
         ).all()
-
         for ax in anexos_antigos:
-
             db.session.delete(ax)
 
         # remove títulos antigos
-
         FinanceiroEmpresa.query.filter_by(
             grupo_lancamento=grupo
         ).delete()
-
         db.session.flush()
-
         criados = 0
-
         for item in apropriacoes:
-
             parcelas = ratear(
                 item['valor'],
                 parcelas_qtd
             )
-
             for parc in range(parcelas_qtd):
-
                 valor_parte = parcelas[parc]
-
                 data_venc_parc = (
                     data_venc_base +
                     relativedelta(months=parc)
                 )
-
                 novo = FinanceiroEmpresa(
-
                     empresa_id=empresa_id,
-
                     data=data_tit,
-
                     tipo=tipo,
-
                     descricao=(
                         descricao
                         if parcelas_qtd == 1
                         else f'{descricao} ({parc+1}/{parcelas_qtd})'
                     ),
-
                     valor=valor_parte,
-
                     status=status,
-
                     data_vencimento=data_venc_parc,
-
                     conta_id=(
                         conta.id
                         if conta else None
                     ),
-
                     plano_financeiro_id=item['plano_id'],
-
                     centro_custo_id=item['centro_id'],
-
                     credor_id=(
                         credor.id
                         if credor else None
                     ),
-
                     cliente_operacional_id=(
                         cliente_operacional.id
                         if cliente_operacional else None
                     ),
-
                     aprovado=False,
-
                     numero_documento=numero_documento,
-
                     comprovante_arquivo=first_filename,
-
                     grupo_lancamento=grupo
                 )
-
                 db.session.add(novo)
-
                 db.session.flush()
-
                 for sf in saved_files:
-
                     db.session.add(
                         FinanceiroAnexo(
                             titulo_id=novo.id,
@@ -10746,16 +10656,11 @@ def empresa_financeiro_editar(lanc_id):
                             original_name=sf.get('original_name')
                         )
                     )
-
                 if conta and status in ('pago', 'recebido'):
-
                     db.session.add(
                         MovimentoCaixaBanco(
-
                             conta_id=conta.id,
-
                             data=data_venc_parc,
-
                             tipo=(
                                 'saida'
                                 if tipo == 'despesa'
@@ -10768,40 +10673,29 @@ def empresa_financeiro_editar(lanc_id):
                             ),
 
                             valor=valor_parte,
-
                             origem='financeiro_empresa',
-
                             referencia_id=novo.id
                         )
                     )
-
                 criados += 1
-
         db.session.commit()
-
         flash(
             'Lançamento atualizado com sucesso!',
             'success'
         )
-
         return redirect(
             url_for('empresa_financeiro_listar')
         )
-
     except Exception as e:
-
         db.session.rollback()
-
         print(
             'Erro ao atualizar lançamento:',
             e
         )
-
         flash(
             'Erro ao salvar alterações.',
             'danger'
         )
-
         return redirect(
             url_for(
                 'empresa_financeiro_editar',
@@ -10921,19 +10815,16 @@ def empresa_financeiro_listar():
                 '||'
             ).label('anexos_ids')
         )
-
         .join(
             FinanceiroAnexo,
             FinanceiroAnexo.titulo_id
             ==
             FinanceiroEmpresa.id
         )
-
         .group_by(
             FinanceiroEmpresa.grupo_lancamento
         )
         .subquery()
-
     )
 
     # 6. QUERY CONSOLIDADA
@@ -11010,7 +10901,6 @@ def empresa_financeiro_listar():
             ==
             FinanceiroEmpresa.grupo_lancamento
         )
-
     )
 
     # FILTROS
@@ -11108,35 +10998,26 @@ def empresa_financeiro_listar():
     # 7. ORDENAÇÃO CONSOLIDADA
 
     if sort == 'valor':
-
         if dir_ == 'asc':
-
             qry = qry.order_by(
                 func.sum(FinanceiroEmpresa.valor).asc()
             )
 
         else:
-
             qry = qry.order_by(
                 func.sum(FinanceiroEmpresa.valor).desc()
             )
 
     elif sort == 'status':
-
         if dir_ == 'asc':
-
             qry = qry.order_by(
                 FinanceiroEmpresa.status.asc()
             )
-
         else:
-
             qry = qry.order_by(
                 FinanceiroEmpresa.status.desc()
             )
-
     else:
-
         qry = qry.order_by(
             FinanceiroEmpresa.data_vencimento.desc(),
             func.min(FinanceiroEmpresa.id).desc()
@@ -11210,6 +11091,15 @@ def empresa_financeiro_listar():
         f"{meses_pt[int(m.mes)-1]}/{int(m.ano)}"
         for m in atrasados_meses
     ]
+    
+    if empresa_id:
+        contas_bancos = CaixaBanco.query.filter_by(
+            empresa_id=empresa_id
+        ).order_by(CaixaBanco.nome).all()
+    else:
+        contas_bancos = CaixaBanco.query.order_by(
+            CaixaBanco.nome
+        ).all()
 
     # 9. RENDERIZAÇÃO
     return render_template(
@@ -11224,7 +11114,8 @@ def empresa_financeiro_listar():
         total_receitas=total_receitas, total_despesas=total_despesas, saldo=saldo,
         total_atrasados=total_atrasados,
         total_pendentes_mes=total_pendentes_mes,
-        meses_atrasados=meses_atrasados_str
+        meses_atrasados=meses_atrasados_str,
+        contas_bancos=contas_bancos
     )
     
 @app.route('/empresa/financeiro/<int:lanc_id>/atualizar-status-data', methods=['POST'], endpoint='empresa_financeiro_atualizar_status_data')
@@ -11252,6 +11143,8 @@ def empresa_financeiro_atualizar_status_data(lanc_id):
     novo_juros = _parse_decimal_br(req_juros) if req_juros else None
     if novo_juros is None:
         novo_juros = Decimal('0.00')
+        
+    conta_id = request.form.get('conta_id', type=int)
 
     # upload do comprovante de BAIXA (único campo no form)
     comp_file = request.files.get('comprovante_pgto')
@@ -11292,6 +11185,9 @@ def empresa_financeiro_atualizar_status_data(lanc_id):
         titulo.status = novo_status
 
         if pode_editar_campos:
+            
+            if conta_id is not None:
+                titulo.conta_id = conta_id
             if novo_status in ('pago', 'recebido'):
                 titulo.data_liquidado = nova_data_liq or titulo.data
             else:

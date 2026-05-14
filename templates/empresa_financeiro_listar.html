@@ -424,19 +424,61 @@
                                             </div>
                                         </div>
                                     {% elif it.aprovado and st == 'pendente' %}
-                                        <form method="POST" action="{{ url_for('empresa_financeiro_atualizar_status_data', lanc_id=it.id) }}" enctype="multipart/form-data" class="form-baixa-inline">
+                                        <form method="POST"
+                                            action="{{ url_for('empresa_financeiro_atualizar_status_data', lanc_id=it.id) }}"
+                                            enctype="multipart/form-data"
+                                            class="form-baixa-inline">
+
                                             <input type="hidden" name="next" value="{{ request.full_path }}"/>
+
                                             <select name="status" class="form-select input-baixa">
-                                                <option value="pago" {% if it.tipo == 'despesa' %}selected{% endif %}>PAGO</option>
-                                                <option value="recebido" {% if it.tipo == 'receita' %}selected{% endif %}>RECEBIDO</option>
+                                                <option value="pago" {% if it.tipo == 'despesa' %}selected{% endif %}>
+                                                    PAGO
+                                                </option>
+
+                                                <option value="recebido" {% if it.tipo == 'receita' %}selected{% endif %}>
+                                                    RECEBIDO
+                                                </option>
                                             </select>
-                                            <input type="date" name="data_liquidado" class="form-control input-baixa" required>
-                                            <input type="text" name="juros" class="form-control input-baixa" placeholder="Juros R$">
+
+                                            <!-- NOVO CAMPO -->
+                                            <select name="conta_id" class="form-select input-baixa" required>
+                                                <option value="">Conta</option>
+
+                                                {% for conta in contas_bancos %}
+                                                    <option value="{{ conta.id }}">
+                                                        {{ conta.banco }} - {{ conta.agencia }}
+                                                    </option>
+                                                {% endfor %}
+                                            </select>
+
+                                            <input type="date"
+                                                name="data_liquidado"
+                                                class="form-control input-baixa"
+                                                required>
+
+                                            <input type="text"
+                                                name="juros"
+                                                class="form-control input-baixa"
+                                                placeholder="Juros R$">
+
                                             <div class="position-relative">
-                                                <input type="file" name="comprovante_pgto" id="file{{it.id}}" class="d-none">
-                                                <label for="file{{it.id}}" class="btn btn-sm btn-outline-secondary w-100 py-1" title="Anexar Comprovante"><i class="bi bi-upload"></i></label>
+                                                <input type="file"
+                                                    name="comprovante_pgto"
+                                                    id="file{{it.id}}"
+                                                    class="d-none">
+
+                                                <label for="file{{it.id}}"
+                                                    class="btn btn-sm btn-outline-secondary w-100 py-1"
+                                                    title="Anexar Comprovante">
+                                                    <i class="bi bi-upload"></i>
+                                                </label>
                                             </div>
-                                            <button class="btn btn-sm btn-success p-1" title="Confirmar Baixa"><i class="bi bi-check-lg"></i></button>
+
+                                            <button class="btn btn-sm btn-success p-1"
+                                                    title="Confirmar Baixa">
+                                                <i class="bi bi-check-lg"></i>
+                                            </button>
                                         </form>
                                     {% else %}
                                         <span class="badge bg-warning text-dark px-3 py-2 rounded-pill"><i class="bi bi-hourglass me-1"></i>PENDENTE APR</span>
