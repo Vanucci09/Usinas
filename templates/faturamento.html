@@ -61,16 +61,63 @@
             <div class="col-md-6 mb-3"><label>Fim Leitura</label><input type="date" name="fim_leitura" class="form-control" required></div>
         </div>
 
-        <!-- Tarifa e ICMS -->
+        <!-- Tarifas e Impostos -->
         <div class="row">
-            <div class="col-md-6 mb-3"><label>Tarifa (R$/kWh)</label><input type="text" name="tarifa_neoenergia" class="form-control tarifa-mask" required></div>
-            <div class="col-md-6 mb-3"><label>ICMS (%)</label><input type="text" name="icms" class="form-control percent-mask" required></div>
+
+            <div class="col-md-3 mb-3">
+                <label>Tarifa Distribuidora atual (R$/kWh)</label>
+                <input type="text"
+                    name="tarifa_neoenergia"
+                    class="form-control tarifa-mask"
+                    required>
+            </div>
+
+            <div class="col-md-3 mb-3">
+                <label>Tarifa S/ Tributos</label>
+                <input type="text"
+                    name="tarifa_base"
+                    class="form-control tarifa-mask">
+            </div>
+
+            <div class="col-md-3 mb-3">
+                <label>ICMS (%)</label>
+                <input type="text"
+                    name="icms"
+                    class="form-control percent-mask"
+                    required>
+            </div>
+
+            <div class="col-md-3 mb-3">
+                <label>PIS (%)</label>
+                <input type="text"
+                    name="pis"
+                    class="form-control percent-mask">
+            </div>
+
+        </div>
+
+        <div class="row">
+
+            <div class="col-md-6 mb-3">
+                <label>COFINS (%)</label>
+                <input type="text"
+                    name="cofins"
+                    class="form-control percent-mask">
+            </div>
+
+            <div class="col-md-6 mb-3">
+                <label>CIP Atual</label>
+                <input type="text"
+                    name="cip_atual"
+                    class="form-control money-mask">
+            </div>
+
         </div>
 
         <!-- Consumos -->
         <div class="row">
             <div class="col-md-6 mb-3"><label>Energia Ativa ( consumo total )</label><input type="text" name="consumo_total" class="form-control decimal-mask" required></div>
-            <div class="col-md-6 mb-3"><label>Consumo Neoenergia</label><input type="text" name="consumo_neoenergia" class="form-control decimal-mask" required></div>
+            <div class="col-md-6 mb-3"><label>Consumo Residual</label><input type="text" name="consumo_neoenergia" class="form-control decimal-mask" required></div>
         </div>
 
         <div class="row">
@@ -267,15 +314,20 @@ async function preencherAutomatico() {
 
         // campos numéricos
         preencherCampo("tarifa_neoenergia", data.tarifa);
+        preencherCampo("tarifa_base", data.tarifa_base);
         preencherCampo("icms", data.icms);
+        preencherCampo("pis", data.pis);
+        preencherCampo("cofins", data.cofins);
+        preencherCampo("cip_atual", data.cip_atual);
         preencherCampo("consumo_total", data.consumo_total);
         preencherCampo("consumo_neoenergia", data.consumo_neoenergia);
         preencherCampo("consumo_usina", data.consumo_usina);
         preencherCampo("saldo_unidade", data.saldo_unidade);
         preencherCampo("injetado", data.injetado);
+
         preencherCampo("valor_conta_neoenergia", data.valor_conta);
 
-        // ✅ Custo TUSD Fio B (se vier no JSON)
+        // Custo TUSD Fio B (se vier no JSON)
         if (data.custo_tusd_fio_b !== undefined && data.custo_tusd_fio_b !== null && data.custo_tusd_fio_b !== '') {
             preencherCampo("custo_tusd_fio_b", data.custo_tusd_fio_b);
         }
