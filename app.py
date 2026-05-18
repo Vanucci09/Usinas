@@ -2452,38 +2452,16 @@ def editar_fatura(id):
 
 @app.route('/relatorio/<int:fatura_id>')
 def relatorio_fatura(fatura_id):
+
     fatura = FaturaMensal.query.get_or_404(fatura_id)
     cliente = Cliente.query.get(fatura.cliente_id)
     usina = Usina.query.get(cliente.usina_id)
 
-    tarifa_base = Decimal(str(fatura.tarifa_neoenergia))
-    if fatura.icms == 0:
-        tarifa_neoenergia_aplicada = tarifa_base * Decimal('1.2625')
-    elif fatura.icms == 20:
-        tarifa_neoenergia_aplicada = tarifa_base
-    else:
-        tarifa_neoenergia_aplicada = tarifa_base * Decimal('1.1023232323')
+    # =========================================================
+    # HELPERS
+    # =========================================================
 
-    consumo_usina = Decimal(str(fatura.consumo_usina))
-    valor_conta   = Decimal(str(fatura.valor_conta_neoenergia))
-
-    if fatura.data_cadastro:
-        data_base = fatura.data_cadastro.date()
-    else:
-        data_base = date(2025, 8, 4)
-
-    # --- Rateio vigente para a data da fatura ---
-    rateio = Rateio.query.filter(
-        Rateio.cliente_id == cliente.id,
-        Rateio.usina_id == usina.id,
-        Rateio.data_inicio <= data_base
-    ).order_by(
-        Rateio.data_inicio.desc(),
-        Rateio.ativo.desc(),
-        Rateio.id.desc()
-    ).first()
-
-    def _dec(v, default="1.00"):
+    def _dec(v, default="0.00"):
         try:
             if v is None:
                 return Decimal(default)
@@ -2491,196 +2469,701 @@ def relatorio_fatura(fatura_id):
         except Exception:
             return Decimal(default)
 
-    def calcular_tarifa_cliente(rateio_obj, fatura_obj):
-        """
-        Retorna tarifa cliente (Decimal) aplicada nesta fatura.
-        - Se usar_tarifa_neoenergia=True:
-            base = fatura.tarifa_neoenergia (preferencial)
-            fallback = rateio.tarifa_kwh
-            fallback final = 1.00
-            aplica desconto_percentual (ou 0)
-        - Se False:
-            usa rateio.tarifa_kwh (fallback 1.00)
-        """
-        if not rateio_obj:
-            return Decimal("0.00")
+    def _percentual_para_decimal(v):
+        valor = _dec(v, "0.00")
+        return valor / Decimal("100")
 
-        usar_neo = bool(getattr(rateio_obj, "usar_tarifa_neoenergia", False))
-        desconto_pct = float(getattr(rateio_obj, "desconto_percentual", 0) or 0.0)
+    # =========================================================
+    # IDENTIFICA SE É FATURA NOVA
+    # =========================================================
 
-        if usar_neo:
+    usa_regra_nova = bool(
+        getattr(fatura, 'tarifa_base', None)
+        and _dec(fatura.tarifa_base) > 0
+    )
 
-            # AGORA USA TARIFA CORRIGIDA COM ICMS
-            tarifa_base_dec = _dec(tarifa_neoenergia_aplicada, default="1.00")
+    # =========================================================
+    # TARIFA NEOENERGIA
+    # =========================================================
 
-            fator = (Decimal("1.00") - (Decimal(str(desconto_pct)) / Decimal("100.00")))
+    def calcular_tarifa_neoenergia(f):
 
-            return (tarifa_base_dec * fator).quantize(
+        usa_nova = bool(
+            getattr(f, 'tarifa_base', None)
+            and _dec(f.tarifa_base) > 0
+        )
+
+        # =========================
+        # NOVA REGRA
+        # =========================
+
+        if usa_nova:
+
+            tarifa_base = _dec(
+                getattr(f, 'tarifa_base', 0),
+                "0.00"
+            )
+
+            pis_dec = _percentual_para_decimal(
+                getattr(f, 'pis', 0)
+            )
+
+            cofins_dec = _percentual_para_decimal(
+                getattr(f, 'cofins', 0)
+            )
+
+            divisor = Decimal("1.00") - (
+                pis_dec +
+                cofins_dec +
+                Decimal("0.20")
+            )
+
+            if divisor <= 0:
+                divisor = Decimal("1.00")
+
+            return (
+                tarifa_base / divisor
+            ).quantize(
                 Decimal("0.0000001"),
                 rounding=ROUND_HALF_UP
             )
 
-        # modo fixo
-        return _dec(getattr(rateio_obj, "tarifa_kwh", None), default="1.00").quantize(
-            Decimal("0.0000001"), rounding=ROUND_HALF_UP
+        # =========================
+        # REGRA ANTIGA
+        # =========================
+
+        tarifa_base_ant = _dec(
+            getattr(f, 'tarifa_neoenergia', 0),
+            "0.00"
         )
 
-    # Tarifa do cliente aplicada na fatura atual
-    tarifa_cliente = calcular_tarifa_cliente(rateio, fatura)
+        icms = _dec(
+            getattr(f, 'icms', 0),
+            "0.00"
+        )
 
-    # --- Cálculos principais ---
-    valor_usina_bruto = consumo_usina * tarifa_cliente
+        if icms == 0:
 
-    # regra TUSD Fio B na fatura atual
-    tusd_ativo_atual = bool(getattr(usina, 'tusd_fio_b', False))
-    custo_tusd_atual = _dec(getattr(fatura, 'custo_tusd_fio_b', 0) or 0, default="0.00").quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            tarifa_final = (
+                tarifa_base_ant *
+                Decimal('1.2625')
+            )
+
+        elif icms == 20:
+
+            tarifa_final = tarifa_base_ant
+
+        else:
+
+            tarifa_final = (
+                tarifa_base_ant *
+                Decimal('1.1023232323')
+            )
+
+        return tarifa_final.quantize(
+            Decimal("0.0000001"),
+            rounding=ROUND_HALF_UP
+        )
+
+    tarifa_neoenergia_aplicada = (
+        calcular_tarifa_neoenergia(fatura)
+    )
+
+    # =========================================================
+    # DADOS BASE
+    # =========================================================
+
+    consumo_usina = _dec(
+        fatura.consumo_usina,
+        "0.00"
+    )
+
+    valor_conta = _dec(
+        fatura.valor_conta_neoenergia,
+        "0.00"
+    )
+
+    if fatura.data_cadastro:
+        data_base = fatura.data_cadastro.date()
+    else:
+        data_base = date(
+            fatura.ano_referencia,
+            fatura.mes_referencia,
+            1
+        )
+
+    # =========================================================
+    # RATEIO VIGENTE
+    # =========================================================
+
+    rateio = (
+        Rateio.query
+        .filter(
+            Rateio.cliente_id == cliente.id,
+            Rateio.usina_id == usina.id,
+            Rateio.data_inicio <= data_base
+        )
+        .order_by(
+            Rateio.data_inicio.desc(),
+            Rateio.ativo.desc(),
+            Rateio.id.desc()
+        )
+        .first()
+    )
+
+    # =========================================================
+    # TARIFA CLIENTE
+    # =========================================================
+
+    def calcular_tarifa_cliente(
+        rateio_obj,
+        tarifa_neo,
+        usa_nova_regra
+    ):
+
+        if not rateio_obj:
+            return Decimal("0.00")
+
+        desconto_pct = _percentual_para_decimal(
+            getattr(
+                rateio_obj,
+                "desconto_percentual",
+                0
+            ) or 0
+        )
+
+        # =========================
+        # REGRA NOVA
+        # =========================
+
+        if usa_nova_regra:
+
+            tarifa_final = (
+                tarifa_neo *
+                (
+                    Decimal("1.00") -
+                    desconto_pct
+                )
+            )
+
+            return tarifa_final.quantize(
+                Decimal("0.0000001"),
+                rounding=ROUND_HALF_UP
+            )
+
+        # =========================
+        # REGRA ANTIGA
+        # =========================
+
+        usar_neo = bool(
+            getattr(
+                rateio_obj,
+                "usar_tarifa_neoenergia",
+                False
+            )
+        )
+
+        if usar_neo:
+
+            fator = (
+                Decimal("1.00") -
+                desconto_pct
+            )
+
+            return (
+                tarifa_neo * fator
+            ).quantize(
+                Decimal("0.0000001"),
+                rounding=ROUND_HALF_UP
+            )
+
+        return _dec(
+            getattr(
+                rateio_obj,
+                "tarifa_kwh",
+                None
+            ),
+            default="1.00"
+        ).quantize(
+            Decimal("0.0000001"),
+            rounding=ROUND_HALF_UP
+        )
+
+    tarifa_cliente = calcular_tarifa_cliente(
+        rateio,
+        tarifa_neoenergia_aplicada,
+        usa_regra_nova
+    )
+
+    # =========================================================
+    # CÁLCULOS PRINCIPAIS
+    # =========================================================
+
+    valor_usina_bruto = (
+        consumo_usina *
+        tarifa_cliente
+    )
+
+    tusd_ativo_atual = bool(
+        getattr(usina, 'tusd_fio_b', False)
+    )
+
+    custo_tusd_atual = _dec(
+        getattr(
+            fatura,
+            'custo_tusd_fio_b',
+            0
+        ) or 0,
+        default="0.00"
+    ).quantize(
+        Decimal('0.01'),
+        rounding=ROUND_HALF_UP
+    )
 
     if tusd_ativo_atual:
-        valor_usina_liquido = (valor_usina_bruto - custo_tusd_atual)
+
+        valor_usina_liquido = (
+            valor_usina_bruto -
+            custo_tusd_atual
+        )
+
         if valor_usina_liquido < Decimal('0'):
             valor_usina_liquido = Decimal('0')
+
     else:
         valor_usina_liquido = valor_usina_bruto
 
-    com_desconto = valor_conta + valor_usina_liquido
-    sem_desconto = (consumo_usina * tarifa_neoenergia_aplicada) + valor_conta - custo_tusd_atual
-    economia = sem_desconto - com_desconto
+    # =========================================================
+    # CÁLCULO ANTIGO
+    # =========================================================
 
-    # ECONOMIA ACUMULADA (corrigida)
-    faturas_anteriores = FaturaMensal.query.filter(
-        FaturaMensal.cliente_id == cliente.id,
-        FaturaMensal.id != fatura.id,
-        (FaturaMensal.ano_referencia < fatura.ano_referencia) |
-        ((FaturaMensal.ano_referencia == fatura.ano_referencia) &
-        (FaturaMensal.mes_referencia < fatura.mes_referencia))
-    ).all()
+    if not usa_regra_nova:
+
+        com_desconto = (
+            valor_conta +
+            valor_usina_liquido
+        )
+
+        sem_desconto = (
+            (
+                consumo_usina *
+                tarifa_neoenergia_aplicada
+            ) +
+            valor_conta -
+            custo_tusd_atual
+        )
+
+    # =========================================================
+    # CÁLCULO NOVO
+    # =========================================================
+
+    else:
+
+        cip_atual_dec = _dec(
+            getattr(
+                fatura,
+                'cip_atual',
+                0
+            ) or 0,
+            default="0.00"
+        )
+
+        com_desconto = (
+            valor_usina_bruto +
+            cip_atual_dec
+        )
+
+        sem_desconto = (
+            (
+                consumo_usina *
+                tarifa_neoenergia_aplicada
+            ) +
+            cip_atual_dec
+        )
+
+    economia = (
+        sem_desconto -
+        com_desconto
+    )
+
+    # =========================================================
+    # ECONOMIA ACUMULADA
+    # =========================================================
+
+    faturas_anteriores = (
+        FaturaMensal.query
+        .filter(
+            FaturaMensal.cliente_id == cliente.id,
+            FaturaMensal.id != fatura.id,
+            (
+                FaturaMensal.ano_referencia <
+                fatura.ano_referencia
+            ) |
+            (
+                (
+                    FaturaMensal.ano_referencia ==
+                    fatura.ano_referencia
+                ) &
+                (
+                    FaturaMensal.mes_referencia <
+                    fatura.mes_referencia
+                )
+            )
+        )
+        .all()
+    )
 
     economia_total = Decimal('0')
 
     for f in faturas_anteriores:
+
         try:
-            # tarifa neoenergia aplicada (sua regra original)
-            tarifa_base_ant = _dec(getattr(f, "tarifa_neoenergia", None), default="0.00")
-            if f.icms == 0:
-                tarifa_aplicada_ant = tarifa_base_ant * Decimal('1.2625')
-            elif f.icms == 20:
-                tarifa_aplicada_ant = tarifa_base_ant
-            else:
-                tarifa_aplicada_ant = tarifa_base_ant * Decimal('1.1023232323')
 
-            consumo_usina_ant = _dec(getattr(f, "consumo_usina", 0) or 0, default="0.00")
-            valor_conta_ant   = _dec(getattr(f, "valor_conta_neoenergia", 0) or 0, default="0.00")
+            usa_nova_ant = bool(
+                getattr(f, 'tarifa_base', None)
+                and _dec(f.tarifa_base) > 0
+            )
 
-            # pega rateio vigente PARA AQUELA fatura (pode mudar no tempo)
+            tarifa_aplicada_ant = (
+                calcular_tarifa_neoenergia(f)
+            )
+
+            consumo_usina_ant = _dec(
+                getattr(
+                    f,
+                    "consumo_usina",
+                    0
+                ) or 0,
+                default="0.00"
+            )
+
+            valor_conta_ant = _dec(
+                getattr(
+                    f,
+                    "valor_conta_neoenergia",
+                    0
+                ) or 0,
+                default="0.00"
+            )
+
             if f.data_cadastro:
-                data_base_ant = f.data_cadastro.date()
+                data_base_ant = (
+                    f.data_cadastro.date()
+                )
             else:
-                data_base_ant = date(f.ano_referencia, f.mes_referencia, 1)
+                data_base_ant = date(
+                    f.ano_referencia,
+                    f.mes_referencia,
+                    1
+                )
 
-            rateio_ant = Rateio.query.filter(
-                Rateio.cliente_id == cliente.id,
-                Rateio.usina_id == usina.id,
-                Rateio.data_inicio <= data_base_ant
-            ).order_by(
-                Rateio.data_inicio.desc(),
-                Rateio.ativo.desc(),
-                Rateio.id.desc()
-            ).first()
+            rateio_ant = (
+                Rateio.query
+                .filter(
+                    Rateio.cliente_id == cliente.id,
+                    Rateio.usina_id == usina.id,
+                    Rateio.data_inicio <= data_base_ant
+                )
+                .order_by(
+                    Rateio.data_inicio.desc(),
+                    Rateio.ativo.desc(),
+                    Rateio.id.desc()
+                )
+                .first()
+            )
 
-            tarifa_cliente_ant = calcular_tarifa_cliente(rateio_ant, f)
+            tarifa_cliente_ant = (
+                calcular_tarifa_cliente(
+                    rateio_ant,
+                    tarifa_aplicada_ant,
+                    usa_nova_ant
+                )
+            )
 
-            valor_usina_ant_bruto = (consumo_usina_ant * tarifa_cliente_ant)
+            valor_usina_ant_bruto = (
+                consumo_usina_ant *
+                tarifa_cliente_ant
+            )
 
-            # regra TUSD por fatura (usa o campo custo_tusd_fio_b da própria fatura)
-            tusd_ativo_ant = bool(getattr(usina, 'tusd_fio_b', False))
-            custo_tusd_ant = _dec(getattr(f, 'custo_tusd_fio_b', 0) or 0, default="0.00").quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            custo_tusd_ant = _dec(
+                getattr(
+                    f,
+                    'custo_tusd_fio_b',
+                    0
+                ) or 0,
+                default="0.00"
+            ).quantize(
+                Decimal('0.01'),
+                rounding=ROUND_HALF_UP
+            )
 
-            if not tusd_ativo_ant:
-                custo_tusd_ant = Decimal('0.00')
+            valor_usina_ant_liq = (
+                valor_usina_ant_bruto -
+                custo_tusd_ant
+            )
 
-            valor_usina_ant_liq = valor_usina_ant_bruto - custo_tusd_ant
             if valor_usina_ant_liq < Decimal('0'):
                 valor_usina_ant_liq = Decimal('0')
 
-            com_desconto_ant = valor_conta_ant + valor_usina_ant_liq
-            sem_desconto_ant = (consumo_usina_ant * tarifa_aplicada_ant) + valor_conta_ant - custo_tusd_ant
+            # =========================
+            # REGRA ANTIGA
+            # =========================
 
-            economia_total += (sem_desconto_ant - com_desconto_ant)
+            if not usa_nova_ant:
 
-        except Exception:
+                com_desconto_ant = (
+                    valor_conta_ant +
+                    valor_usina_ant_liq
+                )
+
+                sem_desconto_ant = (
+                    (
+                        consumo_usina_ant *
+                        tarifa_aplicada_ant
+                    ) +
+                    valor_conta_ant -
+                    custo_tusd_ant
+                )
+
+            # =========================
+            # REGRA NOVA
+            # =========================
+
+            else:
+
+                cip_ant = _dec(
+                    getattr(
+                        f,
+                        'cip_atual',
+                        0
+                    ) or 0,
+                    default="0.00"
+                )
+
+                com_desconto_ant = (
+                    valor_usina_ant_bruto +
+                    cip_ant
+                )
+
+                sem_desconto_ant = (
+                    (
+                        consumo_usina_ant *
+                        tarifa_aplicada_ant
+                    ) +
+                    cip_ant
+                )
+
+            economia_total += (
+                sem_desconto_ant -
+                com_desconto_ant
+            )
+
+        except Exception as e:
+
+            print(
+                '[ERRO ECONOMIA ACUMULADA]',
+                e
+            )
+
             continue
 
-    economia_extra_total = db.session.query(
-        db.func.sum(EconomiaExtra.valor_extra)
-    ).filter(EconomiaExtra.cliente_id == cliente.id).scalar() or Decimal('0')
+    # =========================================================
+    # ECONOMIA EXTRA
+    # =========================================================
 
-    economia_acumulada = economia + economia_total + economia_extra_total
+    economia_extra_total = (
+        db.session.query(
+            db.func.sum(
+                EconomiaExtra.valor_extra
+            )
+        )
+        .filter(
+            EconomiaExtra.cliente_id == cliente.id
+        )
+        .scalar()
+        or Decimal('0')
+    )
 
-    # Cálculo da geração no período (somente para consumo instantâneo)
+    economia_acumulada = (
+        economia +
+        economia_total +
+        economia_extra_total
+    )
+
+    # =========================================================
+    # GERAÇÃO
+    # =========================================================
+
     geracao_periodo = None
+
     if cliente.consumo_instantaneo:
-        geracao_periodo = db.session.query(db.func.sum(Geracao.energia_kwh)).filter(
-            Geracao.usina_id == usina.id,
-            Geracao.data >= fatura.inicio_leitura,
-            Geracao.data <= fatura.fim_leitura
-        ).scalar() or Decimal('0')
-        geracao_periodo = round(geracao_periodo, 2)
 
-    # Ficha de compensação
+        geracao_periodo = (
+            db.session.query(
+                db.func.sum(
+                    Geracao.energia_kwh
+                )
+            )
+            .filter(
+                Geracao.usina_id == usina.id,
+                Geracao.data >= fatura.inicio_leitura,
+                Geracao.data <= fatura.fim_leitura
+            )
+            .scalar()
+            or Decimal('0')
+        )
+
+        geracao_periodo = round(
+            geracao_periodo,
+            2
+        )
+
+    # =========================================================
+    # FICHA DE COMPENSAÇÃO
+    # =========================================================
+
     pasta_boletos = '/data/boletos'
-    pdf_path = os.path.join(pasta_boletos, f"boleto_{fatura.id}.pdf")
 
-    ficha_filename = f"ficha_compensacao_{fatura.id}.png"
-    ficha_path = os.path.join('static', ficha_filename)
+    pdf_path = os.path.join(
+        pasta_boletos,
+        f"boleto_{fatura.id}.pdf"
+    )
+
+    ficha_filename = (
+        f"ficha_compensacao_{fatura.id}.png"
+    )
+
+    ficha_path = os.path.join(
+        'static',
+        ficha_filename
+    )
 
     ficha_compensacao_data_uri = None
 
     if os.path.exists(pdf_path):
-        # agora usa config da usina salva no banco (page_select, dpi, crops)
+
         extrair_ficha_compensacao(
             usina_id=usina.id,
             pdf_path=pdf_path,
             output_path=ficha_path,
-            boleto_proprio=None  # usa usina.boleto_proprio por padrão
-            # se quiser forçar por fatura no futuro, passa True/False aqui
+            boleto_proprio=None
         )
 
         if os.path.exists(ficha_path):
-            ficha_base64 = imagem_para_base64(ficha_path)
-            ficha_compensacao_data_uri = f"data:image/png;base64,{ficha_base64}"
 
-    # Logo CGR
-    logo_cgr_path = os.path.abspath("static/img/logo_cgr.png").replace('\\', '/')
-    logo_cgr_data_uri = f"data:image/png;base64,{imagem_para_base64(logo_cgr_path)}"
+            ficha_base64 = imagem_para_base64(
+                ficha_path
+            )
 
-    # Logo da usina
+            ficha_compensacao_data_uri = (
+                f"data:image/png;base64,{ficha_base64}"
+            )
+
+    # =========================================================
+    # LOGO CGR
+    # =========================================================
+
+    logo_cgr_path = (
+        os.path.abspath(
+            "static/img/logo_cgr.png"
+        ).replace('\\', '/')
+    )
+
+    logo_cgr_data_uri = (
+        f"data:image/png;base64,"
+        f"{imagem_para_base64(logo_cgr_path)}"
+    )
+
+    # =========================================================
+    # LOGO USINA
+    # =========================================================
+
     logo_usina_data_uri = None
-    if usina.logo_url:
-        nome_arquivo = (usina.logo_url or "").strip()
 
-        logos_base = os.path.abspath(os.getenv('LOGOS_PATH', os.path.join('static', 'logos')))
-        path_env = os.path.join(logos_base, nome_arquivo)
-        path_stat = os.path.abspath(os.path.join('static', 'logos', nome_arquivo))
+    if usina.logo_url:
+
+        nome_arquivo = (
+            usina.logo_url or ""
+        ).strip()
+
+        logos_base = os.path.abspath(
+            os.getenv(
+                'LOGOS_PATH',
+                os.path.join(
+                    'static',
+                    'logos'
+                )
+            )
+        )
+
+        path_env = os.path.join(
+            logos_base,
+            nome_arquivo
+        )
+
+        path_stat = os.path.abspath(
+            os.path.join(
+                'static',
+                'logos',
+                nome_arquivo
+            )
+        )
 
         chosen = None
+
         if os.path.exists(path_env):
+
             chosen = path_env
-            print(f"[LOGO] usando LOGOS_PATH: {chosen}")
+
+            print(
+                f"[LOGO] usando LOGOS_PATH: {chosen}"
+            )
+
         elif os.path.exists(path_stat):
+
             chosen = path_stat
-            print(f"[LOGO] usando static/logos: {chosen}")
+
+            print(
+                f"[LOGO] usando static/logos: {chosen}"
+            )
+
         else:
-            print(f"[LOGO] arquivo NÃO encontrado em: {path_env} nem {path_stat}")
+
+            print(
+                f"[LOGO] arquivo NÃO encontrado "
+                f"em: {path_env} nem {path_stat}"
+            )
 
         if chosen:
-            # detecta extensão para o header do data URI (png/jpg)
-            ext = os.path.splitext(chosen)[1].lower()
-            mime = "png" if ext == ".png" else "jpeg"
-            logo_usina_data_uri = f"data:image/{mime};base64,{imagem_para_base64(chosen)}"
 
-    # Bootstrap
-    bootstrap_path = os.path.abspath("static/css/bootstrap.min.css").replace('\\', '/')
+            ext = os.path.splitext(
+                chosen
+            )[1].lower()
+
+            mime = (
+                "png"
+                if ext == ".png"
+                else "jpeg"
+            )
+
+            logo_usina_data_uri = (
+                f"data:image/{mime};base64,"
+                f"{imagem_para_base64(chosen)}"
+            )
+
+    # =========================================================
+    # BOOTSTRAP
+    # =========================================================
+
+    bootstrap_path = os.path.abspath(
+        "static/css/bootstrap.min.css"
+    ).replace('\\', '/')
+
     bootstrap_path = f"file:///{bootstrap_path}"
+
+    # =========================================================
+    # RENDER
+    # =========================================================
 
     return render_template(
         'relatorio_fatura.html',
