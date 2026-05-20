@@ -80,6 +80,28 @@
         line-height: 1.2;
     }
 
+    .valor-alerta {
+
+    display: inline-block;
+
+    background: linear-gradient(
+        135deg,
+        #fff3c4,
+        #ffe082
+    );
+
+    padding: 2px 8px;
+
+    border-radius: 8px;
+
+    font-weight: bold;
+
+    color: #7a5200;
+
+    box-shadow:
+        0 2px 4px rgba(0,0,0,0.08);
+}
+
     /* =======================================================
        TABELAS
     ======================================================= */
@@ -352,9 +374,7 @@
             <strong>UC:</strong> {{ cliente.codigo_unidade }}
             <strong>Bandeira Tarifária:</strong> Verde
         </div>
-    </div>
-
- 
+    </div> 
 
     <!-- COMPARATIVO FINANCEIRO -->
     <div class="comparativo-card">
@@ -411,14 +431,14 @@
                 }}
             </div>
 
-            <div>
-                {{
-                    (
-                        (fatura.consumo_neoenergia | float) *
-                        (tarifa_neoenergia_aplicada | float)
-                    ) | formato_brasileiro
-                }}
-            </div>
+            <div class="valor-alerta">
+    {{
+        (
+            (fatura.consumo_neoenergia | float) *
+            (tarifa_neoenergia_aplicada | float)
+        ) | formato_brasileiro
+    }}
+</div>
         </div>
 
         {% if usina.tusd_fio_b and (fatura.custo_tusd_fio_b or 0) != 0 %}
@@ -428,7 +448,7 @@
 
             <div>-</div>
 
-            <div>
+            <div class="valor-alerta">
                 {{ (fatura.custo_tusd_fio_b or 0)|formato_brasileiro }}
             </div>
         </div>
@@ -445,12 +465,14 @@
 
         {% endif %}
 
-        <div class="comparativo-linha">
-            <div>Bandeiras</div>
+        <div class="comparativo-linha d-none">
+            <div>Estorno de Importe</div>
 
             <div>-</div>
 
-            <div>-</div>
+            <div>
+                -
+            </div>
         </div>
 
         <div class="comparativo-linha">
@@ -496,7 +518,7 @@
                 {{ (fatura.cip_atual or 0)|formato_brasileiro }}
             </div>
 
-            <div>
+            <div class="valor-alerta">
                 {{ (fatura.cip_atual or 0)|formato_brasileiro }}
             </div>
         </div>
