@@ -5,87 +5,327 @@
     <title>Relatório de Faturamento</title>
     <meta name="viewport" content="width=850">
     <link href="file://{{ bootstrap_path }}" rel="stylesheet">
-    <style>
+<style>
+    body {
+        background-color: #f4f6f8;
+        font-family: Arial, sans-serif;
+        width: 850px;
+        margin: auto;
+        color: #2c2c2c;
+    }
+
+    .card-relatorio {
+        background: #ffffff;
+        padding: 30px;
+        border-radius: 20px;
+        box-shadow:
+            0 8px 25px rgba(0,0,0,0.06);
+        border: 1px solid #e8e8e8;
+    }
+
+    .logo {
+        height: 42px;
+        max-width: 130px;
+        object-fit: contain;
+    }
+
+    .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 20px;
+        margin-bottom: 25px;
+    }
+
+    .header h2 {
+        font-size: 24px;
+        font-weight: bold;
+        color: #2e7d32;
+        margin: 0;
+    }
+
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 40px;
+        margin-bottom: 25px;
+    }
+
+    .info-block {
+        font-size: 14px;
+        line-height: 1.6;
+        flex: 1;
+    }
+
+    .info-block strong {
+        display: block;
+        font-weight: bold;
+        color: #000;
+    }
+
+    .section-title {
+        font-size: 18px;
+        font-weight: bold;
+        margin-top: 35px;
+        margin-bottom: 18px;
+        border-bottom: 2px solid #dcdcdc;
+        padding-bottom: 8px;
+        color: #2c2c2c;
+    }
+
+    .valor {
+        font-size: 28px;
+        font-weight: bold;
+        color: #2e7d32;
+        line-height: 1.2;
+    }
+
+    /* =======================================================
+       TABELAS
+    ======================================================= */
+
+    .tabela {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 25px;
+        overflow: hidden;
+        border-radius: 12px;
+    }
+
+    .tabela th {
+        background-color: #f3f5f7;
+        color: #2c2c2c;
+        font-weight: bold;
+        padding: 12px;
+        border: 1px solid #dcdcdc;
+        text-align: center;
+    }
+
+    .tabela td {
+        border: 1px solid #e2e2e2;
+        padding: 10px;
+        text-align: center;
+        font-size: 14px;
+    }
+
+    .tabela tbody tr:nth-child(even) {
+        background-color: #fafafa;
+    }
+
+    .tabela tbody tr:hover td {
+        background-color: #f5f5f5;
+    }
+
+    .tabela td:first-child {
+        font-weight: bold;
+        text-align: left;
+        color: #2c2c2c;
+    }
+
+    .bg-light-yellow {
+        background-color: #fff8dc !important;
+    }
+
+    .bg-light-green {
+        background-color: #edf7ed !important;
+    }
+
+    /* =======================================================
+       COMPARATIVO FINANCEIRO
+    ======================================================= */
+
+    .comparativo-card {
+        background: #ffffff;
+        border-radius: 35px;
+        padding: 30px 35px;
+        margin-top: 35px;
+        box-shadow:
+            0 10px 25px rgba(0,0,0,0.08);
+        border: 3px solid #dfead7;
+    }
+
+    .comparativo-header {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr;
+        font-weight: bold;
+        color: #2e7d32;
+        font-size: 20px;
+        margin-bottom: 20px;
+        padding-bottom: 12px;
+        border-bottom: 2px solid #e5e5e5;
+    }
+
+    .comparativo-linha {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr;
+        padding: 11px 0;
+        align-items: center;
+        font-size: 15px;
+        border-bottom: 1px solid #f1f1f1;
+    }
+
+    .comparativo-linha:last-child {
+        border-bottom: none;
+    }
+
+    .comparativo-linha div:first-child {
+        font-weight: 600;
+        color: #2c2c2c;
+    }
+
+    .comparativo-linha div:nth-child(2),
+    .comparativo-linha div:nth-child(3) {
+        text-align: center;
+        font-weight: 600;
+    }
+
+    .text-success {
+        color: #2e7d32 !important;
+    }
+
+    .fw-bold {
+        font-weight: bold;
+    }
+
+    /* =======================================================
+       RESUMO FINANCEIRO
+    ======================================================= */
+
+    .resumo-financeiro {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 14px;
+        margin-top: 25px;
+    }
+
+    .resumo-card {
+        background: #ffffff;
+        border-radius: 18px;
+        padding: 18px 12px;
+        text-align: center;
+        border: 1px solid #ececec;
+        box-shadow:
+            0 4px 10px rgba(0,0,0,0.04);
+        min-height: 120px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        transition: all 0.2s ease;
+    }
+
+    .resumo-card:hover {
+        transform: translateY(-2px);
+        box-shadow:
+            0 8px 18px rgba(0,0,0,0.08);
+    }
+
+    .resumo-icon {
+        font-size: 24px;
+        margin-bottom: 10px;
+    }
+
+    .resumo-label {
+        font-size: 14px;
+        font-weight: 600;
+        color: #555;
+        margin-bottom: 10px;
+        line-height: 1.3;
+    }
+
+    .resumo-value {
+        font-size: 18px;
+        font-weight: bold;
+        color: #2e7d32;
+        line-height: 1.3;
+    }
+
+    .resumo-card.destaque {
+        background:
+            linear-gradient(
+                135deg,
+                #f8fff4,
+                #edf7ed
+            );
+        border: 2px solid #d7ead5;
+    }
+
+    .resumo-card.economia-card {
+        background:
+            linear-gradient(
+                135deg,
+                #fff8e8,
+                #fff1c9
+            );
+        border: 2px solid #ffe49f;
+    }
+
+    .resumo-card.acumulada {
+        background:
+            linear-gradient(
+                135deg,
+                #eef5ff,
+                #dfeeff
+            );
+        border: 2px solid #cfe1ff;
+    }
+
+    /* =======================================================
+       CARDS PRINCIPAIS
+    ======================================================= */
+
+    .cards-valores {
+        display: flex;
+        gap: 20px;
+        margin-top: 25px;
+    }
+
+    .card-valor {
+        flex: 1;
+        border-radius: 20px;
+        padding: 22px;
+        text-align: center;
+        box-shadow:
+            0 6px 16px rgba(0,0,0,0.05);
+    }
+
+    .card-valor.neoenergia {
+        background: #fff8dc;
+    }
+
+    .card-valor.consorcio {
+        background: #edf7ed;
+    }
+
+    .card-valor .titulo {
+        font-size: 16px;
+        font-weight: bold;
+        margin-bottom: 12px;
+        color: #444;
+    }
+
+    .card-valor .valor {
+        font-size: 34px;
+        font-weight: bold;
+        color: #2e7d32;
+    }
+
+    /* =======================================================
+       PDF / IMPRESSÃO
+    ======================================================= */
+
+    @media print {
         body {
-            background-color: #f8f9fa;
-            font-family: Arial, sans-serif;
-            width: 850px;
-            margin: auto;
-        }
-        .card-relatorio {
             background: white;
-            padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.05);
         }
-        .logo {
-            height: 40px;
-            max-width: 120px;
+
+        .card-relatorio,
+        .comparativo-card,
+        .resumo-card,
+        .card-valor {
+            box-shadow: none;
         }
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-        .info-row {
-            display: flex;
-            justify-content: space-between;
-            gap: 30px;
-            margin-bottom: 20px;
-        }
-        .info-block {
-            font-size: 14px;
-            line-height: 1.4;
-            flex: 1;
-        }
-        .info-block strong {
-            display: block;
-            font-weight: bold;
-        }
-        .section-title {
-            font-size: 16px;
-            font-weight: bold;
-            margin-top: 30px;
-            margin-bottom: 15px;
-            border-bottom: 2px solid #ccc;
-            padding-bottom: 5px;
-        }
-        .valor {
-            font-size: 22px;
-            font-weight: bold;
-            color: #2e7d32;
-        }
-        .tabela {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 20px;
-        }
-        .tabela th, .tabela td {
-            border: 1px solid #ccc;
-            padding: 8px;
-            text-align: center;
-        }
-        .bg-light-yellow {
-            background-color: #fffbe6;
-        }
-        .bg-light-green {
-            background-color: #e9f7ef;
-        }
-        .economia {
-            display: flex;
-            justify-content: space-between;
-            gap: 20px;
-        }
-        .economia .col {
-            flex: 1;
-            text-align: center;
-        }
-        .icon {
-            font-size: 24px;
-        }
-    </style>
+    }
+</style>
 </head>
 <body>
 
@@ -114,86 +354,157 @@
         </div>
     </div>
 
-    <!-- Tabela -->
-    <div class="section-title text-center">Informações da unidade consumidora</div>
-    <table class="tabela">
-        <thead>
-            <tr>
-                <th>Descrição</th>
-                <th>Quantidade</th>
-                <th>Unidade</th>
-                <th>Tarifa R$</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td>Energia Ativa</td>
-                <td>{{ fatura.consumo_total }}</td>
-                <td>kWh</td>
-                <td>-</td>
-            </tr>
-            <tr>
-                <td>Energia Injetada</td>
-                <td>{{ fatura.injetado }}</td>
-                <td>kWh</td>
-                <td>-</td>
-            </tr>
-            <tr>
-                <td>Faturado Neoenergia</td>
-                <td>{{ fatura.consumo_neoenergia }}</td>
-                <td>kWh</td>
-                <td>{{ tarifa_neoenergia_aplicada|formato_tarifa }}</td>
-            </tr>
-            <tr>
-                <td>Faturado {{ usina.nome }}</td>
-                <td>{{ "%.1f"|format(fatura.consumo_usina) }}</td>
-                <td>kWh</td>
-                <td>{{ tarifa_cliente|formato_tarifa }}</td>
-            </tr>
+ 
 
-            {# ✅ Linha extra: Custo TUSD Fio B (mostra apenas quando aplicável) #}
-            {% if usina.tusd_fio_b and (fatura.custo_tusd_fio_b or 0) != 0 %}
-            <tr>
-                <td>Custo TUSD Fio B</td>
-                <td>—</td>
-                <td>—</td>
-                <td>{{ (fatura.custo_tusd_fio_b or 0) | formato_brasileiro }}</td>
-            </tr>
-            {% endif %}
+    <!-- COMPARATIVO FINANCEIRO -->
+    <div class="comparativo-card">
 
-            {% if cliente.mostrar_saldo and fatura.saldo_unidade %}
-            <tr>
-                <td>Saldo Acumulado</td>
-                <td>{{ fatura.saldo_unidade }}</td>
-                <td>kWh</td>
-                <td>-</td>
-            </tr>
-            {% endif %}
-        </tbody>
+        <div class="comparativo-header">
+            <div>Descrição do Item</div>
+            <div>Sem Consórcio</div>
+            <div>Com Consórcio</div>
+        </div>
+
+        <div class="comparativo-linha">
+            <div>Valor da Tarifa</div>
+
+            <div>
+                {{ tarifa_neoenergia_aplicada|formato_tarifa }}
+            </div>
+
+            <div class="text-success fw-bold">
+                {{ tarifa_cliente|formato_tarifa }}
+            </div>
+        </div>
+
+        <div class="comparativo-linha">
+            <div>Consumo de Energia</div>
+
+            <div>
+                {{
+                    (
+                        (fatura.consumo_usina | float) *
+                        (tarifa_neoenergia_aplicada | float)
+                    ) | formato_brasileiro
+                }}
+            </div>
+
+            <div class="text-success fw-bold">
+                {{
+                    (
+                        (fatura.consumo_usina | float) *
+                        (tarifa_cliente | float)
+                    ) | formato_brasileiro
+                }}
+            </div>
+        </div>
+
+        <div class="comparativo-linha">
+            <div>Consumo Residual Distribuidora</div>
+
+            <div>
+                {{
+                    (
+                        (fatura.consumo_neoenergia | float) *
+                        (tarifa_neoenergia_aplicada | float)
+                    ) | formato_brasileiro
+                }}
+            </div>
+
+            <div>
+                {{
+                    (
+                        (fatura.consumo_neoenergia | float) *
+                        (tarifa_neoenergia_aplicada | float)
+                    ) | formato_brasileiro
+                }}
+            </div>
+        </div>
+
+        {% if usina.tusd_fio_b and (fatura.custo_tusd_fio_b or 0) != 0 %}
+
+        <div class="comparativo-linha">
+            <div>TUSD Fio B</div>
+
+            <div>-</div>
+
+            <div>
+                {{ (fatura.custo_tusd_fio_b or 0)|formato_brasileiro }}
+            </div>
+        </div>
+
+        <div class="comparativo-linha">
+            <div>Abatimento TUSD Fio B</div>
+
+            <div>-</div>
+
+            <div class="text-success fw-bold">
+                -{{ (fatura.custo_tusd_fio_b or 0)|formato_brasileiro }}
+            </div>
+        </div>
+
+        {% endif %}
+
+        <div class="comparativo-linha">
+            <div>Bandeiras</div>
+
+            <div>-</div>
+
+            <div>-</div>
+        </div>
+
+        <div class="comparativo-linha">
+            <div>COFINS</div>
+
+            <div>
+                {{ "%.2f"|format(fatura.cofins or 0)|replace('.', ',') }}%
+            </div>
+
+            <div>
+                {{ "%.2f"|format(fatura.cofins or 0)|replace('.', ',') }}%
+            </div>
+        </div>
+
+        <div class="comparativo-linha">
+            <div>ICMS</div>
+
+            <div>
+                {{ "%.2f"|format(fatura.icms or 0)|replace('.', ',') }}%
+            </div>
+
+            <div>
+                {{ "%.2f"|format(fatura.icms or 0)|replace('.', ',') }}%
+            </div>
+        </div>
+
+        <div class="comparativo-linha">
+            <div>PIS</div>
+
+            <div>
+                {{ "%.2f"|format(fatura.pis or 0)|replace('.', ',') }}%
+            </div>
+
+            <div>
+                {{ "%.2f"|format(fatura.pis or 0)|replace('.', ',') }}%
+            </div>
+        </div>
+
+        <div class="comparativo-linha">
+            <div>CIP</div>
+
+            <div>
+                {{ (fatura.cip_atual or 0)|formato_brasileiro }}
+            </div>
+
+            <div>
+                {{ (fatura.cip_atual or 0)|formato_brasileiro }}
+            </div>
+        </div>
+
+    </div>
     </table>
 
-    <!-- NOVA SEÇÃO: Geração da Usina no Período -->
-    {% if cliente.consumo_instantaneo and geracao_periodo %}
-        <div class="section-title text-center">Geração da Usina no Período</div>
-        <table class="tabela">
-            <thead>
-                <tr>
-                    <th>Período</th>
-                    <th>Geração</th>
-                    <th>Unidade</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>{{ fatura.inicio_leitura.strftime('%d/%m/%Y') }} a {{ fatura.fim_leitura.strftime('%d/%m/%Y') }}</td>
-                    <td>{{ geracao_periodo }} kWh</td>
-                    <td>kWh</td>
-                </tr>
-            </tbody>
-        </table>
-    {% endif %}
-
-    <!-- Contas -->
+       <!-- Contas -->
     <div class="contas" style="display: flex; justify-content: center; gap: 40px; margin: 30px 0;">
         <div style="
             background-color: #fffbe6;
@@ -226,39 +537,104 @@
         </div>
     </div>
 
-    <!-- Economia -->
-    <div class="section-title text-center">Sua Fatura {{ usina.nome }}</div>
-    <div class="economia">
-        <div class="col">
-            <div class="icon text-primary">🎯</div>
-            <p><strong>% Desconto:</strong></p>
-            {% set perc_desc = (economia / sem_desconto * 100) if sem_desconto else 0 %}
-            <p class="valor">
-                {{ "%.2f"|format(perc_desc)|replace('.', ',') }}%
-            </p>
+    <!-- ECONOMIA -->
+<div class="section-title text-center">
+    Sua Fatura {{ usina.nome }}
+</div>
+
+{% set perc_desc = (
+    (economia / sem_desconto * 100)
+    if sem_desconto else 0
+) %}
+
+<div class="resumo-financeiro">
+
+    <!-- DESCONTO -->
+    <div class="resumo-card destaque">
+
+        <div class="resumo-icon">
+            🎯
         </div>
-        <div class="col">
-            <div class="icon text-warning">💰</div>
-            <p><strong>Sem Desconto:</strong></p>
-            <p class="valor">{{ sem_desconto|formato_brasileiro }}</p>
+
+        <div class="resumo-label">
+            Desconto
         </div>
-        <div class="col">
-            <div class="icon text-success">💵</div>
-            <p><strong>Com Desconto:</strong></p>
-            <p class="valor">{{ com_desconto|formato_brasileiro }}</p>
+
+        <div class="resumo-value">
+            {{ "%.2f"|format(perc_desc)|replace('.', ',') }}%
         </div>
-        <div class="col">
-            <div class="icon text-dark">🏦</div>
-            <p><strong>Economia:</strong></p>
-            <p class="valor">{{ economia|formato_brasileiro }}</p>
-        </div>
-        <div class="col">
-            <div class="icon text-dark">📈</div>
-            <p><strong>Economia Acumulada:</strong></p>
-            <p class="valor">{{ economia_acumulada|formato_brasileiro }}</p>
-        </div>
-        
+
     </div>
+
+    <!-- SEM CONSÓRCIO -->
+    <div class="resumo-card">
+
+        <div class="resumo-icon">
+            💰
+        </div>
+
+        <div class="resumo-label">
+            Sem Consórcio
+        </div>
+
+        <div class="resumo-value">
+            {{ sem_desconto|formato_brasileiro }}
+        </div>
+
+    </div>
+
+    <!-- COM CONSÓRCIO -->
+    <div class="resumo-card">
+
+        <div class="resumo-icon">
+            💵
+        </div>
+
+        <div class="resumo-label">
+            Com Consórcio
+        </div>
+
+        <div class="resumo-value">
+            {{ com_desconto|formato_brasileiro }}
+        </div>
+
+    </div>
+
+    <!-- ECONOMIA -->
+    <div class="resumo-card economia-card">
+
+        <div class="resumo-icon">
+            📉
+        </div>
+
+        <div class="resumo-label">
+            Economia
+        </div>
+
+        <div class="resumo-value">
+            {{ economia|formato_brasileiro }}
+        </div>
+
+    </div>
+
+    <!-- ECONOMIA ACUMULADA -->
+    <div class="resumo-card acumulada">
+
+        <div class="resumo-icon">
+            📈
+        </div>
+
+        <div class="resumo-label">
+            Economia Total
+        </div>
+
+        <div class="resumo-value">
+            {{ economia_acumulada|formato_brasileiro }}
+        </div>
+
+    </div>
+
+</div>
 
     <!-- Ficha de compensação -->
     {% if ficha_compensacao_path %}

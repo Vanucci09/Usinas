@@ -180,6 +180,7 @@ class Rateio(db.Model):
     codigo_rateio = db.Column(db.Integer, nullable=True)
     data_inicio = db.Column(db.Date, nullable=False, default=date.today)
     ativo = db.Column(db.Boolean, default=True)
+    cip = db.Column(db.Float, nullable=True, default=0)
 
     __table_args__ = (
         CheckConstraint('percentual > 0 AND percentual <= 100', name='ck_rateio_percentual'),
@@ -1496,6 +1497,10 @@ def cadastrar_rateio():
                 request.form.get('desconto_percentual', 0)
             )
             
+            cip = float(
+                request.form.get('cip', 0)
+            )
+            
             # agora sempre falso
             usar_tarifa_neoenergia = False
 
@@ -1540,6 +1545,7 @@ def cadastrar_rateio():
                 cliente_id=cliente_id,
                 percentual=percentual,
                 tarifa_kwh=tarifa_kwh,
+                cip=cip,
                 desconto_percentual=desconto_percentual,
                 usar_tarifa_neoenergia=usar_tarifa_neoenergia,
                 codigo_rateio=proximo_codigo,
@@ -1653,6 +1659,11 @@ def editar_rateio(id):
                 'desconto_percentual',
                 type=float
             )
+            
+            cip = request.form.get(
+                'cip',
+                type=float
+            ) or 0
 
             usar_tarifa_neoenergia = False
 
@@ -1682,6 +1693,7 @@ def editar_rateio(id):
                 cliente_id=cliente_id,
                 percentual=percentual,
                 tarifa_kwh=tarifa_kwh,
+                cip=cip,
                 usar_tarifa_neoenergia=False,
                 desconto_percentual=desconto_percentual,
                 codigo_rateio=rateio_antigo.codigo_rateio,
@@ -2457,9 +2469,7 @@ def relatorio_fatura(fatura_id):
     cliente = Cliente.query.get(fatura.cliente_id)
     usina = Usina.query.get(cliente.usina_id)
 
-    # =========================================================
     # HELPERS
-    # =========================================================
 
     def _dec(v, default="0.00"):
         try:
@@ -2473,18 +2483,13 @@ def relatorio_fatura(fatura_id):
         valor = _dec(v, "0.00")
         return valor / Decimal("100")
 
-    # =========================================================
     # IDENTIFICA SE É FATURA NOVA
-    # =========================================================
 
     usa_regra_nova = bool(
         getattr(fatura, 'tarifa_base', None)
         and _dec(fatura.tarifa_base) > 0
     )
-
-    # =========================================================
     # TARIFA NEOENERGIA
-    # =========================================================
 
     def calcular_tarifa_neoenergia(f):
 
@@ -2493,9 +2498,7 @@ def relatorio_fatura(fatura_id):
             and _dec(f.tarifa_base) > 0
         )
 
-        # =========================
         # NOVA REGRA
-        # =========================
 
         if usa_nova:
 
@@ -2528,9 +2531,7 @@ def relatorio_fatura(fatura_id):
                 rounding=ROUND_HALF_UP
             )
 
-        # =========================
         # REGRA ANTIGA
-        # =========================
 
         tarifa_base_ant = _dec(
             getattr(f, 'tarifa_neoenergia', 0),
@@ -2569,9 +2570,7 @@ def relatorio_fatura(fatura_id):
         calcular_tarifa_neoenergia(fatura)
     )
 
-    # =========================================================
     # DADOS BASE
-    # =========================================================
 
     consumo_usina = _dec(
         fatura.consumo_usina,
@@ -2592,9 +2591,7 @@ def relatorio_fatura(fatura_id):
             1
         )
 
-    # =========================================================
     # RATEIO VIGENTE
-    # =========================================================
 
     rateio = (
         Rateio.query
@@ -2611,9 +2608,7 @@ def relatorio_fatura(fatura_id):
         .first()
     )
 
-    # =========================================================
     # TARIFA CLIENTE
-    # =========================================================
 
     def calcular_tarifa_cliente(
         rateio_obj,
@@ -2632,9 +2627,7 @@ def relatorio_fatura(fatura_id):
             ) or 0
         )
 
-        # =========================
         # REGRA NOVA
-        # =========================
 
         if usa_nova_regra:
 
@@ -2651,9 +2644,7 @@ def relatorio_fatura(fatura_id):
                 rounding=ROUND_HALF_UP
             )
 
-        # =========================
         # REGRA ANTIGA
-        # =========================
 
         usar_neo = bool(
             getattr(
@@ -2695,9 +2686,7 @@ def relatorio_fatura(fatura_id):
         usa_regra_nova
     )
 
-    # =========================================================
     # CÁLCULOS PRINCIPAIS
-    # =========================================================
 
     valor_usina_bruto = (
         consumo_usina *
@@ -2733,9 +2722,7 @@ def relatorio_fatura(fatura_id):
     else:
         valor_usina_liquido = valor_usina_bruto
 
-    # =========================================================
     # CÁLCULO ANTIGO
-    # =========================================================
 
     if not usa_regra_nova:
 
@@ -2753,9 +2740,7 @@ def relatorio_fatura(fatura_id):
             custo_tusd_atual
         )
 
-    # =========================================================
     # CÁLCULO NOVO
-    # =========================================================
 
     else:
 
@@ -2786,9 +2771,7 @@ def relatorio_fatura(fatura_id):
         com_desconto
     )
 
-    # =========================================================
     # ECONOMIA ACUMULADA
-    # =========================================================
 
     faturas_anteriores = (
         FaturaMensal.query
@@ -2905,9 +2888,7 @@ def relatorio_fatura(fatura_id):
             if valor_usina_ant_liq < Decimal('0'):
                 valor_usina_ant_liq = Decimal('0')
 
-            # =========================
             # REGRA ANTIGA
-            # =========================
 
             if not usa_nova_ant:
 
@@ -2925,9 +2906,7 @@ def relatorio_fatura(fatura_id):
                     custo_tusd_ant
                 )
 
-            # =========================
             # REGRA NOVA
-            # =========================
 
             else:
 
@@ -2967,9 +2946,7 @@ def relatorio_fatura(fatura_id):
 
             continue
 
-    # =========================================================
     # ECONOMIA EXTRA
-    # =========================================================
 
     economia_extra_total = (
         db.session.query(
@@ -2990,9 +2967,7 @@ def relatorio_fatura(fatura_id):
         economia_extra_total
     )
 
-    # =========================================================
     # GERAÇÃO
-    # =========================================================
 
     geracao_periodo = None
 
@@ -3018,9 +2993,7 @@ def relatorio_fatura(fatura_id):
             2
         )
 
-    # =========================================================
     # FICHA DE COMPENSAÇÃO
-    # =========================================================
 
     pasta_boletos = '/data/boletos'
 
@@ -3059,9 +3032,7 @@ def relatorio_fatura(fatura_id):
                 f"data:image/png;base64,{ficha_base64}"
             )
 
-    # =========================================================
     # LOGO CGR
-    # =========================================================
 
     logo_cgr_path = (
         os.path.abspath(
@@ -3074,9 +3045,7 @@ def relatorio_fatura(fatura_id):
         f"{imagem_para_base64(logo_cgr_path)}"
     )
 
-    # =========================================================
     # LOGO USINA
-    # =========================================================
 
     logo_usina_data_uri = None
 
@@ -3151,9 +3120,7 @@ def relatorio_fatura(fatura_id):
                 f"{imagem_para_base64(chosen)}"
             )
 
-    # =========================================================
     # BOOTSTRAP
-    # =========================================================
 
     bootstrap_path = os.path.abspath(
         "static/css/bootstrap.min.css"
@@ -3161,9 +3128,7 @@ def relatorio_fatura(fatura_id):
 
     bootstrap_path = f"file:///{bootstrap_path}"
 
-    # =========================================================
     # RENDER
-    # =========================================================
 
     return render_template(
         'relatorio_fatura.html',
@@ -8064,7 +8029,7 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade,
                 continue
 
             # -------- login --------
-            print("✍️ Preenchendo CPF e senha...")
+            print("Preenchendo CPF e senha...")
             WebDriverWait(driver, 30).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, "input[placeholder*='CPF']"))
             ).send_keys(cpf_cnpj)
@@ -8332,7 +8297,6 @@ def baixar_fatura_neoenergia(cpf_cnpj, senha, codigo_unidade,
             print("[WARNING] Erro ao remover user_data_dir:", e)
 
 # ROTA /baixar_fatura (GET/POST)
-
 @app.route("/baixar_fatura", methods=["GET", "POST"])
 def baixar_fatura():
     if request.method == "POST":
@@ -13336,26 +13300,41 @@ def encontrar_melhor_kit_fornecedor_com_inversor(
     valor_kwp=None,
     ajuste_final=0
 ):
+
     geracao_solicitada = float(proposta.valor_tusd_fio_b or 0)
     consumo = float(proposta.consumo_kwh or 0)
 
-    energia_base = geracao_solicitada if geracao_solicitada > 0 else consumo
+    energia_base = (
+        geracao_solicitada
+        if geracao_solicitada > 0
+        else consumo
+    )
 
     if energia_base <= 0:
         return None, 'Informe consumo ou geração solicitada.'
 
-    inversor = FabricanteInversor.query.filter_by(id=inversor_id, ativo=True).first()
+    inversor = (
+        FabricanteInversor.query
+        .filter_by(id=inversor_id, ativo=True)
+        .first()
+    )
+
     if not inversor:
         return None, 'Inversor inválido.'
 
-    tipo = (inversor.tipo_inversor or '').strip().lower()
+    tipo = (
+        inversor.tipo_inversor or ''
+    ).strip().lower()
 
     if tipo == 'microinversor':
         fator = 130.0
+
     elif tipo == 'string':
         fator = 118.0
+
     elif tipo == 'hibrido':
         fator = 120.0
+
     else:
         return None, 'Tipo inválido.'
 
@@ -13395,89 +13374,179 @@ def encontrar_melhor_kit_fornecedor_com_inversor(
 
     melhor_opcao = None
 
+    # LOOP KITS
+
     for vinc_mod in vinculos_modulos:
+
         modulo = vinc_mod.modulo
 
         if not modulo or not modulo.potencia_wp:
             continue
 
-        potencia_modulo_kwp = float(modulo.potencia_wp) / 1000.0
+        potencia_modulo_kwp = (
+            float(modulo.potencia_wp) / 1000.0
+        )
+
         if potencia_modulo_kwp <= 0:
             continue
 
-        qtd_modulos = math.ceil(potencia_kwp / potencia_modulo_kwp)
-        potencia_total_modulos = qtd_modulos * potencia_modulo_kwp
+        qtd_modulos = math.ceil(
+            potencia_kwp / potencia_modulo_kwp
+        )
 
-        potencia_inv = float(inversor.potencia_inversor or 0)
+        potencia_total_modulos = (
+            qtd_modulos * potencia_modulo_kwp
+        )
+
+        potencia_inv = float(
+            inversor.potencia_inversor or 0
+        )
+
         if potencia_inv <= 0:
             continue
-        
+
         # QTD INVERSORES
+
         if tipo == 'microinversor':
-            mppt = int(inversor.quantidade_mppt or 0)
+
+            mppt = int(
+                inversor.quantidade_mppt or 0
+            )
+
             if mppt <= 0:
                 continue
-            qtd_inversores = math.ceil(qtd_modulos / mppt)
-        else:
+
             qtd_inversores = math.ceil(
-                potencia_total_modulos / (potencia_inv * 1.20)
+                qtd_modulos / mppt
+            )
+
+        else:
+
+            qtd_inversores = math.ceil(
+                potencia_total_modulos
+                / (potencia_inv * 1.20)
             )
 
         if qtd_inversores <= 0:
             qtd_inversores = 1
 
-        # VALOR EQUIPAMENTOS
-        valor_modulos = float(vinc_mod.valor or 0) * qtd_modulos
+        # VALOR MANUAL POR KWP
 
-        if tipo == 'string' and valor_kwp is not None:
-            valor_inversores = float(valor_kwp) * potencia_total_modulos
+        if tipo == 'string' and valor_kwp:
+
+            valor_total_final = (
+                potencia_kwp * float(valor_kwp)
+            ) + float(ajuste_final or 0)
+
+            valor_modulos = 0.0
+            valor_inversores = valor_total_final
+
+            valor_equipamentos = valor_total_final
+
+            valor_projeto = 0
+            valor_instalacao = 0
+            valor_restante_material = 0
+
+            valor_extras = 0
+            valor_comissao = 0
+
+            valor_imposto_material = 0
+            valor_imposto_servico = 0
+
+            subtotal = 0
+            valor_bdi = 0
+
+        # CÁLCULO NORMAL
         else:
-            valor_inversores = float(vinculo_inversor.valor or 0) * qtd_inversores
 
-        valor_equipamentos = valor_modulos + valor_inversores
+            valor_modulos = (
+                float(vinc_mod.valor or 0)
+                * qtd_modulos
+            )
 
-        # =========================
-        # CÁLCULO COMPLETO
-        # =========================
-        valor_projeto = max(potencia_kwp * 50.0, 500.0)
-        valor_instalacao = max(potencia_kwp * 220.0, 950.0)
-        valor_restante_material = valor_equipamentos * 0.10
+            valor_inversores = (
+                float(vinculo_inversor.valor or 0)
+                * qtd_inversores
+            )
 
-        base_antes_extras = (
-            valor_equipamentos
-            + float(valor_frete or 0)
-            + valor_projeto
-            + valor_instalacao
-            + valor_restante_material
-        )
+            valor_equipamentos = (
+                valor_modulos
+                + valor_inversores
+            )
 
-        valor_extras = base_antes_extras * 0.05
+            valor_projeto = max(
+                potencia_kwp * 50.0,
+                500.0
+            )
 
-        base_comissao = base_antes_extras + valor_extras
-        valor_comissao = base_comissao * 0.05
+            valor_instalacao = max(
+                potencia_kwp * 220.0,
+                950.0
+            )
 
-        valor_imposto_material = valor_equipamentos * 0.075
-        valor_imposto_servico = (
-            valor_projeto + valor_instalacao + valor_extras
-        ) * 0.075
+            valor_restante_material = (
+                valor_equipamentos * 0.10
+            )
 
-        subtotal = (
-            base_comissao
-            + valor_comissao
-            + valor_imposto_material
-            + valor_imposto_servico
-        )
+            base_antes_extras = (
+                valor_equipamentos
+                + float(valor_frete or 0)
+                + float(valor_baterias or 0)
+                + valor_projeto
+                + valor_instalacao
+                + valor_restante_material
+            )
 
-        valor_bdi = subtotal * 0.26
-        valor_total_final = subtotal + valor_bdi
+            valor_extras = (
+                base_antes_extras * 0.05
+            )
+
+            base_comissao = (
+                base_antes_extras
+                + valor_extras
+            )
+
+            valor_comissao = (
+                base_comissao * 0.05
+            )
+
+            valor_imposto_material = (
+                valor_equipamentos * 0.075
+            )
+
+            valor_imposto_servico = (
+                valor_projeto
+                + valor_instalacao
+                + valor_extras
+            ) * 0.075
+
+            subtotal = (
+                base_comissao
+                + valor_comissao
+                + valor_imposto_material
+                + valor_imposto_servico
+            )
+
+            valor_bdi = subtotal * 0.26
+
+            valor_total_final = (
+                subtotal
+                + valor_bdi
+                + float(ajuste_final or 0)
+            )
 
         # ÁREA
         area_modulo = 0.0
-        if modulo.largura_m and modulo.altura_m:
-            area_modulo = float(modulo.largura_m) * float(modulo.altura_m)
 
+        if modulo.largura_m and modulo.altura_m:
+
+            area_modulo = (
+                float(modulo.largura_m)
+                * float(modulo.altura_m)
+            )
         area_total = qtd_modulos * area_modulo
 
+        # OPÇÃO
         opcao = {
             'fornecedor_id': fornecedor_id,
             'modulo': modulo,
@@ -13486,19 +13555,27 @@ def encontrar_melhor_kit_fornecedor_com_inversor(
             'qtd_inversores': qtd_inversores,
             'potencia': potencia_kwp,
             'area_total': area_total,
-            'geracao_estimada': potencia_kwp * fator,
+            'geracao_estimada': (
+                potencia_kwp * fator
+            ),
 
             # VALORES
             'valor_modulos': valor_modulos,
             'valor_inversores': valor_inversores,
             'valor_equipamentos': valor_equipamentos,
-            'valor_total_final': round(valor_total_final, 2)
+
+            'valor_total_final': round(
+                valor_total_final,
+                2
+            )
         }
 
         if (
-            melhor_opcao is None or
-            opcao['valor_total_final'] < melhor_opcao['valor_total_final']
+            melhor_opcao is None
+            or opcao['valor_total_final']
+            < melhor_opcao['valor_total_final']
         ):
+
             melhor_opcao = opcao
 
     if not melhor_opcao:
@@ -13579,27 +13656,61 @@ def aplicar_kit_na_proposta(proposta, kit, fase_inversor, tensao_inversor, obser
     # DADOS BÁSICOS
     proposta.fornecedor_id = kit['fornecedor'].id
 
-    proposta.tipo_inversor = (
-        kit.get('inversor').tipo_inversor if kit.get('inversor') else None
-    )
+    # KIT API (FORTLEV)
+    if kit.get('api'):
 
-    proposta.modulo_id = (
-        kit.get('modulo').id if kit.get('modulo') else None
-    )
+        proposta.tipo_inversor = kit.get('tipo_inversor')
+        proposta.modulo_id = None
+        proposta.fabricante_inversor_id = None
 
-    proposta.fabricante_inversor_id = (
-        kit.get('inversor').id if kit.get('inversor') else None
-    )
+        proposta.quantidade_modulos = (
+            kit.get('qtd_modulos')
+            or kit.get('quantidade_modulos')
+            or 0
+        )
 
+        proposta.quantidade_inversores = (
+            kit.get('qtd_inversores')
+            or 1
+        )
+
+        proposta.valor_equipamentos_api = Decimal(
+            str(
+                kit.get('valor_equipamentos')
+                or kit.get('valor_total_final')
+                or 0
+            )
+        )
+
+    # KIT INTERNO
+    else:
+
+        proposta.tipo_inversor = (
+            kit.get('inversor').tipo_inversor
+            if kit.get('inversor')
+            else None
+        )
+
+        proposta.modulo_id = (
+            kit.get('modulo').id
+            if kit.get('modulo')
+            else None
+        )
+
+        proposta.fabricante_inversor_id = (
+            kit.get('inversor').id
+            if kit.get('inversor')
+            else None
+        )
+
+        proposta.quantidade_modulos = kit.get('qtd_modulos', 0)
+        proposta.quantidade_inversores = kit.get('qtd_inversores', 1)
+        proposta.valor_equipamentos_api = None
+
+    # CAMPOS COMUNS
     proposta.fase_inversor = fase_inversor
     proposta.tensao_inversor = tensao_inversor
     proposta.observacoes = observacoes
-
-    # QUANTIDADES E DIMENSIONAMENTO
-    proposta.quantidade_modulos = kit.get('qtd_modulos', 0)
-    proposta.quantidade_inversores = kit.get('qtd_inversores', 1)
-
-    # IMPORTANTE: potência pode vir com nomes diferentes
     proposta.potencia_sugerida_kwp = Decimal(
         str(round(
             kit.get('potencia')
@@ -13617,26 +13728,27 @@ def aplicar_kit_na_proposta(proposta, kit, fase_inversor, tensao_inversor, obser
         str(round(kit.get('geracao_estimada', 0), 2))
     )
 
-    # UNIFICAÇÃO (PONTO MAIS IMPORTANTE)
-    if kit.get('api'):
-        # Kit vindo da Fortlev
-        proposta.valor_equipamentos_api = Decimal(
-            str(kit.get('valor_equipamentos', 0))
-        )
-    else:
-        # Kit interno
-        proposta.valor_equipamentos_api = None
-
     proposta.status = 'gerada'
 
 def calcular_resumo_proposta(proposta, modulo):
+
     geracao_solicitada = float(proposta.valor_tusd_fio_b or 0)
     consumo = float(proposta.consumo_kwh or 0)
+
     valor_frete = float(proposta.valor_frete or 0)
+    valor_baterias = float(proposta.valor_baterias or 0)
+    ajuste_final = float(proposta.ajuste_final or 0)
+    valor_kwp = float(proposta.valor_kwp or 0)
 
-    energia_base = geracao_solicitada if geracao_solicitada > 0 else consumo
+    energia_base = (
+        geracao_solicitada
+        if geracao_solicitada > 0
+        else consumo
+    )
 
+    # SEM DADOS
     if energia_base <= 0 or not proposta.fornecedor_id:
+
         proposta.potencia_sugerida_kwp = Decimal('0.00')
         proposta.quantidade_modulos = 0
         proposta.area_estimada_m2 = Decimal('0.00')
@@ -13644,6 +13756,8 @@ def calcular_resumo_proposta(proposta, modulo):
         proposta.valor_modulos = Decimal('0.00')
         proposta.valor_inversores = Decimal('0.00')
         proposta.valor_frete = Decimal('0.00')
+        proposta.valor_baterias = Decimal('0.00')
+        proposta.ajuste_final = Decimal('0.00')
         proposta.valor_projeto = Decimal('0.00')
         proposta.valor_instalacao = Decimal('0.00')
         proposta.valor_restante_material = Decimal('0.00')
@@ -13654,80 +13768,220 @@ def calcular_resumo_proposta(proposta, modulo):
         proposta.valor_subtotal = Decimal('0.00')
         proposta.valor_bdi = Decimal('0.00')
         proposta.valor_estimado_proposta = Decimal('0.00')
+
         return
 
+    # TIPO INVERSOR
     tipo_inv = (proposta.tipo_inversor or '').strip().lower()
 
     if tipo_inv == 'microinversor':
         fator_divisao = 130.0
+
     elif tipo_inv == 'hibrido':
         fator_divisao = 120.0
+
     else:
         fator_divisao = 118.0
 
     potencia_kwp = energia_base / fator_divisao
 
-    # Quantidade de módulos e área
+    # MÓDULOS / ÁREA
     if modulo and modulo.potencia_wp:
-        qtd_modulos = math.ceil((potencia_kwp * 1000) / float(modulo.potencia_wp))
+
+        qtd_modulos = math.ceil(
+            (potencia_kwp * 1000)
+            / float(modulo.potencia_wp)
+        )
 
         area_modulo = 0.0
+
         if modulo.largura_m and modulo.altura_m:
-            area_modulo = float(modulo.largura_m) * float(modulo.altura_m)
+            area_modulo = (
+                float(modulo.largura_m)
+                * float(modulo.altura_m)
+            )
 
         area_total = qtd_modulos * area_modulo
+
     else:
+
         qtd_modulos = int(proposta.quantidade_modulos or 0)
-        area_total = float(proposta.area_estimada_m2 or 0)
+
+        area_total = float(
+            proposta.area_estimada_m2 or 0
+        )
 
     geracao_estimada = potencia_kwp * fator_divisao
 
-    # Valor dos equipamentos
-    valor_api = getattr(proposta, 'valor_equipamentos_api', None)
+    # VALOR MANUAL POR KWP
+    if tipo_inv == 'string' and valor_kwp > 0:
 
-    if valor_api not in (None, 0, Decimal('0.00')):
+        valor_final_manual = (
+            potencia_kwp * valor_kwp
+        )
+
+        proposta.potencia_sugerida_kwp = Decimal(
+            str(round(potencia_kwp, 2))
+        )
+
+        proposta.quantidade_modulos = qtd_modulos
+
+        proposta.area_estimada_m2 = Decimal(
+            str(round(area_total, 2))
+        )
+
+        proposta.geracao_estimada_kwh_mes = Decimal(
+            str(round(geracao_estimada, 2))
+        )
+
+        proposta.valor_modulos = Decimal('0.00')
+
+        proposta.valor_inversores = Decimal(
+            str(round(valor_final_manual, 2))
+        )
+
+        proposta.valor_frete = Decimal(
+            str(round(valor_frete, 2))
+        )
+
+        proposta.valor_baterias = Decimal(
+            str(round(valor_baterias, 2))
+        )
+
+        proposta.ajuste_final = Decimal(
+            str(round(ajuste_final, 2))
+        )
+
+        proposta.valor_projeto = Decimal('0.00')
+        proposta.valor_instalacao = Decimal('0.00')
+        proposta.valor_restante_material = Decimal('0.00')
+        proposta.valor_extras = Decimal('0.00')
+        proposta.valor_comissao_vendedor = Decimal('0.00')
+        proposta.valor_imposto_material = Decimal('0.00')
+        proposta.valor_imposto_servico = Decimal('0.00')
+        proposta.valor_subtotal = Decimal('0.00')
+        proposta.valor_bdi = Decimal('0.00')
+        proposta.valor_estimado_proposta = Decimal(
+            str(round(
+                valor_final_manual + ajuste_final,
+                2
+            ))
+        )
+
+        return
+
+    # VALOR EQUIPAMENTOS
+    valor_api = getattr(
+        proposta,
+        'valor_equipamentos_api',
+        None
+    )
+
+    # API
+    if valor_api not in (
+        None,
+        0,
+        Decimal('0.00')
+    ):
+
         base_equipamentos = float(valor_api)
+
         valor_modulos = 0.0
         valor_inversores = base_equipamentos
+
+    # INTERNO
     else:
-        vinculo_modulo = FornecedorKitModulo.query.filter_by(
-            fornecedor_kit_id=proposta.fornecedor_id,
-            modulo_fotovoltaico_id=proposta.modulo_id
-        ).first()
 
-        valor_unitario_modulo = float(vinculo_modulo.valor or 0) if vinculo_modulo else 0.0
-        valor_modulos = valor_unitario_modulo * qtd_modulos
+        vinculo_modulo = (
+            FornecedorKitModulo.query.filter_by(
+                fornecedor_kit_id=proposta.fornecedor_id,
+                modulo_fotovoltaico_id=proposta.modulo_id
+            ).first()
+        )
 
-        vinculo_inversor = FornecedorKitInversor.query.filter_by(
-            fornecedor_kit_id=proposta.fornecedor_id,
-            fabricante_inversor_id=proposta.fabricante_inversor_id
-        ).first()
+        valor_unitario_modulo = (
+            float(vinculo_modulo.valor or 0)
+            if vinculo_modulo
+            else 0.0
+        )
 
-        qtd_inversores = int(proposta.quantidade_inversores or 1)
-        valor_unitario_inversor = float(vinculo_inversor.valor or 0) if vinculo_inversor else 0.0
-        valor_inversores = valor_unitario_inversor * qtd_inversores
+        valor_modulos = (
+            valor_unitario_modulo
+            * qtd_modulos
+        )
 
-        base_equipamentos = valor_modulos + valor_inversores
+        vinculo_inversor = (
+            FornecedorKitInversor.query.filter_by(
+                fornecedor_kit_id=proposta.fornecedor_id,
+                fabricante_inversor_id=proposta.fabricante_inversor_id
+            ).first()
+        )
 
-    valor_projeto = max(potencia_kwp * 50.0, 500.0)
-    valor_instalacao = max(potencia_kwp * 220.0, 950.0)
-    valor_restante_material = base_equipamentos * 0.10
+        qtd_inversores = int(
+            proposta.quantidade_inversores or 1
+        )
+
+        valor_unitario_inversor = (
+            float(vinculo_inversor.valor or 0)
+            if vinculo_inversor
+            else 0.0
+        )
+
+        valor_inversores = (
+            valor_unitario_inversor
+            * qtd_inversores
+        )
+
+        base_equipamentos = (
+            valor_modulos
+            + valor_inversores
+        )
+
+    # CÁLCULO NORMAL
+    valor_projeto = max(
+        potencia_kwp * 50.0,
+        500.0
+    )
+
+    valor_instalacao = max(
+        potencia_kwp * 220.0,
+        950.0
+    )
+
+    valor_restante_material = (
+        base_equipamentos * 0.10
+    )
 
     base_antes_extras = (
         base_equipamentos
         + valor_frete
+        + valor_baterias
         + valor_projeto
         + valor_instalacao
         + valor_restante_material
     )
 
-    valor_extras = base_antes_extras * 0.05
-    base_comissao = base_antes_extras + valor_extras
-    valor_comissao_vendedor = base_comissao * 0.05
+    valor_extras = (
+        base_antes_extras * 0.05
+    )
 
-    valor_imposto_material = base_equipamentos * 0.075
+    base_comissao = (
+        base_antes_extras
+        + valor_extras
+    )
+
+    valor_comissao_vendedor = (
+        base_comissao * 0.05
+    )
+
+    valor_imposto_material = (
+        base_equipamentos * 0.075
+    )
+
     valor_imposto_servico = (
-        valor_projeto + valor_instalacao + valor_extras
+        valor_projeto
+        + valor_instalacao
+        + valor_extras
     ) * 0.075
 
     valor_subtotal = (
@@ -13738,26 +13992,87 @@ def calcular_resumo_proposta(proposta, modulo):
     )
 
     valor_bdi = valor_subtotal * 0.26
-    valor_total_final = valor_subtotal + valor_bdi
 
-    proposta.potencia_sugerida_kwp = Decimal(str(round(potencia_kwp, 2)))
+    valor_total_final = (
+        valor_subtotal
+        + valor_bdi
+        + ajuste_final
+    )
+
+    # SALVA
+    proposta.potencia_sugerida_kwp = Decimal(
+        str(round(potencia_kwp, 2))
+    )
+
     proposta.quantidade_modulos = qtd_modulos
-    proposta.area_estimada_m2 = Decimal(str(round(area_total, 2)))
-    proposta.geracao_estimada_kwh_mes = Decimal(str(round(geracao_estimada, 2)))
 
-    proposta.valor_modulos = Decimal(str(round(valor_modulos, 2)))
-    proposta.valor_inversores = Decimal(str(round(valor_inversores, 2)))
-    proposta.valor_frete = Decimal(str(round(valor_frete, 2)))
-    proposta.valor_projeto = Decimal(str(round(valor_projeto, 2)))
-    proposta.valor_instalacao = Decimal(str(round(valor_instalacao, 2)))
-    proposta.valor_restante_material = Decimal(str(round(valor_restante_material, 2)))
-    proposta.valor_extras = Decimal(str(round(valor_extras, 2)))
-    proposta.valor_comissao_vendedor = Decimal(str(round(valor_comissao_vendedor, 2)))
-    proposta.valor_imposto_material = Decimal(str(round(valor_imposto_material, 2)))
-    proposta.valor_imposto_servico = Decimal(str(round(valor_imposto_servico, 2)))
-    proposta.valor_subtotal = Decimal(str(round(valor_subtotal, 2)))
-    proposta.valor_bdi = Decimal(str(round(valor_bdi, 2)))
-    proposta.valor_estimado_proposta = Decimal(str(round(valor_total_final, 2)))
+    proposta.area_estimada_m2 = Decimal(
+        str(round(area_total, 2))
+    )
+
+    proposta.geracao_estimada_kwh_mes = Decimal(
+        str(round(geracao_estimada, 2))
+    )
+
+    proposta.valor_modulos = Decimal(
+        str(round(valor_modulos, 2))
+    )
+
+    proposta.valor_inversores = Decimal(
+        str(round(valor_inversores, 2))
+    )
+
+    proposta.valor_frete = Decimal(
+        str(round(valor_frete, 2))
+    )
+
+    proposta.valor_baterias = Decimal(
+        str(round(valor_baterias, 2))
+    )
+
+    proposta.ajuste_final = Decimal(
+        str(round(ajuste_final, 2))
+    )
+
+    proposta.valor_projeto = Decimal(
+        str(round(valor_projeto, 2))
+    )
+
+    proposta.valor_instalacao = Decimal(
+        str(round(valor_instalacao, 2))
+    )
+
+    proposta.valor_restante_material = Decimal(
+        str(round(valor_restante_material, 2))
+    )
+
+    proposta.valor_extras = Decimal(
+        str(round(valor_extras, 2))
+    )
+
+    proposta.valor_comissao_vendedor = Decimal(
+        str(round(valor_comissao_vendedor, 2))
+    )
+
+    proposta.valor_imposto_material = Decimal(
+        str(round(valor_imposto_material, 2))
+    )
+
+    proposta.valor_imposto_servico = Decimal(
+        str(round(valor_imposto_servico, 2))
+    )
+
+    proposta.valor_subtotal = Decimal(
+        str(round(valor_subtotal, 2))
+    )
+
+    proposta.valor_bdi = Decimal(
+        str(round(valor_bdi, 2))
+    )
+
+    proposta.valor_estimado_proposta = Decimal(
+        str(round(valor_total_final, 2))
+    )
 
 def gerar_numero_proposta():
     agora = datetime.now()
@@ -13948,24 +14263,30 @@ def editar_proposta_etapa3(proposta_id):
         fase_inversor = request.form.get('fase_inversor')
         tensao_inversor = request.form.get('tensao_inversor')
         observacoes = request.form.get('observacoes')
-
         fabricante_inversor = request.form.get('fabricante_inversor')
         fabricante_modulo = request.form.get('fabricante_modulo')
-
         valor_frete = decimal_proposta(request.form.get('valor_frete')) or Decimal('0.00')
         valor_baterias = decimal_proposta(request.form.get('valor_baterias')) or Decimal('0.00')
 
-        valor_kwp_raw = request.form.get('valor_kwp')
-        valor_kwp = None
-        if valor_kwp_raw:
-            valor_kwp = float(
-                valor_kwp_raw.replace('R$', '').replace('.', '').replace(',', '.').strip()
-            )
+        valor_kwp = decimal_proposta(
+            request.form.get('valor_kwp')
+        ) or Decimal('0.00')
 
         ajuste_final = decimal_proposta(request.form.get('ajuste_final')) or Decimal('0.00')
 
         # BUSCAR KITS (AQUI ENTRA FORTLEV)
         if acao == 'buscar_kits':
+            
+            # SALVA DADOS TEMPORÁRIOS DA TELA
+            proposta.valor_frete = valor_frete
+            proposta.valor_baterias = valor_baterias
+            proposta.valor_kwp = valor_kwp
+            proposta.ajuste_final = ajuste_final
+            proposta.tipo_inversor = tipo_inversor
+            proposta.fase_inversor = fase_inversor
+            proposta.tensao_inversor = tensao_inversor
+
+            db.session.commit()
 
             if tipo_inversor not in ['string', 'microinversor', 'hibrido']:
                 flash('Selecione um tipo de inversor.', 'danger')
@@ -13991,9 +14312,7 @@ def editar_proposta_etapa3(proposta_id):
 
                 # FORTLEV (API)
                 if fornecedor.api and fornecedor.api_tipo == 'fortlev':
-
                     kits_api = buscar_kits_fortlev(proposta, fornecedor, tipo_inversor)
-
                     kits_recomendados.extend(kits_api)
 
                 # INTERNO
@@ -14014,11 +14333,6 @@ def editar_proposta_etapa3(proposta_id):
                         if kit['fornecedor'].id == fornecedor.id:
                             kits_recomendados.append(kit)
 
-            print("TOTAL KITS:", len(kits_recomendados))
-
-            proposta.tipo_inversor = tipo_inversor
-            db.session.commit()
-
             return render_template(
                 'proposta_etapa3_selecao_gerador.html',
                 proposta=proposta,
@@ -14030,9 +14344,8 @@ def editar_proposta_etapa3(proposta_id):
         # CONFIRMAR KIT
         if acao == 'confirmar_kit':
 
-            kit_index = request.form.get('kit_index', type=int)
-            print("kit_index recebido:", kit_index)
-
+            fornecedor_escolhido_id = request.form.get('fornecedor_escolhido_id', type=int)
+            
             if not tipo_inversor:
                 tipo_inversor = proposta.tipo_inversor
 
@@ -14071,24 +14384,19 @@ def editar_proposta_etapa3(proposta_id):
                         if kit['fornecedor'].id == fornecedor.id:
                             kits_recomendados.append(kit)
 
-            print("TOTAL KITS RECRIADOS:", len(kits_recomendados))
+            # VALIDA INDEX
+            kit_escolhido = next(
+                (
+                    kit for kit in kits_recomendados
+                    if kit['fornecedor'].id == fornecedor_escolhido_id
+                ),
+                None
+            )
 
-            # 🔥 VALIDA INDEX
-            if kit_index is None or kit_index >= len(kits_recomendados):
-                print("ERRO: índice inválido")
+            if not kit_escolhido:
+                print("ERRO: kit não encontrado")
                 flash('Erro ao selecionar kit.', 'danger')
                 return redirect(request.url)
-
-            kit_escolhido = kits_recomendados[kit_index]
-
-            print("\nKIT ESCOLHIDO:")
-            print(kit_escolhido)
-
-            print("\nTIPO DO KIT:", "API" if kit_escolhido.get('api') else "INTERNO")
-
-            print("valor_equipamentos:", kit_escolhido.get('valor_equipamentos'))
-            print("modulo:", kit_escolhido.get('modulo'))
-            print("qtd_modulos:", kit_escolhido.get('qtd_modulos'))
 
             # SALVA DADOS
             proposta.valor_baterias = valor_baterias
@@ -14104,21 +14412,10 @@ def editar_proposta_etapa3(proposta_id):
                 observacoes=observacoes
             )
 
-            print("\nAPÓS aplicar_kit:")
-            print("valor_equipamentos_api:", getattr(proposta, 'valor_equipamentos_api', None))
-            print("quantidade_modulos:", proposta.quantidade_modulos)
-
             calcular_resumo_proposta(
                 proposta,
                 kit_escolhido.get('modulo')
             )
-
-            print("\nAPÓS calcular_resumo_proposta:")
-            print("valor_modulos:", proposta.valor_modulos)
-            print("valor_inversores:", proposta.valor_inversores)
-            print("valor_total:", proposta.valor_estimado_proposta)
-
-            print("====================================================\n")
 
             proposta.status = 'gerada'
 
@@ -14132,8 +14429,11 @@ def editar_proposta_etapa3(proposta_id):
 
             return f"""
             <script>
+                // abre a proposta em nova aba
                 window.open('/proposta/{proposta.slug}', '_blank');
-                window.location.href = '/propostas';
+
+                // abre também na aba atual
+                window.location.href = '/proposta/{proposta.slug}';
             </script>
             """
 
@@ -14330,6 +14630,7 @@ def buscar_kits_fortlev(proposta, fornecedor, tipo_inversor=None):
         base_antes_extras = (
             valor_equipamentos
             + float(proposta.valor_frete or 0)
+            + float(proposta.valor_baterias or 0)
             + valor_projeto
             + valor_instalacao
             + valor_restante_material
@@ -14353,7 +14654,11 @@ def buscar_kits_fortlev(proposta, fornecedor, tipo_inversor=None):
         )
 
         valor_bdi = subtotal * 0.26
-        valor_total_final = subtotal + valor_bdi
+        valor_total_final = (
+            subtotal
+            + valor_bdi
+            + float(proposta.ajuste_final or 0)
+        )
 
         # FILTRO POR FABRICANTE
         prioridade = 1

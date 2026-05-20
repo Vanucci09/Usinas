@@ -4,11 +4,13 @@
 
 {% block content %}
 <div class="container mt-5 p-4 bg-white rounded shadow">
-    <h2 class="mb-4 text-primary text-center">Cadastrar Rateio</h2>
+    <h2 class="mb-4 text-primary text-center">
+        <i class="bi bi-calculator-fill me-2"></i>Cadastrar Rateio
+    </h2>
 
-    <form method="POST" action="{{ url_for('cadastrar_rateio') }}">
+    <form method="POST" action="{{ url_for('cadastrar_rateio') }}" id="formRateio">
         <div class="mb-3">
-            <label for="usina_id" class="form-label">Usina</label>
+            <label for="usina_id" class="form-label fw-semibold">Usina</label>
             <select class="form-select" id="usina_id" name="usina_id" required onchange="carregarClientes()">
                 <option value="" disabled selected>Selecione a usina</option>
                 {% for usina in usinas %}
@@ -18,124 +20,115 @@
         </div>
 
         <div class="mb-3">
-            <label for="cliente_id" class="form-label">Cliente</label>
-            <select class="form-select" id="cliente_id" name="cliente_id" required>
+            <label for="cliente_id" class="form-label fw-semibold">Cliente</label>
+            <select class="form-select" id="cliente_id" name="cliente_id" required disabled>
                 <option value="">Selecione uma usina primeiro</option>
             </select>
         </div>
 
-        <div class="mb-3">
-            <label for="percentual" class="form-label">% da Energia</label>
-            <input type="number" step="0.01" class="form-control" id="percentual" name="percentual" required>
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label for="percentual" class="form-label fw-semibold">% da Energia</label>
+                <div class="input-group">
+                    <input type="number" step="0.01" min="0" max="100" class="form-control" id="percentual" name="percentual" inputmode="decimal" required>
+                    <span class="input-group-text">%</span>
+                </div>
+            </div>
+
+            <div class="col-md-6 mb-3">
+                <label for="tarifa_kwh" class="form-label fw-semibold">Tarifa do Consórcio kWh (R$)</label>
+                <div class="input-group">
+                    <span class="input-group-text">R$</span>
+                    <input type="number" step="0.0000001" min="0" class="form-control" id="tarifa_kwh" name="tarifa_kwh" inputmode="decimal" required>
+                </div>
+            </div>
         </div>
 
         <div class="row">
-
             <div class="col-md-6 mb-3">
-                <label for="tarifa_kwh" class="form-label">
-                    Tarifa do Consórcio kWh (R$)
-                </label>
-
-                <input type="number"
-                    step="0.0000001"
-                    class="form-control"
-                    id="tarifa_kwh"
-                    name="tarifa_kwh"
-                    required>
+                <label for="desconto_percentual" class="form-label fw-semibold">Desconto (%)</label>
+                <div class="input-group">
+                    <input type="number" step="0.01" min="0" max="100" class="form-control" id="desconto_percentual" name="desconto_percentual" value="0" inputmode="decimal">
+                    <span class="input-group-text">%</span>
+                </div>
             </div>
 
             <div class="col-md-6 mb-3">
-                <label for="desconto_percentual" class="form-label">
-                    Desconto (%)
-                </label>
-
-                <input type="number"
-                    step="0.01"
-                    class="form-control"
-                    id="desconto_percentual"
-                    name="desconto_percentual"
-                    value="0">
+                <label for="cip" class="form-label fw-semibold">CIP (R$)</label>
+                <div class="input-group">
+                    <span class="input-group-text">R$</span>
+                    <input type="number" step="0.01" min="0" class="form-control" id="cip" name="cip" value="0" inputmode="decimal">
+                </div>
             </div>
+        </div>
 
-        <div class="text-center mt-3">
-            <button type="submit" class="btn btn-success">Cadastrar Rateio</button>
+        <div class="text-center mt-4">
+            <button type="submit" class="btn btn-success px-4">
+                <i class="bi bi-check-circle-fill me-2"></i>Cadastrar Rateio
+            </button>
         </div>
     </form>
 
-    <div class="text-center mt-4 d-flex justify-content-center gap-3 flex-wrap">
+    <hr class="my-4">
+
+    <div class="text-center d-flex justify-content-center gap-3 flex-wrap">
         <a href="{{ url_for('listar_rateios') }}" class="btn btn-primary">
-            <i class="bi bi-list-ul"></i> Ver Rateios Cadastrados
+            <i class="bi bi-list-ul me-2"></i>Ver Rateios Cadastrados
         </a>
         <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
-            <i class="bi bi-house-door-fill"></i> Voltar para o Início
+            <i class="bi bi-house-door-fill me-2"></i>Voltar para o Início
         </a>
     </div>
 </div>
 
 <script>
-
-function carregarClientes() {
-
+async function carregarClientes() {
     const usinaId = document.getElementById("usina_id").value;
-
     const clienteSelect = document.getElementById("cliente_id");
 
-    clienteSelect.innerHTML =
-        '<option value="">Carregando...</option>';
+    if (!usinaId) return;
 
-    fetch(
-        `/cadastrar_rateio?ajax=1&usina_id=${encodeURIComponent(usinaId)}`
-    )
-    .then(response => response.json())
+    // Reset dinâmico do estado do Select
+    clienteSelect.disabled = true;
+    clienteSelect.innerHTML = '<option value="">⏳ Carregando clientes...</option>';
 
-    .then(data => {
+    try {
+        const response = await fetch(`/cadastrar_rateio?ajax=1&usina_id=${encodeURIComponent(usinaId)}`);
+        
+        if (!response.ok) {
+            throw new Error(`Erro no servidor: ${response.status}`);
+        }
 
+        const data = await response.json();
         clienteSelect.innerHTML = "";
 
         if (!data || data.length === 0) {
-
-            clienteSelect.innerHTML =
-                '<option value="">Nenhum cliente disponível</option>';
-
+            clienteSelect.innerHTML = '<option value="">Nenhum cliente disponível para esta usina</option>';
             return;
         }
 
-        const defaultOption =
-            document.createElement("option");
-
-        defaultOption.textContent =
-            "Selecione o cliente";
-
+        const defaultOption = document.createElement("option");
+        defaultOption.textContent = "Selecione o cliente";
         defaultOption.disabled = true;
         defaultOption.selected = true;
-
+        defaultOption.value = "";
         clienteSelect.appendChild(defaultOption);
 
         data.forEach(cliente => {
-
-            const option =
-                document.createElement("option");
-
+            const option = document.createElement("option");
             option.value = cliente.id;
-
-            option.textContent =
-                `${cliente.nome} (ID: ${cliente.id})`;
-
+            option.textContent = `${cliente.nome} (ID: ${cliente.id})`;
             clienteSelect.appendChild(option);
-
         });
 
-    })
+        // Habilita o select apenas se houver dados válidos
+        clienteSelect.disabled = false;
 
-    .catch(() => {
-
-        clienteSelect.innerHTML =
-            '<option value="">Erro ao carregar clientes</option>';
-
-    });
-
+    } catch (error) {
+        console.error("[AJAX Error] Falha ao buscar clientes:", error);
+        clienteSelect.innerHTML = '<option value="">❌ Erro ao carregar clientes</option>';
+        clienteSelect.disabled = true;
+    }
 }
-
 </script>
-
 {% endblock %}
