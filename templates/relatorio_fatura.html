@@ -432,13 +432,13 @@
             </div>
 
             <div class="valor-alerta">
-    {{
-        (
-            (fatura.consumo_neoenergia | float) *
-            (tarifa_neoenergia_aplicada | float)
-        ) | formato_brasileiro
-    }}
-</div>
+                {{
+                    (
+                        (fatura.consumo_neoenergia | float) *
+                        (tarifa_neoenergia_aplicada | float)
+                    ) | formato_brasileiro
+                }}
+            </div>
         </div>
 
         {% if usina.tusd_fio_b and (fatura.custo_tusd_fio_b or 0) != 0 %}
@@ -470,7 +470,7 @@
 
             <div>-</div>
 
-            <div>
+            <div class="valor-alerta">
                 -
             </div>
         </div>
