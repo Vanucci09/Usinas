@@ -3,22 +3,54 @@ FROM python:3.11-slim-bookworm
 ENV DEBIAN_FRONTEND=noninteractive
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# Dependências do SO (Bookworm)
+# =========================================================
+# DEPENDÊNCIAS DO SISTEMA
+# =========================================================
+
 RUN set -eux; \
   apt-get update; \
   apt-get install -y --no-install-recommends \
-    wget curl unzip gnupg ca-certificates \
-    pkg-config build-essential \
+    wget \
+    curl \
+    unzip \
+    gnupg \
+    ca-certificates \
+    pkg-config \
+    build-essential \
     fonts-liberation \
     libayatana-appindicator3-1 \
-    libasound2 libatk-bridge2.0-0 libatk1.0-0 libcups2 libdbus-1-3 \
-    libgdk-pixbuf-2.0-0 libnspr4 libnss3 libx11-xcb1 libxcomposite1 \
-    libxdamage1 libxrandr2 xdg-utils libu2f-udev libvulkan1 \
-    libxkbcommon0 libxshmfence1 libdrm2 libgbm1 libgtk-3-0 \
-    libpango-1.0-0 libpangocairo-1.0-0 libcairo2 \
-    # opcionais úteis p/ Chrome headless
-    libxss1 lsb-release; \
-  # MySQL/MariaDB headers
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libcups2 \
+    libdbus-1-3 \
+    libgdk-pixbuf-2.0-0 \
+    libnspr4 \
+    libnss3 \
+    libx11-xcb1 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    xdg-utils \
+    libu2f-udev \
+    libvulkan1 \
+    libxkbcommon0 \
+    libxshmfence1 \
+    libdrm2 \
+    libgbm1 \
+    libgtk-3-0 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libcairo2 \
+    libxss1 \
+    lsb-release \
+    tesseract-ocr;
+
+# =========================================================
+# MYSQL / MARIADB HEADERS
+# =========================================================
+
+RUN set -eux; \
   if apt-cache show default-libmysqlclient-dev >/dev/null 2>&1; then \
     apt-get install -y --no-install-recommends default-libmysqlclient-dev; \
   else \
@@ -27,7 +59,10 @@ RUN set -eux; \
   apt-get clean; \
   rm -rf /var/lib/apt/lists/*
 
-# Repositório e instalação do Google Chrome
+# =========================================================
+# GOOGLE CHROME
+# =========================================================
+
 RUN set -eux; \
   curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
     | gpg --dearmor -o /usr/share/keyrings/google.gpg; \
@@ -39,7 +74,10 @@ RUN set -eux; \
   apt-get clean; \
   rm -rf /var/lib/apt/lists/*
 
-# ChromeDriver via Chrome for Testing (tenta a versão exata; se 404, usa known-good do major)
+# =========================================================
+# CHROMEDRIVER
+# =========================================================
+
 RUN set -eux; \
   CHROME_VERSION="$(google-chrome --version | awk '{print $3}')" ; \
   CHROME_MAJOR="${CHROME_VERSION%%.*}" ; \
@@ -68,15 +106,32 @@ RUN set -eux; \
   chmod +x /usr/bin/chromedriver; \
   rm -rf /usr/local/bin/chromedriver-linux64 /tmp/chromedriver.zip /tmp/cft.json /tmp/cft.py
 
+# =========================================================
+# VARIÁVEIS
+# =========================================================
+
 ENV CHROME_BIN=/usr/bin/google-chrome
 ENV PATH="${PATH}:/usr/bin"
+ENV PYTHONUNBUFFERED=1
+
+# =========================================================
+# APP
+# =========================================================
 
 WORKDIR /app
+
 COPY . /app
 
-# Cache de pacotes pip para builds mais rápidos
+# =========================================================
+# PYTHON PACKAGES
+# =========================================================
+
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --upgrade pip && \
     pip install -r requirements.txt
 
-CMD ["python", "app.py"]
+# =========================================================
+# START
+# =========================================================
+
+CMD ["python", "-m", "gunicorn", "app:app", "--bind", "0.0.0.0:10000", "--workers", "1", "--threads", "8", "--timeout", "600"]

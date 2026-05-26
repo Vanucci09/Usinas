@@ -1,23 +1,10 @@
 services:
   - type: web
     name: usinas
-    env: python
+    env: docker
     plan: standard
-
-    buildCommand: |
-      bash build.sh && pip install -r requirements.txt
-
-    startCommand: gunicorn app:app
+    dockerfilePath: ./Dockerfile
 
     envVars:
       - key: RENDER
         value: "true"
-
-    aptPackages:
-      - tesseract-ocr
-      - chromium
-      - chromium-driver
-      - wget
-      - unzip
-      - curl
-      - jq
