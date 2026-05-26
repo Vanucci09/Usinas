@@ -1,26 +1,38 @@
 #!/usr/bin/env bash
 
-echo "📦 Instalando Chromium e ChromeDriver..."
+set -o errexit
 
-# Atualiza os pacotes
-apt-get update && apt-get install -y \
+echo "📦 Instalando dependências..."
+
+# Atualiza pacotes
+apt-get update
+
+# Instala dependências Linux
+apt-get install -y \
 wget \
 unzip \
 curl \
 jq \
+chromium \
 tesseract-ocr
 
-# Instala o Chromium
-apt-get install -y chromium
+echo "✅ Tesseract instalado"
 
-# Obtém a versão do Chromium instalada
+echo "VERSAO TESSERACT:"
+tesseract --version
+
+# Obtém versão do Chromium
 CHROME_VERSION=$(chromium --version | grep -oP '\d+\.\d+\.\d+')
 
-# Busca o ChromeDriver compatível
+echo "📦 Versão Chromium:"
+echo "$CHROME_VERSION"
+
+# Busca ChromeDriver compatível
 CHROMEDRIVER_URL=$(curl -s "https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json" \
   | jq -r --arg ver "$CHROME_VERSION" '.versions[] | select(.version | test("^" + $ver)) | .downloads.chromedriver[] | select(.platform == "linux64") | .url')
 
-# Faz o download e instalação
+echo "📦 Download ChromeDriver..."
+
 wget -O chromedriver.zip "$CHROMEDRIVER_URL"
 
 unzip chromedriver.zip
@@ -30,4 +42,3 @@ mv chromedriver-linux64/chromedriver /usr/bin/chromedriver
 chmod +x /usr/bin/chromedriver
 
 echo "✅ Chromium e ChromeDriver instalados."
-echo "✅ Tesseract instalado."
