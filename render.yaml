@@ -16,6 +16,7 @@ services:
     aptPackages:
       - tesseract-ocr
       - chromium
+      - chromium-driver
       - wget
       - unzip
       - curl
