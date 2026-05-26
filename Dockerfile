@@ -44,7 +44,8 @@ RUN set -eux; \
     libcairo2 \
     libxss1 \
     lsb-release \
-    tesseract-ocr;
+    tesseract-ocr\
+    tesseract-ocr-por;
 
 # =========================================================
 # MYSQL / MARIADB HEADERS
