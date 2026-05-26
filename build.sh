@@ -3,7 +3,12 @@
 echo "📦 Instalando Chromium e ChromeDriver..."
 
 # Atualiza os pacotes
-apt-get update && apt-get install -y wget unzip curl jq
+apt-get update && apt-get install -y \
+wget \
+unzip \
+curl \
+jq \
+tesseract-ocr
 
 # Instala o Chromium
 apt-get install -y chromium
@@ -17,8 +22,12 @@ CHROMEDRIVER_URL=$(curl -s "https://googlechromelabs.github.io/chrome-for-testin
 
 # Faz o download e instalação
 wget -O chromedriver.zip "$CHROMEDRIVER_URL"
+
 unzip chromedriver.zip
+
 mv chromedriver-linux64/chromedriver /usr/bin/chromedriver
+
 chmod +x /usr/bin/chromedriver
 
 echo "✅ Chromium e ChromeDriver instalados."
+echo "✅ Tesseract instalado."
