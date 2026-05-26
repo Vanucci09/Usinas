@@ -61,3 +61,4 @@ undetected-chromedriver==3.5.5
 fortlev_solar_sdk==0.2.4
 pytesseract
 Pillow
+opencv-python-headless

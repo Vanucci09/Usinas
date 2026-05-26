@@ -40,6 +40,8 @@ from sqlalchemy.dialects.postgresql import JSONB
 import traceback
 from zoneinfo import ZoneInfo    
 from fortlev_solar_sdk import FortlevSolarClient
+import platform
+import cv2
 import pytesseract
 from PIL import Image
 
@@ -16441,16 +16443,16 @@ def excluir_conta_concessionaria(conta_id):
 
     return redirect(url_for('listar_contas_concessionaria'))
 
-pytesseract.pytesseract.tesseract_cmd = (
-    r"C:\Users\User\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"
-)
+# WINDOWS LOCAL
+if platform.system() == 'Windows':
+
+    pytesseract.pytesseract.tesseract_cmd = (
+        r"C:\Users\User\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"
+    )
 
 @app.route('/contas-concessionaria/importar', methods=['GET', 'POST'])
 @login_required
 def importar_conta_concessionaria():
-
-    import cv2
-    import numpy as np
 
     empresas = Empresa.query.order_by(Empresa.nome).all()
     vendedores = Vendedor.query.filter_by(ativo=True).all()
