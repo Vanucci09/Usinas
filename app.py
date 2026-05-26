@@ -40,6 +40,8 @@ from sqlalchemy.dialects.postgresql import JSONB
 import traceback
 from zoneinfo import ZoneInfo    
 from fortlev_solar_sdk import FortlevSolarClient
+import pytesseract
+from PIL import Image
 
 
 app = Flask(__name__)
@@ -257,14 +259,12 @@ class PrevisaoMensal(db.Model):
     ano = db.Column(db.Integer, nullable=False)
     mes = db.Column(db.Integer, nullable=False)  # 1 a 12
     previsao_kwh = db.Column(db.Float, nullable=False)
-
     usina = db.relationship('Usina', backref='previsoes')
 
 class CategoriaDespesa(db.Model):
     __tablename__ = 'categorias_despesa'
     id = db.Column(db.Integer, primary_key=True)
-    nome = db.Column(db.String(100), nullable=False, unique=True)
-    
+    nome = db.Column(db.String(100), nullable=False, unique=True)    
     despesas = db.relationship('FinanceiroUsina', backref='categoria')
 
 class FinanceiroUsina(db.Model):
@@ -280,7 +280,6 @@ class FinanceiroUsina(db.Model):
     referencia_ano = db.Column(db.Integer, nullable=True)
     data_pagamento = db.Column(db.Date)
     juros = db.Column(Numeric(10, 2), default=0)
-
     credor_id = db.Column(db.Integer, db.ForeignKey('credores.id'), nullable=True)
     comprovante_arquivo = db.Column(db.String(255))
     
@@ -628,6 +627,143 @@ class CentroCusto(db.Model):
         ),
         Index('ix_centros_custos_empresa_codigo', 'empresa_id', 'codigo'),
         Index('ix_centros_custos_empresa_cliente', 'empresa_id', 'cliente_id'),
+    )
+    
+class ContaConcessionaria(db.Model):
+    __tablename__ = 'contas_concessionaria'
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    empresa_id = db.Column(
+        db.Integer,
+        db.ForeignKey('empresas.id'),
+        nullable=False
+    )
+
+    vendedor_id = db.Column(
+        db.Integer,
+        db.ForeignKey('vendedores.id'),
+        nullable=True
+    )
+
+    centro_custo_id = db.Column(
+        db.Integer,
+        db.ForeignKey('centros_custos.id'),
+        nullable=True
+    )
+
+    # Número da unidade consumidora
+    n_uc = db.Column(
+        db.String(50),
+        nullable=False
+    )
+
+    # Tarifas
+    tarifa_energia = db.Column(
+        db.Numeric(10, 7),
+        nullable=True
+    )
+
+    tarifa_concessionaria = db.Column(
+        db.Numeric(10, 7),
+        nullable=True
+    )
+
+    # Encargos
+    cip = db.Column(
+        db.Numeric(10, 2),
+        nullable=True,
+        default=0
+    )
+
+    icms = db.Column(
+        db.Numeric(10, 4),
+        nullable=True,
+        default=0
+    )
+
+    pis = db.Column(
+        db.Numeric(10, 4),
+        nullable=True,
+        default=0
+    )
+
+    cofins = db.Column(
+        db.Numeric(10, 4),
+        nullable=True,
+        default=0
+    )
+
+    desconto = db.Column(
+        db.Numeric(10, 4),
+        nullable=True,
+        default=0
+    )
+
+    # Dados elétricos
+    fase = db.Column(
+        db.String(50),
+        nullable=True
+    )
+    
+    consumo_medio = db.Column(
+        db.Numeric(12, 2),
+        nullable=True,
+        default=0
+    )
+
+    bandeira = db.Column(
+        db.String(100),
+        nullable=True
+    )
+
+    ativo = db.Column(
+        db.Boolean,
+        default=True,
+        nullable=False
+    )
+
+    criado_em = db.Column(
+        db.DateTime(timezone=True),
+        server_default=func.now()
+    )
+
+    atualizado_em = db.Column(
+        db.DateTime(timezone=True),
+        onupdate=func.now()
+    )
+
+    # Relacionamentos
+    empresa = db.relationship(
+        'Empresa',
+        backref=db.backref(
+            'contas_concessionaria',
+            lazy=True
+        )
+    )
+
+    vendedor = db.relationship(
+        'Vendedor',
+        backref=db.backref(
+            'contas_concessionaria',
+            lazy=True
+        )
+    )
+
+    centro_custo = db.relationship(
+        'CentroCusto',
+        backref=db.backref(
+            'contas_concessionaria',
+            lazy=True
+        )
+    )
+
+    __table_args__ = (
+        Index(
+            'ix_conta_concessionaria_empresa_uc',
+            'empresa_id',
+            'n_uc'
+        ),
     )
     
 class DocumentoCentroCusto(db.Model):
@@ -5096,14 +5232,14 @@ def listar_e_salvar_geracoes(hoje=None):
     if hoje is None:
         hoje = hoje_br()
 
+    ontem = hoje - timedelta(days=1)
     usina_kwh_por_dia = {}
-
-    # 1) SOLIS - por inversor (SÓ etoday, sem acumular nada)
     
+    # 1) SOLIS - por inversor
     try:
         registros_solis = listar_todos_inversores()
     except Exception as e:
-        print(f"❌ Erro ao listar inversores Solis: {e}")
+        print(f"Erro ao listar inversores Solis: {e}")
         registros_solis = []
 
     for r in registros_solis:
@@ -5115,13 +5251,23 @@ def listar_e_salvar_geracoes(hoje=None):
 
         inversor = Inversor.query.filter_by(inverter_sn=sn).first()
         if not inversor:
-            # inversor não vinculado no banco -> ignora
             continue
 
-        # Sempre grava APENAS o valor do dia vindo da API.
+        # [TRAVA OFFLINE] Verifica se o inversor gerou exatamente o mesmo valor ontem
+        # Se ontem gerou 2500 e a API continua mandando 2500 hoje com a usina offline, vira 0.
+        geracao_ontem_inv = GeracaoInversor.query.filter_by(inverter_sn=sn, data=ontem).first()
+        if geracao_ontem_inv and etoday == geracao_ontem_inv.etoday and etoday > 0:
+            # Se o valor é idêntico ao de ontem, a API pode estar travada com o último dado da usina offline
+            # Vamos zerar o etoday para hoje para não repetir o gráfico de ontem
+            print(f"Solis: Inversor {sn} offline/travado com o valor de ontem ({etoday} kWh). Forçando 0 para hoje.")
+            etoday = 0.0
+
         existente = GeracaoInversor.query.filter_by(inverter_sn=sn, data=hoje).first()
         if existente:
-            existente.etoday = etoday
+            if etoday > existente.etoday:
+                existente.etoday = etoday
+            else:
+                etoday = existente.etoday
         else:
             nova = GeracaoInversor(
                 data=hoje,
@@ -5131,18 +5277,15 @@ def listar_e_salvar_geracoes(hoje=None):
             )
             db.session.add(nova)
 
-        # Acumula por usina só com esse etoday
         usina_kwh_por_dia[inversor.usina_id] = usina_kwh_por_dia.get(inversor.usina_id, 0.0) + etoday
 
-    # 2) SUNGROW - por planta (ps_id vinculado em Usina.sungrow_ps_id)
-    
+    # 2) SUNGROW - por planta
     try:
-        usinas_sungrow_api = listar_usinas_sungrow()  # já retorna today_kwh e total_mwh
+        usinas_sungrow_api = listar_usinas_sungrow()
     except Exception as e:
-        print(f"❌ Erro ao listar usinas Sungrow: {e}")
+        print(f"Erro ao listar usinas Sungrow: {e}")
         usinas_sungrow_api = []
 
-    # Mapa ps_id(string) -> today_kwh
     mapa_sungrow = {}
     for p in usinas_sungrow_api:
         ps_id = str(p.get("ps_id"))
@@ -5155,20 +5298,31 @@ def listar_e_salvar_geracoes(hoje=None):
         ps_id_str = str(usina.sungrow_ps_id)
         etoday = float(mapa_sungrow.get(ps_id_str, 0.0))
 
-        # logs enxutos, só pra ter uma noção
-        if etoday > 0:
-            print(f"✅ Sungrow: {usina.nome} (ps_id={ps_id_str}) -> {etoday:.2f} kWh")
-        else:
-            print(f"⚠️ Sungrow: {usina.nome} (ps_id={ps_id_str}) sem geração hoje ou não retornada.")
+        # [TRAVA OFFLINE SUNGROW]
+        # Busca a geração total da usina no dia de ontem
+        geracao_ontem_usina = Geracao.query.filter_by(usina_id=usina.id, data=ontem).first()
+        
+        if geracao_ontem_usina and etoday == geracao_ontem_usina.energia_kwh and etoday > 0:
+            print(f"⚡ Sungrow: {usina.nome} offline/travada repetindo o valor de ontem ({etoday} kWh). Forçando 0 hoje.")
+            etoday = 0.0
 
+        # Validação com o que já foi salvo HOJE (para não dar downgrade caso o job rode várias vezes)
+        leitura_existente = Geracao.query.filter_by(usina_id=usina.id, data=hoje).first()
+        if leitura_existente and etoday < leitura_existente.energia_kwh:
+            etoday = leitura_existente.energia_kwh
+
+        if etoday > 0:
+            print(f"Sungrow: {usina.nome} (ps_id={ps_id_str}) -> {etoday:.2f} kWh")
+        
+        # Soma ao dicionário (preservando o que já veio do Solis, se houver)
         usina_kwh_por_dia[usina.id] = usina_kwh_por_dia.get(usina.id, 0.0) + etoday
 
     # 3) SALVAR TOTAL POR USINA (tabela Geracao)
-    
     for usina_id, soma_etoday in usina_kwh_por_dia.items():
         leitura = Geracao.query.filter_by(usina_id=usina_id, data=hoje).first()
         if leitura:
-            leitura.energia_kwh = soma_etoday
+            if soma_etoday > leitura.energia_kwh:
+                leitura.energia_kwh = soma_etoday
         else:
             nova_leitura = Geracao(
                 data=hoje,
@@ -5178,7 +5332,7 @@ def listar_e_salvar_geracoes(hoje=None):
             db.session.add(nova_leitura)
 
     db.session.commit()
-    print("✅ Geração diária salva para todas as usinas (Solis + Sungrow).")
+    print("Geração diária processada com sucesso.")
     
 TZ_BR = ZoneInfo("America/Sao_Paulo")
 
@@ -5194,7 +5348,7 @@ def atualizar_geracao_agendada():
 
     # trava concorrência (mesmo processo)
     if not GERACAO_JOB_LOCK.acquire(blocking=False):
-        print(f"[{now}] ⏭️ Job já em execução. Ignorando.")
+        print(f"[{now}] Job já em execução. Ignorando.")
         return
 
     try:
@@ -5202,11 +5356,11 @@ def atualizar_geracao_agendada():
         if GERACAO_LAST_RUN_AT is not None:
             dt = (now - GERACAO_LAST_RUN_AT).total_seconds()
             if dt < GERACAO_MIN_INTERVAL:
-                print(f"[{now}] ⏭️ Disparo duplicado ({dt:.1f}s). Ignorando.")
+                print(f"[{now}] Disparo duplicado ({dt:.1f}s). Ignorando.")
                 return
 
         if GERACAO_JOB_RUNNING:
-            print(f"[{now}] ⏭️ Flag running ativa. Ignorando.")
+            print(f"[{now}] Flag running ativa. Ignorando.")
             return
 
         GERACAO_JOB_RUNNING = True
@@ -5219,10 +5373,10 @@ def atualizar_geracao_agendada():
             listar_e_salvar_geracoes(hoje=hoje)
             listar_e_salvar_geracoes_kehua(hoje=hoje)
 
-            print(f"[{agora_br()}] ✅ Atualização concluída.")
+            print(f"[{agora_br()}] Atualização concluída.")
 
     except Exception as e:
-        print(f"[{agora_br()}] ❌ Erro na atualização agendada: {e}")
+        print(f"[{agora_br()}] Erro na atualização agendada: {e}")
         traceback.print_exc()
 
     finally:
@@ -5244,17 +5398,17 @@ def start_scheduler_once():
     is_debug = bool(getattr(app, "debug", False))
 
     if is_debug and not is_reloader_process:
-        print(f"[{agora_br()}] ⏭️ Debug reloader: não iniciando scheduler neste processo.")
+        print(f"[{agora_br()}] Debug reloader: não iniciando scheduler neste processo.")
         return
 
     if scheduler.running:
-        print(f"[{agora_br()}] ♻️ Scheduler já está rodando.")
+        print(f"[{agora_br()}] Scheduler já está rodando.")
         return
 
     scheduler.add_job(
         func=atualizar_geracao_agendada,
         trigger="interval",
-        minutes=5,
+        minutes=20,
         id="job_atualizar_geracao",
         replace_existing=True,
         max_instances=1,
@@ -5263,15 +5417,13 @@ def start_scheduler_once():
     )
     scheduler.start()
     atexit.register(lambda: scheduler.shutdown(wait=False))
-    print(f"[{agora_br()}] ✅ Scheduler iniciado (único). PID={os.getpid()}")
+    print(f"[{agora_br()}] Scheduler iniciado (único). PID={os.getpid()}")
     
 def init_background_jobs():
     if os.getenv("RUN_SCHEDULER", "1") != "1":
-        print(f"[{agora_br()}] ⏭️ RUN_SCHEDULER=0, não iniciando scheduler.")
+        print(f"[{agora_br()}] RUN_SCHEDULER=0, não iniciando scheduler.")
         return
     start_scheduler_once()
-
-# ... cria app, configurações, db, login_manager, etc
 
 init_background_jobs()
 
@@ -15337,7 +15489,7 @@ def definir_condicoes_pagamento(proposta_id):
         flash('Condição de pagamento salva com sucesso.', 'success')
         return redirect(url_for('listar_propostas'))
 
-    # 🔥 CARREGA CONDIÇÃO EXISTENTE PARA EDIÇÃO (IMPORTANTE)
+    # CARREGA CONDIÇÃO EXISTENTE PARA EDIÇÃO (IMPORTANTE)
     condicao = CondicaoPagamentoProposta.query.filter_by(
         proposta_id=proposta.id
     ).first()
@@ -15966,6 +16118,784 @@ def recusar_proposta(slug):
         db.session.commit()
 
     return render_template('resposta_cliente.html', tipo='recusada')
+
+@app.route('/contas-concessionaria/nova', methods=['GET', 'POST'])
+@login_required
+def nova_conta_concessionaria():
+
+    empresas = Empresa.query.order_by(Empresa.nome).all()
+    vendedores = Vendedor.query.filter_by(ativo=True).order_by(Vendedor.nome).all()
+    centros = CentroCusto.query.filter_by(ativo=True).order_by(CentroCusto.nome).all()
+
+    if request.method == 'POST':
+
+        try:
+
+            conta = ContaConcessionaria(
+
+                empresa_id=request.form.get('empresa_id', type=int),
+                vendedor_id=request.form.get('vendedor_id', type=int),
+                centro_custo_id=request.form.get('centro_custo_id', type=int),
+                n_uc=request.form.get('n_uc'),
+                tarifa_energia=request.form.get('tarifa_energia') or 0,
+                tarifa_concessionaria=request.form.get('tarifa_concessionaria') or 0,
+                cip=request.form.get('cip') or 0,
+                icms=request.form.get('icms') or 0,
+                pis=request.form.get('pis') or 0,
+                cofins=request.form.get('cofins') or 0,
+                desconto=request.form.get('desconto') or 0,
+                fase=request.form.get('fase'),
+                bandeira=request.form.get('bandeira'),
+                ativo=True,
+                consumo_medio=request.form.get('consumo_medio') or 0,
+            )
+
+            db.session.add(conta)
+            db.session.commit()
+            flash('Conta concessionária cadastrada com sucesso!', 'success')
+
+            return redirect(
+                url_for('listar_contas_concessionaria')
+            )
+
+        except Exception as e:
+
+            db.session.rollback()
+            print(f'ERRO AO SALVAR CONTA CONCESSIONÁRIA: {e}')
+            flash('Erro ao salvar.', 'danger')
+
+    return render_template(
+        'contas_concessionaria_form.html',
+        empresas=empresas,
+        vendedores=vendedores,
+        centros=centros
+    )
+    
+@app.route('/contas-concessionaria')
+@login_required
+def listar_contas_concessionaria():
+
+    contas = ContaConcessionaria.query.order_by(
+        ContaConcessionaria.id.desc()
+    ).all()
+
+    return render_template(
+        'contas_concessionaria_lista.html',
+        contas=contas
+    )
+    
+@app.route('/contas-concessionaria/<int:conta_id>/proposta')
+@login_required
+def proposta_conta_concessionaria(conta_id):
+
+    conta = db.session.get(ContaConcessionaria, conta_id)
+
+    if not conta:
+        flash('Conta concessionária não encontrada.', 'warning')
+        return redirect(url_for('listar_contas_concessionaria'))
+
+    def moeda(valor):
+        return float(valor or 0)
+
+    consumo_medio = moeda(conta.consumo_medio)
+    tarifa_energia = moeda(conta.tarifa_energia)
+    tarifa_concessionaria = moeda(conta.tarifa_concessionaria)
+    cip = moeda(conta.cip)
+    desconto = moeda(conta.desconto)
+
+    fase = (conta.fase or '').strip().lower()
+    bandeira = (conta.bandeira or '').strip().lower()
+
+    # DISPONIBILIDADE POR FASE
+
+    if fase == 'trifásico' or fase == 'trifasico':
+        consumo_disponibilidade = 100
+
+    elif fase == 'bifásico' or fase == 'bifasico':
+        consumo_disponibilidade = 50
+
+    else:
+        consumo_disponibilidade = 30
+
+    # VALOR BANDEIRA
+
+    if bandeira == 'amarela':
+        bandeira_valor = 1.885
+
+    elif bandeira in ['vermelha i', 'vermelha_1', 'vermelha 1']:
+        bandeira_valor = 4.463
+
+    elif bandeira in ['vermelha ii', 'vermelha_2', 'vermelha 2']:
+        bandeira_valor = 7.877
+
+    else:
+        bandeira_valor = 0
+
+    # ENERGIA INJETADA
+
+    energia_injetada = (
+        consumo_medio - consumo_disponibilidade
+    )
+
+    if energia_injetada < 0:
+        energia_injetada = 0
+        
+    # VALOR kWh PARQUE SOLAR
+
+    valor_kwh_parque_solar = (
+        tarifa_concessionaria
+        * (1 - (desconto / 100))
+    )
+    
+    # TARIFA ENERGIA REDUZIDA
+
+    tarifa_energia_reduzida = (
+        tarifa_energia / (1 - 0.1537)
+    )
+    
+    # VALOR BANDEIRA DISPONIBILIDADE
+
+    valor_bandeira_disponibilidade = (
+        (consumo_disponibilidade / 100)
+        * bandeira_valor
+    )
+
+    # VALOR CUSTO DISPONIBILIDADE + BANDEIRA
+
+    valor_custo_disponibilidade_bandeira = (
+        (tarifa_energia_reduzida * consumo_disponibilidade)
+        + valor_bandeira_disponibilidade
+    )
+
+    # PAGAMENTO CONSÓRCIO
+
+    valor_pagamento_consorcio = (
+        energia_injetada * valor_kwh_parque_solar
+    )
+
+    # TOTAL APÓS ADESÃO
+
+    total_apos_adesao = (
+        59.08
+        + valor_custo_disponibilidade_bandeira
+        + valor_pagamento_consorcio
+    )
+
+    # VALOR MÉDIO CONCESSIONÁRIA
+
+    valor_medio_total_concessionaria = (
+        consumo_medio * tarifa_concessionaria
+    )
+
+    # ILUMINAÇÃO + BANDEIRA
+
+    valor_iluminacao_publica = cip
+
+    valor_iluminacao_publica_bandeira = (
+        cip
+        + (
+            (energia_injetada / 100)
+            * bandeira_valor
+        )
+    )
+
+    # TOTAL CONCESSIONÁRIA
+
+    total_concessionaria = (
+        valor_medio_total_concessionaria
+        + valor_iluminacao_publica_bandeira
+    )
+
+    # GANHO MENSAL
+
+    ganho_mensal = (
+        total_concessionaria - total_apos_adesao
+    )
+
+    # GANHO ANUAL
+
+    ganho_anual = ganho_mensal * 12
+
+    # ECONOMIA %
+
+    if total_concessionaria > 0:
+
+        economia_percentual = (
+            (ganho_mensal / total_concessionaria) * 100
+        )
+
+    else:
+        economia_percentual = 0
+
+    dados = {
+        'consumo_disponibilidade': consumo_disponibilidade,
+        'bandeira_valor': bandeira_valor,
+        'energia_injetada': energia_injetada,
+        'valor_kwh_parque_solar': valor_kwh_parque_solar,
+        'valor_custo_disponibilidade_bandeira': valor_custo_disponibilidade_bandeira,
+        'valor_pagamento_consorcio': valor_pagamento_consorcio,
+        'total_apos_adesao': total_apos_adesao,
+        'valor_medio_total_concessionaria': valor_medio_total_concessionaria,
+        'valor_iluminacao_publica': valor_iluminacao_publica,
+        'valor_iluminacao_publica_bandeira': valor_iluminacao_publica_bandeira,
+        'total_concessionaria': total_concessionaria,
+        'ganho_mensal': ganho_mensal,
+        'ganho_anual': ganho_anual,
+        'economia_percentual': economia_percentual,
+        'desconto': desconto,
+        'cip': cip,
+    }
+
+    return render_template(
+        'proposta_conta_concessionaria.html',
+        conta=conta,
+        dados=dados
+    )
+    
+@app.route('/contas-concessionaria/<int:conta_id>/editar', methods=['GET', 'POST'])
+@login_required
+def editar_conta_concessionaria(conta_id):
+
+    conta = db.session.get(ContaConcessionaria, conta_id)
+
+    if not conta:
+        flash('Conta não encontrada.', 'warning')
+        return redirect(url_for('listar_contas_concessionaria'))
+
+    empresas = Empresa.query.order_by(Empresa.nome).all()
+    vendedores = Vendedor.query.filter_by(ativo=True).all()
+    centros = CentroCusto.query.filter_by(ativo=True).all()
+
+    if request.method == 'POST':
+
+        try:
+
+            conta.empresa_id = request.form.get('empresa_id', type=int)
+            conta.vendedor_id = request.form.get('vendedor_id', type=int)
+            conta.centro_custo_id = request.form.get('centro_custo_id', type=int)
+
+            conta.n_uc = request.form.get('n_uc')
+
+            conta.tarifa_energia = request.form.get('tarifa_energia') or 0
+            conta.tarifa_concessionaria = request.form.get('tarifa_concessionaria') or 0
+
+            conta.consumo_medio = request.form.get('consumo_medio') or 0
+
+            conta.cip = request.form.get('cip') or 0
+
+            conta.icms = request.form.get('icms') or 0
+            conta.pis = request.form.get('pis') or 0
+            conta.cofins = request.form.get('cofins') or 0
+
+            conta.desconto = request.form.get('desconto') or 0
+
+            conta.fase = request.form.get('fase')
+            conta.bandeira = request.form.get('bandeira')
+
+            db.session.commit()
+
+            flash('Conta atualizada com sucesso!', 'success')
+
+            return redirect(url_for('listar_contas_concessionaria'))
+
+        except Exception as e:
+
+            db.session.rollback()
+
+            print(f'ERRO AO EDITAR CONTA: {e}')
+
+            flash('Erro ao atualizar.', 'danger')
+
+    return render_template(
+        'contas_concessionaria_form.html',
+        conta=conta,
+        empresas=empresas,
+        vendedores=vendedores,
+        centros=centros
+    )
+    
+@app.route('/contas-concessionaria/<int:conta_id>/excluir', methods=['POST'])
+@login_required
+def excluir_conta_concessionaria(conta_id):
+
+    conta = db.session.get(ContaConcessionaria, conta_id)
+
+    if not conta:
+        flash('Conta não encontrada.', 'warning')
+        return redirect(url_for('listar_contas_concessionaria'))
+
+    try:
+
+        db.session.delete(conta)
+        db.session.commit()
+
+        flash('Conta excluída com sucesso!', 'success')
+
+    except Exception as e:
+
+        db.session.rollback()
+
+        print(f'ERRO AO EXCLUIR CONTA: {e}')
+
+        flash('Erro ao excluir conta.', 'danger')
+
+    return redirect(url_for('listar_contas_concessionaria'))
+
+pytesseract.pytesseract.tesseract_cmd = (
+    r"C:\Users\User\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"
+)
+
+@app.route('/contas-concessionaria/importar', methods=['GET', 'POST'])
+@login_required
+def importar_conta_concessionaria():
+
+    import cv2
+    import numpy as np
+
+    empresas = Empresa.query.order_by(Empresa.nome).all()
+    vendedores = Vendedor.query.filter_by(ativo=True).all()
+    centros = CentroCusto.query.filter_by(ativo=True).all()
+
+    if request.method == 'POST':
+
+        arquivo = request.files.get('arquivo')
+
+        if not arquivo:
+            flash('Envie uma imagem ou PDF.', 'warning')
+            return redirect(request.url)
+
+        UPLOAD_FOLDER = os.environ.get(
+            'COMPROVANTES_PATH',
+            'uploads'
+        )
+
+        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+        caminho_arquivo = os.path.join(
+            UPLOAD_FOLDER,
+            arquivo.filename
+        )
+
+        arquivo.save(caminho_arquivo)
+
+        print(f'[DEBUG] arquivo enviado: {arquivo.filename}')
+        print(f'[DEBUG] caminho arquivo: {caminho_arquivo}')
+
+        texto = ''
+
+        try:
+
+            # =====================================================
+            # PDF
+            # =====================================================
+
+            if arquivo.filename.lower().endswith('.pdf'):
+
+                pdf = fitz.open(caminho_arquivo)
+
+                for pagina in pdf:
+
+                    pix = pagina.get_pixmap(dpi=300)
+
+                    imagem_temp = f'{caminho_arquivo}.png'
+
+                    pix.save(imagem_temp)
+
+                    img = cv2.imread(imagem_temp)
+
+                    gray = cv2.cvtColor(
+                        img,
+                        cv2.COLOR_BGR2GRAY
+                    )
+
+                    gray = cv2.GaussianBlur(
+                        gray,
+                        (5, 5),
+                        0
+                    )
+
+                    gray = cv2.convertScaleAbs(
+                        gray,
+                        alpha=1.8,
+                        beta=20
+                    )
+
+                    thresh = cv2.adaptiveThreshold(
+                        gray,
+                        255,
+                        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                        cv2.THRESH_BINARY,
+                        31,
+                        2
+                    )
+
+                    thresh = cv2.resize(
+                        thresh,
+                        None,
+                        fx=2,
+                        fy=2,
+                        interpolation=cv2.INTER_CUBIC
+                    )
+
+                    texto += pytesseract.image_to_string(
+                        thresh,
+                        lang='por',
+                        config='--oem 3 --psm 6'
+                    )
+
+            # =====================================================
+            # IMAGEM
+            # =====================================================
+
+            else:
+
+                img = cv2.imread(caminho_arquivo)
+
+                # =====================================================
+                # MELHORIAS OCR
+                # =====================================================
+
+                # escala cinza
+                gray = cv2.cvtColor(
+                    img,
+                    cv2.COLOR_BGR2GRAY
+                )
+
+                # remove ruído
+                gray = cv2.GaussianBlur(
+                    gray,
+                    (5, 5),
+                    0
+                )
+
+                # aumenta contraste
+                gray = cv2.convertScaleAbs(
+                    gray,
+                    alpha=1.8,
+                    beta=20
+                )
+
+                # binarização adaptativa
+                thresh = cv2.adaptiveThreshold(
+                    gray,
+                    255,
+                    cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                    cv2.THRESH_BINARY,
+                    31,
+                    2
+                )
+
+                # aumenta resolução
+                thresh = cv2.resize(
+                    thresh,
+                    None,
+                    fx=2,
+                    fy=2,
+                    interpolation=cv2.INTER_CUBIC
+                )
+
+                # salva debug
+                debug_path = os.path.join(
+                    UPLOAD_FOLDER,
+                    'debug_ocr.png'
+                )
+
+                cv2.imwrite(debug_path, thresh)
+
+                print(f'[DEBUG] imagem tratada salva: {debug_path}')
+
+                # OCR
+                texto = pytesseract.image_to_string(
+                    thresh,
+                    lang='por',
+                    config='--oem 3 --psm 6'
+                )
+
+            print('\n================ TEXTO OCR ================\n')
+            print(texto)
+            print('\n===========================================\n')
+
+            texto_upper = texto.upper()
+
+            # =====================================================
+            # N UC
+            # =====================================================
+
+            n_uc = ''
+
+            uc_patterns = [
+                r'C[ÓO]DIGO DA INSTALA[ÇC][ÃA]O\s*(\d+)',
+                r'INSTALA[ÇC][ÃA]O\s*(\d+)',
+                r'UC\s*(\d+)'
+            ]
+
+            for pattern in uc_patterns:
+
+                uc_match = re.search(
+                    pattern,
+                    texto_upper
+                )
+
+                if uc_match:
+                    n_uc = uc_match.group(1)
+                    break
+
+            print(f'[DEBUG] n_uc: {n_uc}')
+
+            # =====================================================
+            # CONSUMO
+            # =====================================================
+
+            consumo_medio = 0
+
+            consumos = re.findall(
+                r'(\d{2,5})',
+                texto
+            )
+
+            print(f'[DEBUG] consumos brutos: {consumos}')
+
+            numeros_validos = []
+
+            for c in consumos:
+
+                try:
+
+                    valor = int(c)
+
+                    if 50 <= valor <= 5000:
+                        numeros_validos.append(valor)
+
+                except:
+                    pass
+
+            print(f'[DEBUG] numeros_validos: {numeros_validos}')
+
+            if numeros_validos:
+                consumo_medio = max(numeros_validos)
+
+            print(f'[DEBUG] consumo_medio: {consumo_medio}')
+
+            # =====================================================
+            # TARIFA ENERGIA
+            # =====================================================
+
+            tarifa_energia = 0
+
+            tarifa_patterns = [
+                r'(\d,\d{6,7})',
+                r'(\d,\d{5})',
+                r'(\d,\d{4})'
+            ]
+
+            for pattern in tarifa_patterns:
+
+                tarifa_match = re.search(
+                    pattern,
+                    texto
+                )
+
+                if tarifa_match:
+
+                    tarifa_energia = float(
+                        tarifa_match.group(1).replace(',', '.')
+                    )
+
+                    break
+
+            print(f'[DEBUG] tarifa_energia: {tarifa_energia}')
+
+            # =====================================================
+            # TARIFA CONCESSIONÁRIA
+            # =====================================================
+
+            tarifa_concessionaria = tarifa_energia
+
+            print(f'[DEBUG] tarifa_concessionaria: {tarifa_concessionaria}')
+
+            # =====================================================
+            # CIP
+            # =====================================================
+
+            cip = 0
+
+            cip_patterns = [
+                r'CIP.*?(\d+,\d{2})',
+                r'ILUMINA[ÇC][ÃA]O.*?(\d+,\d{2})'
+            ]
+
+            for pattern in cip_patterns:
+
+                cip_match = re.search(
+                    pattern,
+                    texto_upper
+                )
+
+                if cip_match:
+
+                    cip = float(
+                        cip_match.group(1).replace(',', '.')
+                    )
+
+                    break
+
+            print(f'[DEBUG] cip: {cip}')
+
+            # =====================================================
+            # ICMS
+            # =====================================================
+
+            icms = 0
+
+            icms_match = re.search(
+                r'ICMS\s+(\d{1,2},\d{2})',
+                texto_upper
+            )
+
+            if icms_match:
+
+                icms = float(
+                    icms_match.group(1).replace(',', '.')
+                )
+
+            print(f'[DEBUG] icms: {icms}')
+
+            # =====================================================
+            # PIS
+            # =====================================================
+
+            pis = 0
+
+            pis_match = re.search(
+                r'PIS\s+(\d+,\d{2})',
+                texto_upper
+            )
+
+            if pis_match:
+
+                pis = float(
+                    pis_match.group(1).replace(',', '.')
+                )
+
+            print(f'[DEBUG] pis: {pis}')
+
+            # =====================================================
+            # COFINS
+            # =====================================================
+
+            cofins = 0
+
+            cofins_match = re.search(
+                r'COFINS\s+(\d+,\d{2})',
+                texto_upper
+            )
+
+            if cofins_match:
+
+                cofins = float(
+                    cofins_match.group(1).replace(',', '.')
+                )
+
+            print(f'[DEBUG] cofins: {cofins}')
+
+            # =====================================================
+            # FASE
+            # =====================================================
+
+            fase = 'Monofásico'
+
+            if 'TRIFASICO' in texto_upper:
+                fase = 'Trifásico'
+
+            elif 'BIFASICO' in texto_upper:
+                fase = 'Bifásico'
+
+            print(f'[DEBUG] fase: {fase}')
+
+            # =====================================================
+            # BANDEIRA
+            # =====================================================
+
+            bandeira = ''
+
+            if 'VERMELHA PATAMAR II' in texto_upper:
+                bandeira = 'Vermelha_2'
+
+            elif 'VERMELHA PATAMAR I' in texto_upper:
+                bandeira = 'Vermelha_1'
+
+            elif 'AMARELA' in texto_upper:
+                bandeira = 'Amarela'
+
+            print(f'[DEBUG] bandeira: {bandeira}')
+
+            # =====================================================
+            # VALOR TOTAL
+            # =====================================================
+
+            valor_total = 0
+
+            total_match = re.search(
+                r'TOTAL A PAGAR\s*(\d+,\d{2})',
+                texto_upper
+            )
+
+            if total_match:
+
+                valor_total = float(
+                    total_match.group(1).replace(',', '.')
+                )
+
+            print(f'[DEBUG] valor_total: {valor_total}')
+
+            dados_extraidos = {
+                'n_uc': n_uc,
+                'consumo_medio': consumo_medio,
+                'tarifa_energia': tarifa_energia,
+                'tarifa_concessionaria': tarifa_concessionaria,
+                'cip': cip,
+                'icms': icms,
+                'pis': pis,
+                'cofins': cofins,
+                'fase': fase,
+                'bandeira': bandeira,
+                'valor_total': valor_total
+            }
+
+            print('\n=========== DADOS EXTRAÍDOS ===========')
+            print(dados_extraidos)
+            print('=======================================\n')
+
+            flash(
+                'Dados extraídos com sucesso!',
+                'success'
+            )
+
+            return render_template(
+                'contas_concessionaria_form.html',
+                empresas=empresas,
+                vendedores=vendedores,
+                centros=centros,
+                dados_extraidos=dados_extraidos
+            )
+
+        except Exception as e:
+
+            print(f'ERRO OCR: {e}')
+
+            flash(
+                'Erro ao processar arquivo.',
+                'danger'
+            )
+
+            return redirect(request.url)
+
+    return render_template(
+        'importar_conta_concessionaria.html',
+        empresas=empresas,
+        vendedores=vendedores,
+        centros=centros
+    )
 
 
 if __name__ == "__main__":

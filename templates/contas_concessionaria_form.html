@@ -1,0 +1,434 @@
+<!-- templates/contas_concessionaria_form.html -->
+
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="container py-4">
+
+    <div class="card shadow-sm border-0">
+
+        <div class="card-body">
+
+            <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+
+                <div class="d-flex align-items-center gap-3">
+
+                    <a
+                        href="{{ url_for('listar_contas_concessionaria') }}"
+                        class="btn btn-outline-secondary btn-sm rounded-circle d-flex align-items-center justify-content-center"
+                        style="width:40px; height:40px;"
+                        title="Voltar">
+
+                        <i class="bi bi-arrow-left fs-5"></i>
+
+                    </a>
+
+                    <h4 class="mb-0 fw-bold text-dark">
+                        <i class="bi bi-lightning-charge text-warning"></i>
+
+                        {% if conta %}
+                            Editar Conta Concessionária
+                        {% else %}
+                            Cadastro Conta Concessionária
+                        {% endif %}
+                    </h4>
+
+                </div>
+
+            </div>
+
+            <form method="POST">
+
+                <!-- IDENTIFICAÇÃO -->
+                <h5 class="border-bottom pb-2 mb-4 text-secondary">
+                    <i class="bi bi-person-badge"></i>
+                    Identificação
+                </h5>
+
+                <div class="row">
+
+                    <!-- EMPRESA -->
+                    <div class="col-md-4 mb-3">
+
+                        <label class="form-label fw-bold">
+                            Empresa
+                        </label>
+
+                        <select
+                            name="empresa_id"
+                            class="form-select"
+                            required>
+
+                            <option value="">
+                                Selecione
+                            </option>
+
+                            {% for empresa in empresas %}
+                            <option
+                                value="{{ empresa.id }}"
+                                {% if conta and conta.empresa_id == empresa.id %}selected{% endif %}>
+
+                                {{ empresa.nome }}
+
+                            </option>
+                            {% endfor %}
+
+                        </select>
+
+                    </div>
+
+                    <!-- CLIENTE -->
+                    <div class="col-md-4 mb-3">
+
+                        <label class="form-label fw-bold">
+                            Cliente
+                        </label>
+
+                        <select
+                            name="centro_custo_id"
+                            class="form-select"
+                            required>
+
+                            <option value="">
+                                Selecione
+                            </option>
+
+                            {% for centro in centros %}
+                            <option
+                                value="{{ centro.id }}"
+                                {% if conta and conta.centro_custo_id == centro.id %}selected{% endif %}>
+
+                                {{ centro.codigo }} - {{ centro.nome }}
+
+                            </option>
+                            {% endfor %}
+
+                        </select>
+
+                    </div>
+
+                    <!-- VENDEDOR -->
+                    <div class="col-md-4 mb-3">
+
+                        <label class="form-label fw-bold">
+                            Vendedor
+                        </label>
+
+                        <select
+                            name="vendedor_id"
+                            class="form-select">
+
+                            <option value="">
+                                Selecione
+                            </option>
+
+                            {% for vendedor in vendedores %}
+                            <option
+                                value="{{ vendedor.id }}"
+                                {% if conta and conta.vendedor_id == vendedor.id %}selected{% endif %}>
+
+                                {{ vendedor.nome }}
+
+                            </option>
+                            {% endfor %}
+
+                        </select>
+
+                    </div>
+
+                </div>
+
+                <!-- DADOS TÉCNICOS -->
+                <h5 class="border-bottom pb-2 mb-4 mt-4 text-secondary">
+                    <i class="bi bi-lightning"></i>
+                    Dados Técnicos
+                </h5>
+
+                <div class="row">
+
+                    <!-- UC -->
+                    <div class="col-md-3 mb-3">
+
+                        <label class="form-label fw-bold">
+                            Nº UC
+                        </label>
+
+                        <input
+                            type="text"
+                            name="n_uc"
+                            class="form-control"
+                            value="{{ conta.n_uc if conta else '' }}"
+                            required>
+
+                    </div>
+
+                    <!-- FASE -->
+                    <div class="col-md-3 mb-3">
+
+                        <label class="form-label fw-bold">
+                            Tipo de Fase
+                        </label>
+
+                        <select
+                            name="fase"
+                            class="form-select">
+
+                            <option value="">
+                                Selecione
+                            </option>
+
+                            <option
+                                value="Monofásico"
+                                {% if conta and conta.fase == 'Monofásico' %}selected{% endif %}>
+                                Monofásico
+                            </option>
+
+                            <option
+                                value="Bifásico"
+                                {% if conta and conta.fase == 'Bifásico' %}selected{% endif %}>
+                                Bifásico
+                            </option>
+
+                            <option
+                                value="Trifásico"
+                                {% if conta and conta.fase == 'Trifásico' %}selected{% endif %}>
+                                Trifásico
+                            </option>
+
+                        </select>
+
+                    </div>
+
+                    <!-- BANDEIRA -->
+                    <div class="col-md-3 mb-3">
+
+                        <label class="form-label fw-bold">
+                            Bandeira
+                        </label>
+
+                        <select
+                            name="bandeira"
+                            class="form-select">
+
+                            <option value="">
+                                Selecione
+                            </option>
+
+                            <option
+                                value="Amarela"
+                                {% if conta and conta.bandeira == 'Amarela' %}selected{% endif %}>
+                                Amarela
+                            </option>
+
+                            <option
+                                value="Vermelha_1"
+                                {% if conta and conta.bandeira == 'Vermelha_1' %}selected{% endif %}>
+                                Vermelha 1
+                            </option>
+
+                            <option
+                                value="Vermelha_2"
+                                {% if conta and conta.bandeira == 'Vermelha_2' %}selected{% endif %}>
+                                Vermelha 2
+                            </option>
+
+                        </select>
+
+                    </div>
+
+                    <!-- DESCONTO -->
+                    <div class="col-md-3 mb-3">
+
+                        <label class="form-label fw-bold">
+                            Desconto (%)
+                        </label>
+
+                        <input
+                            type="number"
+                            step="0.0001"
+                            name="desconto"
+                            class="form-control"
+                            value="{{ conta.desconto if conta else '' }}">
+
+                    </div>
+
+                </div>
+
+                <!-- CONSUMO E CUSTOS -->
+                <h5 class="border-bottom pb-2 mb-4 mt-4 text-secondary">
+                    <i class="bi bi-cash-stack"></i>
+                    Consumo e Custos
+                </h5>
+
+                <div class="row">
+
+                    <!-- CONSUMO MÉDIO -->
+                    <div class="col-md-3 mb-3">
+
+                        <label class="form-label fw-bold">
+                            Consumo Médio (kWh)
+                        </label>
+
+                        <input
+                            type="number"
+                            step="0.01"
+                            name="consumo_medio"
+                            class="form-control"
+                            value="{{ conta.consumo_medio if conta else '' }}">
+
+                    </div>
+
+                    <!-- TARIFA ENERGIA -->
+                    <div class="col-md-3 mb-3">
+
+                        <label class="form-label fw-bold">
+                            Tarifa Energia
+                        </label>
+
+                        <input
+                            type="number"
+                            step="0.0000001"
+                            name="tarifa_energia"
+                            class="form-control"
+                            value="{{ conta.tarifa_energia if conta else '' }}">
+
+                    </div>
+
+                    <!-- TARIFA CONCESSIONÁRIA -->
+                    <div class="col-md-3 mb-3">
+
+                        <label class="form-label fw-bold">
+                            Tarifa Concessionária
+                        </label>
+
+                        <input
+                            type="number"
+                            step="0.0000001"
+                            name="tarifa_concessionaria"
+                            class="form-control"
+                            value="{{ conta.tarifa_concessionaria if conta else '' }}">
+
+                    </div>
+
+                    <!-- CIP -->
+                    <div class="col-md-3 mb-3">
+
+                        <label class="form-label fw-bold">
+                            CIP
+                        </label>
+
+                        <input
+                            type="number"
+                            step="0.01"
+                            name="cip"
+                            class="form-control"
+                            value="{{ conta.cip if conta else '' }}">
+
+                    </div>
+
+                </div>
+
+                <div class="row">
+
+                    <!-- ICMS -->
+                    <div class="col-md-2 mb-3">
+
+                        <label class="form-label fw-bold">
+                            ICMS
+                        </label>
+
+                        <input
+                            type="number"
+                            step="0.0001"
+                            name="icms"
+                            class="form-control"
+                            value="{{ conta.icms if conta else '' }}">
+
+                    </div>
+
+                    <!-- PIS -->
+                    <div class="col-md-2 mb-3">
+
+                        <label class="form-label fw-bold">
+                            PIS
+                        </label>
+
+                        <input
+                            type="number"
+                            step="0.0001"
+                            name="pis"
+                            class="form-control"
+                            value="{{ conta.pis if conta else '' }}">
+
+                    </div>
+
+                    <!-- COFINS -->
+                    <div class="col-md-2 mb-3">
+
+                        <label class="form-label fw-bold">
+                            COFINS
+                        </label>
+
+                        <input
+                            type="number"
+                            step="0.0001"
+                            name="cofins"
+                            class="form-control"
+                            value="{{ conta.cofins if conta else '' }}">
+
+                    </div>
+
+                </div>
+
+                <div class="d-flex justify-content-end mt-4">
+
+                    <button
+                        type="submit"
+                        class="btn btn-primary px-4 shadow-sm">
+
+                        <i class="bi bi-save"></i>
+
+                        {% if conta %}
+                            Atualizar
+                        {% else %}
+                            Salvar
+                        {% endif %}
+
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+<style>
+
+    .card {
+        border-radius: 12px;
+    }
+
+    .form-control,
+    .form-select {
+        border-radius: 10px;
+        min-height: 45px;
+    }
+
+    .form-control:focus,
+    .form-select:focus {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.15rem rgba(13, 110, 253, 0.15);
+    }
+
+    h5 {
+        font-weight: 600;
+    }
+
+</style>
+
+{% endblock %}

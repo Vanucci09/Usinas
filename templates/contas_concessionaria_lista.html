@@ -1,0 +1,203 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="container py-4">
+
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-3">
+            <a href="{{ url_for('index') }}#comercial" class="btn btn-outline-secondary btn-sm rounded-circle px-2" title="Voltar ao Painel Comercial">
+                <i class="bi bi-arrow-left fs-5"></i>
+            </a>
+            <h4 class="mb-0 fw-bold text-dark">
+                <i class="bi bi-lightning-charge text-warning"></i>
+                Contas Concessionária
+            </h4>
+        </div>
+
+        <div class="d-flex gap-2">
+
+    <!-- IMPORTAR -->
+    <a
+        href="{{ url_for('importar_conta_concessionaria') }}"
+        class="btn btn-success px-3 shadow-xs">
+
+        <i class="bi bi-upload me-1"></i>
+        Importar Conta
+
+    </a>
+
+    <!-- NOVA -->
+    <a
+        href="{{ url_for('nova_conta_concessionaria') }}"
+        class="btn btn-primary px-3 shadow-xs">
+
+        <i class="bi bi-plus-circle me-1"></i>
+        Nova Conta
+
+    </a>
+
+</div>
+    </div>
+
+    <div class="card shadow-sm border-0 grid-card-modern">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 listagem-table">
+                <thead class="table-light-custom text-uppercase tracking-wider">
+                    <tr>
+                        <th scope="col" class="ps-3" style="width: 70px;">ID</th>
+                        <th scope="col">Cliente</th>
+                        <th scope="col">Nº UC</th>
+                        <th scope="col">Fase</th>
+                        <th scope="col">Bandeira</th>
+                        <th scope="col" class="text-end" style="width: 150px;">Tarifa Energia</th>
+                        <th scope="col" class="text-end" style="width: 180px;">Tarifa Concessionária</th>
+                        <th scope="col" class="text-center" style="width: 140px;">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for conta in contas %}
+                    <tr>
+                        <td class="ps-3 font-monospace text-muted">
+                            #{{ conta.id }}
+                        </td>
+                        <td class="fw-semibold text-dark">
+                            {{ conta.centro_custo.nome if conta.centro_custo else '-' }}
+                        </td>
+                        <td class="font-monospace">
+                            {{ conta.n_uc }}
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-dark border">{{ conta.fase }}</span>
+                        </td>
+                        <td>
+                            {{ conta.bandeira }}
+                        </td>
+                        <td class="text-end font-monospace fw-medium text-secondary js-list-pure">
+                            {{ conta.tarifa_energia }}
+                        </td>
+                        <td class="text-end font-monospace fw-bold text-dark js-list-pure">
+                            {{ conta.tarifa_concessionaria }}
+                        </td>
+                        <td class="text-center">
+
+                            <div class="d-flex justify-content-center gap-1 flex-wrap">
+
+                                <!-- PROPOSTA -->
+                                <a
+                                    href="{{ url_for('proposta_conta_concessionaria', conta_id=conta.id) }}"
+                                    class="btn btn-sm btn-success shadow-xs rounded-pill action-btn-hover">
+
+                                    <i class="bi bi-file-earmark-text"></i>
+                                </a>
+
+                                <!-- EDITAR -->
+                                <a
+                                    href="{{ url_for('editar_conta_concessionaria', conta_id=conta.id) }}"
+                                    class="btn btn-sm btn-primary shadow-xs rounded-pill action-btn-hover">
+
+                                    <i class="bi bi-pencil-square"></i>
+                                </a>
+
+                                <!-- EXCLUIR -->
+                                <form
+                                    method="POST"
+                                    action="{{ url_for('excluir_conta_concessionaria', conta_id=conta.id) }}"
+                                    onsubmit="return confirm('Deseja realmente excluir esta conta?');">
+
+                                    <button
+                                        type="submit"
+                                        class="btn btn-sm btn-danger shadow-xs rounded-pill action-btn-hover">
+
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+
+                                </form>
+
+                            </div>
+
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="text-center py-4 text-muted">
+                            <i class="bi bi-folder-x fs-3 d-block mb-2"></i>
+                            Nenhuma conta registrada até o momento.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const brFormat = new Intl.NumberFormat('pt-BR', {
+            minimumFractionDigits: 4, 
+            maximumFractionDigits: 7  
+        });
+
+        document.querySelectorAll('.js-list-pure').forEach(function(cell) {
+            let valueRaw = cell.textContent.trim();
+            let num = parseFloat(valueRaw);
+            if (!isNaN(num)) {
+                cell.textContent = 'R$ ' + brFormat.format(num);
+            }
+        });
+    });
+</script>
+
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    .container, .listagem-table {
+        font-family: 'Inter', -apple-system, sans-serif !important;
+    }
+
+    .grid-card-modern {
+        border-radius: 8px !important;
+        overflow: hidden;
+    }
+
+    .table-light-custom {
+        background-color: #f8f9fa !important;
+        border-bottom: 2px solid #dee2e6 !important;
+    }
+
+    .table-light-custom th {
+        font-size: 0.75rem !important;
+        font-weight: 700 !important;
+        color: #495057 !important;
+        padding: 14px 12px !important;
+    }
+
+    .listagem-table td {
+        padding: 14px 12px !important;
+        border-bottom: 1px solid #edf2f7 !important;
+    }
+
+    .shadow-xs {
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
+    }
+
+    .action-btn-hover {
+        transition: transform 0.15s ease, background-color 0.15s ease;
+    }
+
+    .action-btn-hover:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 6px rgba(40, 167, 69, 0.15) !important;
+    }
+
+    .tracking-wider {
+        letter-spacing: 0.04em !important;
+    }
+
+    .gap-3 {
+        gap: 1rem !important;
+    }
+</style>
+
+{% endblock %}
