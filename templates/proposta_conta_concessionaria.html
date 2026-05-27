@@ -1,24 +1,56 @@
-{% extends 'base.html' %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
 
-{% block content %}
+    <meta charset="UTF-8">
+    <title>
+        Proposta Comercial - {{ conta.centro_custo.nome }}
+    </title>
 
-<div class="container py-4">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet">
+
+    <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+</head>
+
+<body class="bg-light">
+                <div class="container py-4">
 
     <div class="card shadow-sm border-0 mb-4 card-proposal">
         <div class="card-body">
+
             <div class="d-flex justify-content-between align-items-center mb-3 hide-on-print">
+
                 <h4 class="mb-0 text-primary fw-bold">
-                    <i class="bi bi-file-earmark-bar-graph"></i> Proposta Comercial — Geração Distribuída
+                    <i class="bi bi-file-earmark-bar-graph"></i>
+                    Proposta Comercial — Geração Distribuída
                 </h4>
+
                 <button onclick="window.print()" class="btn btn-primary px-4">
-                    <i class="bi bi-printer-fill me-2"></i> Imprimir Proposta
+                    <i class="bi bi-printer-fill me-2"></i>
+                    Imprimir Proposta
                 </button>
+
             </div>
 
             <div class="row pt-2">
                 <div class="col-md-6">
                     <p class="mb-1"><strong>Cliente:</strong> {{ conta.centro_custo.nome if conta.centro_custo else '-' }}</p>
-                    <p class="mb-1"><strong>CNPJ/CPF:</strong> {{ conta.centro_custo.documento if conta.centro_custo.documento else '-' }}</p>
+                    <p class="mb-1">
+                        <strong>CNPJ/CPF:</strong>
+
+                        {% if conta.centro_custo and conta.centro_custo.cpf_cnpj %}
+                            {{ conta.centro_custo.cpf_cnpj }}
+                        {% else %}
+                            Não informado
+                        {% endif %}
+                    </p>
                     <p class="mb-1"><strong>Unidade Consumidora (UC):</strong> {{ conta.n_uc }}</p>
                 </div>
                 <div class="col-md-6 text-md-end">
@@ -42,52 +74,14 @@
                         <th scope="col" class="ps-4 py-3">Detalhamento dos Valores</th>
                         <th scope="col" class="text-center py-3" style="width: 60px;">Ref.</th>
                         <th scope="col" class="text-end py-3 style-price-col">Valor</th>
-                        <th scope="col" class="text-center py-3 bg-yellow fw-bold text-dark border-start-0" style="width: 240px;">
-                            Fatura Após Adesão<br>ao Consórcio
+                        <th scope="col" class="text-center py-3 bg-red fw-bold text-white border-start-0" style="width: 240px;" id="header-dinamico-lateral">
+                            FATURA ATUAL<br>SEM CONSÓRCIO
                         </th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td class="ps-4 fw-medium text-secondary">Energia Injetada Recomendada</td>
-                        <td class="text-center text-muted">-</td>
-                        <td class="text-end fw-bold text-dark font-monospace js-format-kwh">{{ dados.energia_injetada }}</td>
-                        
-                        <td rowspan="6" class="text-center bg-yellow-gradient align-middle border-start-0 font-display">
-                            <div class="p-3">
-                                <i class="bi bi-sun-fill text-warning fs-1 d-block mb-2 visual-pulse"></i>
-                                <span class="d-block fw-bold fs-4 text-dark lh-sm">NOVA<br>ESTRUTURA</span>
-                                <small class="text-muted d-block mt-2 font-monospace">Créditos Injetados</small>
-                            </div>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="ps-4 text-muted">Valor do kWh no Parque Solar</td>
-                        <td class="text-center text-muted">R$</td>
-                        <td class="text-end font-monospace js-format-pure">{{ dados.valor_kwh_parque_solar }}</td>
-                    </tr>
-                    <tr>
-                        <td class="ps-4 text-muted">Custo Estimado de Iluminação Pública</td>
-                        <td class="text-center text-muted">R$</td>
-                        <td class="text-end font-monospace js-format-pure">59.08</td>
-                    </tr>
-                    <tr>
-                        <td class="ps-4 text-muted">Custo de Disponibilidade + Bandeira Média</td>
-                        <td class="text-center text-muted">R$</td>
-                        <td class="text-end font-monospace js-format-pure">{{ dados.valor_custo_disponibilidade_bandeira }}</td>
-                    </tr>
-                    <tr>
-                        <td class="ps-4 text-muted">Valor Unitário de Assinatura do Consórcio</td>
-                        <td class="text-center text-muted">R$</td>
-                        <td class="text-end font-monospace js-format-pure">{{ dados.valor_pagamento_consorcio }}</td>
-                    </tr>
-                    <tr class="table-warning-light border-bottom-dark">
-                        <td class="ps-4 fw-bold text-dark">Previsão de Custo Global Pós-Consórcio</td>
-                        <td class="text-center fw-bold text-dark">R$</td>
-                        <td class="text-end fw-bold text-dark font-monospace fs-6 js-format-pure">{{ dados.total_apos_adesao }}</td>
-                    </tr>
-
-                    <tr>
+                    
+                    <tr class="bloco-vermelho-top">
                         <td class="ps-4 text-muted">Valor Médio Histórico na Concessionária</td>
                         <td class="text-center text-muted">R$</td>
                         <td class="text-end font-monospace js-format-pure">{{ dados.valor_medio_total_concessionaria }}</td>
@@ -99,18 +93,52 @@
                             </div>
                         </td>
                     </tr>
-                    <tr>
+                    <tr class="bloco-vermelho">
                         <td class="ps-4 text-muted">Encargos Adicionais (Iluminação + Bandeiras)</td>
                         <td class="text-center text-muted">R$</td>
                         <td class="text-end font-monospace js-format-pure">{{ dados.valor_iluminacao_publica_bandeira }}</td>
                     </tr>
-                    <tr class="table-danger-light border-bottom-dark">
+                    <tr class="table-danger-light bloco-vermelho-bottom">
                         <td class="ps-4 fw-bold text-dark">Custo Médio Atual Total</td>
                         <td class="text-center fw-bold text-dark">R$</td>
                         <td class="text-end fw-bold text-dark font-monospace fs-6 js-format-pure">{{ dados.total_concessionaria }}</td>
                     </tr>
 
-                    <tr class="table-success-row">
+                    <tr class="bloco-amarelo-top">
+                        <td class="ps-4 fw-medium text-secondary">Energia Injetada Recomendada</td>
+                        <td class="text-center text-muted">-</td>
+                        <td class="text-end fw-bold text-dark font-monospace js-format-kwh">{{ dados.energia_injetada }}</td>
+                        
+                        <td rowspan="5" class="text-center bg-yellow-gradient align-middle border-start-0 font-display">
+                            <div class="p-3">
+                                <i class="bi bi-sun-fill text-warning fs-1 d-block mb-2 visual-pulse"></i>
+                                <span class="d-block fw-bold fs-4 text-dark lh-sm">NOVA<br>ESTRUTURA</span>
+                                <small class="text-muted d-block mt-2 font-monospace">Créditos Injetados</small>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr class="bloco-amarelo">
+                        <td class="ps-4 text-muted">Valor do kWh no Parque Solar</td>
+                        <td class="text-center text-muted">R$</td>
+                        <td class="text-end font-monospace js-format-pure">{{ dados.valor_kwh_parque_solar }}</td>
+                    </tr>
+                    <tr class="bloco-amarelo">
+                        <td class="ps-4 text-muted">Custo Estimado de Iluminação Pública</td>
+                        <td class="text-center text-muted">R$</td>
+                        <td class="text-end font-monospace js-format-pure">{{ dados.custo_iluminacao }}</td>
+                    </tr>
+                    <tr class="bloco-amarelo">
+                        <td class="ps-4 text-muted">Custo de Disponibilidade + Bandeira Média</td>
+                        <td class="text-center text-muted">R$</td>
+                        <td class="text-end font-monospace js-format-pure">{{ dados.valor_custo_disponibilidade_bandeira }}</td>
+                    </tr>
+                    <tr class="table-warning-light bloco-amarelo-bottom">
+                        <td class="ps-4 fw-bold text-dark">Previsão de Custo Global Pós-Consórcio</td>
+                        <td class="text-center fw-bold text-dark">R$</td>
+                        <td class="text-end fw-bold text-dark font-monospace fs-6 js-format-pure">{{ dados.total_apos_adesao }}</td>
+                    </tr>
+
+                    <tr class="bloco-verde-top">
                         <td class="ps-4 fw-bold text-success-dark">Economia Mensal Estimada</td>
                         <td class="text-center fw-bold text-success-dark">R$</td>
                         <td class="text-end fw-bold text-success-dark font-monospace fs-6 js-format-pure">{{ dados.ganho_mensal }}</td>
@@ -124,21 +152,22 @@
                             </div>
                         </td>
                     </tr>
-                    <tr class="table-success-row">
+                    <tr class="bloco-verde">
                         <td class="ps-4 fw-bold text-success-dark">Economia Anual Projetada</td>
                         <td class="text-center fw-bold text-success-dark">R$</td>
                         <td class="text-end fw-bold text-success-dark font-monospace fs-5 js-format-pure">{{ dados.ganho_anual }}</td>
                     </tr>
-                    <tr>
+                    <tr class="bloco-verde">
                         <td class="ps-4 text-muted">Desconto Contratual Aplicado sobre a TE</td>
                         <td class="text-center text-muted">-</td>
                         <td class="text-end fw-bold text-primary font-monospace js-format-porcento">{{ dados.desconto }}</td>
                     </tr>
-                    <tr class="table-success-highlight">
+                    <tr class="table-success-highlight bloco-verde-bottom">
                         <td class="ps-4 fw-bold text-dark">Redução Percebida Mínima Global</td>
                         <td class="text-center text-muted">-</td>
                         <td class="text-end fw-extrabold text-success fs-5 font-monospace js-format-porcento">{{ dados.economia_percentual }}</td>
                     </tr>
+
                     <tr class="bg-light text-muted">
                         <td colspan="4" class="small fst-italic py-3 ps-4 border-top">
                             <i class="bi bi-info-circle-fill me-1 text-secondary"></i> Para a aplicação integral deste percentual de benefício, o titular da unidade consumidora deve estar devidamente enquadrado nas condições de <strong>Classificação Empresarial</strong> elegíveis (ex: ME ou EPP).
@@ -192,7 +221,7 @@
             <div class="bg-light p-3 rounded mb-3 border-start border-warning border-3">
                 <ul class="mb-0 ps-3 text-muted">
                     <li class="mb-2">A presente proposta prevê a contabilização dos créditos aos consorciados a partir do início do período de operação da usina.</li>
-                    <li class="mb-2">Nosso plano oferece aos consorciados um desconto de <strong>até 15%</strong> em relação à tarifa nominal vigente (base verde da concessionária), estruturado em um contrato de 60 meses.</li>
+                    <li class="mb-2">Nosso plano offers aos consorciados um desconto de <strong>até 15%</strong> em relação à tarifa nominal vigente (base verde da concessionária), estruturado em um contrato de 60 meses.</li>
                     <li><i class="bi bi-exclamation-triangle-fill text-warning"></i> <strong>Nota de Variabilidade:</strong> O valor cobrado é variável e corrigido conforme os reajustes oficiais da tarifa de energia elétrica aplicados pela concessionária local, pois os custos de rateio do consórcio são diretamente indexados a essa tarifa.</li>
                 </ul>
             </div>
@@ -215,13 +244,11 @@
 
 <script>
     document.addEventListener("DOMContentLoaded", function() {
-        // Inicializa o formatador internacional configurado para o padrão brasileiro
         const brFormatter = new Intl.NumberFormat('pt-BR', {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2
         });
 
-        // 1. Formata os números puros que representam valores monetários
         document.querySelectorAll('.js-format-pure').forEach(function(element) {
             let value = parseFloat(element.textContent.trim());
             if (!isNaN(value)) {
@@ -229,7 +256,6 @@
             }
         });
 
-        // 2. Formata campos de energia (kWh)
         document.querySelectorAll('.js-format-kwh').forEach(function(element) {
             let value = parseFloat(element.textContent.trim());
             if (!isNaN(value)) {
@@ -237,7 +263,6 @@
             }
         });
 
-        // 3. Formata campos de porcentagem (%)
         document.querySelectorAll('.js-format-porcento').forEach(function(element) {
             let value = parseFloat(element.textContent.trim());
             if (!isNaN(value)) {
@@ -245,7 +270,6 @@
             }
         });
 
-        // 4. Formata a caixa de destaque final (60 meses)
         document.querySelectorAll('.js-format-total-60').forEach(function(element) {
             let value = parseFloat(element.textContent.trim());
             if (!isNaN(value)) {
@@ -256,9 +280,16 @@
 </script>
 
 <style>
+    body{
+        background:#f4f6f9;
+    }
+
+    .card-proposal{
+        border-radius:16px !important;
+        overflow:hidden;
+    }
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
-    /* Definição de Tipografia e Grid */
     .card-proposal, .proposta-table {
         font-family: 'Inter', -apple-system, sans-serif !important;
         letter-spacing: -0.01em;
@@ -268,15 +299,10 @@
     .tracking-wider { letter-spacing: 0.05em !important; }
     .fw-extrabold { font-weight: 800 !important; }
     
-    /* Configurações de Tabela Executiva Clean */
     .proposta-table th, 
     .proposta-table td {
         border: 1px solid #e9ecef !important;
         padding: 12px 16px !important;
-    }
-    
-    .border-bottom-dark {
-        border-bottom: 2px solid #212529 !important;
     }
     
     .style-price-col {
@@ -288,7 +314,25 @@
         color: #ffffff !important;
     }
 
-    /* Blocos de Efeito Lateral e Cores do Modelo */
+    /* BORDAS GROSSAS PARA DIVISIONAR CADA ESTRUTURA/PERÍODO */
+    .bloco-vermelho-top td, .bloco-amarelo-top td, .bloco-verde-top td {
+        border-top: 4px solid #212529 !important; /* Divisor superior robusto */
+    }
+    .bloco-vermelho-bottom td, .bloco-amarelo-bottom td, .bloco-verde-bottom td {
+        border-bottom: 4px solid #212529 !important; /* Divisor inferior robusto */
+    }
+
+    /* Customização de Cores dos Cards Laterais */
+    .bg-red {
+        background-color: #EE5253 !important;
+    }
+    .bg-red-gradient {
+        background: linear-gradient(180deg, #FF6B6B 0%, #EE5253 100%) !important;
+    }
+    .table-danger-light {
+        background-color: #FFF5F5 !important;
+    }
+
     .bg-yellow { 
         background-color: #FFDE4D !important; 
         color: #000000 !important;
@@ -299,13 +343,6 @@
     }
     .table-warning-light {
         background-color: #FFFBEB !important;
-    }
-    
-    .bg-red-gradient {
-        background: linear-gradient(180deg, #FF6B6B 0%, #EE5253 100%) !important;
-    }
-    .table-danger-light {
-        background-color: #FFF5F5 !important;
     }
     
     .bg-success-gradient {
@@ -333,7 +370,6 @@
         box-shadow: 0 4px 6px rgba(0,0,0,0.04);
     }
 
-    /* Caixa de Economia em Pill */
     .display-total-saving {
         background-color: #0F172A;
         color: #10B981;
@@ -346,7 +382,6 @@
         box-shadow: 0 10px 15px -3px rgba(15, 23, 42, 0.15);
     }
 
-    /* Efeito de Pulsação Visual */
     .visual-pulse {
         animation: sun-pulse 3s infinite ease-in-out;
     }
@@ -356,7 +391,6 @@
         100% { transform: scale(1); opacity: 0.9; }
     }
 
-    /* Controle do Escopo de Impressão */
     .page-break {
         display: none;
     }
@@ -386,27 +420,11 @@
             margin-bottom: 0 !important;
         }
 
-        .card-header {
-            background-color: #212529 !important;
-            color: #ffffff !important;
-        }
-
         .page-break {
             display: block;
             page-break-before: always;
         }
-        
-        .display-total-saving {
-            background-color: #0F172A !important;
-            color: #10B981 !important;
-            border: 1px solid #000;
-        }
-
-        .proposta-table th, 
-        .proposta-table td {
-            padding: 8px 12px !important;
-        }
     }
 </style>
-
-{% endblock %}
+</body>
+</html>

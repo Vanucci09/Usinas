@@ -707,17 +707,41 @@ class ContaConcessionaria(db.Model):
         db.String(50),
         nullable=True
     )
-    
+
+    bandeira = db.Column(
+        db.String(100),
+        nullable=True
+    )
+
+    # ME/EPP
+    me_epp = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=False
+    )
+
+    # CONSUMO MÉDIO
+
     consumo_medio = db.Column(
         db.Numeric(12, 2),
         nullable=True,
         default=0
     )
 
-    bandeira = db.Column(
-        db.String(100),
-        nullable=True
-    )
+    # ÚLTIMOS 12 MESES
+
+    consumo_mes_1 = db.Column(db.Numeric(12, 2), default=0)
+    consumo_mes_2 = db.Column(db.Numeric(12, 2), default=0)
+    consumo_mes_3 = db.Column(db.Numeric(12, 2), default=0)
+    consumo_mes_4 = db.Column(db.Numeric(12, 2), default=0)
+    consumo_mes_5 = db.Column(db.Numeric(12, 2), default=0)
+    consumo_mes_6 = db.Column(db.Numeric(12, 2), default=0)
+    consumo_mes_7 = db.Column(db.Numeric(12, 2), default=0)
+    consumo_mes_8 = db.Column(db.Numeric(12, 2), default=0)
+    consumo_mes_9 = db.Column(db.Numeric(12, 2), default=0)
+    consumo_mes_10 = db.Column(db.Numeric(12, 2), default=0)
+    consumo_mes_11 = db.Column(db.Numeric(12, 2), default=0)
+    consumo_mes_12 = db.Column(db.Numeric(12, 2), default=0)
 
     ativo = db.Column(
         db.Boolean,
@@ -735,7 +759,8 @@ class ContaConcessionaria(db.Model):
         onupdate=func.now()
     )
 
-    # Relacionamentos
+    # RELACIONAMENTOS
+
     empresa = db.relationship(
         'Empresa',
         backref=db.backref(
@@ -16126,36 +16151,193 @@ def recusar_proposta(slug):
 @login_required
 def nova_conta_concessionaria():
 
-    empresas = Empresa.query.order_by(Empresa.nome).all()
-    vendedores = Vendedor.query.filter_by(ativo=True).order_by(Vendedor.nome).all()
-    centros = CentroCusto.query.filter_by(ativo=True).order_by(CentroCusto.nome).all()
+    empresas = Empresa.query.order_by(
+        Empresa.nome
+    ).all()
+
+    vendedores = Vendedor.query.filter_by(
+        ativo=True
+    ).order_by(
+        Vendedor.nome
+    ).all()
+
+    centros = CentroCusto.query.filter_by(
+        ativo=True
+    ).order_by(
+        CentroCusto.nome
+    ).all()
 
     if request.method == 'POST':
 
         try:
 
+            print('\n=========== FORM CONTA CONCESSIONÁRIA ===========')
+            print(request.form)
+            print('=================================================\n')
+
             conta = ContaConcessionaria(
 
-                empresa_id=request.form.get('empresa_id', type=int),
-                vendedor_id=request.form.get('vendedor_id', type=int),
-                centro_custo_id=request.form.get('centro_custo_id', type=int),
-                n_uc=request.form.get('n_uc'),
-                tarifa_energia=request.form.get('tarifa_energia') or 0,
-                tarifa_concessionaria=request.form.get('tarifa_concessionaria') or 0,
-                cip=request.form.get('cip') or 0,
-                icms=request.form.get('icms') or 0,
-                pis=request.form.get('pis') or 0,
-                cofins=request.form.get('cofins') or 0,
-                desconto=request.form.get('desconto') or 0,
-                fase=request.form.get('fase'),
-                bandeira=request.form.get('bandeira'),
+                # =====================================================
+                # RELACIONAMENTOS
+                # =====================================================
+
+                empresa_id=request.form.get(
+                    'empresa_id',
+                    type=int
+                ),
+
+                vendedor_id=request.form.get(
+                    'vendedor_id',
+                    type=int
+                ),
+
+                centro_custo_id=request.form.get(
+                    'centro_custo_id',
+                    type=int
+                ),
+
+                # =====================================================
+                # DADOS PRINCIPAIS
+                # =====================================================
+
+                n_uc=request.form.get(
+                    'n_uc'
+                ),
+
+                fase=request.form.get(
+                    'fase'
+                ),
+
+                bandeira=request.form.get(
+                    'bandeira'
+                ),
+
+                # =====================================================
+                # TARIFAS
+                # =====================================================
+
+                tarifa_energia=request.form.get(
+                    'tarifa_energia'
+                ) or 0,
+
+                tarifa_concessionaria=request.form.get(
+                    'tarifa_concessionaria'
+                ) or 0,
+
+                desconto=request.form.get(
+                    'desconto'
+                ) or 0,
+
+                # =====================================================
+                # ENCARGOS
+                # =====================================================
+
+                cip=request.form.get(
+                    'cip'
+                ) or 0,
+
+                icms=request.form.get(
+                    'icms'
+                ) or 0,
+
+                pis=request.form.get(
+                    'pis'
+                ) or 0,
+
+                cofins=request.form.get(
+                    'cofins'
+                ) or 0,
+
+                # =====================================================
+                # CLASSIFICAÇÃO
+                # =====================================================
+
+                me_epp=(
+                    True
+                    if request.form.get('me_epp')
+                    else False
+                ),
+
+                # =====================================================
+                # CONSUMO MÉDIO
+                # =====================================================
+
+                consumo_medio=request.form.get(
+                    'consumo_medio'
+                ) or 0,
+
+                # =====================================================
+                # CONSUMO ÚLTIMOS 12 MESES
+                # =====================================================
+
+                consumo_mes_1=request.form.get(
+                    'consumo_mes_1'
+                ) or 0,
+
+                consumo_mes_2=request.form.get(
+                    'consumo_mes_2'
+                ) or 0,
+
+                consumo_mes_3=request.form.get(
+                    'consumo_mes_3'
+                ) or 0,
+
+                consumo_mes_4=request.form.get(
+                    'consumo_mes_4'
+                ) or 0,
+
+                consumo_mes_5=request.form.get(
+                    'consumo_mes_5'
+                ) or 0,
+
+                consumo_mes_6=request.form.get(
+                    'consumo_mes_6'
+                ) or 0,
+
+                consumo_mes_7=request.form.get(
+                    'consumo_mes_7'
+                ) or 0,
+
+                consumo_mes_8=request.form.get(
+                    'consumo_mes_8'
+                ) or 0,
+
+                consumo_mes_9=request.form.get(
+                    'consumo_mes_9'
+                ) or 0,
+
+                consumo_mes_10=request.form.get(
+                    'consumo_mes_10'
+                ) or 0,
+
+                consumo_mes_11=request.form.get(
+                    'consumo_mes_11'
+                ) or 0,
+
+                consumo_mes_12=request.form.get(
+                    'consumo_mes_12'
+                ) or 0,
+                
+                # STATUS
+
                 ativo=True,
-                consumo_medio=request.form.get('consumo_medio') or 0,
             )
 
             db.session.add(conta)
+
             db.session.commit()
-            flash('Conta concessionária cadastrada com sucesso!', 'success')
+
+            print('\n=========== CONTA SALVA ===========')
+            print(f'ID: {conta.id}')
+            print(f'UC: {conta.n_uc}')
+            print(f'ME/EPP: {conta.me_epp}')
+            print(f'Consumo Médio: {conta.consumo_medio}')
+            print('===================================\n')
+
+            flash(
+                'Conta concessionária cadastrada com sucesso!',
+                'success'
+            )
 
             return redirect(
                 url_for('listar_contas_concessionaria')
@@ -16164,8 +16346,15 @@ def nova_conta_concessionaria():
         except Exception as e:
 
             db.session.rollback()
-            print(f'ERRO AO SALVAR CONTA CONCESSIONÁRIA: {e}')
-            flash('Erro ao salvar.', 'danger')
+
+            print(
+                f'ERRO AO SALVAR CONTA CONCESSIONÁRIA: {e}'
+            )
+
+            flash(
+                'Erro ao salvar conta concessionária.',
+                'danger'
+            )
 
     return render_template(
         'contas_concessionaria_form.html',
@@ -16187,9 +16376,8 @@ def listar_contas_concessionaria():
         contas=contas
     )
     
-@app.route('/contas-concessionaria/<int:conta_id>/proposta')
-@login_required
-def proposta_conta_concessionaria(conta_id):
+@app.route('/contas-concessionaria/<int:conta_id>/proposta/<slug>')
+def proposta_conta_concessionaria(conta_id, slug):
 
     conta = db.session.get(ContaConcessionaria, conta_id)
 
@@ -16205,12 +16393,10 @@ def proposta_conta_concessionaria(conta_id):
     tarifa_concessionaria = moeda(conta.tarifa_concessionaria)
     cip = moeda(conta.cip)
     desconto = moeda(conta.desconto)
-
     fase = (conta.fase or '').strip().lower()
     bandeira = (conta.bandeira or '').strip().lower()
 
     # DISPONIBILIDADE POR FASE
-
     if fase == 'trifásico' or fase == 'trifasico':
         consumo_disponibilidade = 100
 
@@ -16221,7 +16407,6 @@ def proposta_conta_concessionaria(conta_id):
         consumo_disponibilidade = 30
 
     # VALOR BANDEIRA
-
     if bandeira == 'amarela':
         bandeira_valor = 1.885
 
@@ -16235,7 +16420,6 @@ def proposta_conta_concessionaria(conta_id):
         bandeira_valor = 0
 
     # ENERGIA INJETADA
-
     energia_injetada = (
         consumo_medio - consumo_disponibilidade
     )
@@ -16244,56 +16428,53 @@ def proposta_conta_concessionaria(conta_id):
         energia_injetada = 0
         
     # VALOR kWh PARQUE SOLAR
-
     valor_kwh_parque_solar = (
         tarifa_concessionaria
         * (1 - (desconto / 100))
     )
     
     # TARIFA ENERGIA REDUZIDA
-
     tarifa_energia_reduzida = (
         tarifa_energia / (1 - 0.1537)
     )
     
     # VALOR BANDEIRA DISPONIBILIDADE
-
     valor_bandeira_disponibilidade = (
         (consumo_disponibilidade / 100)
         * bandeira_valor
     )
 
     # VALOR CUSTO DISPONIBILIDADE + BANDEIRA
-
     valor_custo_disponibilidade_bandeira = (
         (tarifa_energia_reduzida * consumo_disponibilidade)
         + valor_bandeira_disponibilidade
     )
 
     # PAGAMENTO CONSÓRCIO
-
     valor_pagamento_consorcio = (
         energia_injetada * valor_kwh_parque_solar
     )
 
-    # TOTAL APÓS ADESÃO
+    # CUSTO ILUMINAÇÃO / CIP
+    if conta.me_epp:
+        custo_iluminacao = 59.08
+    else:
+        custo_iluminacao = cip
 
+    # TOTAL APÓS ADESÃO
     total_apos_adesao = (
-        59.08
+        custo_iluminacao
         + valor_custo_disponibilidade_bandeira
         + valor_pagamento_consorcio
     )
 
     # VALOR MÉDIO CONCESSIONÁRIA
-
     valor_medio_total_concessionaria = (
         consumo_medio * tarifa_concessionaria
     )
 
     # ILUMINAÇÃO + BANDEIRA
-
     valor_iluminacao_publica = cip
-
     valor_iluminacao_publica_bandeira = (
         cip
         + (
@@ -16303,26 +16484,21 @@ def proposta_conta_concessionaria(conta_id):
     )
 
     # TOTAL CONCESSIONÁRIA
-
     total_concessionaria = (
         valor_medio_total_concessionaria
         + valor_iluminacao_publica_bandeira
     )
 
     # GANHO MENSAL
-
     ganho_mensal = (
         total_concessionaria - total_apos_adesao
     )
 
     # GANHO ANUAL
-
     ganho_anual = ganho_mensal * 12
 
     # ECONOMIA %
-
     if total_concessionaria > 0:
-
         economia_percentual = (
             (ganho_mensal / total_concessionaria) * 100
         )
@@ -16347,6 +16523,7 @@ def proposta_conta_concessionaria(conta_id):
         'economia_percentual': economia_percentual,
         'desconto': desconto,
         'cip': cip,
+        'custo_iluminacao': custo_iluminacao,
     }
 
     return render_template(
@@ -16358,7 +16535,6 @@ def proposta_conta_concessionaria(conta_id):
 @app.route('/contas-concessionaria/<int:conta_id>/editar', methods=['GET', 'POST'])
 @login_required
 def editar_conta_concessionaria(conta_id):
-
     conta = db.session.get(ContaConcessionaria, conta_id)
 
     if not conta:
@@ -16370,44 +16546,50 @@ def editar_conta_concessionaria(conta_id):
     centros = CentroCusto.query.filter_by(ativo=True).all()
 
     if request.method == 'POST':
-
         try:
-
+            # Identificação
             conta.empresa_id = request.form.get('empresa_id', type=int)
-            conta.vendedor_id = request.form.get('vendedor_id', type=int)
             conta.centro_custo_id = request.form.get('centro_custo_id', type=int)
+            
+            # Tratamento para vendedor opcional (evita salvar 0 ou string vazia)
+            vendedor_id = request.form.get('vendedor_id', type=int)
+            conta.vendedor_id = vendedor_id if vendedor_id else None
 
+            # Dados Técnicos
             conta.n_uc = request.form.get('n_uc')
+            conta.fase = request.form.get('fase') or None
+            conta.bandeira = request.form.get('bandeira') or None
+            conta.desconto = request.form.get('desconto', type=float) or 0.0
+            
+            # Tratamento do Switch ME/EPP (se não vier no POST, é False)
+            conta.me_epp = True if request.form.get('me_epp') else False
 
-            conta.tarifa_energia = request.form.get('tarifa_energia') or 0
-            conta.tarifa_concessionaria = request.form.get('tarifa_concessionaria') or 0
+            # Captura dinâmica dos 12 meses de consumo
+            for i in range(1, 13):
+                campo_mes = f'consumo_mes_{i}'
+                valor_mes = request.form.get(campo_mes, type=float)
+                # Define o valor digitado ou None se o campo foi deixado em branco
+                setattr(conta, campo_mes, valor_mes if valor_mes is not None else None)
 
-            conta.consumo_medio = request.form.get('consumo_medio') or 0
-
-            conta.cip = request.form.get('cip') or 0
-
-            conta.icms = request.form.get('icms') or 0
-            conta.pis = request.form.get('pis') or 0
-            conta.cofins = request.form.get('cofins') or 0
-
-            conta.desconto = request.form.get('desconto') or 0
-
-            conta.fase = request.form.get('fase')
-            conta.bandeira = request.form.get('bandeira')
+            # Consumo Calculado e Tarifas
+            conta.consumo_medio = request.form.get('consumo_medio', type=float) or 0.0
+            conta.tarifa_energia = request.form.get('tarifa_energia', type=float) or 0.0
+            conta.tarifa_concessionaria = request.form.get('tarifa_concessionaria', type=float) or 0.0
+            conta.cip = request.form.get('cip', type=float) or 0.0
+            
+            # Impostos
+            conta.icms = request.form.get('icms', type=float) or 0.0
+            conta.pis = request.form.get('pis', type=float) or 0.0
+            conta.cofins = request.form.get('cofins', type=float) or 0.0
 
             db.session.commit()
-
             flash('Conta atualizada com sucesso!', 'success')
-
             return redirect(url_for('listar_contas_concessionaria'))
 
         except Exception as e:
-
             db.session.rollback()
-
             print(f'ERRO AO EDITAR CONTA: {e}')
-
-            flash('Erro ao atualizar.', 'danger')
+            flash('Erro ao atualizar a conta. Verifique os dados inseridos.', 'danger')
 
     return render_template(
         'contas_concessionaria_form.html',
@@ -16439,9 +16621,7 @@ def excluir_conta_concessionaria(conta_id):
         db.session.rollback()
 
         print(f'ERRO AO EXCLUIR CONTA: {e}')
-
         flash('Erro ao excluir conta.', 'danger')
-
     return redirect(url_for('listar_contas_concessionaria'))
 
 # WINDOWS LOCAL
@@ -16489,6 +16669,58 @@ def importar_conta_concessionaria():
         try:
 
             # =====================================================
+            # FUNÇÃO OCR
+            # =====================================================
+
+            def processar_ocr(img):
+
+                gray = cv2.cvtColor(
+                    img,
+                    cv2.COLOR_BGR2GRAY
+                )
+
+                # aumenta resolução
+                gray = cv2.resize(
+                    gray,
+                    None,
+                    fx=3,
+                    fy=3,
+                    interpolation=cv2.INTER_CUBIC
+                )
+
+                # contraste
+                gray = cv2.convertScaleAbs(
+                    gray,
+                    alpha=1.4,
+                    beta=10
+                )
+
+                # threshold simples
+                _, thresh = cv2.threshold(
+                    gray,
+                    150,
+                    255,
+                    cv2.THRESH_BINARY
+                )
+
+                debug_path = os.path.join(
+                    UPLOAD_FOLDER,
+                    'debug_ocr.png'
+                )
+
+                cv2.imwrite(debug_path, thresh)
+
+                print(f'[DEBUG] imagem tratada salva: {debug_path}')
+
+                texto_ocr = pytesseract.image_to_string(
+                    thresh,
+                    lang='por',
+                    config='--oem 3 --psm 6 -c preserve_interword_spaces=1'
+                )
+
+                return texto_ocr
+
+            # =====================================================
             # PDF
             # =====================================================
 
@@ -16506,45 +16738,7 @@ def importar_conta_concessionaria():
 
                     img = cv2.imread(imagem_temp)
 
-                    gray = cv2.cvtColor(
-                        img,
-                        cv2.COLOR_BGR2GRAY
-                    )
-
-                    gray = cv2.GaussianBlur(
-                        gray,
-                        (5, 5),
-                        0
-                    )
-
-                    gray = cv2.convertScaleAbs(
-                        gray,
-                        alpha=1.8,
-                        beta=20
-                    )
-
-                    thresh = cv2.adaptiveThreshold(
-                        gray,
-                        255,
-                        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                        cv2.THRESH_BINARY,
-                        31,
-                        2
-                    )
-
-                    thresh = cv2.resize(
-                        thresh,
-                        None,
-                        fx=2,
-                        fy=2,
-                        interpolation=cv2.INTER_CUBIC
-                    )
-
-                    texto += pytesseract.image_to_string(
-                        thresh,
-                        lang='por',
-                        config='--oem 3 --psm 6'
-                    )
+                    texto += processar_ocr(img)
 
             # =====================================================
             # IMAGEM
@@ -16554,71 +16748,17 @@ def importar_conta_concessionaria():
 
                 img = cv2.imread(caminho_arquivo)
 
-                # =====================================================
-                # MELHORIAS OCR
-                # =====================================================
-
-                # escala cinza
-                gray = cv2.cvtColor(
-                    img,
-                    cv2.COLOR_BGR2GRAY
-                )
-
-                # remove ruído
-                gray = cv2.GaussianBlur(
-                    gray,
-                    (5, 5),
-                    0
-                )
-
-                # aumenta contraste
-                gray = cv2.convertScaleAbs(
-                    gray,
-                    alpha=1.8,
-                    beta=20
-                )
-
-                # binarização adaptativa
-                thresh = cv2.adaptiveThreshold(
-                    gray,
-                    255,
-                    cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                    cv2.THRESH_BINARY,
-                    31,
-                    2
-                )
-
-                # aumenta resolução
-                thresh = cv2.resize(
-                    thresh,
-                    None,
-                    fx=2,
-                    fy=2,
-                    interpolation=cv2.INTER_CUBIC
-                )
-
-                # salva debug
-                debug_path = os.path.join(
-                    UPLOAD_FOLDER,
-                    'debug_ocr.png'
-                )
-
-                cv2.imwrite(debug_path, thresh)
-
-                print(f'[DEBUG] imagem tratada salva: {debug_path}')
-
-                # OCR
-                texto = pytesseract.image_to_string(
-                    thresh,
-                    lang='por',
-                    config='--oem 3 --psm 6'
-                )
+                texto = processar_ocr(img)
 
             print('\n================ TEXTO OCR ================\n')
             print(texto)
             print('\n===========================================\n')
 
             texto_upper = texto.upper()
+
+            texto_upper = texto_upper.replace('O.', '0.')
+            texto_upper = texto_upper.replace('TRtASICO', 'TRIFASICO')
+            texto_upper = texto_upper.replace('TRTASICO', 'TRIFASICO')
 
             # =====================================================
             # N UC
@@ -16627,19 +16767,16 @@ def importar_conta_concessionaria():
             n_uc = ''
 
             uc_patterns = [
-                r'C[ÓO]DIGO DA INSTALA[ÇC][ÃA]O\s*(\d+)',
-                r'INSTALA[ÇC][ÃA]O\s*(\d+)',
-                r'UC\s*(\d+)'
+                r'C[ÓO]DIGO DA INSTALA[ÇC][ÃA]O[:\s]*(\d{4,12})',
+                r'INSTALA[ÇC][ÃA]O\s*(\d{4,12})',
             ]
 
             for pattern in uc_patterns:
 
-                uc_match = re.search(
-                    pattern,
-                    texto_upper
-                )
+                uc_match = re.search(pattern, texto_upper)
 
                 if uc_match:
+
                     n_uc = uc_match.group(1)
                     break
 
@@ -16651,31 +16788,104 @@ def importar_conta_concessionaria():
 
             consumo_medio = 0
 
-            consumos = re.findall(
-                r'(\d{2,5})',
-                texto
-            )
+            linhas = texto_upper.splitlines()
 
-            print(f'[DEBUG] consumos brutos: {consumos}')
+            # =====================================================
+            # 1. TABELA HISTÓRICO
+            # =====================================================
 
-            numeros_validos = []
+            for linha in linhas:
 
-            for c in consumos:
+                linha_upper = linha.upper()
 
-                try:
+                # linhas do histórico
+                if re.search(r'[A-Z]{3}/\d{2}', linha_upper):
 
-                    valor = int(c)
+                    print(f'[DEBUG] linha histórico: {linha_upper}')
 
-                    if 50 <= valor <= 5000:
-                        numeros_validos.append(valor)
+                    numeros = re.findall(
+                        r'\b\d{3,5}\b',
+                        linha_upper
+                    )
 
-                except:
-                    pass
+                    print(f'[DEBUG] numeros histórico: {numeros}')
 
-            print(f'[DEBUG] numeros_validos: {numeros_validos}')
+                    candidatos = []
 
-            if numeros_validos:
-                consumo_medio = max(numeros_validos)
+                    for item in numeros:
+
+                        try:
+
+                            valor = int(item)
+
+                            if (
+                                100 <= valor <= 20000
+                                and valor != int(n_uc or 0)
+                                and valor not in [2024, 2025, 2026]
+                            ):
+
+                                candidatos.append(valor)
+
+                        except:
+                            pass
+
+                    print(f'[DEBUG] candidatos histórico: {candidatos}')
+
+                    # pega o primeiro mês (mais atual)
+                    if candidatos:
+
+                        consumo_medio = candidatos[0]
+                        break
+
+            # =====================================================
+            # 2. TABELA MEDIDOR
+            # =====================================================
+
+            if consumo_medio == 0:
+
+                for linha in linhas:
+
+                    linha_upper = linha.upper()
+
+                    if (
+                        'ENERGIA' in linha_upper
+                        or 'ATIVO' in linha_upper
+                    ):
+
+                        print(f'[DEBUG] linha medidor: {linha_upper}')
+
+                        numeros = re.findall(
+                            r'\b\d{3,5}\b',
+                            linha_upper
+                        )
+
+                        print(f'[DEBUG] numeros medidor: {numeros}')
+
+                        candidatos = []
+
+                        for item in numeros:
+
+                            try:
+
+                                valor = int(item)
+
+                                if (
+                                    100 <= valor <= 20000
+                                    and valor != int(n_uc or 0)
+                                    and valor not in [2024, 2025, 2026]
+                                ):
+
+                                    candidatos.append(valor)
+
+                            except:
+                                pass
+
+                        print(f'[DEBUG] candidatos medidor: {candidatos}')
+
+                        if candidatos:
+
+                            consumo_medio = max(candidatos)
+                            break
 
             print(f'[DEBUG] consumo_medio: {consumo_medio}')
 
@@ -16685,34 +16895,116 @@ def importar_conta_concessionaria():
 
             tarifa_energia = 0
 
-            tarifa_patterns = [
-                r'(\d,\d{6,7})',
-                r'(\d,\d{5})',
-                r'(\d,\d{4})'
-            ]
+            tarifa_match = re.search(
+                r'0\.\d{6,7}',
+                texto_upper
+            )
 
-            for pattern in tarifa_patterns:
+            if tarifa_match:
 
-                tarifa_match = re.search(
-                    pattern,
-                    texto
+                tarifa_energia = float(
+                    tarifa_match.group(0)
                 )
 
-                if tarifa_match:
+            print(f'[DEBUG] tarifa_energia: {tarifa_energia}')
 
-                    tarifa_energia = float(
-                        tarifa_match.group(1).replace(',', '.')
+            # =====================================================
+            # ICMS / PIS / COFINS
+            # =====================================================
+
+            icms = 0
+            pis = 0
+            cofins = 0
+
+            for linha in texto_upper.splitlines():
+
+                linha_upper = linha.upper()
+
+                # ICMS
+                if 'ICMS' in linha_upper:
+
+                    numeros = re.findall(
+                        r'(\d+[\.,]\d{2})',
+                        linha_upper
                     )
 
-                    break
+                    print(f'[DEBUG] linha ICMS: {linha_upper}')
+                    print(f'[DEBUG] numeros ICMS: {numeros}')
 
-            print(f'[DEBUG] tarifa_energia: {tarifa_energia}')
+                    for item in numeros:
+
+                        valor = float(
+                            item.replace(',', '.')
+                        )
+
+                        if 15 <= valor <= 30:
+                            icms = valor
+
+                # PIS
+                elif 'PIS' in linha_upper:
+
+                    numeros = re.findall(
+                        r'(\d+[\.,]\d{2})',
+                        linha_upper
+                    )
+
+                    print(f'[DEBUG] linha PIS: {linha_upper}')
+                    print(f'[DEBUG] numeros PIS: {numeros}')
+
+                    for item in numeros:
+
+                        valor = float(
+                            item.replace(',', '.')
+                        )
+
+                        if 0 < valor <= 2:
+                            pis = valor
+
+                # COFINS
+                elif 'COFINS' in linha_upper:
+
+                    numeros = re.findall(
+                        r'(\d+[\.,]\d{2})',
+                        linha_upper
+                    )
+
+                    print(f'[DEBUG] linha COFINS: {linha_upper}')
+                    print(f'[DEBUG] numeros COFINS: {numeros}')
+
+                    for item in numeros:
+
+                        valor = float(
+                            item.replace(',', '.')
+                        )
+
+                        if 2 <= valor <= 10:
+                            cofins = valor
+
+            print(f'[DEBUG] icms: {icms}')
+            print(f'[DEBUG] pis: {pis}')
+            print(f'[DEBUG] cofins: {cofins}')
 
             # =====================================================
             # TARIFA CONCESSIONÁRIA
             # =====================================================
 
-            tarifa_concessionaria = tarifa_energia
+            tarifa_concessionaria = 0
+
+            if (
+                tarifa_energia > 0
+                and icms > 0
+            ):
+
+                tarifa_concessionaria = round(
+                    tarifa_energia / (
+                        1 - (
+                            (pis / 100)
+                            + (cofins / 100)
+                            + (icms / 100)
+                        )
+                    ),
+                    7
+                )
 
             print(f'[DEBUG] tarifa_concessionaria: {tarifa_concessionaria}')
 
@@ -16722,84 +17014,35 @@ def importar_conta_concessionaria():
 
             cip = 0
 
-            cip_patterns = [
-                r'CIP.*?(\d+,\d{2})',
-                r'ILUMINA[ÇC][ÃA]O.*?(\d+,\d{2})'
-            ]
+            for linha in texto_upper.splitlines():
 
-            for pattern in cip_patterns:
+                linha_upper = linha.upper()
 
-                cip_match = re.search(
-                    pattern,
-                    texto_upper
-                )
+                if (
+                    'ILUMINACAO' in linha_upper
+                    or 'PUBLICA' in linha_upper
+                ):
 
-                if cip_match:
-
-                    cip = float(
-                        cip_match.group(1).replace(',', '.')
+                    numeros = re.findall(
+                        r'(\d+[\.,]\d{2})',
+                        linha_upper
                     )
 
-                    break
+                    for item in numeros:
+
+                        try:
+
+                            valor = float(
+                                item.replace(',', '.')
+                            )
+
+                            if 1 <= valor <= 1000:
+                                cip = valor
+
+                        except:
+                            pass
 
             print(f'[DEBUG] cip: {cip}')
-
-            # =====================================================
-            # ICMS
-            # =====================================================
-
-            icms = 0
-
-            icms_match = re.search(
-                r'ICMS\s+(\d{1,2},\d{2})',
-                texto_upper
-            )
-
-            if icms_match:
-
-                icms = float(
-                    icms_match.group(1).replace(',', '.')
-                )
-
-            print(f'[DEBUG] icms: {icms}')
-
-            # =====================================================
-            # PIS
-            # =====================================================
-
-            pis = 0
-
-            pis_match = re.search(
-                r'PIS\s+(\d+,\d{2})',
-                texto_upper
-            )
-
-            if pis_match:
-
-                pis = float(
-                    pis_match.group(1).replace(',', '.')
-                )
-
-            print(f'[DEBUG] pis: {pis}')
-
-            # =====================================================
-            # COFINS
-            # =====================================================
-
-            cofins = 0
-
-            cofins_match = re.search(
-                r'COFINS\s+(\d+,\d{2})',
-                texto_upper
-            )
-
-            if cofins_match:
-
-                cofins = float(
-                    cofins_match.group(1).replace(',', '.')
-                )
-
-            print(f'[DEBUG] cofins: {cofins}')
 
             # =====================================================
             # FASE
@@ -16807,10 +17050,10 @@ def importar_conta_concessionaria():
 
             fase = 'Monofásico'
 
-            if 'TRIFASICO' in texto_upper:
+            if 'TRIFAS' in texto_upper:
                 fase = 'Trifásico'
 
-            elif 'BIFASICO' in texto_upper:
+            elif 'BIFAS' in texto_upper:
                 fase = 'Bifásico'
 
             print(f'[DEBUG] fase: {fase}')
@@ -16830,6 +17073,9 @@ def importar_conta_concessionaria():
             elif 'AMARELA' in texto_upper:
                 bandeira = 'Amarela'
 
+            elif 'VERDE' in texto_upper:
+                bandeira = 'Verde'
+
             print(f'[DEBUG] bandeira: {bandeira}')
 
             # =====================================================
@@ -16838,18 +17084,45 @@ def importar_conta_concessionaria():
 
             valor_total = 0
 
-            total_match = re.search(
-                r'TOTAL A PAGAR\s*(\d+,\d{2})',
-                texto_upper
-            )
+            for linha in texto_upper.splitlines():
 
-            if total_match:
+                if (
+                    'TOTAL A PAGAR' in linha
+                    or 'TOTAL DA FATURA' in linha
+                ):
 
-                valor_total = float(
-                    total_match.group(1).replace(',', '.')
-                )
+                    valores = re.findall(
+                        r'(\d{1,3}(?:[\.,]\d{3})*[\.,]\d{2})',
+                        linha
+                    )
+
+                    for item in valores:
+
+                        try:
+
+                            valor = float(
+                                item.replace('.', '')
+                                .replace(',', '.')
+                            )
+
+                            if valor > valor_total:
+                                valor_total = valor
+
+                        except:
+                            pass
 
             print(f'[DEBUG] valor_total: {valor_total}')
+
+            if (
+                not n_uc
+                or consumo_medio == 0
+                or valor_total == 0
+            ):
+
+                flash(
+                    'Não foi possível extrair todos os dados automaticamente. Revise os campos.',
+                    'warning'
+                )
 
             dados_extraidos = {
                 'n_uc': n_uc,

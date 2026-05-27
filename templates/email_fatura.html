@@ -3,37 +3,58 @@
 <head>
     <meta charset="UTF-8">
 </head>
-<body style="font-family: Arial, sans-serif; background-color: #f9f9f9; color: #333; padding: 20px;">    
+<body style="font-family: Arial, sans-serif; background-color: #f4f6f9; color: #333333; padding: 20px; line-height: 1.5;">    
 
-    <p style="font-size: 16px; margin-bottom: 20px;">
-        Olá, <strong>{{ cliente.nome }} - (ID {{ rateio.codigo_rateio }})</strong>!
-    </p>
+    <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
+        
+        <p style="font-size: 16px; margin-bottom: 20px;">
+            Olá, <strong>{{ cliente.nome }} - (ID {{ rateio.codigo_rateio }})</strong>!
+        </p>
 
-    <p style="font-size: 16px; margin-bottom: 20px;">
-        Clique no botão abaixo para acessar o relatório da sua fatura referente a
-        <strong>{{ fatura.mes_referencia }}/{{ fatura.ano_referencia }}</strong>:
-    </p>
+        <p style="font-size: 16px; margin-bottom: 20px; fw-bold">
+            Sua fatura chegou.
+        </p>
 
-    <p style="margin-bottom: 20px;">
-        <a href="{{ link_relatorio }}" 
-           style="display: inline-block; background-color: #007BFF; color: #fff; padding: 12px 20px; 
-                  border-radius: 5px; text-decoration: none; font-weight: bold;">
-           Acessar Relatório
-        </a>
-    </p>
+        <div style="background-color: #FFFBEB; border-left: 4px solid #F59E0B; padding: 15px; border-radius: 4px; margin-bottom: 25px;">
+            <p style="font-size: 15px; color: #B45309; margin: 0; font-weight: bold; mb-2;">
+                <span style="font-size: 18px;">⚠️</span> Importante: Faturamento por Média
+            </p>
+            <p style="font-size: 14px; color: #451a03; margin: 5px 0 0 0;">
+                Conforme informado previamente, devido a atualizações do sistema da Neoenergia, sua fatura foi realizada pela média.
+            </p>
+            <p style="font-size: 14px; color: #451a03; margin: 8px 0 0 0; font-weight: bold;">
+                Assim que receber a fatura da Neoenergia, nos encaminhe com urgência para conferência prévia antes do pagamento.
+            </p>
+        </div>
 
-    <p style="font-size: 16px; margin-bottom: 10px;">
-        Ou copie e cole este link no navegador:
-    </p>
+        <p style="font-size: 16px; margin-bottom: 20px;">
+            Clique no botão abaixo para acessar o relatório da sua fatura referente a 
+            <strong>{{ fatura.mes_referencia }}/{{ fatura.ano_referencia }}</strong> (ou 5/2026):
+        </p>
 
-    <p style="word-break: break-all; font-size: 14px;">
-        <a href="{{ link_relatorio }}" style="color: #007BFF;">{{ link_relatorio }}</a>
-    </p>
+        <p style="margin-bottom: 25px; text-align: center;">
+            <a href="{{ link_relatorio }}" 
+               style="display: inline-block; background-color: #007BFF; color: #ffffff; padding: 14px 30px; 
+                      border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 16px; box-shadow: 0 2px 5px rgba(0,123,255,0.2);">
+               Acessar Relatório
+            </a>
+        </p>
 
-    <p style="font-size: 16px; margin-top: 40px;">
-        Atenciosamente,<br>
-        Equipe CGR Energia
-    </p>
+        <p style="font-size: 14px; color: #666666; margin-bottom: 10px;">
+            Ou copie e cole este link no seu navegador:
+        </p>
+        <p style="word-break: break-all; font-size: 13px; margin-bottom: 30px; background-color: #f8f9fa; padding: 10px; border-radius: 4px;">
+            <a href="{{ link_relatorio }}" style="color: #007BFF; text-decoration: none;">{{ link_relatorio }}</a>
+        </p>
+
+        <hr style="border: 0; border-top: 1px solid #eef2f5; margin-bottom: 25px;">
+
+        <p style="font-size: 15px; color: #555555; margin-top: 20px;">
+            Atenciosamente,<br>
+            <strong style="color: #007BFF;">Equipe CGR Energia</strong>
+        </p>
+        
+    </div>
 
 </body>
 </html>

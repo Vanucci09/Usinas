@@ -85,7 +85,12 @@
 
                                 <!-- PROPOSTA -->
                                 <a
-                                    href="{{ url_for('proposta_conta_concessionaria', conta_id=conta.id) }}"
+                                    href="{{ url_for(
+                                        'proposta_conta_concessionaria',
+                                        conta_id=conta.id,
+                                        slug=(conta.centro_custo.nome|lower|replace(' ', '-'))
+                                    ) }}"
+                                    target="_blank"
                                     class="btn btn-sm btn-success shadow-xs rounded-pill action-btn-hover">
 
                                     <i class="bi bi-file-earmark-text"></i>
