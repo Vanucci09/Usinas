@@ -758,6 +758,19 @@ class ContaConcessionaria(db.Model):
         db.DateTime(timezone=True),
         onupdate=func.now()
     )
+    
+    # VALIDAÇÕES
+    validacao_vendedor = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=False
+    )
+
+    validacao_cliente = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=False
+    )
 
     # RELACIONAMENTOS
 
@@ -16393,14 +16406,15 @@ def proposta_conta_concessionaria(conta_id, slug):
     tarifa_concessionaria = moeda(conta.tarifa_concessionaria)
     cip = moeda(conta.cip)
     desconto = moeda(conta.desconto)
+
     fase = (conta.fase or '').strip().lower()
     bandeira = (conta.bandeira or '').strip().lower()
 
     # DISPONIBILIDADE POR FASE
-    if fase == 'trifásico' or fase == 'trifasico':
+    if fase in ['trifásico', 'trifasico']:
         consumo_disponibilidade = 100
 
-    elif fase == 'bifásico' or fase == 'bifasico':
+    elif fase in ['bifásico', 'bifasico']:
         consumo_disponibilidade = 50
 
     else:
@@ -16426,18 +16440,18 @@ def proposta_conta_concessionaria(conta_id, slug):
 
     if energia_injetada < 0:
         energia_injetada = 0
-        
+
     # VALOR kWh PARQUE SOLAR
     valor_kwh_parque_solar = (
         tarifa_concessionaria
         * (1 - (desconto / 100))
     )
-    
+
     # TARIFA ENERGIA REDUZIDA
     tarifa_energia_reduzida = (
         tarifa_energia / (1 - 0.1537)
     )
-    
+
     # VALOR BANDEIRA DISPONIBILIDADE
     valor_bandeira_disponibilidade = (
         (consumo_disponibilidade / 100)
@@ -16475,6 +16489,7 @@ def proposta_conta_concessionaria(conta_id, slug):
 
     # ILUMINAÇÃO + BANDEIRA
     valor_iluminacao_publica = cip
+
     valor_iluminacao_publica_bandeira = (
         cip
         + (
@@ -16499,6 +16514,7 @@ def proposta_conta_concessionaria(conta_id, slug):
 
     # ECONOMIA %
     if total_concessionaria > 0:
+
         economia_percentual = (
             (ganho_mensal / total_concessionaria) * 100
         )
@@ -16526,12 +16542,21 @@ def proposta_conta_concessionaria(conta_id, slug):
         'custo_iluminacao': custo_iluminacao,
     }
 
+    # VALIDADE PROPOSTA
+    validade_proposta = None
+
+    if conta.criado_em:
+        validade_proposta = (
+            conta.criado_em + timedelta(days=15)
+        )
+
     return render_template(
         'proposta_conta_concessionaria.html',
         conta=conta,
-        dados=dados
+        dados=dados,
+        validade_proposta=validade_proposta
     )
-    
+        
 @app.route('/contas-concessionaria/<int:conta_id>/editar', methods=['GET', 'POST'])
 @login_required
 def editar_conta_concessionaria(conta_id):
@@ -16669,17 +16694,18 @@ def importar_conta_concessionaria():
         try:
 
             # =====================================================
-            # FUNÇÃO OCR
+            # OCR
             # =====================================================
 
             def processar_ocr(img):
+
+                altura, largura = img.shape[:2]
 
                 gray = cv2.cvtColor(
                     img,
                     cv2.COLOR_BGR2GRAY
                 )
 
-                # aumenta resolução
                 gray = cv2.resize(
                     gray,
                     None,
@@ -16688,14 +16714,12 @@ def importar_conta_concessionaria():
                     interpolation=cv2.INTER_CUBIC
                 )
 
-                # contraste
                 gray = cv2.convertScaleAbs(
                     gray,
                     alpha=1.4,
                     beta=10
                 )
 
-                # threshold simples
                 _, thresh = cv2.threshold(
                     gray,
                     150,
@@ -16703,22 +16727,113 @@ def importar_conta_concessionaria():
                     cv2.THRESH_BINARY
                 )
 
-                debug_path = os.path.join(
-                    UPLOAD_FOLDER,
-                    'debug_ocr.png'
-                )
+                # =====================================================
+                # OCR GERAL
+                # =====================================================
 
-                cv2.imwrite(debug_path, thresh)
-
-                print(f'[DEBUG] imagem tratada salva: {debug_path}')
-
-                texto_ocr = pytesseract.image_to_string(
+                texto_geral = pytesseract.image_to_string(
                     thresh,
                     lang='por',
-                    config='--oem 3 --psm 6 -c preserve_interword_spaces=1'
+                    config='--oem 3 --psm 6'
                 )
 
-                return texto_ocr
+                # =====================================================
+                # HISTÓRICO
+                # =====================================================
+
+                hist_y1 = int(altura * 0.48)
+                hist_y2 = int(altura * 0.78)
+
+                hist_x1 = 0
+                hist_x2 = int(largura * 0.48)
+
+                historico = img[
+                    hist_y1:hist_y2,
+                    hist_x1:hist_x2
+                ]
+
+                historico_gray = cv2.cvtColor(
+                    historico,
+                    cv2.COLOR_BGR2GRAY
+                )
+
+                historico_gray = cv2.resize(
+                    historico_gray,
+                    None,
+                    fx=4,
+                    fy=4,
+                    interpolation=cv2.INTER_CUBIC
+                )
+
+                _, historico_thresh = cv2.threshold(
+                    historico_gray,
+                    150,
+                    255,
+                    cv2.THRESH_BINARY
+                )
+
+                texto_historico = pytesseract.image_to_string(
+                    historico_thresh,
+                    lang='por',
+                    config='--oem 3 --psm 6'
+                )
+
+                print('\n=========== OCR HISTÓRICO ===========\n')
+                print(texto_historico)
+
+                # =====================================================
+                # TRIBUTOS
+                # =====================================================
+
+                trib_y1 = int(altura * 0.48)
+                trib_y2 = int(altura * 0.72)
+
+                trib_x1 = int(largura * 0.45)
+                trib_x2 = largura
+
+                tributos = img[
+                    trib_y1:trib_y2,
+                    trib_x1:trib_x2
+                ]
+
+                trib_gray = cv2.cvtColor(
+                    tributos,
+                    cv2.COLOR_BGR2GRAY
+                )
+
+                trib_gray = cv2.resize(
+                    trib_gray,
+                    None,
+                    fx=4,
+                    fy=4,
+                    interpolation=cv2.INTER_CUBIC
+                )
+
+                _, trib_thresh = cv2.threshold(
+                    trib_gray,
+                    150,
+                    255,
+                    cv2.THRESH_BINARY
+                )
+
+                texto_tributos = pytesseract.image_to_string(
+                    trib_thresh,
+                    lang='por',
+                    config='--oem 3 --psm 6'
+                )
+
+                print('\n=========== OCR TRIBUTOS ===========\n')
+                print(texto_tributos)
+
+                texto_final = (
+                    texto_geral
+                    + '\n'
+                    + texto_historico
+                    + '\n'
+                    + texto_tributos
+                )
+
+                return texto_final
 
             # =====================================================
             # PDF
@@ -16766,19 +16881,15 @@ def importar_conta_concessionaria():
 
             n_uc = ''
 
-            uc_patterns = [
-                r'C[ÓO]DIGO DA INSTALA[ÇC][ÃA]O[:\s]*(\d{4,12})',
-                r'INSTALA[ÇC][ÃA]O\s*(\d{4,12})',
-            ]
+            uc_match = re.search(
+                r'C[ÓO]DIGO DA INSTALA[ÇC][ÃA]O.*?(\d{4,12})',
+                texto_upper,
+                re.DOTALL
+            )
 
-            for pattern in uc_patterns:
+            if uc_match:
 
-                uc_match = re.search(pattern, texto_upper)
-
-                if uc_match:
-
-                    n_uc = uc_match.group(1)
-                    break
+                n_uc = uc_match.group(1)
 
             print(f'[DEBUG] n_uc: {n_uc}')
 
@@ -16791,24 +16902,27 @@ def importar_conta_concessionaria():
             linhas = texto_upper.splitlines()
 
             # =====================================================
-            # 1. TABELA HISTÓRICO
+            # LINHA PRINCIPAL
             # =====================================================
 
             for linha in linhas:
 
                 linha_upper = linha.upper()
 
-                # linhas do histórico
-                if re.search(r'[A-Z]{3}/\d{2}', linha_upper):
+                if (
+                    'CONSUMO' in linha_upper
+                    or 'KH' in linha_upper
+                    or 'KWH' in linha_upper
+                ):
 
-                    print(f'[DEBUG] linha histórico: {linha_upper}')
+                    print(f'[DEBUG] linha principal consumo: {linha_upper}')
 
                     numeros = re.findall(
                         r'\b\d{3,5}\b',
                         linha_upper
                     )
 
-                    print(f'[DEBUG] numeros histórico: {numeros}')
+                    print(f'[DEBUG] numeros linha principal: {numeros}')
 
                     candidatos = []
 
@@ -16819,7 +16933,7 @@ def importar_conta_concessionaria():
                             valor = int(item)
 
                             if (
-                                100 <= valor <= 20000
+                                500 <= valor <= 20000
                                 and valor != int(n_uc or 0)
                                 and valor not in [2024, 2025, 2026]
                             ):
@@ -16829,37 +16943,47 @@ def importar_conta_concessionaria():
                         except:
                             pass
 
-                    print(f'[DEBUG] candidatos histórico: {candidatos}')
+                    print(f'[DEBUG] candidatos linha principal: {candidatos}')
 
-                    # pega o primeiro mês (mais atual)
                     if candidatos:
 
-                        consumo_medio = candidatos[0]
-                        break
+                        consumo_medio = max(candidatos)
+
+                        if consumo_medio >= 3000:
+                            break
 
             # =====================================================
-            # 2. TABELA MEDIDOR
+            # HISTÓRICO
             # =====================================================
 
             if consumo_medio == 0:
 
                 for linha in linhas:
 
-                    linha_upper = linha.upper()
+                    linha_upper = linha.upper().strip()
 
-                    if (
-                        'ENERGIA' in linha_upper
-                        or 'ATIVO' in linha_upper
+                    if any(x in linha_upper for x in [
+                        'REF:',
+                        'TOTAL',
+                        'VENCIMENTO',
+                        'FATURA',
+                        'PAGAR'
+                    ]):
+                        continue
+
+                    if re.search(
+                        r'^[A-Z]{3}/\d{2}',
+                        linha_upper
                     ):
 
-                        print(f'[DEBUG] linha medidor: {linha_upper}')
+                        print(f'[DEBUG] linha histórico: {linha_upper}')
 
                         numeros = re.findall(
                             r'\b\d{3,5}\b',
                             linha_upper
                         )
 
-                        print(f'[DEBUG] numeros medidor: {numeros}')
+                        print(f'[DEBUG] numeros histórico: {numeros}')
 
                         candidatos = []
 
@@ -16870,7 +16994,7 @@ def importar_conta_concessionaria():
                                 valor = int(item)
 
                                 if (
-                                    100 <= valor <= 20000
+                                    500 <= valor <= 20000
                                     and valor != int(n_uc or 0)
                                     and valor not in [2024, 2025, 2026]
                                 ):
@@ -16880,7 +17004,7 @@ def importar_conta_concessionaria():
                             except:
                                 pass
 
-                        print(f'[DEBUG] candidatos medidor: {candidatos}')
+                        print(f'[DEBUG] candidatos histórico: {candidatos}')
 
                         if candidatos:
 
@@ -17171,6 +17295,169 @@ def importar_conta_concessionaria():
         empresas=empresas,
         vendedores=vendedores,
         centros=centros
+    )
+    
+@app.route(
+    '/contas-concessionaria/<int:conta_id>/validar-vendedor',
+    methods=['POST']
+)
+def validar_vendedor_conta_concessionaria(conta_id):
+
+    conta = db.session.get(ContaConcessionaria, conta_id)
+
+    if not conta:
+        flash('Conta não encontrada.', 'danger')
+        return redirect(request.referrer)
+
+    conta.validacao_vendedor = True
+
+    db.session.commit()
+
+    flash('Proposta validada pelo vendedor.', 'success')
+
+    return redirect(request.referrer)
+
+
+@app.route(
+    '/contas-concessionaria/<int:conta_id>/validar-cliente',
+    methods=['POST']
+)
+def validar_cliente_conta_concessionaria(conta_id):
+
+    conta = db.session.get(ContaConcessionaria, conta_id)
+
+    if not conta:
+        flash('Conta não encontrada.', 'danger')
+        return redirect(request.referrer)
+
+    if not conta.validacao_vendedor:
+        flash('A proposta precisa ser validada pelo vendedor primeiro.', 'warning')
+        return redirect(request.referrer)
+
+    conta.validacao_cliente = True
+
+    db.session.commit()
+
+    flash('Proposta validada pelo cliente.', 'success')
+
+    return redirect(request.referrer)
+
+@app.route('/contas-concessionaria/<int:conta_id>/enviar-email')
+@login_required
+def enviar_email_conta_concessionaria(conta_id):
+
+    conta = ContaConcessionaria.query.get_or_404(conta_id)
+
+    centro = conta.centro_custo
+
+    # Prioriza email do representante
+    email_destino = (
+        centro.representante_email
+        or centro.email
+    )
+
+    if not email_destino:
+        flash(
+            'Nenhum e-mail cadastrado para este cliente.',
+            'warning'
+        )
+        return redirect(
+            url_for('listar_contas_concessionaria')
+        )
+
+    # LINK DA PROPOSTA
+    link_proposta = url_for(
+        'proposta_conta_concessionaria',
+        conta_id=conta.id,
+        slug=(centro.nome.lower().replace(' ', '-')),
+        _external=True
+    )
+
+    # VALIDADE
+    validade_proposta = None
+
+    if conta.criado_em:
+        validade_proposta = (
+            conta.criado_em + timedelta(days=15)
+        )
+
+    # HTML DO EMAIL
+    html_body = render_template(
+        'email_proposta_concessionaria.html',
+        conta=conta,
+        centro=centro,
+        link_proposta=link_proposta,
+        validade_proposta=validade_proposta
+    )
+
+    msg = Message(
+        subject=f'Proposta Comercial de Energia - UC {conta.n_uc}',
+
+        sender=(
+            'CGR Energia Solar',
+            'seuemail@dominio.com'
+        ),
+
+        recipients=[email_destino],
+
+        html=html_body
+    )
+
+    try:
+
+        mail.send(msg)
+
+        flash(
+            'E-mail da proposta enviado com sucesso!',
+            'success'
+        )
+
+    except Exception as e:
+
+        flash(
+            f'Erro ao enviar e-mail: {e}',
+            'danger'
+        )
+
+    return redirect(
+        url_for('listar_contas_concessionaria')
+    )
+    
+@app.route(
+    '/contas-concessionaria/<int:conta_id>/termo-adesao'
+)
+@login_required
+def termo_adesao_concessionaria(conta_id):
+
+    conta = db.session.get(
+        ContaConcessionaria,
+        conta_id
+    )
+
+    if not conta:
+        flash(
+            'Conta concessionária não encontrada.',
+            'warning'
+        )
+
+        return redirect(
+            url_for('listar_contas_concessionaria')
+        )
+
+    if not conta.validacao_cliente:
+
+        flash(
+            'O cliente ainda não validou a proposta.',
+            'warning'
+        )
+
+        return redirect(
+            url_for('listar_contas_concessionaria')
+        )
+
+    return render_template(
+        'termo_adesao_concessionaria.html',
+        conta=conta
     )
 
 

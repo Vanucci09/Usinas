@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Termo de Adesão - {{ conta.centro_custo.nome if conta.centro_custo else '-' }}</title>
+
+    <style>
+        body {
+            font-family: "Courier New", monospace;
+            background: #f5f5f5;
+            color: #000;
+            font-size: 14px;
+        }
+
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            background: #fff;
+            margin: 20px auto;
+            padding: 18mm;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 20px;
+            text-decoration: underline;
+            margin-bottom: 30px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        th {
+            background: #bfb8b8;
+            border: 1px solid #000;
+            text-align: center;
+            font-size: 16px;
+            padding: 5px;
+        }
+
+        td {
+            border: 1px solid #000;
+            padding: 5px 8px;
+            vertical-align: top;
+        }
+
+        .label {
+            width: 26%;
+            background: #bfb8b8;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        p {
+            text-align: justify;
+            line-height: 1.35;
+            margin-bottom: 12px;
+        }
+
+        .assinatura {
+            margin-top: 45px;
+            text-align: center;
+        }
+
+        .linha {
+            margin: 35px auto 5px;
+            width: 320px;
+            border-top: 1px solid #000;
+        }
+
+        .print-actions {
+            width: 210mm;
+            margin: 20px auto;
+            text-align: right;
+        }
+
+        button {
+            padding: 10px 18px;
+            border: none;
+            background: #0d6efd;
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        @media print {
+            body {
+                background: #fff;
+                margin: 0;
+            }
+
+            .print-actions {
+                display: none;
+            }
+
+            .page {
+                margin: 0;
+                width: 100%;
+                min-height: 297mm;
+                page-break-after: always;
+                box-shadow: none;
+            }
+
+            .page:last-child {
+                page-break-after: auto;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="print-actions">
+    <button onclick="window.print()">Imprimir Termo</button>
+</div>
+
+<!-- PÁGINA 1 -->
+<div class="page">
+
+    <h1>TERMO DE INTENÇÃO DE ADESÃO À CONSÓRCIO</h1>
+
+    <table>
+        <tr>
+            <th colspan="2">DADOS DA CONSORCIADA:</th>
+        </tr>
+
+        <tr>
+            <td class="label">Razão Social:</td>
+            <td>{{ conta.centro_custo.nome if conta.centro_custo else '-' }}</td>
+        </tr>
+
+        <tr>
+            <td class="label">CNPJ:</td>
+            <td>{{ conta.centro_custo.cpf_cnpj if conta.centro_custo and conta.centro_custo.cpf_cnpj else '-' }}</td>
+        </tr>
+
+        <tr>
+            <td class="label">Telefone:</td>
+            <td>{{ conta.centro_custo.telefone if conta.centro_custo and conta.centro_custo.telefone else '-' }}</td>
+        </tr>
+
+        <tr>
+            <td class="label">Endereço:</td>
+            <td>{{ conta.centro_custo.endereco if conta.centro_custo and conta.centro_custo.endereco else '-' }}</td>
+        </tr>
+
+        <tr>
+            <td class="label">Representante Legal:</td>
+            <td>
+                {{ conta.centro_custo.representante_nome if conta.centro_custo and conta.centro_custo.representante_nome else '-' }}
+            </td>
+        </tr>
+
+        <tr>
+            <td class="label">End. Rep. Legal:</td>
+            <td>
+                {{ conta.centro_custo.representante_endereco if conta.centro_custo and conta.centro_custo.representante_endereco else '-' }}
+            </td>
+        </tr>
+
+        <tr>
+            <td class="label">E-mail:</td>
+            <td>
+                {{ conta.centro_custo.representante_email or conta.centro_custo.email if conta.centro_custo else '-' }}
+            </td>
+        </tr>
+
+        <tr>
+            <td class="label">Distribuidora:</td>
+            <td>NEOENERGIA</td>
+        </tr>
+
+        <tr>
+            <td class="label">Nº do Cliente:</td>
+            <td>{{ conta.n_uc }}</td>
+        </tr>
+
+        <tr>
+            <td class="label">Desconto:</td>
+            <td>{{ conta.desconto|int }}% Sobre a TE</td>
+        </tr>
+
+        <tr>
+            <td class="label">Multa por Rescisão Antecipada:</td>
+            <td>
+                A fidelidade ao presente consórcio é de 12 meses após início da compensação
+                na conta de energia. Após esse prazo, a saída se dá apenas com notificação
+                antecipada de 90 dias. A saída no período de fidelidade enseja multa de 20%
+                sobre o montante estimado faltante para completar a fidelidade.
+            </td>
+        </tr>
+
+        <tr>
+            <td class="label">Prazos:</td>
+            <td>
+                Este termo possui prazo avençado de 60 (sessenta) meses a contar da data
+                da primeira compensação de créditos. Não há prazo inicial da compensação,
+                visto que há dependência da concessionária para ligações e homologação de
+                rateio de créditos.
+            </td>
+        </tr>
+    </table>
+
+    <p>
+        <strong>1. INTENÇÃO:</strong> Pelo presente Termo de Intenção de Adesão ao Consórcio
+        (“Termo”), a empresa acima qualificada (“Consorciada”), por liberalidade, opta por
+        tornar-se membro do Consórcio LLE Energia CNPJ 63.835.437/0001-65, sendo a Ipsum
+        Participações e Serviços Ltda como Consorciada Líder, cuja liderança é exercida pela
+        empresa CGR ENERGIA E ENGENHARIA LTDA CNPJ 30.295.719/0001-68.
+    </p>
+
+    <p>
+        (i) Com vistas a possibilitar sua participação no SCEE da ANEEL, criado pela REN 482,
+        na modalidade de Geração Compartilhada, sua participação neste Consórcio foi aprovada
+        por unanimidade entre seus sócios, com base nos arts. 278 e 279 da Lei 6.404/1976;
+    </p>
+
+</div>
+
+<!-- PÁGINA 2 -->
+<div class="page">
+
+    <p>
+        (ii) Autoriza a Consorciada Líder ou sua representante tomar todas as medidas e
+        assinarem todos os documentos necessários para tanto, incluindo, mas não se limitando
+        ao aditamento do instrumento de constituição do referido Consórcio;
+    </p>
+
+    <p>
+        (iii) O representante signatário possui pleno direito, poder e autoridade para celebrar
+        o presente Termo, cumprindo com as obrigações e compromissos estabelecidos nele.
+    </p>
+
+    <p>
+        (iv) O Instrumento Particular de Constituição de Consórcio e o presente Termo foram
+        devidamente aprovados, tendo a Consorciada recebido cópia de ambos e expressado sua
+        compreensão e concordância.
+    </p>
+
+    <p>
+        <strong>2. DAS COMUNICAÇÕES.</strong> Todas as comunicações entre a Consorciada e a
+        Consorciada Líder deverão ser feitas por escrito e transmitidas via correio ou documento
+        eletrônico encaminhado por e-mail.
+    </p>
+
+    <p>
+        <strong>3. DA ASSINATURA ELETRÔNICA.</strong> As Partes reconhecem e concordam que este
+        Termo poderá ser assinado e aceito com o uso de assinaturas eletrônicas e/ou digitais,
+        possuindo validade jurídica nos termos da legislação aplicável.
+    </p>
+
+    <p>
+        Brasília,
+        {% if conta.criado_em %}
+            {{ conta.criado_em.strftime('%d/%m/%Y') }}
+        {% else %}
+            ____/____/________
+        {% endif %}.
+    </p>
+
+    <div class="assinatura">
+        <div class="linha"></div>
+        {{ conta.centro_custo.nome if conta.centro_custo else '-' }}<br>
+        {{ conta.centro_custo.representante_nome if conta.centro_custo and conta.centro_custo.representante_nome else 'Representante Legal' }}
+    </div>
+
+    <div class="assinatura">
+        <div class="linha"></div>
+        Testemunha 01<br>
+        CPF:
+    </div>
+
+    <div class="assinatura">
+        <div class="linha"></div>
+        Testemunha 02<br>
+        CPF:
+    </div>
+
+</div>
+
+<!-- PÁGINA 3 -->
+<div class="page">
+
+    <h1>PROCURAÇÃO</h1>
+
+    <table>
+        <tr>
+            <th colspan="2">DADOS DA OUTORGANTE:</th>
+        </tr>
+
+        <tr>
+            <td class="label">Razão Social:</td>
+            <td>{{ conta.centro_custo.nome if conta.centro_custo else '-' }}</td>
+        </tr>
+
+        <tr>
+            <td class="label">CNPJ:</td>
+            <td>{{ conta.centro_custo.cpf_cnpj if conta.centro_custo and conta.centro_custo.cpf_cnpj else '-' }}</td>
+        </tr>
+
+        <tr>
+            <td class="label">Telefone:</td>
+            <td>{{ conta.centro_custo.telefone if conta.centro_custo and conta.centro_custo.telefone else '-' }}</td>
+        </tr>
+
+        <tr>
+            <td class="label">Endereço:</td>
+            <td>{{ conta.centro_custo.endereco if conta.centro_custo and conta.centro_custo.endereco else '-' }}</td>
+        </tr>
+
+        <tr>
+            <td class="label">Representante Legal:</td>
+            <td>{{ conta.centro_custo.representante_nome if conta.centro_custo and conta.centro_custo.representante_nome else '-' }}</td>
+        </tr>
+
+        <tr>
+            <td class="label">E-mail:</td>
+            <td>{{ conta.centro_custo.representante_email or conta.centro_custo.email if conta.centro_custo else '-' }}</td>
+        </tr>
+
+        <tr>
+            <td class="label">Distribuidora:</td>
+            <td>NEOENERGIA</td>
+        </tr>
+
+        <tr>
+            <td class="label">Nº do Cliente:</td>
+            <td>{{ conta.n_uc }}</td>
+        </tr>
+    </table>
+
+    <p>
+        <strong>I. QUALIFICAÇÃO:</strong> Outorgante
+        {{ conta.centro_custo.nome if conta.centro_custo else '-' }},
+        inscrita no CNPJ nº
+        {{ conta.centro_custo.cpf_cnpj if conta.centro_custo and conta.centro_custo.cpf_cnpj else '-' }},
+        neste ato representada por
+        {{ conta.centro_custo.representante_nome if conta.centro_custo and conta.centro_custo.representante_nome else '-' }},
+        nomeia e constitui como procuradora a Sra. BARBARA SANTANA RIOS,
+        portadora do RG nº 3235957 SSP-DF, CPF nº 035.681.321-50.
+    </p>
+
+    <p>
+        <strong>II. PODERES:</strong> Neste ato, a Consorciada expressamente outorga à CGR ENERGIA
+        procuração com poderes gerais necessários para que a represente em todo e qualquer assunto
+        interno do Consórcio, incluindo deliberações, representação perante terceiros, ANEEL,
+        CCEE, ONS, EPE, MME, CREA, concessionária e/ou distribuidora de energia elétrica local.
+    </p>
+
+</div>
+
+<!-- PÁGINA 4 -->
+<div class="page">
+
+    <p>
+        A presente procuração também autoriza a assinatura de alterações do Instrumento Particular
+        de Constituição do Consórcio, atos de ingresso e saída de Consorciada, extinção do Consórcio,
+        registros, arquivamentos, documentos necessários para viabilizar o enquadramento do Consórcio
+        e unidades consumidoras na modalidade de compensação de créditos de Geração Compartilhada.
+    </p>
+
+    <p>
+        A Consorciada outorga ainda poderes especiais para recebimento de citações, intimações e
+        notificações provenientes de qualquer processo judicial e/ou administrativo relacionado ao
+        Consórcio e/ou à sua condição de Consorciada.
+    </p>
+
+    <p>
+        Brasília,
+        {% if conta.criado_em %}
+            {{ conta.criado_em.strftime('%d/%m/%Y') }}
+        {% else %}
+            ____/____/________
+        {% endif %}.
+    </p>
+
+    <div class="assinatura">
+        <div class="linha"></div>
+        {{ conta.centro_custo.nome if conta.centro_custo else '-' }}<br>
+        {{ conta.centro_custo.representante_nome if conta.centro_custo and conta.centro_custo.representante_nome else 'Representante Legal' }}
+    </div>
+
+</div>
+
+</body>
+</html>

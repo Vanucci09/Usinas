@@ -83,23 +83,57 @@
 
                             <div class="d-flex justify-content-center gap-1 flex-wrap">
 
-                                <!-- PROPOSTA -->
-                                <a
-                                    href="{{ url_for(
-                                        'proposta_conta_concessionaria',
-                                        conta_id=conta.id,
-                                        slug=(conta.centro_custo.nome|lower|replace(' ', '-'))
-                                    ) }}"
-                                    target="_blank"
-                                    class="btn btn-sm btn-success shadow-xs rounded-pill action-btn-hover">
+                            <!-- PROPOSTA -->
+                            <a
+                                href="{{ url_for(
+                                    'proposta_conta_concessionaria',
+                                    conta_id=conta.id,
+                                    slug=(conta.centro_custo.nome|lower|replace(' ', '-'))
+                                ) }}"
+                                target="_blank"
+                                class="btn btn-sm btn-success shadow-xs rounded-pill action-btn-hover"
+                                title="Visualizar Proposta">
 
-                                    <i class="bi bi-file-earmark-text"></i>
+                                <i class="bi bi-file-earmark-text"></i>
+                            </a>
+
+                            <!-- TERMO DE ADESÃO -->
+                            {% if conta.validacao_cliente %}
+
+                            <a
+                                href="{{ url_for(
+                                    'termo_adesao_concessionaria',
+                                    conta_id=conta.id
+                                ) }}"
+                                target="_blank"
+                                class="btn btn-sm btn-warning shadow-xs rounded-pill action-btn-hover"
+                                title="Termo de Adesão">
+
+                                <i class="bi bi-file-earmark-richtext"></i>
+                            </a>
+
+                            {% endif %}
+
+                            {% if not conta.validacao_cliente %}
+
+                                <!-- ENVIAR EMAIL -->
+                                {% if conta.validacao_vendedor %}
+
+                                <a
+                                    href="{{ url_for('enviar_email_conta_concessionaria', conta_id=conta.id) }}"
+                                    class="btn btn-sm btn-dark shadow-xs rounded-pill action-btn-hover"
+                                    title="Enviar proposta por e-mail">
+
+                                    <i class="bi bi-envelope-fill"></i>
                                 </a>
+
+                                {% endif %}
 
                                 <!-- EDITAR -->
                                 <a
                                     href="{{ url_for('editar_conta_concessionaria', conta_id=conta.id) }}"
-                                    class="btn btn-sm btn-primary shadow-xs rounded-pill action-btn-hover">
+                                    class="btn btn-sm btn-primary shadow-xs rounded-pill action-btn-hover"
+                                    title="Editar">
 
                                     <i class="bi bi-pencil-square"></i>
                                 </a>
@@ -112,14 +146,17 @@
 
                                     <button
                                         type="submit"
-                                        class="btn btn-sm btn-danger shadow-xs rounded-pill action-btn-hover">
+                                        class="btn btn-sm btn-danger shadow-xs rounded-pill action-btn-hover"
+                                        title="Excluir">
 
                                         <i class="bi bi-trash"></i>
                                     </button>
 
                                 </form>
 
-                            </div>
+                            {% endif %}
+
+                        </div>
 
                         </td>
                     </tr>

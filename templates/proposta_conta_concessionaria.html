@@ -3,9 +3,7 @@
 <head>
 
     <meta charset="UTF-8">
-    <title>
-        Proposta Comercial - {{ conta.centro_custo.nome }}
-    </title>
+    <title>Proposta Comercial - {{ conta.centro_custo.nome if conta.centro_custo else '-' }}</title>
 
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
@@ -20,31 +18,35 @@
 </head>
 
 <body class="bg-light">
-                <div class="container py-4">
+    <div class="container py-4">
 
-    <div class="card shadow-sm border-0 mb-4 card-proposal">
+    <div class="card shadow-sm border-0 mb-4 card-proposal print-block">
         <div class="card-body">
 
             <div class="d-flex justify-content-between align-items-center mb-3 hide-on-print">
-
-                <h4 class="mb-0 text-primary fw-bold">
+                <h3 class="mb-0 text-primary fw-bold fs-3">
                     <i class="bi bi-file-earmark-bar-graph"></i>
-                    Proposta Comercial — Geração Distribuída
-                </h4>
+                    Proposta Comercial — {{ conta.centro_custo.nome if conta.centro_custo else '-' }}
+                </h3>
 
                 <button onclick="window.print()" class="btn btn-primary px-4">
                     <i class="bi bi-printer-fill me-2"></i>
                     Imprimir Proposta
                 </button>
+            </div>
+            
 
+            <div class="d-none show-on-print-block mb-4">
+                <h2 class="text-primary fw-bold display-6 border-bottom pb-2">
+                    Proposta Comercial — {{ conta.centro_custo.nome if conta.centro_custo else '-' }}
+                </h2>
             </div>
 
-            <div class="row pt-2">
-                <div class="col-md-6">
+            <div class="row pt-2 g-3">
+                <div class="col-md-4 col-6">
                     <p class="mb-1"><strong>Cliente:</strong> {{ conta.centro_custo.nome if conta.centro_custo else '-' }}</p>
                     <p class="mb-1">
                         <strong>CNPJ/CPF:</strong>
-
                         {% if conta.centro_custo and conta.centro_custo.cpf_cnpj %}
                             {{ conta.centro_custo.cpf_cnpj }}
                         {% else %}
@@ -53,16 +55,39 @@
                     </p>
                     <p class="mb-1"><strong>Unidade Consumidora (UC):</strong> {{ conta.n_uc }}</p>
                 </div>
-                <div class="col-md-6 text-md-end">
+                <div class="col-md-4 col-6">
                     <p class="mb-1"><strong>Vendedor:</strong> {{ conta.vendedor.nome if conta.vendedor else '-' }}</p>
                     <p class="mb-1"><strong>Fase:</strong> {{ conta.fase }}</p>
                     <p class="mb-1"><strong>Bandeira Tarifária:</strong> {{ conta.bandeira }}</p>
+                </div>
+                <div class="col-md-4 col-12 text-md-end pt-md-0 pt-2">
+
+                    <p class="mb-1">
+                        <strong>Data da Proposta:</strong>
+
+                        {% if conta.criado_em %}
+                            {{ conta.criado_em.strftime('%d/%m/%Y') }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </p>
+
+                    <p class="mb-1 text-danger">
+                        <strong>Validade da Proposta:</strong>
+
+                        {% if validade_proposta %}
+                            {{ validade_proposta.strftime('%d/%m/%Y') }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </p>
+
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="card shadow-sm border-0 mb-4 card-proposal">
+    <div class="card shadow-sm border-0 mb-4 card-proposal print-block">
         <div class="card-header bg-dark text-white fw-bold py-3 d-flex align-items-center justify-content-between">
             <span><i class="bi bi-calculator-fill me-2 text-warning"></i> ANÁLISE ECONÔMICA E COMPARATIVO DE CUSTOS</span>
             <span class="badge bg-secondary text-white fw-normal font-monospace">Valores em R$ (BRL)</span>
@@ -74,7 +99,7 @@
                         <th scope="col" class="ps-4 py-3">Detalhamento dos Valores</th>
                         <th scope="col" class="text-center py-3" style="width: 60px;">Ref.</th>
                         <th scope="col" class="text-end py-3 style-price-col">Valor</th>
-                        <th scope="col" class="text-center py-3 bg-red fw-bold text-white border-start-0" style="width: 240px;" id="header-dinamico-lateral">
+                        <th scope="col" class="text-center py-3 bg-red fw-bold text-white border-start-0" style="width: 240px;">
                             FATURA ATUAL<br>SEM CONSÓRCIO
                         </th>
                     </tr>
@@ -148,7 +173,16 @@
                                 <div class="icon-box-eco mb-2">
                                     <i class="bi bi-piggy-bank-fill fs-2 text-success-dark"></i>
                                 </div>
-                                <span class="fs-5 lh-sm d-block fw-extrabold text-success-dark">Economia de quase<br>3 contas por ano!</span>
+                                {% set qtd_contas = (
+                                    (dados.ganho_anual / dados.total_concessionaria)
+                                    if dados.total_concessionaria > 0
+                                    else 0
+                                ) %}
+
+                                <span class="fs-5 lh-sm d-block fw-extrabold text-success-dark">
+                                    Economia de quase<br>
+                                    {{ qtd_contas|round(1) }} contas por ano!
+                                </span>
                             </div>
                         </td>
                     </tr>
@@ -168,11 +202,21 @@
                         <td class="text-end fw-extrabold text-success fs-5 font-monospace js-format-porcento">{{ dados.economia_percentual }}</td>
                     </tr>
 
-                    <tr class="bg-light text-muted">
-                        <td colspan="4" class="small fst-italic py-3 ps-4 border-top">
-                            <i class="bi bi-info-circle-fill me-1 text-secondary"></i> Para a aplicação integral deste percentual de benefício, o titular da unidade consumidora deve estar devidamente enquadrado nas condições de <strong>Classificação Empresarial</strong> elegíveis (ex: ME ou EPP).
-                        </td>
-                    </tr>
+                        {% if conta.me_epp %}
+
+                        <tr class="bg-light text-muted">
+                            <td colspan="4" class="small fst-italic py-3 ps-4 border-top">
+                                <i class="bi bi-info-circle-fill me-1 text-secondary"></i>
+
+                                Para a aplicação integral deste percentual de benefício,
+                                o titular da unidade consumidora deve estar devidamente
+                                enquadrado nas condições de
+                                <strong>Classificação Empresarial</strong>
+                                elegíveis (ex: ME ou EPP).
+                            </td>
+                        </tr>
+
+                        {% endif %}
                     <tr>
                         <td colspan="4" class="p-4 text-center text-dark border-top-0 call-to-action-box bg-white">
                             <p class="mb-3 fs-6">
@@ -188,57 +232,170 @@
         </div>
     </div>
 
-    <div class="page-break"></div>
-
-    <div class="card shadow-sm border-0 mb-4 card-proposal mt-4">
+    <div class="card shadow-sm border-0 mb-4 card-proposal mt-4 print-block">
         <div class="card-header bg-dark text-white fw-bold py-3">
             <i class="bi bi-info-circle me-2"></i> ENTENDA COMO FUNCIONA A OPERAÇÃO
         </div>
         <div class="card-body p-4 text-dark">
             
-            <div class="row g-4 mb-4">
+            <div class="row g-4 mb-4 prevent-split">
                 <div class="col-md-4">
                     <div class="p-3 rounded border border-primary h-100 bg-white shadow-xs">
                         <h5 class="fw-bold text-primary mb-2"><i class="bi bi-file-earmark-text"></i> O Consórcio</h5>
-                        <p class="small text-muted mb-0">Através do consórcio, é celebrado um contrato de arrendamento do parque solar, onde os consorciados são inseridos de acordo com o respectivo percentual, até que se chegue a 100% da energia disponível do parque.</p>
+                        <p class="small text-muted mb-0">Através do consórcio, é celebrado um contrato de arrendamento do parque solar, onde os consorciados são inseridos de acordo com o respectivo percentual, até que se chegue a 100% da energia disponível do parque. As regras do consórcio são iguais para todos.</p>
                     </div>
                 </div>
                 <div class="col-md-4">
                     <div class="p-3 rounded border border-info h-100 bg-white shadow-xs">
                         <h5 class="fw-bold text-info mb-2"><i class="bi bi-building"></i> A Distribuidora</h5>
-                        <p class="small text-muted mb-0">A lista de consorciados, com os respectivos percentuais, é enviada à distribuidora local, que fará o cadastro das Unidades Consumidoras. A leitura da usina é feita mensalmente e os créditos de energia são repassados diretamente aos consorciados.</p>
+                        <p class="small text-muted mb-0">A lista de consorciados, com os respectivos percentuais, é enviada à distribuidora local, que fará o cadastro das Unidades Consumidoras. A leitura da usina é feita mensalmente e os créditos de energia são repassados diretamente aos consorciados. Sua energia continua sendo fornecida pela distribuidora local, a operação é totalmente burocrática.</p>
                     </div>
                 </div>
                 <div class="col-md-4">
                     <div class="p-3 rounded border border-success h-100 bg-white shadow-xs">
                         <h5 class="fw-bold text-success mb-2"><i class="bi bi-gear-wide-connected"></i> A Gestão (CGR)</h5>
-                        <p class="small text-muted mb-0">A CGR, como gestora do consórcio, confere a medição física realizada e despacha as faturas de forma a ratear perfeitamente os créditos relativos a cada Unidade Consumidora participante.</p>
+                        <p class="small text-muted mb-0">A CGR como gestora do consórcio, confere o lançamento dos créditos para as consorciadas, balanço do rateio e despacha as faturas do consórcio, assim como administra o relacionamento do consórcio com a distribuidora local e proprietários dos diversos parques solares que administra.</p>
                     </div>
                 </div>
             </div>
 
-            <h5 class="fw-bold border-bottom pb-2 mb-3 mt-4 text-secondary"><i class="bi bi-sliders"></i> Diretrizes e Condições Comerciais</h5>
-            <div class="bg-light p-3 rounded mb-3 border-start border-warning border-3">
-                <ul class="mb-0 ps-3 text-muted">
-                    <li class="mb-2">A presente proposta prevê a contabilização dos créditos aos consorciados a partir do início do período de operação da usina.</li>
-                    <li class="mb-2">Nosso plano offers aos consorciados um desconto de <strong>até 15%</strong> em relação à tarifa nominal vigente (base verde da concessionária), estruturado em um contrato de 60 meses.</li>
-                    <li><i class="bi bi-exclamation-triangle-fill text-warning"></i> <strong>Nota de Variabilidade:</strong> O valor cobrado é variável e corrigido conforme os reajustes oficiais da tarifa de energia elétrica aplicados pela concessionária local, pois os custos de rateio do consórcio são diretamente indexados a essa tarifa.</li>
-                </ul>
+            <div class="prevent-split">
+                <h5 class="fw-bold border-bottom pb-2 mb-3 mt-4 text-secondary"><i class="bi bi-sliders"></i> Diretrizes e Condições Comerciais</h5>
+                <div class="table-responsive mb-4">
+                    <div class="alert alert-warning border shadow-sm mb-4">
+                        <div class="d-flex align-items-start">
+                            <i class="bi bi-lightning-charge-fill fs-3 text-warning me-3"></i>
+                            <div class="text-dark">
+                                <strong>Importante:</strong>
+                                O desconto ofertado é calculado considerando a
+                                <strong>bandeira verde</strong> da concessionária.
+                                Durante períodos de bandeiras tarifárias adicionais
+                                (amarela, vermelha patamar I e vermelha patamar II),
+                                o percentual de economia tende a aumentar,
+                                pois o desconto é aplicado diretamente sobre o valor do consumo de energia faturado.
+                            </div>
+                        </div>
+                    </div>
+
+                    <table class="table table-bordered align-middle text-center shadow-sm overflow-hidden rounded">
+                        <thead>
+                            <tr class="table-dark">
+                                <th colspan="5" class="py-3 fs-5">
+                                    <i class="bi bi-tag-fill me-2"></i>
+                                    Impacto da Bandeira Tarifária no Desconto Aplicado
+                                </th>
+                            </tr>
+                            <tr class="bg-light">
+                                <th class="fw-bold fst-italic">Bandeira</th>
+                                <th class="text-success fw-bold">Verde</th>
+                                <th class="text-warning fw-bold">Amarela</th>
+                                <th style="color:#dc3545;" class="fw-bold">Vermelha I</th>
+                                <th style="color:#c82333;" class="fw-bold">Vermelha II</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="fw-semibold bg-light">Desconto</td>
+                                <td class="fs-5 fw-bold text-success">15,00%</td>
+                                <td class="fs-5 fw-bold text-warning">18,00%</td>
+                                <td class="fs-5 fw-bold text-danger">20,00%</td>
+                                <td class="fs-5 fw-bold" style="color:#c82333;">22,00%</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="alert alert-light border shadow-sm">
+                    <div class="d-flex align-items-start">
+                        <i class="bi bi-info-circle-fill text-primary fs-3 me-3"></i>
+                        <div class="text-muted">
+                            Os percentuais acima representam o desconto máximo aplicado sobre a tarifa nominal
+                            (base verde da concessionária), considerando o impacto da bandeira tarifária vigente.
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <h5 class="fw-bold border-bottom pb-2 mb-3 mt-4 text-danger"><i class="bi bi-shield-check"></i> Garantias de Transparência e Segurança</h5>
-            <div class="bg-light p-3 rounded mb-2 border-start border-danger border-3">
-                <p class="mb-2 text-muted fw-semibold">É importante ressaltar duas premissas fundamentais para a proteção financeira do cliente:</p>
-                <ol class="mb-3 ps-3 text-muted">
-                    <li class="mb-2"><strong>Risco Zero:</strong> Não há qualquer tipo de custo prévio para a adesão e ingresso no consórcio. O rateio de cobrança só é iniciado para o consorciado após a efetiva verificação de que o mesmo já recebeu os créditos homologados em sua fatura de energia elétrica, sempre correspondentes à geração mensal real da usina.</li>
-                    <li class="mb-2"><strong>Flexibilidade de Saída:</strong> Não há aplicação de multa rescisória caso o cliente opte por sair do modelo antes do término do prazo estimado de 60 meses. No entanto, em caso de saída voluntária, o consorciado deverá quitar integralmente todos os saldos de créditos acumulados e consumidos até o desligamento definitivo.</li>
-                    <li class="mb-2"><strong>Incidência do Benefício:</strong> O desconto comercial é aplicado exclusivamente sobre o valor regulado da <strong>TARIFA DE ENERGIA (TE)</strong> e não sobre o montante integral e bruto da fatura (que engloba taxas fixas, impostos e contribuições). Dessa forma, a percepção de desconto global sobre a conta total apresentará uma proporção naturalmente menor do que o percentual nominal incidente sobre a tarifa de energia isolada.</li>
-                    <li><strong>Cronograma de Entrada em Operação:</strong> Como as adesões são comercializadas de forma antecipada à entrada em operação do Parque Solar, torna-se imperativo que o cliente verifique junto ao consultor a disponibilidade imediata de cotas e os prazos oficiais de cronograma para o início da operação do Parque Solar ofertado.</li>
-                </ol>
+            <div class="prevent-split mt-4">
+                <h5 class="fw-bold border-bottom pb-2 mb-3 text-danger"><i class="bi bi-shield-check"></i> Garantias de Transparência e Segurança</h5>
+                <div class="bg-light p-3 rounded mb-2 border-start border-danger border-3">
+                    <p class="mb-2 text-muted fw-semibold">É importante ressaltar duas premissas fundamentais para a proteção financeira do cliente:</p>
+                    <ol class="mb-3 ps-3 text-muted">
+                        <li class="mb-2"><strong>Risco Zero:</strong> Não há qualquer tipo de custo prévio para a adesão e ingresso no consórcio. O rateio de cobrança só é iniciado para o consorciado após a efetiva verificação de que o mesmo já recebeu os créditos homologados em sua fatura de energia elétrica, sempre correspondentes à geração mensal real da usina.</li>
+                        <li class="mb-2"><strong>Flexibilidade de Saída:</strong> Não há aplicação de multa rescisória caso o cliente opte por sair do modelo antes do término do prazo estimado de 12 meses. No entanto, em caso de saída voluntária, o consorciado deverá quitar integralmente todos os saldos de créditos acumulados e consumidos até o desligamento definitivo.</li>
+                        <li class="mb-2"><strong>Incidência do Benefício:</strong> O desconto comercial é aplicado exclusivamente sobre o valor regulado da <strong>TARIFA DE ENERGIA (TE)</strong> e não sobre o montante integral e bruto da fatura (que engloba taxas fixas, impostos e contribuições). Dessa forma, a percepção de desconto global sobre a conta total apresentará uma proporção naturalmente menor do que o percentual nominal incidente sobre a tarifa de energia isolada.</li>
+                        <li><strong>Cronograma de Entrada em Operação:</strong> Como as adesões são comercializadas de forma antecipada à entrada em operação do Parque Solar, torna-se imperativo que o cliente verifique junto ao consultor a disponibilidade imediata de cotas e os prazos oficiais de cronograma para o início da operação do Parque Solar ofertado.</li>
+                    </ol>
+                </div>
             </div>
 
         </div>
     </div>
+    <!-- AÇÕES DA PROPOSTA -->
+<div class="card shadow-sm border-0 mt-4 hide-on-print">
+    
+    <div class="card-body">
+
+        <div class="d-flex justify-content-center flex-wrap gap-3">
+
+            <!-- IMPRIMIR -->
+            <button
+                onclick="window.print()"
+                class="btn btn-primary btn-lg px-5 rounded-pill shadow-sm">
+
+                <i class="bi bi-printer-fill me-2"></i>
+                Imprimir Proposta
+            </button>
+
+            <!-- VALIDAÇÃO VENDEDOR -->
+            {% if not conta.validacao_vendedor %}
+
+            <form method="POST"
+                  action="{{ url_for('validar_vendedor_conta_concessionaria', conta_id=conta.id) }}">
+
+                <button
+                    type="submit"
+                    class="btn btn-success btn-lg px-5 rounded-pill shadow-sm">
+
+                    <i class="bi bi-check-circle-fill me-2"></i>
+                    Aprovar Proposta
+                </button>
+            </form>
+
+            {% endif %}
+
+            <!-- VALIDAÇÃO CLIENTE -->
+            {% if conta.validacao_vendedor and not conta.validacao_cliente %}
+
+            <form method="POST"
+                  action="{{ url_for('validar_cliente_conta_concessionaria', conta_id=conta.id) }}">
+
+                <button
+                    type="submit"
+                    class="btn btn-dark btn-lg px-5 rounded-pill shadow-sm">
+
+                    <i class="bi bi-person-check-fill me-2"></i>
+                    Aceite do Cliente
+                </button>
+            </form>
+
+            {% endif %}
+
+            <!-- STATUS -->
+            {% if conta.validacao_cliente %}
+
+            <div class="alert alert-success mb-0 px-4 py-3 rounded-pill fw-bold d-flex align-items-center">
+                <i class="bi bi-patch-check-fill me-2"></i>
+                Proposta Validada
+            </div>
+
+            {% endif %}
+
+        </div>
+
+    </div>
+
+</div>
 
 </div>
 
@@ -288,23 +445,33 @@
         border-radius:16px !important;
         overflow:hidden;
     }
+
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
-    .card-proposal, .proposta-table {
+    .card-proposal,
+    .proposta-table {
         font-family: 'Inter', -apple-system, sans-serif !important;
         letter-spacing: -0.01em;
     }
-    
-    .fs-7 { font-size: 0.8rem !important; }
-    .tracking-wider { letter-spacing: 0.05em !important; }
-    .fw-extrabold { font-weight: 800 !important; }
-    
-    .proposta-table th, 
+
+    .fs-7 {
+        font-size: 0.8rem !important;
+    }
+
+    .tracking-wider {
+        letter-spacing: 0.05em !important;
+    }
+
+    .fw-extrabold {
+        font-weight: 800 !important;
+    }
+
+    .proposta-table th,
     .proposta-table td {
         border: 1px solid #e9ecef !important;
         padding: 12px 16px !important;
     }
-    
+
     .style-price-col {
         width: 170px;
     }
@@ -314,46 +481,56 @@
         color: #ffffff !important;
     }
 
-    /* BORDAS GROSSAS PARA DIVISIONAR CADA ESTRUTURA/PERÍODO */
-    .bloco-vermelho-top td, .bloco-amarelo-top td, .bloco-verde-top td {
-        border-top: 4px solid #212529 !important; /* Divisor superior robusto */
-    }
-    .bloco-vermelho-bottom td, .bloco-amarelo-bottom td, .bloco-verde-bottom td {
-        border-bottom: 4px solid #212529 !important; /* Divisor inferior robusto */
+    .bloco-vermelho-top td,
+    .bloco-amarelo-top td,
+    .bloco-verde-top td {
+        border-top: 4px solid #212529 !important;
     }
 
-    /* Customização de Cores dos Cards Laterais */
+    .bloco-vermelho-bottom td,
+    .bloco-amarelo-bottom td,
+    .bloco-verde-bottom td {
+        border-bottom: 4px solid #212529 !important;
+    }
+
     .bg-red {
         background-color: #EE5253 !important;
     }
+
     .bg-red-gradient {
         background: linear-gradient(180deg, #FF6B6B 0%, #EE5253 100%) !important;
     }
+
     .table-danger-light {
         background-color: #FFF5F5 !important;
     }
 
-    .bg-yellow { 
-        background-color: #FFDE4D !important; 
+    .bg-yellow {
+        background-color: #FFDE4D !important;
         color: #000000 !important;
     }
+
     .bg-yellow-gradient {
         background: linear-gradient(180deg, #FFDE4D 0%, #F4CE14 100%) !important;
         color: #000000 !important;
     }
+
     .table-warning-light {
         background-color: #FFFBEB !important;
     }
-    
+
     .bg-success-gradient {
         background: linear-gradient(180deg, #4CD137 0%, #44BD32 100%) !important;
     }
+
     .table-success-row {
         background-color: #F4FEE3 !important;
     }
+
     .table-success-highlight {
         background-color: #E6FCD2 !important;
     }
+
     .text-success-dark {
         color: #1B4D0C !important;
     }
@@ -385,44 +562,156 @@
     .visual-pulse {
         animation: sun-pulse 3s infinite ease-in-out;
     }
+
     @keyframes sun-pulse {
-        0% { transform: scale(1); opacity: 0.9; }
-        50% { transform: scale(1.08); opacity: 1; }
-        100% { transform: scale(1); opacity: 0.9; }
+        0% {
+            transform: scale(1);
+            opacity: 0.9;
+        }
+
+        50% {
+            transform: scale(1.08);
+            opacity: 1;
+        }
+
+        100% {
+            transform: scale(1);
+            opacity: 0.9;
+        }
+    }
+
+    .show-on-print-block {
+        display: none !important;
     }
 
     .page-break {
-        display: none;
+        display: block;
+        height: 1px;
     }
 
+    /* ============================= */
+    /* IMPRESSÃO / PDF */
+    /* ============================= */
+
     @media print {
-        nav, .navbar, .sidebar, .btn, footer, .hide-on-print {
+
+        @page {
+            size: A4;
+            margin: 10mm;
+        }
+
+        nav,
+        .navbar,
+        .sidebar,
+        .btn,
+        footer,
+        .hide-on-print {
             display: none !important;
         }
 
+        .show-on-print-block {
+            display: block !important;
+        }
+
+        html,
         body {
+            width: 100%;
+            height: auto;
+            overflow: visible !important;
+
             background: #ffffff !important;
             color: #000000 !important;
+
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
+        }
+
+        body {
+            margin: 0 !important;
+            padding: 0 !important;
         }
 
         .container {
             max-width: 100% !important;
             width: 100% !important;
+
             padding: 0 !important;
             margin: 0 !important;
         }
 
-        .card {
-            border: none !important;
+        .card-proposal {
             box-shadow: none !important;
-            margin-bottom: 0 !important;
+            border: 1px solid #dcdcdc !important;
+
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+
+            margin-bottom: 20px !important;
+        }
+
+        .table-responsive {
+            overflow: visible !important;
+        }
+
+        .proposta-table {
+            width: 100% !important;
+            font-size: 11px !important;
+        }
+
+        .proposta-table td,
+        .proposta-table th {
+            padding: 8px !important;
+        }
+
+        .display-total-saving {
+            font-size: 1.3rem !important;
+            padding: 10px 20px !important;
+        }
+
+        .print-block,
+        .prevent-split,
+        table,
+        tr,
+        td,
+        th,
+        ol,
+        ul,
+        li,
+        .alert,
+        .card-body,
+        .card-header,
+        .row,
+        .col-md-4,
+        .col-6,
+        .col-12 {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
         }
 
         .page-break {
-            display: block;
-            page-break-before: always;
+            display: block !important;
+            page-break-before: always !important;
+
+            height: 0 !important;
+            margin: 0 !important;
+        }
+
+        .bg-red-gradient,
+        .bg-yellow-gradient,
+        .bg-success-gradient,
+        .table-warning-light,
+        .table-danger-light,
+        .table-success-highlight,
+        .table-dark-custom,
+        .bg-dark {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+
+        .shadow-sm,
+        .shadow,
+        .shadow-xs {
+            box-shadow: none !important;
         }
     }
 </style>
