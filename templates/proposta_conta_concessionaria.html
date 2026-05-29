@@ -18,81 +18,109 @@
 </head>
 
 <body class="bg-light">
-    <div class="container py-4">
+<div class="container py-4">
 
-    <div class="card shadow-sm border-0 mb-4 card-proposal print-block">
+    <div class="card shadow-sm border-0 mb-4 card-proposal print-block p-2">
         <div class="card-body">
 
-            <div class="d-flex justify-content-between align-items-center mb-3 hide-on-print">
-                <h3 class="mb-0 text-primary fw-bold fs-3">
-                    <i class="bi bi-file-earmark-bar-graph"></i>
-                    Proposta Comercial — {{ conta.centro_custo.nome if conta.centro_custo else '-' }}
+            <div class="d-flex justify-content-between align-items-center pb-3 mb-4 border-bottom hide-on-print">
+                <h3 class="mb-0 text-primary fw-bold d-flex align-items-center gap-2" style="letter-spacing: -0.5px;">
+                    <i class="bi bi-file-earmark-bar-graph-fill text-primary"></i>
+                    Proposta Comercial
                 </h3>
-
-                <button onclick="window.print()" class="btn btn-primary px-4">
-                    <i class="bi bi-printer-fill me-2"></i>
+                <button onclick="window.print()" class="btn btn-primary px-4 fw-semibold d-flex align-items-center gap-2 shadow-sm">
+                    <i class="bi bi-printer-fill"></i>
                     Imprimir Proposta
                 </button>
             </div>
-            
 
-            <div class="d-none show-on-print-block mb-4">
-                <h2 class="text-primary fw-bold display-6 border-bottom pb-2">
-                    Proposta Comercial — {{ conta.centro_custo.nome if conta.centro_custo else '-' }}
-                </h2>
+            <div class="d-none show-on-print-block text-center mb-4 pb-3 border-bottom">
+                <img src="{{ url_for('static', filename='Nova_logo_CGR.jpeg') }}" alt="Logo CGR Energia" style="height: 90px; object-fit: contain;">
+                <h2 class="text-primary fw-bold mt-2 mb-0" style="letter-spacing: -1px;">PROPOSTA COMERCIAL</h2>
             </div>
 
-            <div class="row pt-2 g-3">
-                <div class="col-md-4 col-6">
-                    <p class="mb-1"><strong>Cliente:</strong> {{ conta.centro_custo.nome if conta.centro_custo else '-' }}</p>
-                    <p class="mb-1">
-                        <strong>CNPJ/CPF:</strong>
-                        {% if conta.centro_custo and conta.centro_custo.cpf_cnpj %}
-                            {{ conta.centro_custo.cpf_cnpj }}
-                        {% else %}
-                            Não informado
-                        {% endif %}
-                    </p>
-                    <p class="mb-1"><strong>Unidade Consumidora (UC):</strong> {{ conta.n_uc }}</p>
+            <div class="row g-4 align-items-stretch m-0">
+                
+                <div class="col-md-3 text-center hide-on-print ps-0">
+                    <div class="p-3 bg-white rounded border d-flex align-items-center justify-content-center h-100" style="min-height: 160px;">
+                        <img src="{{ url_for('static', filename='Nova_logo_CGR.jpeg') }}" alt="Logo CGR Energia" class="img-fluid" style="max-height: 130px; width: auto; object-fit: contain;">
+                    </div>
                 </div>
-                <div class="col-md-4 col-6">
-                    <p class="mb-1"><strong>Vendedor:</strong> {{ conta.vendedor.nome if conta.vendedor else '-' }}</p>
-                    <p class="mb-1"><strong>Fase:</strong> {{ conta.fase }}</p>
-                    <p class="mb-1"><strong>Bandeira Tarifária:</strong> {{ conta.bandeira }}</p>
+
+                <div class="col-md-5">
+                    <div class="bg-light p-3 rounded h-100 border-start border-primary border-3 shadow-inner d-flex flex-column justify-content-between">
+                        <div>
+                            <h6 class="fw-bold text-primary text-uppercase mb-3 d-flex align-items-center gap-2" style="font-size: 0.85rem; letter-spacing: 0.5px;">
+                                <i class="bi bi-geo-alt-fill"></i> Unidade Consumidora
+                            </h6>
+                            <div class="d-flex flex-column gap-2" style="font-size: 0.95rem;">
+                                <div>
+                                    <span class="text-muted d-block small text-uppercase fw-semibold" style="font-size: 0.75rem;">Cliente</span>
+                                    <strong class="text-dark">{{ conta.centro_custo.nome if conta.centro_custo else '-' }}</strong>
+                                </div>
+                                <div>
+                                    <span class="text-muted d-block small text-uppercase fw-semibold" style="font-size: 0.75rem;">CNPJ / CPF</span>
+                                    <span class="text-dark fw-medium">
+                                        {{ conta.centro_custo.cpf_cnpj if conta.centro_custo and conta.centro_custo.cpf_cnpj else 'Não informado' }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <span class="text-muted d-block small text-uppercase fw-semibold mb-1" style="font-size: 0.75rem;">Código da UC</span>
+                            <span class="badge bg-secondary text-white font-monospace px-2 py-1.5">{{ conta.n_uc }}</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="col-md-4 col-12 text-md-end pt-md-0 pt-2">
 
-                    <p class="mb-1">
-                        <strong>Data da Proposta:</strong>
-
-                        {% if conta.criado_em %}
-                            {{ conta.criado_em.strftime('%d/%m/%Y') }}
-                        {% else %}
-                            -
-                        {% endif %}
-                    </p>
-
-                    <p class="mb-1 text-danger">
-                        <strong>Validade da Proposta:</strong>
-
-                        {% if validade_proposta %}
-                            {{ validade_proposta.strftime('%d/%m/%Y') }}
-                        {% else %}
-                            -
-                        {% endif %}
-                    </p>
-
+                <div class="col-md-4 pe-0">
+                    <div class="bg-light p-3 rounded h-100 border-start border-dark border-3">
+                        <h6 class="fw-bold text-dark text-uppercase mb-3 d-flex align-items-center gap-2" style="font-size: 0.85rem; letter-spacing: 0.5px;">
+                            <i class="bi bi-info-circle-fill text-muted"></i> Informações Globais
+                        </h6>
+                        <table class="table table-sm table-borderless mb-0" style="font-size: 0.9rem;">
+                            <tbody>
+                                <tr>
+                                    <td class="text-muted py-1 ps-0 text-uppercase fw-semibold" style="font-size: 0.75rem;">Consultor:</td>
+                                    <td class="text-end fw-medium py-1 pe-0 text-dark">{{ conta.vendedor.nome if conta.vendedor else '-' }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted py-1 ps-0 text-uppercase fw-semibold" style="font-size: 0.75rem;">Fase:</td>
+                                    <td class="text-end py-1 pe-0 text-dark"><span class="badge bg-dark-subtle text-dark fw-semibold">{{ conta.fase }}</span></td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted py-1 ps-0 text-uppercase fw-semibold" style="font-size: 0.75rem;">Bandeira:</td>
+                                    <td class="text-end fw-medium py-1 pe-0 text-dark">{{ conta.bandeira }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted py-1 ps-0 text-uppercase fw-semibold" style="font-size: 0.75rem;">Emissão:</td>
+                                    <td class="text-end fw-medium py-1 pe-0 text-dark">
+                                        {{ conta.criado_em.strftime('%d/%m/%Y') if conta.criado_em else '-' }}
+                                    </td>
+                                </tr>
+                                <tr class="border-top-dashed">
+                                    <td class="text-danger py-2 ps-0 text-uppercase fw-bold" style="font-size: 0.75rem;">Validade:</td>
+                                    <td class="text-end text-danger fw-bold py-2 pe-0">
+                                        <i class="bi bi-calendar-event-fill small me-1"></i>
+                                        {{ validade_proposta.strftime('%d/%m/%Y') if validade_proposta else '-' }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-            </div>
-        </div>
+
+            </div> </div>
     </div>
+
+    <div class="page-break"></div>
 
     <div class="card shadow-sm border-0 mb-4 card-proposal print-block">
         <div class="card-header bg-dark text-white fw-bold py-3 d-flex align-items-center justify-content-between">
             <span><i class="bi bi-calculator-fill me-2 text-warning"></i> ANÁLISE ECONÔMICA E COMPARATIVO DE CUSTOS</span>
             <span class="badge bg-secondary text-white fw-normal font-monospace">Valores em R$ (BRL)</span>
         </div>
-        <div class="card-body p-0 table-responsive">
+        <div class="card-body p-0">
             <table class="table table-hover align-middle mb-0 proposta-table">
                 <thead>
                     <tr class="table-dark-custom text-uppercase fs-7 tracking-wider">
@@ -232,13 +260,16 @@
         </div>
     </div>
 
+    <div class="page-break page-break-print"></div>
+
     <div class="card shadow-sm border-0 mb-4 card-proposal mt-4 print-block">
         <div class="card-header bg-dark text-white fw-bold py-3">
             <i class="bi bi-info-circle me-2"></i> ENTENDA COMO FUNCIONA A OPERAÇÃO
         </div>
         <div class="card-body p-4 text-dark">
-            
-            <div class="row g-4 mb-4 prevent-split">
+
+            <div class="row g-4 mb-4">
+
                 <div class="col-md-4">
                     <div class="p-3 rounded border border-primary h-100 bg-white shadow-xs">
                         <h5 class="fw-bold text-primary mb-2"><i class="bi bi-file-earmark-text"></i> O Consórcio</h5>
@@ -259,8 +290,10 @@
                 </div>
             </div>
 
-            <div class="prevent-split">
-                <h5 class="fw-bold border-bottom pb-2 mb-3 mt-4 text-secondary"><i class="bi bi-sliders"></i> Diretrizes e Condições Comerciais</h5>
+            <div>
+                <h5 class="fw-bold border-bottom pb-2 mb-3 mt-4 text-secondary">
+                    <i class="bi bi-sliders"></i> Diretrizes e Condições Comerciais
+                </h5>
                 <div class="table-responsive mb-4">
                     <div class="alert alert-warning border shadow-sm mb-4">
                         <div class="d-flex align-items-start">
@@ -282,7 +315,7 @@
                             <tr class="table-dark">
                                 <th colspan="5" class="py-3 fs-5">
                                     <i class="bi bi-tag-fill me-2"></i>
-                                    Impacto da Bandeira Tarifária no Desconto Aplicado
+                                    Quanto chegará o seu desconto nas respectivas bandeiras,
                                 </th>
                             </tr>
                             <tr class="bg-light">
@@ -296,10 +329,62 @@
                         <tbody>
                             <tr>
                                 <td class="fw-semibold bg-light">Desconto</td>
-                                <td class="fs-5 fw-bold text-success">15,00%</td>
-                                <td class="fs-5 fw-bold text-warning">18,00%</td>
-                                <td class="fs-5 fw-bold text-danger">20,00%</td>
-                                <td class="fs-5 fw-bold" style="color:#c82333;">22,00%</td>
+
+                                {% set reducao = dados.economia_percentual|float %}
+                                {% set bandeira = conta.bandeira|default('', true)|lower %}
+
+                                {% if bandeira == 'verde' and reducao > 15 %}
+
+                                    {% set desconto_verde = reducao %}
+                                    {% set desconto_amarela = reducao + 2 %}
+                                    {% set desconto_vermelha1 = reducao + 5 %}
+                                    {% set desconto_vermelha2 = reducao + 7 %}
+
+                                {% elif 'amarela' in bandeira and reducao > 18 %}
+
+                                    {% set desconto_verde = reducao - 2 %}
+                                    {% set desconto_amarela = reducao %}
+                                    {% set desconto_vermelha1 = reducao + 3 %}
+                                    {% set desconto_vermelha2 = reducao + 5 %}
+
+                                {% elif ('vermelha i' in bandeira or 'vermelha_1' in bandeira) and reducao > 20 %}
+
+                                    {% set desconto_verde = reducao - 5 %}
+                                    {% set desconto_amarela = reducao - 3 %}
+                                    {% set desconto_vermelha1 = reducao %}
+                                    {% set desconto_vermelha2 = reducao + 2 %}
+
+                                {% elif ('vermelha ii' in bandeira or 'vermelha_2' in bandeira) and reducao > 22 %}
+
+                                    {% set desconto_verde = reducao - 7 %}
+                                    {% set desconto_amarela = reducao - 5 %}
+                                    {% set desconto_vermelha1 = reducao - 2 %}
+                                    {% set desconto_vermelha2 = reducao %}
+
+                                {% else %}
+
+                                    {% set desconto_verde = 15 %}
+                                    {% set desconto_amarela = 18 %}
+                                    {% set desconto_vermelha1 = 20 %}
+                                    {% set desconto_vermelha2 = 22 %}
+
+                                {% endif %}
+
+                                <td class="fs-5 fw-bold text-success">
+                                    {{ "%.2f"|format(desconto_verde)|replace('.', ',') }}%
+                                </td>
+
+                                <td class="fs-5 fw-bold text-warning">
+                                    {{ "%.2f"|format(desconto_amarela)|replace('.', ',') }}%
+                                </td>
+
+                                <td class="fs-5 fw-bold text-danger">
+                                    {{ "%.2f"|format(desconto_vermelha1)|replace('.', ',') }}%
+                                </td>
+
+                                <td class="fs-5 fw-bold" style="color:#c82333;">
+                                    {{ "%.2f"|format(desconto_vermelha2)|replace('.', ',') }}%
+                                </td>
                             </tr>
                         </tbody>
                     </table>
@@ -322,7 +407,23 @@
                     <p class="mb-2 text-muted fw-semibold">É importante ressaltar duas premissas fundamentais para a proteção financeira do cliente:</p>
                     <ol class="mb-3 ps-3 text-muted">
                         <li class="mb-2"><strong>Risco Zero:</strong> Não há qualquer tipo de custo prévio para a adesão e ingresso no consórcio. O rateio de cobrança só é iniciado para o consorciado após a efetiva verificação de que o mesmo já recebeu os créditos homologados em sua fatura de energia elétrica, sempre correspondentes à geração mensal real da usina.</li>
-                        <li class="mb-2"><strong>Flexibilidade de Saída:</strong> Não há aplicação de multa rescisória caso o cliente opte por sair do modelo antes do término do prazo estimado de 12 meses. No entanto, em caso de saída voluntária, o consorciado deverá quitar integralmente todos os saldos de créditos acumulados e consumidos até o desligamento definitivo.</li>
+                        {% set prazo_fidelidade = 12 %}
+
+                        {% if dados.desconto|float > 19.99 %}
+                            {% set prazo_fidelidade = 36 %}
+                        {% endif %}
+
+                        <li class="mb-2">
+                            <strong>Flexibilidade de Saída:</strong>
+
+                            O Prazo de fidelidade para com o consórcio é de
+                            <strong>{{ prazo_fidelidade }} meses</strong>
+                            após o protocolo do Rateio, antes do protocolo não há multa rescisória podendo o termo ser rescindido apenas com aviso formal.
+
+                            Após o protocolo do Rateio há fidelidade no consórcio nos termos acordados.
+
+                            No entanto, em caso de saída no período de fidelidade, o consorciado deverá quitar integralmente todos os saldos de créditos acumulados e consumidos até o desligamento definitivo, além de multa contratual estipulada no termo de adesão.
+                        </li>
                         <li class="mb-2"><strong>Incidência do Benefício:</strong> O desconto comercial é aplicado exclusivamente sobre o valor regulado da <strong>TARIFA DE ENERGIA (TE)</strong> e não sobre o montante integral e bruto da fatura (que engloba taxas fixas, impostos e contribuições). Dessa forma, a percepção de desconto global sobre a conta total apresentará uma proporção naturalmente menor do que o percentual nominal incidente sobre a tarifa de energia isolada.</li>
                         <li><strong>Cronograma de Entrada em Operação:</strong> Como as adesões são comercializadas de forma antecipada à entrada em operação do Parque Solar, torna-se imperativo que o cliente verifique junto ao consultor a disponibilidade imediata de cotas e os prazos oficiais de cronograma para o início da operação do Parque Solar ofertado.</li>
                     </ol>
@@ -364,20 +465,25 @@
 
             {% endif %}
 
-            <!-- VALIDAÇÃO CLIENTE -->
-            {% if conta.validacao_vendedor and not conta.validacao_cliente %}
+            {% if conta.email_enviado %}
 
-            <form method="POST"
-                  action="{{ url_for('validar_cliente_conta_concessionaria', conta_id=conta.id) }}">
+                {% if not conta.validacao_cliente %}
 
-                <button
-                    type="submit"
-                    class="btn btn-dark btn-lg px-5 rounded-pill shadow-sm">
+                    <form method="POST"
+                        action="{{ url_for('validar_cliente_conta_concessionaria', conta_id=conta.id) }}">
 
-                    <i class="bi bi-person-check-fill me-2"></i>
-                    Aceite do Cliente
-                </button>
-            </form>
+                        <button
+                            type="submit"
+                            class="btn btn-dark btn-lg px-5 rounded-pill shadow-sm">
+
+                            <i class="bi bi-person-check-fill me-2"></i>
+                            Aceite do Cliente
+
+                        </button>
+
+                    </form>
+
+                {% endif %}
 
             {% endif %}
 
@@ -593,6 +699,10 @@
     /* IMPRESSÃO / PDF */
     /* ============================= */
 
+    .page-break-print {
+        display: none;
+    }
+
     @media print {
 
         @page {
@@ -611,6 +721,22 @@
 
         .show-on-print-block {
             display: block !important;
+        }
+
+        /* LOGO MAIOR NO PDF */
+        .show-on-print-block img {
+            height: 180px !important;
+            max-width: 400px !important;
+            width: auto !important;
+        }
+
+        .page-break-print {
+            display: block !important;
+            page-break-before: always !important;
+            break-before: page !important;
+            height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }
 
         html,
@@ -643,10 +769,7 @@
             box-shadow: none !important;
             border: 1px solid #dcdcdc !important;
 
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-
-            margin-bottom: 20px !important;
+            margin-bottom: 15px !important;
         }
 
         .table-responsive {
@@ -668,30 +791,28 @@
             padding: 10px 20px !important;
         }
 
-        .print-block,
-        .prevent-split,
-        table,
-        tr,
-        td,
-        th,
-        ol,
-        ul,
-        li,
-        .alert,
-        .card-body,
-        .card-header,
-        .row,
-        .col-md-4,
-        .col-6,
-        .col-12 {
+        .proposta-table {
+            page-break-inside: auto !important;
+            break-inside: auto !important;
+        }
+
+        .proposta-table tbody {
+            page-break-inside: auto !important;
+            break-inside: auto !important;
+        }
+
+        .proposta-table tr {
             page-break-inside: avoid !important;
             break-inside: avoid !important;
+        }
+
+        .proposta-table thead {
+            display: table-header-group;
         }
 
         .page-break {
             display: block !important;
             page-break-before: always !important;
-
             height: 0 !important;
             margin: 0 !important;
         }

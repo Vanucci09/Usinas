@@ -121,21 +121,54 @@
     </div>
 
     <nav class="flex-grow-1">
-        <button class="nav-link-custom active" data-target="geracao"><i class="bi bi-lightning-charge"></i> Geração</button>
-        <button class="nav-link-custom" data-target="monitoramento"><i class="bi bi-activity"></i> Monitoramento</button>
-        <button class="nav-link-custom" data-target="comercial"><i class="bi bi-cart3"></i> Comercial</button>
-        <button class="nav-link-custom" data-target="consorcios"><i class="bi bi-people"></i> Consórcios</button>
-        <button class="nav-link-custom" data-target="financeiro_empresa"><i class="bi bi-briefcase"></i> Finan. Empresa</button>
-        <button class="nav-link-custom" data-target="financeiro_usinas"><i class="bi bi-cash-stack"></i> Finan. Usinas</button>
-        
-        {% if current_user.email in ['master@admin.com', 'nuza@cgrenergia.com.br'] %}
-        <button class="nav-link-custom" data-target="investidores"><i class="bi bi-building-up"></i> Investidores</button>
-        {% endif %}
 
-        {% if current_user.email == 'master@admin.com' %}
-        <button class="nav-link-custom" data-target="admin"><i class="bi bi-shield-lock"></i> Administração</button>
-        {% endif %}
-    </nav>
+    {% if current_user.perfil == 'comercial' %}
+
+        <button class="nav-link-custom active" data-target="comercial">
+            <i class="bi bi-cart3"></i> Comercial
+        </button>
+
+    {% else %}
+
+        <button class="nav-link-custom active" data-target="geracao">
+            <i class="bi bi-lightning-charge"></i> Geração
+        </button>
+
+        <button class="nav-link-custom" data-target="monitoramento">
+            <i class="bi bi-activity"></i> Monitoramento
+        </button>
+
+        <button class="nav-link-custom" data-target="comercial">
+            <i class="bi bi-cart3"></i> Comercial
+        </button>
+
+        <button class="nav-link-custom" data-target="consorcios">
+            <i class="bi bi-people"></i> Consórcios
+        </button>
+
+        <button class="nav-link-custom" data-target="financeiro_empresa">
+            <i class="bi bi-briefcase"></i> Finan. Empresa
+        </button>
+
+        <button class="nav-link-custom" data-target="financeiro_usinas">
+            <i class="bi bi-cash-stack"></i> Finan. Usinas
+        </button>
+
+    {% endif %}
+
+    {% if current_user.email in ['master@admin.com', 'nuza@cgrenergia.com.br'] %}
+        <button class="nav-link-custom" data-target="investidores">
+            <i class="bi bi-building-up"></i> Investidores
+        </button>
+    {% endif %}
+
+    {% if current_user.email == 'master@admin.com' %}
+        <button class="nav-link-custom" data-target="admin">
+            <i class="bi bi-shield-lock"></i> Administração
+        </button>
+    {% endif %}
+
+</nav>
 
     <div class="user-profile d-flex align-items-center gap-3">
         <div class="avatar bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 35px; height: 35px; font-size: 0.9rem;">
@@ -150,7 +183,10 @@
 
 <main class="main-content">
     
-    <section id="geracao" class="active-section">
+    <section id="geracao"
+    {% if current_user.perfil != 'comercial' %}
+        class="active-section"
+    {% endif %}>
         <h2 class="section-title">⚡ Geração</h2>
         <div class="row g-3">
             <div class="col-md-4 col-lg-3"><a href="{{ url_for('cadastrar_usina') }}" class="card-menu"><div class="icon-box"><i class="bi bi-plus-circle"></i></div><h5>Cadastrar Usina</h5><p>Nova unidade</p></a></div>
@@ -169,17 +205,96 @@
         </div>
     </section>
 
-    <section id="comercial">
-        <h2 class="section-title">🛒 Comercial</h2>
-        <div class="row g-3">
-            <div class="col-md-4 col-lg-3"><a href="{{ url_for('listar_vendedores') }}" class="card-menu"><div class="icon-box"><i class="bi bi-people"></i></div><h5>Vendedores</h5><p>Equipe</p></a></div>
-            <div class="col-md-4 col-lg-3"><a href="{{ url_for('listar_propostas') }}" class="card-menu"><div class="icon-box"><i class="bi bi-file-text"></i></div><h5>Propostas de Usinas</h5><p>Orçamentos</p></a></div>
-            <div class="col-md-4 col-lg-3"><a href="{{ url_for('listar_contas_concessionaria') }}" class="card-menu"><div class="icon-box"><i class="bi bi-file-text"></i></div><h5>Propostas de Parque Solar</h5><p>Orçamentos</p></a></div>
-            <div class="col-md-4 col-lg-3"><a href="{{ url_for('listar_concessionarias') }}" class="card-menu"><div class="icon-box"><i class="bi bi-geo"></i></div><h5>Concessionárias</h5><p>Empresas</p></a></div>
-            <div class="col-md-4 col-lg-3"><a href="{{ url_for('listar_fornecedores_kit') }}" class="card-menu"><div class="icon-box"><i class="bi bi-box-seam"></i></div><h5>Fornecedores</h5><p>Kits</p></a></div>
-            <div class="col-md-4 col-lg-3"><a href="{{ url_for('listar_centros_custos') }}" class="card-menu"><div class="icon-box"><i class="bi bi-person-add"></i></div><h5>Cadastro de Cliente</h5><p>Novo registro</p></a></div>
+    <section id="comercial"
+    {% if current_user.perfil == 'comercial' %}
+        class="active-section"
+    {% endif %}>
+    <h2 class="section-title">🛒 Comercial</h2>
+
+    <div class="row g-3">
+
+    {% if current_user.perfil == 'comercial' %}
+
+    <div class="col-md-4 col-lg-3">
+        <a href="{{ url_for('listar_centros_custos') }}" class="card-menu">
+            <div class="icon-box">
+                <i class="bi bi-person-add"></i>
+            </div>
+            <h5>Cadastro de Cliente</h5>
+            <p>Novo registro</p>
+        </a>
+    </div>
+
+    {% else %}
+
+    <div class="col-md-4 col-lg-3">
+        <a href="{{ url_for('listar_vendedores') }}" class="card-menu">
+            <div class="icon-box">
+                <i class="bi bi-people"></i>
+            </div>
+            <h5>Vendedores</h5>
+            <p>Equipe</p>
+        </a>
+    </div>
+
+    {% endif %}
+
+    <div class="col-md-4 col-lg-3">
+        <a href="{{ url_for('listar_propostas') }}" class="card-menu">
+                <div class="icon-box">
+                    <i class="bi bi-file-text"></i>
+                </div>
+                <h5>Propostas de Usinas</h5>
+                <p>Orçamentos</p>
+            </a>
         </div>
-    </section>
+
+        <div class="col-md-4 col-lg-3">
+            <a href="{{ url_for('listar_contas_concessionaria') }}" class="card-menu">
+                <div class="icon-box">
+                    <i class="bi bi-file-text"></i>
+                </div>
+                <h5>Propostas de Parque Solar</h5>
+                <p>Orçamentos</p>
+            </a>
+        </div>
+
+        {% if current_user.perfil != 'comercial' %}
+
+            <div class="col-md-4 col-lg-3">
+                <a href="{{ url_for('listar_concessionarias') }}" class="card-menu">
+                    <div class="icon-box">
+                        <i class="bi bi-geo"></i>
+                    </div>
+                    <h5>Concessionárias</h5>
+                    <p>Empresas</p>
+                </a>
+            </div>
+
+            <div class="col-md-4 col-lg-3">
+                <a href="{{ url_for('listar_fornecedores_kit') }}" class="card-menu">
+                    <div class="icon-box">
+                        <i class="bi bi-box-seam"></i>
+                    </div>
+                    <h5>Fornecedores</h5>
+                    <p>Kits</p>
+                </a>
+            </div>
+
+            <div class="col-md-4 col-lg-3">
+                <a href="{{ url_for('listar_centros_custos') }}" class="card-menu">
+                    <div class="icon-box">
+                        <i class="bi bi-person-add"></i>
+                    </div>
+                    <h5>Cadastro de Cliente</h5>
+                    <p>Novo registro</p>
+                </a>
+            </div>
+
+        {% endif %}
+
+    </div>
+</section>
 
     <section id="consorcios">
         <h2 class="section-title">👥 Gestão de Consórcios</h2>
@@ -277,14 +392,19 @@
 
     // Lógica ao carregar a página (Verifica parâmetro ?aba=)
     document.addEventListener("DOMContentLoaded", function() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const abaAtiva = urlParams.get('aba');
 
-        if (abaAtiva === 'financeiro') {
-            // Chama a função passando o ID da sua seção financeira
-            switchSection('financeiro_usinas');
-        }
-    });
+    {% if current_user.perfil == 'comercial' %}
+        switchSection('comercial');
+        return;
+    {% endif %}
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const abaAtiva = urlParams.get('aba');
+
+    if (abaAtiva === 'financeiro') {
+        switchSection('financeiro_usinas');
+    }
+});
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

@@ -60,15 +60,37 @@
                         </div>
 
                         <div class="col-md-4">
-                            <label class="form-label fw-semibold">Vendedor</label>
+                            {% if current_user.perfil == 'comercial' and vendedor_logado %}
+
+                            <input type="hidden"
+                                name="vendedor_id"
+                                value="{{ vendedor_logado.id }}">
+
+                            <div class="mb-3">
+                                <label class="form-label">Vendedor</label>
+                                <input type="text"
+                                    class="form-control"
+                                    value="{{ vendedor_logado.nome }}"
+                                    readonly>
+                            </div>
+
+                            {% else %}
+
+                            <label class="form-label">Vendedor</label>
                             <select name="vendedor_id" class="form-select">
-                                <option value="">Selecione...</option>
-                                {% for vendedor in vendedores %}
-                                <option value="{{ vendedor.id }}" {% if conta and conta.vendedor_id == vendedor.id %}selected{% endif %}>
-                                    {{ vendedor.nome }}
-                                </option>
-                                {% endfor %}
-                            </select>
+                            <option value="">Selecione...</option>
+
+                            {% for vendedor in vendedores %}
+                            <option value="{{ vendedor.id }}"
+                                {% if conta and conta.vendedor_id == vendedor.id %}
+                                    selected
+                                {% endif %}>
+                                {{ vendedor.nome }}
+                            </option>
+                            {% endfor %}
+                        </select>
+
+                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -107,8 +129,19 @@
                         <div class="col-md-3">
                             <label class="form-label fw-semibold">Desconto (%)</label>
                             <div class="input-group">
-                                <input type="number" step="0.0001" name="desconto" class="form-control" value="{{ conta.desconto if conta else '' }}">
-                                <span class="input-group-text">%</span>
+                                <input type="number"
+                                        step="0.0001"
+                                        name="desconto"
+                                        class="form-control"
+                                        value="{{ conta.desconto if conta else '' }}"
+                                        {% if current_user.perfil == 'comercial' %}
+                                        max="15"
+                                        {% endif %}>
+                                {% if current_user.perfil == 'comercial' %}
+                                <div class="form-text text-danger">
+                                    Desconto máximo permitido para perfil comercial: 15%.
+                                </div>
+                                {% endif %}
                             </div>
                         </div>
 

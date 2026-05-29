@@ -771,6 +771,24 @@ class ContaConcessionaria(db.Model):
         nullable=False,
         default=False
     )
+    
+    # CONTROLE DE E-MAIL
+
+    email_enviado = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=False
+    )
+
+    data_envio_email = db.Column(
+        db.DateTime(timezone=True),
+        nullable=True
+    )
+    
+    email_destinatario = db.Column(
+        db.String(255),
+        nullable=True
+    )
 
     # RELACIONAMENTOS
 
@@ -837,31 +855,36 @@ class Comercial(db.Model):
     ativo = db.Column(db.Boolean, default=True, nullable=False)
     criado_em = db.Column(db.DateTime, server_default=db.func.now())
 
-    # Relacionamentos
-    vendedores = db.relationship(
-        'Vendedor',
-        backref='comercial',
-        lazy=True,
-        cascade='all, delete-orphan'
-    )
-
 class Vendedor(db.Model):
     __tablename__ = 'vendedores'
 
     id = db.Column(db.Integer, primary_key=True)
-    empresa_id = db.Column(db.Integer, db.ForeignKey('empresas.id'), nullable=False)
-    comercial_id = db.Column(db.Integer, db.ForeignKey('comercial.id'), nullable=True)
-    nome = db.Column(db.String(150), nullable=False)
-    telefone = db.Column(db.String(30), nullable=True)
-    email = db.Column(db.String(120), nullable=True)
-    cpf = db.Column(db.String(20), nullable=True, unique=False)
-    comissao_percentual = db.Column(db.Numeric(10, 2), nullable=True, default=0)
-    ativo = db.Column(db.Boolean, default=True, nullable=False)
-    observacoes = db.Column(db.Text, nullable=True)
-    criado_em = db.Column(db.DateTime, server_default=db.func.now())
 
-    def __repr__(self):
-        return f'<Vendedor {self.nome}>'
+    empresa_id = db.Column(
+        db.Integer,
+        db.ForeignKey('empresas.id'),
+        nullable=False
+    )
+
+    usuario_id = db.Column(
+        db.Integer,
+        db.ForeignKey('usuarios.id'),
+        nullable=True,
+        unique=True
+    )
+
+    nome = db.Column(db.String(150), nullable=False)
+    telefone = db.Column(db.String(30))
+    email = db.Column(db.String(120))
+    cpf = db.Column(db.String(20))
+    comissao_percentual = db.Column(db.Numeric(10, 2), default=0)
+    ativo = db.Column(db.Boolean, default=True)
+    observacoes = db.Column(db.Text)
+
+    usuario = db.relationship(
+        'Usuario',
+        foreign_keys=[usuario_id]
+    )
     
 class CondicaoPagamentoProposta(db.Model):
     __tablename__ = 'condicoes_pagamento_proposta'
@@ -1105,21 +1128,42 @@ class FotoVistoria(db.Model):
     
 class Usuario(db.Model, UserMixin):
     __tablename__ = 'usuarios'
+
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String, nullable=False)
     email = db.Column(db.String, unique=True, nullable=False)
     senha_hash = db.Column(db.String, nullable=False)
+
+    perfil = db.Column(
+        db.String(30),
+        nullable=False,
+        default='usuario'
+    )
+
     pode_cadastrar_geracao = db.Column(db.Boolean, default=False)
     pode_cadastrar_cliente = db.Column(db.Boolean, default=False)
     pode_cadastrar_fatura = db.Column(db.Boolean, default=False)
     pode_acessar_financeiro = db.Column(db.Boolean, default=False)
     pode_aprovar_financeiro = db.Column(db.Boolean, default=False)
+    pode_acessar_comercial = db.Column(db.Boolean, default=False)
 
     def set_senha(self, senha):
         self.senha_hash = generate_password_hash(senha)
 
     def verificar_senha(self, senha):
         return check_password_hash(self.senha_hash, senha)
+
+    @property
+    def is_vendedor(self):
+        return self.perfil == 'vendedor'
+
+    @property
+    def is_gerente_comercial(self):
+        return self.perfil == 'gerente_comercial'
+
+    @property
+    def is_admin(self):
+        return self.perfil == 'admin'
 
 
 lock_selenium = Lock()
@@ -4180,27 +4224,36 @@ def logout():
 def cadastrar_usuario():
     if current_user.email != 'master@admin.com':
         return "Acesso negado", 403
-    
+
     if request.method == 'POST':
         nome = request.form['nome']
         email = request.form['email']
         senha = request.form['senha']
+        perfil = request.form.get('perfil', 'usuario')
+
         pode_geracao = 'pode_cadastrar_geracao' in request.form
         pode_cliente = 'pode_cadastrar_cliente' in request.form
         pode_fatura = 'pode_cadastrar_fatura' in request.form
         pode_financeiro = 'pode_acessar_financeiro' in request.form
+        pode_aprovar_financeiro = 'pode_aprovar_financeiro' in request.form
 
         novo_usuario = Usuario(
             nome=nome,
             email=email,
+            perfil=perfil,
             pode_cadastrar_geracao=pode_geracao,
             pode_cadastrar_cliente=pode_cliente,
             pode_cadastrar_fatura=pode_fatura,
-            pode_acessar_financeiro=pode_financeiro
+            pode_acessar_financeiro=pode_financeiro,
+            pode_aprovar_financeiro=pode_aprovar_financeiro
         )
+
         novo_usuario.set_senha(senha)
+
         db.session.add(novo_usuario)
         db.session.commit()
+
+        flash('Usuário cadastrado com sucesso!', 'success')
         return redirect(url_for('cadastrar_usuario'))
 
     return render_template('cadastrar_usuario.html')
@@ -4224,36 +4277,64 @@ def editar_usuario(id):
     if request.method == 'POST':
         usuario.nome = request.form['nome']
         usuario.email = request.form['email']
+
+        # Perfil
+        usuario.perfil = request.form.get('perfil', 'usuario')
+
+        # Permissões
         usuario.pode_cadastrar_geracao = 'pode_cadastrar_geracao' in request.form
         usuario.pode_cadastrar_cliente = 'pode_cadastrar_cliente' in request.form
         usuario.pode_cadastrar_fatura = 'pode_cadastrar_fatura' in request.form
         usuario.pode_acessar_financeiro = 'pode_acessar_financeiro' in request.form
+        usuario.pode_acessar_comercial = 'pode_acessar_comercial' in request.form
+
         quer_aprovador = 'pode_aprovar_financeiro' in request.form
 
         try:
             if quer_aprovador:
-                # zera todos os demais
-                Usuario.query.filter(Usuario.id != usuario.id).update(
+                # Mantém apenas um aprovador financeiro
+                Usuario.query.filter(
+                    Usuario.id != usuario.id
+                ).update(
                     {Usuario.pode_aprovar_financeiro: False}
                 )
+
                 usuario.pode_aprovar_financeiro = True
             else:
-                # permite ficar sem aprovador (se quiser obrigar 1 sempre, avise que adapto)
                 usuario.pode_aprovar_financeiro = False
 
+            # Atualiza senha apenas se preenchida
             if request.form.get('senha'):
                 usuario.set_senha(request.form['senha'])
 
             db.session.commit()
-            flash('Usuário atualizado com sucesso.', 'success')
+
+            flash(
+                'Usuário atualizado com sucesso.',
+                'success'
+            )
+
         except Exception as e:
             db.session.rollback()
-            print('Erro ao editar usuário:', e)
-            flash('Erro ao salvar alterações.', 'danger')
 
-        return redirect(url_for('listar_usuarios'))
+            print(
+                'Erro ao editar usuário:',
+                e
+            )
 
-    return render_template('editar_usuario.html', usuario=usuario)
+            flash(
+                'Erro ao salvar alterações.',
+                'danger'
+            )
+
+        return redirect(
+            url_for('listar_usuarios')
+        )
+
+    return render_template(
+        'editar_usuario.html',
+        usuario=usuario
+    )
 
 @app.route('/excluir_usuario/<int:id>', methods=['POST'])
 @login_required
@@ -13311,7 +13392,19 @@ def listar_vendedores():
 @login_required
 def cadastrar_vendedor():
     empresas = Empresa.query.order_by(Empresa.nome).all()
-    comerciais = Comercial.query.order_by(Comercial.nome).all()
+
+    usuarios_vinculados = db.session.query(
+        Vendedor.usuario_id
+    ).filter(
+        Vendedor.usuario_id.isnot(None)
+    )
+
+    comerciais = Usuario.query.filter(
+        Usuario.perfil == 'comercial',
+        ~Usuario.id.in_(usuarios_vinculados)
+    ).order_by(
+        Usuario.nome
+    ).all()
 
     # Detecta únicos
     empresa_unica = empresas[0] if len(empresas) == 1 else None
@@ -13319,21 +13412,66 @@ def cadastrar_vendedor():
 
     if request.method == 'POST':
         try:
-            empresa_id = request.form.get('empresa_id', type=int) or (empresa_unica.id if empresa_unica else None)
-            comercial_id = request.form.get('comercial_id', type=int) or (comercial_unico.id if comercial_unico else None)
+            empresa_id = request.form.get(
+                'empresa_id',
+                type=int
+            ) or (
+                empresa_unica.id if empresa_unica else None
+            )
 
-            nome = request.form.get('nome', '').strip()
-            telefone = request.form.get('telefone', '').strip()
-            email = request.form.get('email', '').strip()
-            cpf = request.form.get('cpf', '').strip()
-            observacoes = request.form.get('observacoes', '').strip()
-            ativo = True if request.form.get('ativo') == 'on' else False
+            usuario_id = request.form.get(
+                'usuario_id',
+                type=int
+            ) or (
+                comercial_unico.id if comercial_unico else None
+            )
 
-            comissao_str = request.form.get('comissao_percentual', '').strip()
-            comissao_percentual = Decimal(comissao_str.replace(',', '.')) if comissao_str else Decimal('0.00')
+            nome = request.form.get(
+                'nome',
+                ''
+            ).strip()
+
+            telefone = request.form.get(
+                'telefone',
+                ''
+            ).strip()
+
+            email = request.form.get(
+                'email',
+                ''
+            ).strip()
+
+            cpf = request.form.get(
+                'cpf',
+                ''
+            ).strip()
+
+            observacoes = request.form.get(
+                'observacoes',
+                ''
+            ).strip()
+
+            ativo = (
+                request.form.get('ativo') == 'on'
+            )
+
+            comissao_str = request.form.get(
+                'comissao_percentual',
+                ''
+            ).strip()
+
+            comissao_percentual = (
+                Decimal(comissao_str.replace(',', '.'))
+                if comissao_str
+                else Decimal('0.00')
+            )
 
             if not empresa_id:
-                flash('Selecione uma empresa.', 'warning')
+                flash(
+                    'Selecione uma empresa.',
+                    'warning'
+                )
+
                 return render_template(
                     'vendedores_form.html',
                     vendedor=None,
@@ -13344,7 +13482,11 @@ def cadastrar_vendedor():
                 )
 
             if not nome:
-                flash('Informe o nome do vendedor.', 'warning')
+                flash(
+                    'Informe o nome do vendedor.',
+                    'warning'
+                )
+
                 return render_template(
                     'vendedores_form.html',
                     vendedor=None,
@@ -13356,7 +13498,7 @@ def cadastrar_vendedor():
 
             vendedor = Vendedor(
                 empresa_id=empresa_id,
-                comercial_id=comercial_id if comercial_id else None,
+                usuario_id=usuario_id,
                 nome=nome,
                 telefone=telefone or None,
                 email=email or None,
@@ -13369,12 +13511,22 @@ def cadastrar_vendedor():
             db.session.add(vendedor)
             db.session.commit()
 
-            flash('Vendedor cadastrado com sucesso.', 'success')
-            return redirect(url_for('listar_vendedores'))
+            flash(
+                'Vendedor cadastrado com sucesso.',
+                'success'
+            )
+
+            return redirect(
+                url_for('listar_vendedores')
+            )
 
         except Exception as e:
             db.session.rollback()
-            flash(f'Erro ao cadastrar vendedor: {e}', 'danger')
+
+            flash(
+                f'Erro ao cadastrar vendedor: {e}',
+                'danger'
+            )
 
     return render_template(
         'vendedores_form.html',
@@ -13397,29 +13549,86 @@ def editar_vendedor(vendedor_id):
     vendedor = Vendedor.query.get_or_404(vendedor_id)
 
     empresas = Empresa.query.order_by(Empresa.nome).all()
-    comerciais = Comercial.query.order_by(Comercial.nome).all()
 
-    # Detecta únicos
+    usuarios_vinculados = db.session.query(
+        Vendedor.usuario_id
+    ).filter(
+        Vendedor.usuario_id.isnot(None),
+        Vendedor.id != vendedor.id
+    )
+
+    comerciais = Usuario.query.filter(
+        Usuario.perfil == 'comercial',
+        ~Usuario.id.in_(usuarios_vinculados)
+    ).order_by(
+        Usuario.nome
+    ).all()
+
     empresa_unica = empresas[0] if len(empresas) == 1 else None
     comercial_unico = comerciais[0] if len(comerciais) == 1 else None
 
     if request.method == 'POST':
         try:
-            empresa_id = request.form.get('empresa_id', type=int) or (empresa_unica.id if empresa_unica else None)
-            comercial_id = request.form.get('comercial_id', type=int) or (comercial_unico.id if comercial_unico else None)
+            empresa_id = request.form.get(
+                'empresa_id',
+                type=int
+            ) or (
+                empresa_unica.id if empresa_unica else None
+            )
 
-            nome = request.form.get('nome', '').strip()
-            telefone = request.form.get('telefone', '').strip()
-            email = request.form.get('email', '').strip()
-            cpf = request.form.get('cpf', '').strip()
-            observacoes = request.form.get('observacoes', '').strip()
-            ativo = True if request.form.get('ativo') == 'on' else False
+            usuario_id = request.form.get(
+                'usuario_id',
+                type=int
+            ) or (
+                comercial_unico.id if comercial_unico else None
+            )
 
-            comissao_str = request.form.get('comissao_percentual', '').strip()
-            comissao_percentual = Decimal(comissao_str.replace(',', '.')) if comissao_str else Decimal('0.00')
+            nome = request.form.get(
+                'nome',
+                ''
+            ).strip()
+
+            telefone = request.form.get(
+                'telefone',
+                ''
+            ).strip()
+
+            email = request.form.get(
+                'email',
+                ''
+            ).strip()
+
+            cpf = request.form.get(
+                'cpf',
+                ''
+            ).strip()
+
+            observacoes = request.form.get(
+                'observacoes',
+                ''
+            ).strip()
+
+            ativo = (
+                request.form.get('ativo') == 'on'
+            )
+
+            comissao_str = request.form.get(
+                'comissao_percentual',
+                ''
+            ).strip()
+
+            comissao_percentual = (
+                Decimal(comissao_str.replace(',', '.'))
+                if comissao_str
+                else Decimal('0.00')
+            )
 
             if not empresa_id:
-                flash('Selecione uma empresa.', 'warning')
+                flash(
+                    'Selecione uma empresa.',
+                    'warning'
+                )
+
                 return render_template(
                     'vendedores_form.html',
                     vendedor=vendedor,
@@ -13430,7 +13639,11 @@ def editar_vendedor(vendedor_id):
                 )
 
             if not nome:
-                flash('Informe o nome do vendedor.', 'warning')
+                flash(
+                    'Informe o nome do vendedor.',
+                    'warning'
+                )
+
                 return render_template(
                     'vendedores_form.html',
                     vendedor=vendedor,
@@ -13441,7 +13654,7 @@ def editar_vendedor(vendedor_id):
                 )
 
             vendedor.empresa_id = empresa_id
-            vendedor.comercial_id = comercial_id if comercial_id else None
+            vendedor.usuario_id = usuario_id
             vendedor.nome = nome
             vendedor.telefone = telefone or None
             vendedor.email = email or None
@@ -13452,12 +13665,22 @@ def editar_vendedor(vendedor_id):
 
             db.session.commit()
 
-            flash('Vendedor atualizado com sucesso.', 'success')
-            return redirect(url_for('listar_vendedores'))
+            flash(
+                'Vendedor atualizado com sucesso.',
+                'success'
+            )
+
+            return redirect(
+                url_for('listar_vendedores')
+            )
 
         except Exception as e:
             db.session.rollback()
-            flash(f'Erro ao editar vendedor: {e}', 'danger')
+
+            flash(
+                f'Erro ao atualizar vendedor: {e}',
+                'danger'
+            )
 
     return render_template(
         'vendedores_form.html',
@@ -14327,6 +14550,21 @@ def nova_proposta_etapa1():
         .order_by(Vendedor.nome)
         .all()
     )
+    
+    vendedor_logado = None
+
+    if current_user.perfil == 'comercial':
+        vendedor_logado = Vendedor.query.filter_by(
+            usuario_id=current_user.id,
+            ativo=True
+        ).first()
+        
+    if current_user.perfil == 'comercial' and not vendedor_logado:
+        flash(
+            'Seu usuário comercial não está vinculado a nenhum vendedor.',
+            'danger'
+        )
+        return redirect(url_for('index'))
 
     concessionarias = (
         Concessionaria.query
@@ -14337,14 +14575,21 @@ def nova_proposta_etapa1():
 
     if request.method == 'POST':
         centro_custo_id = request.form.get('centro_custo_id', type=int)
-        vendedor_id = request.form.get('vendedor_id', type=int)
+        vendedor_id = (
+            vendedor_logado.id
+            if vendedor_logado
+            else request.form.get(
+                'vendedor_id',
+                type=int
+            )
+        )
         concessionaria_id = request.form.get('concessionaria_id', type=int)
 
         centro_custo = CentroCusto.query.get_or_404(centro_custo_id)
         vendedor = Vendedor.query.get_or_404(vendedor_id)
 
         # COMERCIAL AUTOMÁTICO
-        comercial_id = vendedor.comercial_id
+        comercial_id = vendedor.usuario_id
 
         consumo_kwh = decimal_proposta(request.form.get('consumo_kwh'))
         geracao_solicitada = decimal_proposta(request.form.get('valor_tusd_fio_b'))
@@ -14356,7 +14601,8 @@ def nova_proposta_etapa1():
                 proposta=None,
                 centros_custo=centros_custo,
                 vendedores=vendedores,
-                concessionarias=concessionarias
+                concessionarias=concessionarias,
+                vendedor_logado=vendedor_logado
             )
 
         proposta = PropostaKitSolar(
@@ -14396,7 +14642,8 @@ def nova_proposta_etapa1():
         proposta=None,
         centros_custo=centros_custo,
         vendedores=vendedores,
-        concessionarias=concessionarias
+        concessionarias=concessionarias,
+        vendedor_logado=vendedor_logado
     )
     
 def coordenada_para_decimal(valor):
@@ -14666,41 +14913,141 @@ def visualizar_proposta(slug):
 @app.route('/propostas/<int:proposta_id>/editar', methods=['GET', 'POST'])
 @login_required
 def editar_proposta_etapa1(proposta_id):
-    proposta = PropostaKitSolar.query.get_or_404(proposta_id)
 
-    centros_custo = CentroCusto.query.filter_by(ativo=True).order_by(CentroCusto.nome).all()
-    vendedores = Vendedor.query.filter_by(ativo=True).order_by(Vendedor.nome).all()
-    concessionarias = Concessionaria.query.filter_by(ativo=True).order_by(Concessionaria.nome).all()
-    comerciais = Comercial.query.filter_by(ativo=True).order_by(Comercial.nome).all()
+    proposta = PropostaKitSolar.query.get_or_404(
+        proposta_id
+    )
+
+    centros_custo = (
+        CentroCusto.query
+        .filter_by(ativo=True)
+        .order_by(CentroCusto.nome)
+        .all()
+    )
+
+    vendedores = (
+        Vendedor.query
+        .filter_by(ativo=True)
+        .order_by(Vendedor.nome)
+        .all()
+    )
+
+    vendedor_logado = None
+
+    if current_user.perfil == 'comercial':
+        vendedor_logado = Vendedor.query.filter_by(
+            usuario_id=current_user.id,
+            ativo=True
+        ).first()
+
+        if not vendedor_logado:
+            flash(
+                'Seu usuário comercial não está vinculado a nenhum vendedor.',
+                'danger'
+            )
+            return redirect(url_for('index'))
+
+    concessionarias = (
+        Concessionaria.query
+        .filter_by(ativo=True)
+        .order_by(Concessionaria.nome)
+        .all()
+    )
 
     if request.method == 'POST':
-        centro_custo_id = request.form.get('centro_custo_id', type=int)
-        vendedor_id = request.form.get('vendedor_id', type=int)
-        comercial_id = request.form.get('comercial_id', type=int)
-        concessionaria_id = request.form.get('concessionaria_id', type=int)
 
-        centro_custo = CentroCusto.query.get_or_404(centro_custo_id)
+        centro_custo_id = request.form.get(
+            'centro_custo_id',
+            type=int
+        )
+
+        vendedor_id = (
+            vendedor_logado.id
+            if vendedor_logado
+            else request.form.get(
+                'vendedor_id',
+                type=int
+            )
+        )
+
+        concessionaria_id = request.form.get(
+            'concessionaria_id',
+            type=int
+        )
+
+        centro_custo = CentroCusto.query.get_or_404(
+            centro_custo_id
+        )
+
+        vendedor = Vendedor.query.get_or_404(
+            vendedor_id
+        )
 
         proposta.empresa_id = centro_custo.empresa_id
         proposta.centro_custo_id = centro_custo.id
-        proposta.vendedor_id = vendedor_id
-        proposta.comercial_id = comercial_id
-        proposta.grupo_tarifario = request.form.get('grupo_tarifario')
-        proposta.consumo_kwh = decimal_proposta(request.form.get('consumo_kwh'))
-        proposta.codigo_instalacao = request.form.get('codigo_instalacao')
-        proposta.codigo_cliente = request.form.get('codigo_cliente')
-        proposta.custo_disponibilidade = decimal_proposta(request.form.get('custo_disponibilidade'))
-        proposta.custo_iluminacao_publica = decimal_proposta(request.form.get('custo_iluminacao_publica'))
-        proposta.valor_total_conta = decimal_proposta(request.form.get('valor_total_conta'))
+
+        proposta.vendedor_id = vendedor.id
+        proposta.comercial_id = vendedor.usuario_id
+
+        proposta.grupo_tarifario = request.form.get(
+            'grupo_tarifario'
+        )
+
+        proposta.consumo_kwh = decimal_proposta(
+            request.form.get('consumo_kwh')
+        )
+
+        proposta.codigo_instalacao = request.form.get(
+            'codigo_instalacao'
+        )
+
+        proposta.codigo_cliente = request.form.get(
+            'codigo_cliente'
+        )
+
+        proposta.custo_disponibilidade = decimal_proposta(
+            request.form.get('custo_disponibilidade')
+        )
+
+        proposta.custo_iluminacao_publica = decimal_proposta(
+            request.form.get('custo_iluminacao_publica')
+        )
+
+        proposta.valor_total_conta = decimal_proposta(
+            request.form.get('valor_total_conta')
+        )
+
         proposta.concessionaria_id = concessionaria_id
-        proposta.valor_kwh = decimal_proposta(request.form.get('valor_kwh'))
-        proposta.valor_tusd_fio_b = decimal_proposta(request.form.get('valor_tusd_fio_b'))
-        proposta.tipo_fase = request.form.get('tipo_fase')
-        proposta.tensao_rede = request.form.get('tensao_rede')
+
+        proposta.valor_kwh = decimal_proposta(
+            request.form.get('valor_kwh')
+        )
+
+        proposta.valor_tusd_fio_b = decimal_proposta(
+            request.form.get('valor_tusd_fio_b')
+        )
+
+        proposta.tipo_fase = request.form.get(
+            'tipo_fase'
+        )
+
+        proposta.tensao_rede = request.form.get(
+            'tensao_rede'
+        )
 
         db.session.commit()
-        flash('Proposta atualizada com sucesso.', 'success')
-        return redirect(url_for('editar_proposta_etapa2', proposta_id=proposta.id))
+
+        flash(
+            'Proposta atualizada com sucesso.',
+            'success'
+        )
+
+        return redirect(
+            url_for(
+                'editar_proposta_etapa2',
+                proposta_id=proposta.id
+            )
+        )
 
     return render_template(
         'proposta_etapa1_conta_energia.html',
@@ -14708,7 +15055,7 @@ def editar_proposta_etapa1(proposta_id):
         centros_custo=centros_custo,
         vendedores=vendedores,
         concessionarias=concessionarias,
-        comerciais=comerciais
+        vendedor_logado=vendedor_logado
     )
 
 def mapear_fase(fase):
@@ -16180,28 +16527,73 @@ def nova_conta_concessionaria():
         CentroCusto.nome
     ).all()
 
+    # NOVO: identifica automaticamente o vendedor do usuário comercial
+    vendedor_logado = None
+
+    if current_user.perfil == 'comercial':
+        vendedor_logado = Vendedor.query.filter_by(
+            usuario_id=current_user.id,
+            ativo=True
+        ).first()
+        
+    desconto = float(
+        request.form.get('desconto') or 0
+    )
+
+    if current_user.perfil == 'comercial' and desconto > 15:
+        flash(
+            'Usuários comerciais podem informar no máximo 15% de desconto.',
+            'warning'
+        )
+
+        return render_template(
+            'contas_concessionaria_form.html',
+            empresas=empresas,
+            vendedores=vendedores,
+            centros=centros,
+            vendedor_logado=vendedor_logado
+        )
+
     if request.method == 'POST':
 
         try:
 
-            print('\n=========== FORM CONTA CONCESSIONÁRIA ===========')
-            print(request.form)
-            print('=================================================\n')
+            desconto = float(
+                request.form.get('desconto') or 0
+            )
+
+            if (
+                current_user.perfil == 'comercial'
+                and desconto > 15
+            ):
+                flash(
+                    'Usuários comerciais podem informar no máximo 15% de desconto.',
+                    'warning'
+                )
+
+                return render_template(
+                    'contas_concessionaria_form.html',
+                    empresas=empresas,
+                    vendedores=vendedores,
+                    centros=centros,
+                    vendedor_logado=vendedor_logado
+                )
 
             conta = ContaConcessionaria(
 
-                # =====================================================
                 # RELACIONAMENTOS
-                # =====================================================
-
                 empresa_id=request.form.get(
                     'empresa_id',
                     type=int
                 ),
 
-                vendedor_id=request.form.get(
-                    'vendedor_id',
-                    type=int
+                vendedor_id=(
+                    vendedor_logado.id
+                    if vendedor_logado
+                    else request.form.get(
+                        'vendedor_id',
+                        type=int
+                    )
                 ),
 
                 centro_custo_id=request.form.get(
@@ -16209,26 +16601,12 @@ def nova_conta_concessionaria():
                     type=int
                 ),
 
-                # =====================================================
                 # DADOS PRINCIPAIS
-                # =====================================================
+                n_uc=request.form.get('n_uc'),
+                fase=request.form.get('fase'),
+                bandeira=request.form.get('bandeira'),
 
-                n_uc=request.form.get(
-                    'n_uc'
-                ),
-
-                fase=request.form.get(
-                    'fase'
-                ),
-
-                bandeira=request.form.get(
-                    'bandeira'
-                ),
-
-                # =====================================================
                 # TARIFAS
-                # =====================================================
-
                 tarifa_energia=request.form.get(
                     'tarifa_energia'
                 ) or 0,
@@ -16237,115 +16615,46 @@ def nova_conta_concessionaria():
                     'tarifa_concessionaria'
                 ) or 0,
 
-                desconto=request.form.get(
-                    'desconto'
-                ) or 0,
+                desconto=desconto,
 
-                # =====================================================
                 # ENCARGOS
-                # =====================================================
+                cip=request.form.get('cip') or 0,
+                icms=request.form.get('icms') or 0,
+                pis=request.form.get('pis') or 0,
+                cofins=request.form.get('cofins') or 0,
 
-                cip=request.form.get(
-                    'cip'
-                ) or 0,
-
-                icms=request.form.get(
-                    'icms'
-                ) or 0,
-
-                pis=request.form.get(
-                    'pis'
-                ) or 0,
-
-                cofins=request.form.get(
-                    'cofins'
-                ) or 0,
-
-                # =====================================================
                 # CLASSIFICAÇÃO
-                # =====================================================
-
                 me_epp=(
                     True
                     if request.form.get('me_epp')
                     else False
                 ),
 
-                # =====================================================
                 # CONSUMO MÉDIO
-                # =====================================================
-
                 consumo_medio=request.form.get(
                     'consumo_medio'
                 ) or 0,
 
-                # =====================================================
                 # CONSUMO ÚLTIMOS 12 MESES
-                # =====================================================
+                consumo_mes_1=request.form.get('consumo_mes_1') or 0,
+                consumo_mes_2=request.form.get('consumo_mes_2') or 0,
+                consumo_mes_3=request.form.get('consumo_mes_3') or 0,
+                consumo_mes_4=request.form.get('consumo_mes_4') or 0,
+                consumo_mes_5=request.form.get('consumo_mes_5') or 0,
+                consumo_mes_6=request.form.get('consumo_mes_6') or 0,
+                consumo_mes_7=request.form.get('consumo_mes_7') or 0,
+                consumo_mes_8=request.form.get('consumo_mes_8') or 0,
+                consumo_mes_9=request.form.get('consumo_mes_9') or 0,
+                consumo_mes_10=request.form.get('consumo_mes_10') or 0,
+                consumo_mes_11=request.form.get('consumo_mes_11') or 0,
+                consumo_mes_12=request.form.get('consumo_mes_12') or 0,
 
-                consumo_mes_1=request.form.get(
-                    'consumo_mes_1'
-                ) or 0,
-
-                consumo_mes_2=request.form.get(
-                    'consumo_mes_2'
-                ) or 0,
-
-                consumo_mes_3=request.form.get(
-                    'consumo_mes_3'
-                ) or 0,
-
-                consumo_mes_4=request.form.get(
-                    'consumo_mes_4'
-                ) or 0,
-
-                consumo_mes_5=request.form.get(
-                    'consumo_mes_5'
-                ) or 0,
-
-                consumo_mes_6=request.form.get(
-                    'consumo_mes_6'
-                ) or 0,
-
-                consumo_mes_7=request.form.get(
-                    'consumo_mes_7'
-                ) or 0,
-
-                consumo_mes_8=request.form.get(
-                    'consumo_mes_8'
-                ) or 0,
-
-                consumo_mes_9=request.form.get(
-                    'consumo_mes_9'
-                ) or 0,
-
-                consumo_mes_10=request.form.get(
-                    'consumo_mes_10'
-                ) or 0,
-
-                consumo_mes_11=request.form.get(
-                    'consumo_mes_11'
-                ) or 0,
-
-                consumo_mes_12=request.form.get(
-                    'consumo_mes_12'
-                ) or 0,
-                
                 # STATUS
-
                 ativo=True,
             )
 
             db.session.add(conta)
-
             db.session.commit()
-
-            print('\n=========== CONTA SALVA ===========')
-            print(f'ID: {conta.id}')
-            print(f'UC: {conta.n_uc}')
-            print(f'ME/EPP: {conta.me_epp}')
-            print(f'Consumo Médio: {conta.consumo_medio}')
-            print('===================================\n')
 
             flash(
                 'Conta concessionária cadastrada com sucesso!',
@@ -16373,7 +16682,8 @@ def nova_conta_concessionaria():
         'contas_concessionaria_form.html',
         empresas=empresas,
         vendedores=vendedores,
-        centros=centros
+        centros=centros,
+        vendedor_logado=vendedor_logado
     )
     
 @app.route('/contas-concessionaria')
@@ -16560,68 +16870,204 @@ def proposta_conta_concessionaria(conta_id, slug):
 @app.route('/contas-concessionaria/<int:conta_id>/editar', methods=['GET', 'POST'])
 @login_required
 def editar_conta_concessionaria(conta_id):
-    conta = db.session.get(ContaConcessionaria, conta_id)
+
+    conta = db.session.get(
+        ContaConcessionaria,
+        conta_id
+    )
 
     if not conta:
-        flash('Conta não encontrada.', 'warning')
-        return redirect(url_for('listar_contas_concessionaria'))
+        flash(
+            'Conta não encontrada.',
+            'warning'
+        )
+        return redirect(
+            url_for(
+                'listar_contas_concessionaria'
+            )
+        )
 
-    empresas = Empresa.query.order_by(Empresa.nome).all()
-    vendedores = Vendedor.query.filter_by(ativo=True).all()
-    centros = CentroCusto.query.filter_by(ativo=True).all()
+    empresas = Empresa.query.order_by(
+        Empresa.nome
+    ).all()
+
+    vendedores = (
+        Vendedor.query
+        .filter_by(ativo=True)
+        .order_by(Vendedor.nome)
+        .all()
+    )
+
+    centros = (
+        CentroCusto.query
+        .filter_by(ativo=True)
+        .order_by(CentroCusto.nome)
+        .all()
+    )
+
+    vendedor_logado = None
+
+    if current_user.perfil == 'comercial':
+        vendedor_logado = Vendedor.query.filter_by(
+            usuario_id=current_user.id,
+            ativo=True
+        ).first()
+
+        if not vendedor_logado:
+            flash(
+                'Seu usuário comercial não está vinculado a nenhum vendedor.',
+                'danger'
+            )
+            return redirect(
+                url_for('index')
+            )
 
     if request.method == 'POST':
+
         try:
+
+            desconto = float(
+                request.form.get('desconto') or 0
+            )
+
+            if (
+                current_user.perfil == 'comercial'
+                and desconto > 15
+            ):
+                flash(
+                    'Usuários comerciais podem informar no máximo 15% de desconto.',
+                    'warning'
+                )
+
+                return render_template(
+                    'contas_concessionaria_form.html',
+                    conta=conta,
+                    empresas=empresas,
+                    vendedores=vendedores,
+                    centros=centros,
+                    vendedor_logado=vendedor_logado
+                )
+
             # Identificação
-            conta.empresa_id = request.form.get('empresa_id', type=int)
-            conta.centro_custo_id = request.form.get('centro_custo_id', type=int)
-            
-            # Tratamento para vendedor opcional (evita salvar 0 ou string vazia)
-            vendedor_id = request.form.get('vendedor_id', type=int)
-            conta.vendedor_id = vendedor_id if vendedor_id else None
+            conta.empresa_id = request.form.get(
+                'empresa_id',
+                type=int
+            )
+
+            conta.centro_custo_id = request.form.get(
+                'centro_custo_id',
+                type=int
+            )
+
+            conta.vendedor_id = (
+                vendedor_logado.id
+                if vendedor_logado
+                else request.form.get(
+                    'vendedor_id',
+                    type=int
+                )
+            )
 
             # Dados Técnicos
             conta.n_uc = request.form.get('n_uc')
             conta.fase = request.form.get('fase') or None
             conta.bandeira = request.form.get('bandeira') or None
-            conta.desconto = request.form.get('desconto', type=float) or 0.0
-            
-            # Tratamento do Switch ME/EPP (se não vier no POST, é False)
-            conta.me_epp = True if request.form.get('me_epp') else False
+            conta.desconto = desconto
 
-            # Captura dinâmica dos 12 meses de consumo
+            conta.me_epp = (
+                True
+                if request.form.get('me_epp')
+                else False
+            )
+
+            # Consumos
             for i in range(1, 13):
-                campo_mes = f'consumo_mes_{i}'
-                valor_mes = request.form.get(campo_mes, type=float)
-                # Define o valor digitado ou None se o campo foi deixado em branco
-                setattr(conta, campo_mes, valor_mes if valor_mes is not None else None)
 
-            # Consumo Calculado e Tarifas
-            conta.consumo_medio = request.form.get('consumo_medio', type=float) or 0.0
-            conta.tarifa_energia = request.form.get('tarifa_energia', type=float) or 0.0
-            conta.tarifa_concessionaria = request.form.get('tarifa_concessionaria', type=float) or 0.0
-            conta.cip = request.form.get('cip', type=float) or 0.0
-            
+                campo_mes = f'consumo_mes_{i}'
+
+                valor_mes = request.form.get(
+                    campo_mes,
+                    type=float
+                )
+
+                setattr(
+                    conta,
+                    campo_mes,
+                    valor_mes
+                    if valor_mes is not None
+                    else None
+                )
+
+            # Tarifas
+            conta.consumo_medio = request.form.get(
+                'consumo_medio',
+                type=float
+            ) or 0.0
+
+            conta.tarifa_energia = request.form.get(
+                'tarifa_energia',
+                type=float
+            ) or 0.0
+
+            conta.tarifa_concessionaria = request.form.get(
+                'tarifa_concessionaria',
+                type=float
+            ) or 0.0
+
+            conta.cip = request.form.get(
+                'cip',
+                type=float
+            ) or 0.0
+
             # Impostos
-            conta.icms = request.form.get('icms', type=float) or 0.0
-            conta.pis = request.form.get('pis', type=float) or 0.0
-            conta.cofins = request.form.get('cofins', type=float) or 0.0
+            conta.icms = request.form.get(
+                'icms',
+                type=float
+            ) or 0.0
+
+            conta.pis = request.form.get(
+                'pis',
+                type=float
+            ) or 0.0
+
+            conta.cofins = request.form.get(
+                'cofins',
+                type=float
+            ) or 0.0
 
             db.session.commit()
-            flash('Conta atualizada com sucesso!', 'success')
-            return redirect(url_for('listar_contas_concessionaria'))
+
+            flash(
+                'Conta atualizada com sucesso!',
+                'success'
+            )
+
+            return redirect(
+                url_for(
+                    'listar_contas_concessionaria'
+                )
+            )
 
         except Exception as e:
+
             db.session.rollback()
-            print(f'ERRO AO EDITAR CONTA: {e}')
-            flash('Erro ao atualizar a conta. Verifique os dados inseridos.', 'danger')
+
+            print(
+                f'ERRO AO EDITAR CONTA: {e}'
+            )
+
+            flash(
+                'Erro ao atualizar a conta. Verifique os dados inseridos.',
+                'danger'
+            )
 
     return render_template(
         'contas_concessionaria_form.html',
         conta=conta,
         empresas=empresas,
         vendedores=vendedores,
-        centros=centros
+        centros=centros,
+        vendedor_logado=vendedor_logado
     )
     
 @app.route('/contas-concessionaria/<int:conta_id>/excluir', methods=['POST'])
@@ -17407,12 +17853,21 @@ def enviar_email_conta_concessionaria(conta_id):
 
         mail.send(msg)
 
+        # REGISTRA ENVIO
+        conta.email_enviado = True
+        conta.data_envio_email = datetime.utcnow()
+        conta.email_destinatario = email_destino
+
+        db.session.commit()
+
         flash(
             'E-mail da proposta enviado com sucesso!',
             'success'
         )
 
     except Exception as e:
+
+        db.session.rollback()
 
         flash(
             f'Erro ao enviar e-mail: {e}',

@@ -38,16 +38,40 @@
                                     </select>
                                 </div>
                                 <div class="col-md-6">
+
+                                {% if current_user.perfil == 'comercial' and vendedor_logado %}
+
+                                    <input type="hidden"
+                                        name="vendedor_id"
+                                        value="{{ vendedor_logado.id }}">
+
                                     <label class="form-label fw-semibold">Vendedor</label>
+
+                                    <input type="text"
+                                        class="form-control"
+                                        value="{{ vendedor_logado.nome }}"
+                                        readonly>
+
+                                {% else %}
+
+                                    <label class="form-label fw-semibold">Vendedor</label>
+
                                     <select name="vendedor_id" class="form-select" required>
                                         <option value="">Selecione o Vendedor</option>
+
                                         {% for vendedor in vendedores %}
-                                            <option value="{{ vendedor.id }}" {% if proposta and proposta.vendedor_id == vendedor.id %}selected{% endif %}>
+                                            <option value="{{ vendedor.id }}"
+                                                {% if proposta and proposta.vendedor_id == vendedor.id %}
+                                                    selected
+                                                {% endif %}>
                                                 {{ vendedor.nome }}
                                             </option>
                                         {% endfor %}
                                     </select>
-                                </div>
+
+                                {% endif %}
+
+                            </div>
                             </div>
                         </div>
 

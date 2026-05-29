@@ -5,119 +5,175 @@
 {% endblock %}
 
 {% block content %}
-<div class="container mt-5 mb-5">
-    <div class="card shadow rounded p-4">
+<div class="container mt-5 mb-5" style="max-width: 900px;">
+    
+    <div class="card shadow-sm border-0 bg-white rounded-3 p-2">
+        <div class="card-body p-4 p-md-5">
 
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h3 class="text-primary mb-0">
-                {% if vendedor %}Editar Vendedor{% else %}Novo Vendedor{% endif %}
-            </h3>
-            <a href="{{ url_for('listar_vendedores') }}" class="btn btn-secondary">Voltar</a>
-        </div>
-
-        <form method="POST">
-            <div class="row g-3">
-
-                <!-- EMPRESA -->
-                {% if empresa_unica %}
-                    <input type="hidden" name="empresa_id" value="{{ empresa_unica.id }}">
-                {% else %}
-                <div class="col-md-6">
-                    <label class="form-label">Empresa</label>
-                    <select name="empresa_id" class="form-select" required>
-                        <option value="">Selecione</option>
-                        {% for empresa in empresas %}
-                        <option value="{{ empresa.id }}"
-                            {% if vendedor and vendedor.empresa_id == empresa.id %}selected{% endif %}>
-                            {{ empresa.nome }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                {% endif %}
-
-                <!-- COMERCIAL -->
-                {% if comercial_unico %}
-                    <input type="hidden" name="comercial_id" value="{{ comercial_unico.id }}">
-                {% else %}
-                <div class="col-md-6">
-                    <label class="form-label">Comercial</label>
-                    <select name="comercial_id" class="form-select">
-                        <option value="">Selecione</option>
-                        {% for comercial in comerciais %}
-                        <option value="{{ comercial.id }}"
-                            {% if vendedor and vendedor.comercial_id == comercial.id %}selected{% endif %}>
-                            {{ comercial.nome }} - {{ comercial.empresa.nome }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                {% endif %}
-
-                <!-- NOME -->
-                <div class="col-md-6">
-                    <label class="form-label">Nome</label>
-                    <input type="text" name="nome" class="form-control"
-                           value="{{ vendedor.nome if vendedor else '' }}" required>
-                </div>
-
-                <!-- TELEFONE -->
-                <div class="col-md-3">
-                    <label class="form-label">Telefone</label>
-                    <input type="text" name="telefone" class="form-control"
-                           value="{{ vendedor.telefone if vendedor and vendedor.telefone else '' }}">
-                </div>
-
-                <!-- CPF -->
-                <div class="col-md-3">
-                    <label class="form-label">CPF</label>
-                    <input type="text" name="cpf" class="form-control"
-                           value="{{ vendedor.cpf if vendedor and vendedor.cpf else '' }}">
-                </div>
-
-                <!-- EMAIL -->
-                <div class="col-md-6">
-                    <label class="form-label">Email</label>
-                    <input type="email" name="email" class="form-control"
-                           value="{{ vendedor.email if vendedor and vendedor.email else '' }}">
-                </div>
-
-                <!-- COMISSÃO -->
-                <div class="col-md-3">
-                    <label class="form-label">Comissão (%)</label>
-                    <input type="text" name="comissao_percentual" class="form-control"
-                           value="{{ vendedor.comissao_percentual if vendedor and vendedor.comissao_percentual is not none else '' }}">
-                </div>
-
-                <!-- ATIVO -->
-                <div class="col-md-3 d-flex align-items-end">
-                    <div class="form-check mb-2">
-                        <input class="form-check-input" type="checkbox" name="ativo"
-                               {% if vendedor %}
-                                   {% if vendedor.ativo %}checked{% endif %}
-                               {% else %}
-                                   checked
-                               {% endif %}>
-                        <label class="form-check-label">Ativo</label>
+            <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mb-4 pb-3 border-bottom">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="bg-primary-subtle text-primary rounded-circle p-3 d-inline-flex">
+                        <i class="bi {% if vendedor %}bi-pencil-square{% else %}bi-person-plus-fill{% endif %} fs-3"></i>
+                    </div>
+                    <div>
+                        <h3 class="mb-1 text-dark fw-bold" style="letter-spacing: -0.5px;">
+                            {% if vendedor %}Editar Vendedor{% else %}Novo Vendedor{% endif %}
+                        </h3>
+                        <p class="text-muted small mb-0">Preencha as informações do consultor e defina a comissão comercial.</p>
                     </div>
                 </div>
+                <div>
+                    <a href="{{ url_for('listar_vendedores') }}" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2 px-3 fw-medium">
+                        <i class="bi bi-arrow-left"></i> Voltar
+                    </a>
+                </div>
+            </div>
 
-                <!-- OBSERVAÇÕES -->
-                <div class="col-12">
-                    <label class="form-label">Observações</label>
-                    <textarea name="observacoes" class="form-control" rows="4">
-{{ vendedor.observacoes if vendedor and vendedor.observacoes else '' }}
-                    </textarea>
+            <form method="POST">
+                <div class="row g-4">
+
+                    {% if not empresa_unica or not comercial_unico %}
+                    <div class="col-12 m-0">
+                        <h5 class="text-secondary fw-semibold mb-3 small text-uppercase" style="letter-spacing: 0.5px;">Vínculos Estruturais</h5>
+                    </div>
+                    {% endif %}
+
+                    {% if empresa_unica %}
+                        <input type="hidden" name="empresa_id" value="{{ empresa_unica.id }}">
+                    {% else %}
+                    <div class="col-md-6 mt-0">
+                        <label class="form-label fw-medium text-secondary">Empresa Vinculada</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-building"></i></span>
+                            <select name="empresa_id" class="form-select border-start-0 ps-0" required>
+                                <option value="">Selecione a empresa...</option>
+                                {% for empresa in empresas %}
+                                <option value="{{ empresa.id }}" {% if vendedor and vendedor.empresa_id == empresa.id %}selected{% endif %}>
+                                    {{ empresa.nome }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if comercial_unico %}
+                    <div class="col-md-6 mt-0">
+                        <label class="form-label fw-medium text-secondary">Usuário do Sistema</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-shield-lock"></i></span>
+                            <input type="hidden" name="usuario_id" value="{{ comercial_unico.id }}">
+                            <input type="text" class="form-control bg-light border-start-0 ps-0 text-dark fw-medium" value="{{ comercial_unico.nome }}" readonly>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="col-md-6 mt-0">
+                        <label class="form-label fw-medium text-secondary">Usuário do Sistema</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-shield-lock"></i></span>
+                            <select name="usuario_id" class="form-select border-start-0 ps-0">
+                                <option value="">Selecione o perfil de login...</option>
+                                {% for usuario in comerciais %}
+                                <option value="{{ usuario.id }}" {% if vendedor and vendedor.usuario_id == usuario.id %}selected{% endif %}>
+                                    {{ usuario.nome }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    {% endif %}
+
+
+                    <div class="col-12 pt-2">
+                        <h5 class="text-secondary fw-semibold mb-3 small text-uppercase" style="letter-spacing: 0.5px;">Dados do Consultor</h5>
+                    </div>
+
+                    <div class="col-md-6 mt-1">
+                        <label class="form-label fw-medium text-secondary">Nome Completo</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-person"></i></span>
+                            <input type="text" name="nome" class="form-control border-start-0 ps-0" value="{{ vendedor.nome if vendedor else '' }}" placeholder="Ex: Felipe Vanucci" required>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3 mt-1">
+                        <label class="form-label fw-medium text-secondary">Telefone / WhatsApp</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-whatsapp"></i></span>
+                            <input type="text" name="telefone" class="form-control border-start-0 ps-0" value="{{ vendedor.telefone if vendedor and vendedor.telefone else '' }}" placeholder="(61) 99999-9999">
+                        </div>
+                    </div>
+
+                    <div class="col-md-3 mt-1">
+                        <label class="form-label fw-medium text-secondary">CPF</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-card-text"></i></span>
+                            <input type="text" name="cpf" class="form-control border-start-0 ps-0" value="{{ vendedor.cpf if vendedor and vendedor.cpf else '' }}" placeholder="000.000.000-00">
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label fw-medium text-secondary">E-mail de Contato</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-envelope"></i></span>
+                            <input type="email" name="email" class="form-control border-start-0 ps-0" value="{{ vendedor.email if vendedor and vendedor.email else '' }}" placeholder="consultor@cgr.com">
+                        </div>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label fw-medium text-secondary">Comissão (%)</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-percent"></i></span>
+                            <input type="text" name="comissao_percentual" class="form-control border-start-0 ps-0 text-end fw-bold text-primary" value="{{ vendedor.comissao_percentual if vendedor and vendedor.comissao_percentual is not none else '' }}" placeholder="0.00">
+                        </div>
+                    </div>
+
+                    <div class="col-md-3 d-flex align-items-center">
+                        <div class="form-check form-switch bg-light p-2.5 px-5 rounded border shadow-inner w-100 d-flex align-items-center" style="height: 38px;">
+                            <input class="form-check-input switch-ativo ms-3" type="checkbox" name="ativo" id="vendedor_ativo" style="transform: scale(1.25); margin-top: 0;"
+                                   {% if vendedor %}{% if vendedor.ativo %}checked{% endif %}{% else %}checked{% endif %}>
+                            <label class="form-check-label fw-semibold text-dark ms-2" for="vendedor_ativo">Consultor Ativo</label>
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label fw-medium text-secondary">Observações Internas</label>
+                        <textarea name="observacoes" class="form-control p-3" rows="4" placeholder="Adicione notas sobre termos contratuais, metas ou histórico do consultor...">{{ vendedor.observacoes if vendedor and vendedor.observacoes else '' }}</textarea>
+                    </div>
+
                 </div>
 
-            </div>
+                <div class="row pt-4 mt-2 border-top align-items-center g-3">
+                    <div class="col-sm-6 order-2 order-sm-1 text-center text-sm-start">
+                        <a href="{{ url_for('listar_vendedores') }}" class="btn btn-link text-muted text-decoration-none p-0">
+                            Cancelar e Sair
+                        </a>
+                    </div>
+                    <div class="col-sm-6 order-1 order-sm-2 text-center text-sm-end">
+                        <button type="submit" class="btn btn-success px-5 py-2 fw-semibold shadow-sm w-100 w-sm-auto">
+                            <i class="bi bi-check2-circle me-1"></i>Salvar Registro
+                        </button>
+                    </div>
+                </div>
+            </form>
 
-            <div class="mt-4 d-flex gap-2">
-                <button type="submit" class="btn btn-success">Salvar</button>
-                <a href="{{ url_for('listar_vendedores') }}" class="btn btn-outline-secondary">Cancelar</a>
-            </div>
-        </form>
-
+        </div>
     </div>
 </div>
+
+<style>
+    /* Customização do Switch */
+    .switch-ativo:checked {
+        background-color: #198754;
+        border-color: #198754;
+    }
+    .shadow-inner {
+        box-shadow: inset 0 1px 2px rgba(0,0,0,.04);
+    }
+    
+    /* Remove espaçamentos extras que quebram o visual no textarea */
+    textarea.form-control {
+        resize: vertical;
+    }
+</style>
 {% endblock %}
