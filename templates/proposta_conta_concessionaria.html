@@ -81,8 +81,25 @@
                         <table class="table table-sm table-borderless mb-0" style="font-size: 0.9rem;">
                             <tbody>
                                 <tr>
-                                    <td class="text-muted py-1 ps-0 text-uppercase fw-semibold" style="font-size: 0.75rem;">Consultor:</td>
-                                    <td class="text-end fw-medium py-1 pe-0 text-dark">{{ conta.vendedor.nome if conta.vendedor else '-' }}</td>
+                                    <td class="text-muted py-1 ps-0 text-uppercase fw-semibold"
+                                        style="font-size: 0.75rem;">
+                                        Consultor:
+                                    </td>
+
+                                    <td class="text-end fw-medium py-1 pe-0 text-dark">
+                                        {{ conta.vendedor.nome if conta.vendedor else '-' }}
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <td class="text-muted py-1 ps-0 text-uppercase fw-semibold"
+                                        style="font-size: 0.75rem;">
+                                        Telefone:
+                                    </td>
+
+                                    <td class="text-end fw-medium py-1 pe-0 text-dark">
+                                        {{ conta.vendedor.telefone if conta.vendedor and conta.vendedor.telefone else '-' }}
+                                    </td>
                                 </tr>
                                 <tr>
                                     <td class="text-muted py-1 ps-0 text-uppercase fw-semibold" style="font-size: 0.75rem;">Fase:</td>
@@ -225,7 +242,7 @@
                         <td class="text-end fw-bold text-primary font-monospace js-format-porcento">{{ dados.desconto }}</td>
                     </tr>
                     <tr class="table-success-highlight bloco-verde-bottom">
-                        <td class="ps-4 fw-bold text-dark">Redução Percebida Mínima Global</td>
+                        <td class="ps-4 fw-bold text-dark">Redução Percebida Estimada Global</td>
                         <td class="text-center text-muted">-</td>
                         <td class="text-end fw-extrabold text-success fs-5 font-monospace js-format-porcento">{{ dados.economia_percentual }}</td>
                     </tr>
@@ -315,7 +332,7 @@
                             <tr class="table-dark">
                                 <th colspan="5" class="py-3 fs-5">
                                     <i class="bi bi-tag-fill me-2"></i>
-                                    Quanto chegará o seu desconto nas respectivas bandeiras,
+                                    Quanto poderá chegar o seu desconto nas respectivas bandeiras,
                                 </th>
                             </tr>
                             <tr class="bg-light">

@@ -52,8 +52,12 @@
                             <select name="centro_custo_id" class="form-select" required>
                                 <option value="">Selecione...</option>
                                 {% for centro in centros %}
-                                <option value="{{ centro.id }}" {% if conta and conta.centro_custo_id == centro.id %}selected{% endif %}>
-                                    {{ centro.codigo }} - {{ centro.nome }}
+                                <option value="{{ centro.id }}">
+                                    {% if centro.codigo %}
+                                        {{ centro.codigo }} - {{ centro.nome }}
+                                    {% else %}
+                                        {{ centro.nome }}
+                                    {% endif %}
                                 </option>
                                 {% endfor %}
                             </select>
@@ -136,10 +140,16 @@
                                         value="{{ conta.desconto if conta else '' }}"
                                         {% if current_user.perfil == 'comercial' %}
                                         max="15"
-                                        {% endif %}>
+                                        {% elif current_user.perfil == 'gerente_comercial' %}
+                                        max="20"
+                                        {% endif %}
                                 {% if current_user.perfil == 'comercial' %}
                                 <div class="form-text text-danger">
                                     Desconto máximo permitido para perfil comercial: 15%.
+                                </div>
+                                {% elif current_user.perfil == 'gerente_comercial' %}
+                                <div class="form-text text-danger">
+                                    Desconto máximo permitido para gerente comercial: 20%.
                                 </div>
                                 {% endif %}
                             </div>

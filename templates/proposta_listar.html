@@ -69,10 +69,13 @@ R$ {{ "{:,.2f}".format(valor).replace(",", "X").replace(".", ",").replace("X", "
                     </select>
                 </div>
 
+                {% if current_user.perfil != 'comercial' %}
+
                 <!-- Vendedor -->
                 <div class="col-md-2">
                     <select name="vendedor_id" class="form-select">
                         <option value="">Vendedor</option>
+
                         {% for v in vendedores %}
                             <option value="{{ v.id }}"
                                 {{ 'selected' if request.args.get('vendedor_id') == v.id|string }}>
@@ -81,6 +84,8 @@ R$ {{ "{:,.2f}".format(valor).replace(",", "X").replace(".", ",").replace("X", "
                         {% endfor %}
                     </select>
                 </div>
+
+                {% endif %}
 
                 <!-- Botões -->
                 <div class="col-md-3 d-flex gap-2">

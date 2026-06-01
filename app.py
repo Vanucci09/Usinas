@@ -611,6 +611,16 @@ class CentroCusto(db.Model):
     representante_endereco = db.Column(db.String(255), nullable=True)
     representante_telefone = db.Column(db.String(30), nullable=True)
     representante_email = db.Column(db.String(120), nullable=True)
+    vendedor_id = db.Column(
+        db.Integer,
+        db.ForeignKey('vendedores.id'),
+        nullable=True
+    )
+
+    vendedor = db.relationship(
+        'Vendedor',
+        backref='centros_custos'
+    )
         
     cliente = db.relationship(
         'ClienteOperacional', 
@@ -4222,8 +4232,13 @@ def logout():
 @app.route('/cadastrar_usuario', methods=['GET', 'POST'])
 @login_required
 def cadastrar_usuario():
-    if current_user.email != 'master@admin.com':
-        return "Acesso negado", 403
+
+    if not current_user.is_admin:
+        flash(
+            'Você não possui permissão para acessar esta página.',
+            'danger'
+        )
+        return redirect(url_for('index'))
 
     if request.method == 'POST':
         nome = request.form['nome']
@@ -4236,6 +4251,7 @@ def cadastrar_usuario():
         pode_fatura = 'pode_cadastrar_fatura' in request.form
         pode_financeiro = 'pode_acessar_financeiro' in request.form
         pode_aprovar_financeiro = 'pode_aprovar_financeiro' in request.form
+        pode_comercial = 'pode_acessar_comercial' in request.form
 
         novo_usuario = Usuario(
             nome=nome,
@@ -4245,7 +4261,8 @@ def cadastrar_usuario():
             pode_cadastrar_cliente=pode_cliente,
             pode_cadastrar_fatura=pode_fatura,
             pode_acessar_financeiro=pode_financeiro,
-            pode_aprovar_financeiro=pode_aprovar_financeiro
+            pode_aprovar_financeiro=pode_aprovar_financeiro,
+            pode_acessar_comercial=pode_comercial
         )
 
         novo_usuario.set_senha(senha)
@@ -5137,6 +5154,24 @@ def sync_solis(dia):
 def portal_usinas():
     try:
         todos_records = listar_todos_inversores()
+        
+        print(
+            f"[PORTAL] Total registros recebidos: "
+            f"{len(todos_records)}"
+        )
+
+        stations = set()
+
+        for r in todos_records:
+
+            stations.add(
+                r.get("stationId")
+            )
+
+        print(
+            f"[PORTAL] Total stationId únicos: "
+            f"{len(stations)}"
+        )
     except Exception as e:
         return render_template(
             'portal_usinas.html',
@@ -5154,6 +5189,12 @@ def portal_usinas():
         station_name = rec.get("stationName") or "Sem Nome"
         nome_plant = f"{station_id} - {station_name}"
         detalhe_por_plant.setdefault(nome_plant, []).append(rec)
+
+    for nome, lista in detalhe_por_plant.items():
+        print(
+            f"[PORTAL] {nome} -> "
+            f"{len(lista)} inversores"
+        )
 
     # Resumo por planta
     usinas_info = []
@@ -5186,42 +5227,60 @@ def portal_usinas():
     )
     
 def listar_todos_inversores():
+
     path = "/v1/api/inverterList"
+
     todos = []
     pagina = 1
-    MAX_PAGINAS = 5  # limite alto, mas seguro
 
-    while pagina <= MAX_PAGINAS:
-        body = {"currentPage": pagina, "pageSize": 100}
-        headers, body_json = montar_headers_solis(path, body)
+    while True:
+
+        body = {
+            "pageNo": pagina,
+            "pageSize": 100
+        }
+
+        headers, body_json = montar_headers_solis(
+            path,
+            body
+        )
 
         try:
-            resp = requests.post(f"{SOLIS_BASE_URL}{path}", headers=headers, data=body_json, timeout=10)
+
+            resp = requests.post(
+                f"{SOLIS_BASE_URL}{path}",
+                headers=headers,
+                data=body_json,
+                timeout=20
+            )
+
             resp.raise_for_status()
+
             dados = resp.json()
+
         except Exception as e:
-            print(f"Erro na página {pagina}: {e}")
+
+            print(
+                f"Erro na página {pagina}: {e}"
+            )
+
             break
 
-        registros = dados.get("data", {}).get("page", {}).get("records", [])
-        
+        page = dados.get("data", {}).get("page", {})
+        registros = page.get("records", [])
+        total_api = page.get("total", 0)
+
         if not registros:
             break
 
         todos.extend(registros)
+
+        if total_api and len(todos) >= total_api:
+            break
+
         pagina += 1
 
-    # Remover duplicados por SN (caso a API esteja replicando)
-    vistos = set()
-    unicos = []
-    for r in todos:
-        sn = r.get("sn")
-        if sn and sn not in vistos:
-            vistos.add(sn)
-            unicos.append(r)
-
-    print(f"Total de inversores únicos: {len(unicos)}")
-    return unicos
+    return todos
 
 @app.route('/cadastrar_inversor', methods=['GET', 'POST'])
 @login_required
@@ -12665,10 +12724,29 @@ def cadastrar_centro_custo():
             if not all([representante_nome, representante_cpf, representante_endereco, representante_telefone, representante_email]):
                 flash('Para CNPJ, os dados do representante são obrigatórios.', 'danger')
                 return redirect(url_for('cadastrar_centro_custo'))
+            
+        vendedor_id = None
+
+        if current_user.perfil == 'comercial':
+
+            vendedor = Vendedor.query.filter_by(
+                usuario_id=current_user.id,
+                ativo=True
+            ).first()
+
+            if vendedor:
+                vendedor_id = vendedor.id
+
+            print(
+                f"[CENTRO] Usuário={current_user.nome} "
+                f"Perfil={current_user.perfil} "
+                f"Vendedor={vendedor.id if vendedor else None}"
+            )
 
         novo_centro = CentroCusto(
             empresa_id=empresa_id_int,
             cliente_id=cliente_id_int,
+            vendedor_id=vendedor_id,
             codigo=codigo.strip() if codigo else None,
             nome=nome.strip(),
             cpf_cnpj=cpf_cnpj.strip() if cpf_cnpj else None,
@@ -12719,9 +12797,17 @@ def cadastrar_centro_custo():
             flash('Centro de Custo cadastrado com sucesso!', 'success')
             return redirect(url_for('listar_centros_custos'))
 
-        except IntegrityError:
+        except IntegrityError as e:
             db.session.rollback()
-            flash('Já existe um centro com esse código.', 'warning')
+
+            print("\n========== INTEGRITY ERROR ==========")
+            print(str(e))
+            print("=====================================\n")
+
+            flash(
+                f'Erro de integridade: {str(e.orig)}',
+                'danger'
+            )
 
         except Exception as e:
             db.session.rollback()
@@ -12773,17 +12859,51 @@ def upload_documentos_cc(cc_id):
 @app.route('/centros_custos')
 @login_required
 def listar_centros_custos():
-    empresa_id = request.args.get('empresa_id', type=int)
-    empresas = Empresa.query.order_by(Empresa.nome).all()
 
-    query = (CentroCusto.query
-             .join(Empresa, CentroCusto.empresa_id == Empresa.id))
+    empresa_id = request.args.get(
+        'empresa_id',
+        type=int
+    )
+
+    empresas = Empresa.query.order_by(
+        Empresa.nome
+    ).all()
+
+    query = (
+        CentroCusto.query
+        .join(
+            Empresa,
+            CentroCusto.empresa_id == Empresa.id
+        )
+    )
+
+    if current_user.perfil == 'comercial':
+
+        vendedor = Vendedor.query.filter_by(
+            usuario_id=current_user.id,
+            ativo=True
+        ).first()
+
+        if vendedor:
+            query = query.filter(
+                CentroCusto.vendedor_id == vendedor.id
+            )
+
     if empresa_id:
-        query = query.filter(CentroCusto.empresa_id == empresa_id)
+        query = query.filter(
+            CentroCusto.empresa_id == empresa_id
+        )
 
-    centros = query.order_by(CentroCusto.nome).all()
-    return render_template('listar_centros_custos.html',
-                           centros=centros, empresas=empresas, empresa_id=empresa_id)
+    centros = query.order_by(
+        CentroCusto.nome
+    ).all()
+
+    return render_template(
+        'listar_centros_custos.html',
+        centros=centros,
+        empresas=empresas,
+        empresa_id=empresa_id
+    )
 
 @app.route('/centros_custos/<int:cc_id>/editar', methods=['GET', 'POST'])
 @login_required
@@ -15264,7 +15384,24 @@ def listar_propostas():
     status = request.args.get('status')
     vendedor_id = request.args.get('vendedor_id', type=int)
 
-    query = PropostaKitSolar.query.options(joinedload(PropostaKitSolar.vistoria))
+    query = PropostaKitSolar.query.options(
+        joinedload(PropostaKitSolar.vistoria)
+    )
+
+    # COMERCIAL SÓ VÊ AS PRÓPRIAS PROPOSTAS
+    if current_user.perfil == 'comercial':
+
+        vendedor = Vendedor.query.filter_by(
+            usuario_id=current_user.id,
+            ativo=True
+        ).first()
+
+        if vendedor:
+            query = query.filter(
+                PropostaKitSolar.vendedor_id == vendedor.id
+            )
+        else:
+            query = query.filter(False)
 
     # Busca geral
     if busca:
@@ -15277,15 +15414,20 @@ def listar_propostas():
 
     # Tipo de serviço
     if tipo_servico == 'bess':
-        query = query.filter(PropostaKitSolar.tipo_inversor.ilike('hibrido'))
+
+        query = query.filter(
+            PropostaKitSolar.tipo_inversor.ilike('hibrido')
+        )
 
     elif tipo_servico == 'solo':
+
         query = query.filter(
             PropostaKitSolar.tipo_inversor != 'hibrido',
             PropostaKitSolar.tipo_telhado.ilike('solo')
         )
 
     elif tipo_servico == 'kit':
+
         query = query.filter(
             db.or_(
                 PropostaKitSolar.tipo_inversor != 'hibrido',
@@ -15296,31 +15438,59 @@ def listar_propostas():
                 PropostaKitSolar.tipo_telhado.is_(None)
             )
         )
-        
-    propostas = PropostaKitSolar.query.all()
 
     # Status
     if status == 'aprovada':
-        query = query.filter(PropostaKitSolar.status == 'aprovada')
+
+        query = query.filter(
+            PropostaKitSolar.status == 'aprovada'
+        )
 
     elif status == 'gerada':
-        query = query.filter(PropostaKitSolar.status == 'gerada')
+
+        query = query.filter(
+            PropostaKitSolar.status == 'gerada'
+        )
 
     elif status == 'edicao':
-        query = query.filter(PropostaKitSolar.status == 'em_edicao')
-        
+
+        query = query.filter(
+            PropostaKitSolar.status == 'em_edicao'
+        )
+
+    # Vendedor (somente admin/gerente)
+    if vendedor_id and current_user.perfil != 'comercial':
+
+        query = query.filter(
+            PropostaKitSolar.vendedor_id == vendedor_id
+        )
+
+    propostas = query.order_by(
+        PropostaKitSolar.criado_em.desc()
+    ).all()
+
+    # Última condição de pagamento
     for p in propostas:
-        p.condicao_pagamento = CondicaoPagamentoProposta.query.filter_by(
-            proposta_id=p.id
-        ).order_by(CondicaoPagamentoProposta.id.desc()).first()
 
-    # Vendedor
-    if vendedor_id:
-        query = query.filter(PropostaKitSolar.vendedor_id == vendedor_id)
+        p.condicao_pagamento = (
+            CondicaoPagamentoProposta.query
+            .filter_by(proposta_id=p.id)
+            .order_by(
+                CondicaoPagamentoProposta.id.desc()
+            )
+            .first()
+        )
 
-    propostas = query.order_by(PropostaKitSolar.criado_em.desc()).all()
-
-    vendedores = Vendedor.query.order_by(Vendedor.nome).all()
+    # Comercial não escolhe vendedor
+    if current_user.perfil == 'comercial':
+        vendedores = []
+    else:
+        vendedores = (
+            Vendedor.query
+            .filter_by(ativo=True)
+            .order_by(Vendedor.nome)
+            .all()
+        )
 
     return render_template(
         'proposta_listar.html',
@@ -16521,11 +16691,33 @@ def nova_conta_concessionaria():
         Vendedor.nome
     ).all()
 
-    centros = CentroCusto.query.filter_by(
-        ativo=True
-    ).order_by(
-        CentroCusto.nome
-    ).all()
+    if current_user.perfil == 'comercial':
+
+        vendedor_logado = Vendedor.query.filter_by(
+            usuario_id=current_user.id,
+            ativo=True
+        ).first()
+
+        if vendedor_logado:
+
+            centros = CentroCusto.query.filter(
+                CentroCusto.ativo == True,
+                CentroCusto.vendedor_id == vendedor_logado.id
+            ).order_by(
+                CentroCusto.nome
+            ).all()
+
+        else:
+
+            centros = []
+
+    else:
+
+        centros = CentroCusto.query.filter_by(
+            ativo=True
+        ).order_by(
+            CentroCusto.nome
+        ).all()
 
     # NOVO: identifica automaticamente o vendedor do usuário comercial
     vendedor_logado = None
@@ -16540,7 +16732,12 @@ def nova_conta_concessionaria():
         request.form.get('desconto') or 0
     )
 
-    if current_user.perfil == 'comercial' and desconto > 15:
+    limite_desconto = 15
+
+    if current_user.perfil == 'gerente_comercial':
+        limite_desconto = 20
+
+    if current_user.perfil in ['comercial', 'gerente_comercial'] and desconto > limite_desconto:
         flash(
             'Usuários comerciais podem informar no máximo 15% de desconto.',
             'warning'
@@ -16562,9 +16759,14 @@ def nova_conta_concessionaria():
                 request.form.get('desconto') or 0
             )
 
+            limite_desconto = 15
+
+            if current_user.perfil == 'gerente_comercial':
+                limite_desconto = 20
+
             if (
-                current_user.perfil == 'comercial'
-                and desconto > 15
+                current_user.perfil in ['comercial', 'gerente_comercial']
+                and desconto > limite_desconto
             ):
                 flash(
                     'Usuários comerciais podem informar no máximo 15% de desconto.',
@@ -16690,9 +16892,29 @@ def nova_conta_concessionaria():
 @login_required
 def listar_contas_concessionaria():
 
-    contas = ContaConcessionaria.query.order_by(
-        ContaConcessionaria.id.desc()
-    ).all()
+    query = ContaConcessionaria.query
+
+    if current_user.perfil == 'comercial':
+
+        vendedor = Vendedor.query.filter_by(
+            usuario_id=current_user.id,
+            ativo=True
+        ).first()
+
+        if vendedor:
+            query = query.filter(
+                ContaConcessionaria.vendedor_id == vendedor.id
+            )
+        else:
+            query = query.filter(False)
+
+    contas = (
+        query
+        .order_by(
+            ContaConcessionaria.id.desc()
+        )
+        .all()
+    )
 
     return render_template(
         'contas_concessionaria_lista.html',
@@ -16716,7 +16938,6 @@ def proposta_conta_concessionaria(conta_id, slug):
     tarifa_concessionaria = moeda(conta.tarifa_concessionaria)
     cip = moeda(conta.cip)
     desconto = moeda(conta.desconto)
-
     fase = (conta.fase or '').strip().lower()
     bandeira = (conta.bandeira or '').strip().lower()
 
@@ -16898,12 +17119,40 @@ def editar_conta_concessionaria(conta_id):
         .all()
     )
 
-    centros = (
-        CentroCusto.query
-        .filter_by(ativo=True)
-        .order_by(CentroCusto.nome)
-        .all()
-    )
+    vendedor_logado = None
+
+    if current_user.perfil == 'comercial':
+
+        vendedor_logado = Vendedor.query.filter_by(
+            usuario_id=current_user.id,
+            ativo=True
+        ).first()
+
+        if not vendedor_logado:
+            flash(
+                'Seu usuário comercial não está vinculado a nenhum vendedor.',
+                'danger'
+            )
+            return redirect(url_for('index'))
+
+        centros = (
+            CentroCusto.query
+            .filter(
+                CentroCusto.ativo == True,
+                CentroCusto.vendedor_id == vendedor_logado.id
+            )
+            .order_by(CentroCusto.nome)
+            .all()
+        )
+
+    else:
+
+        centros = (
+            CentroCusto.query
+            .filter_by(ativo=True)
+            .order_by(CentroCusto.nome)
+            .all()
+        )
 
     vendedor_logado = None
 
@@ -16918,9 +17167,7 @@ def editar_conta_concessionaria(conta_id):
                 'Seu usuário comercial não está vinculado a nenhum vendedor.',
                 'danger'
             )
-            return redirect(
-                url_for('index')
-            )
+            return redirect(url_for('index'))
 
     if request.method == 'POST':
 
@@ -16930,12 +17177,19 @@ def editar_conta_concessionaria(conta_id):
                 request.form.get('desconto') or 0
             )
 
+            limite_desconto = None
+
+            if current_user.perfil == 'comercial':
+                limite_desconto = 15
+            elif current_user.perfil == 'gerente_comercial':
+                limite_desconto = 20
+
             if (
-                current_user.perfil == 'comercial'
-                and desconto > 15
+                limite_desconto is not None
+                and desconto > limite_desconto
             ):
                 flash(
-                    'Usuários comerciais podem informar no máximo 15% de desconto.',
+                    f'Usuários com este perfil podem informar no máximo {limite_desconto}% de desconto.',
                     'warning'
                 )
 

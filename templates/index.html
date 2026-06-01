@@ -122,7 +122,7 @@
 
     <nav class="flex-grow-1">
 
-    {% if current_user.perfil == 'comercial' %}
+    {% if current_user.perfil in ['comercial', 'gerente_comercial'] %}
 
         <button class="nav-link-custom active" data-target="comercial">
             <i class="bi bi-cart3"></i> Comercial
@@ -156,13 +156,12 @@
 
     {% endif %}
 
-    {% if current_user.email in ['master@admin.com', 'nuza@cgrenergia.com.br'] %}
+    {# Nova regra unificada para administradores acessar investidores e administração #}
+    {% if current_user.perfil == 'admin' %}
         <button class="nav-link-custom" data-target="investidores">
             <i class="bi bi-building-up"></i> Investidores
         </button>
-    {% endif %}
-
-    {% if current_user.email == 'master@admin.com' %}
+        
         <button class="nav-link-custom" data-target="admin">
             <i class="bi bi-shield-lock"></i> Administração
         </button>
@@ -206,7 +205,7 @@
     </section>
 
     <section id="comercial"
-    {% if current_user.perfil == 'comercial' %}
+    {% if current_user.perfil in ['comercial', 'gerente_comercial'] %}
         class="active-section"
     {% endif %}>
     <h2 class="section-title">🛒 Comercial</h2>
@@ -333,7 +332,8 @@
         </div>
     </section>
 
-    {% if current_user.email in ['master@admin.com', 'nuza@cgrenergia.com.br'] %}
+    {# Seções protegidas usando a nova validação de perfil 'admin' #}
+    {% if current_user.perfil == 'admin' %}
     <section id="investidores">
         <h2 class="section-title">🏢 Investidores</h2>
         <div class="row g-3">
@@ -347,9 +347,7 @@
             <div class="col-md-4 col-lg-3"><a href="{{ url_for('cadastrar_participacao_direta') }}" class="card-menu"><div class="icon-box"><i class="bi bi-share"></i></div><h5>Vincular Acionistas</h5><p>Usina</p></a></div>
         </div>
     </section>
-    {% endif %}
 
-    {% if current_user.email == 'master@admin.com' %}
     <section id="admin">
         <h2 class="section-title">👤 Administração</h2>
         <div class="row g-3">
@@ -393,7 +391,7 @@
     // Lógica ao carregar a página (Verifica parâmetro ?aba=)
     document.addEventListener("DOMContentLoaded", function() {
 
-    {% if current_user.perfil == 'comercial' %}
+    {% if current_user.perfil in ['comercial', 'gerente_comercial'] %}
         switchSection('comercial');
         return;
     {% endif %}
