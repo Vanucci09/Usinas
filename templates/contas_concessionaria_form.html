@@ -50,17 +50,21 @@
                         <div class="col-md-4">
                             <label class="form-label fw-semibold">Cliente <span class="text-danger">*</span></label>
                             <select name="centro_custo_id" class="form-select" required>
-                                <option value="">Selecione...</option>
-                                {% for centro in centros %}
-                                <option value="{{ centro.id }}">
-                                    {% if centro.codigo %}
-                                        {{ centro.codigo }} - {{ centro.nome }}
-                                    {% else %}
-                                        {{ centro.nome }}
-                                    {% endif %}
-                                </option>
-                                {% endfor %}
-                            </select>
+                            <option value="">Selecione...</option>
+
+                            {% for centro in centros %}
+                            <option value="{{ centro.id }}"
+                                {% if conta and conta.centro_custo_id == centro.id %}
+                                    selected
+                                {% endif %}>
+                                {% if centro.codigo %}
+                                    {{ centro.codigo }} - {{ centro.nome }}
+                                {% else %}
+                                    {{ centro.nome }}
+                                {% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
                         </div>
 
                         <div class="col-md-4">

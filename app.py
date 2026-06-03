@@ -4278,15 +4278,22 @@ def cadastrar_usuario():
 @app.route('/usuarios')
 @login_required
 def listar_usuarios():
-    if current_user.email != 'master@admin.com':
+
+    if current_user.perfil != 'admin':
         return "Acesso negado", 403
-    usuarios = Usuario.query.all()
-    return render_template('usuarios_admin.html', usuarios=usuarios)
+
+    usuarios = Usuario.query.order_by(Usuario.nome).all()
+
+    return render_template(
+        'usuarios_admin.html',
+        usuarios=usuarios
+    )
 
 @app.route('/editar_usuario/<int:id>', methods=['GET', 'POST'])
 @login_required
 def editar_usuario(id):
-    if current_user.email != 'master@admin.com':
+
+    if current_user.perfil != 'admin':
         return "Acesso negado", 403
 
     usuario = Usuario.query.get_or_404(id)
@@ -4296,33 +4303,58 @@ def editar_usuario(id):
         usuario.email = request.form['email']
 
         # Perfil
-        usuario.perfil = request.form.get('perfil', 'usuario')
+        usuario.perfil = request.form.get(
+            'perfil',
+            'usuario'
+        )
 
         # Permissões
-        usuario.pode_cadastrar_geracao = 'pode_cadastrar_geracao' in request.form
-        usuario.pode_cadastrar_cliente = 'pode_cadastrar_cliente' in request.form
-        usuario.pode_cadastrar_fatura = 'pode_cadastrar_fatura' in request.form
-        usuario.pode_acessar_financeiro = 'pode_acessar_financeiro' in request.form
-        usuario.pode_acessar_comercial = 'pode_acessar_comercial' in request.form
+        usuario.pode_cadastrar_geracao = (
+            'pode_cadastrar_geracao' in request.form
+        )
 
-        quer_aprovador = 'pode_aprovar_financeiro' in request.form
+        usuario.pode_cadastrar_cliente = (
+            'pode_cadastrar_cliente' in request.form
+        )
+
+        usuario.pode_cadastrar_fatura = (
+            'pode_cadastrar_fatura' in request.form
+        )
+
+        usuario.pode_acessar_financeiro = (
+            'pode_acessar_financeiro' in request.form
+        )
+
+        usuario.pode_acessar_comercial = (
+            'pode_acessar_comercial' in request.form
+        )
+
+        quer_aprovador = (
+            'pode_aprovar_financeiro' in request.form
+        )
 
         try:
+
             if quer_aprovador:
-                # Mantém apenas um aprovador financeiro
+
                 Usuario.query.filter(
                     Usuario.id != usuario.id
                 ).update(
-                    {Usuario.pode_aprovar_financeiro: False}
+                    {
+                        Usuario.pode_aprovar_financeiro: False
+                    }
                 )
 
                 usuario.pode_aprovar_financeiro = True
+
             else:
                 usuario.pode_aprovar_financeiro = False
 
             # Atualiza senha apenas se preenchida
             if request.form.get('senha'):
-                usuario.set_senha(request.form['senha'])
+                usuario.set_senha(
+                    request.form['senha']
+                )
 
             db.session.commit()
 
@@ -4332,6 +4364,7 @@ def editar_usuario(id):
             )
 
         except Exception as e:
+
             db.session.rollback()
 
             print(
