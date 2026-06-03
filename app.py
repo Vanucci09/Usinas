@@ -782,6 +782,12 @@ class ContaConcessionaria(db.Model):
         default=False
     )
     
+    alocado = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=False
+    )
+    
     # CONTROLE DE E-MAIL
 
     email_enviado = db.Column(
@@ -18197,9 +18203,129 @@ def termo_adesao_concessionaria(conta_id):
             url_for('listar_contas_concessionaria')
         )
 
+    template = (
+        'termo_adesao_concessionaria.html'
+        if conta.alocado
+        else 'termo_fila_espera.html'
+    )
+
     return render_template(
-        'termo_adesao_concessionaria.html',
+        template,
         conta=conta
+    )
+    
+@app.route(
+    '/contas-concessionaria/<int:conta_id>/alocar',
+    methods=['GET', 'POST']
+)
+@login_required
+def alocar_conta_concessionaria(conta_id):
+
+    conta = db.session.get(
+        ContaConcessionaria,
+        conta_id
+    )
+
+    if not conta:
+        flash(
+            'Conta não encontrada.',
+            'warning'
+        )
+        return redirect(
+            url_for('listar_contas_concessionaria')
+        )
+
+    usinas = Usina.query.order_by(
+        Usina.nome
+    ).all()
+
+    if request.method == 'POST':
+
+        usina_id = request.form.get(
+            'usina_id',
+            type=int
+        )
+
+        usina = db.session.get(
+            Usina,
+            usina_id
+        )
+
+        if not usina:
+            flash(
+                'Selecione uma usina.',
+                'warning'
+            )
+            return redirect(request.url)
+
+        centro = conta.centro_custo
+
+        # evita duplicidade por UC
+        cliente_existente = Cliente.query.filter_by(
+            codigo_unidade=conta.n_uc
+        ).first()
+
+        if cliente_existente:
+
+            flash(
+                'Já existe um cliente cadastrado com esta unidade consumidora.',
+                'warning'
+            )
+
+            return redirect(
+                url_for('listar_contas_concessionaria')
+            )
+
+        try:
+
+            cliente = Cliente(
+                nome=centro.nome,
+                cpf_cnpj=centro.cpf_cnpj,
+                endereco=centro.endereco or '',
+                codigo_unidade=conta.n_uc,
+                usina_id=usina.id,
+                email=centro.email,
+                telefone=centro.telefone,
+                email_cc=None,
+                mostrar_saldo=True,
+                consumo_instantaneo=False,
+                login_concessionaria=None,
+                senha_concessionaria=None,
+                dia_relatorio=None,
+                relatorio_automatico=False,
+                ativo=True
+            )
+
+            db.session.add(cliente)
+            conta.alocado = True
+            db.session.commit()
+
+            flash(
+                'Cliente criado e alocado com sucesso.',
+                'success'
+            )
+
+        except Exception as e:
+
+            db.session.rollback()
+            print(
+                'Erro ao alocar cliente:',
+                e
+            )
+            flash(
+                'Erro ao realizar a alocação.',
+                'danger'
+            )
+        return redirect(
+            url_for(
+                'listar_contas_concessionaria'
+            )
+        )
+
+    return render_template(
+        'alocar_conta_concessionaria.html',
+        conta=conta,
+        usinas=usinas
     )
 
 

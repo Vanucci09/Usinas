@@ -85,9 +85,10 @@
                         <th scope="col" style="width: 140px;">Nº UC</th>
                         <th scope="col" style="width: 110px;">Fase</th>
                         <th scope="col" style="width: 120px;">Bandeira</th>
-                        <th scope="col" class="text-end" style="width: 140px;">Tarifa Energia</th>
-                        <th scope="col" class="text-end" style="width: 160px;">Tarifa Total</th>
                         <th scope="col" class="text-center" style="width: 160px;">Status</th>
+                        <th scope="col" class="text-center" style="width: 140px;">
+                            Alocação
+                        </th>
                         <th scope="col" class="text-center pe-4" style="width: 180px;">Ações</th>
                     </tr>
                 </thead>
@@ -114,12 +115,6 @@
                                 {{ conta.bandeira }}
                             </span>
                         </td>
-                        <td class="text-end font-monospace text-secondary js-list-pure">
-                            {{ conta.tarifa_energia }}
-                        </td>
-                        <td class="text-end font-monospace fw-bold text-dark js-list-pure">
-                            {{ conta.tarifa_concessionaria }}
-                        </td>
                         <td class="text-center">
                             {% if conta.validacao_cliente %}
                                 <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1.5 rounded-pill w-100 d-inline-block text-center">
@@ -135,6 +130,17 @@
                                 </span>
                             {% endif %}
                         </td>
+                        <td class="text-center">
+                            {% if conta.alocado %}
+                                <span class="badge bg-success">
+                                    Alocado
+                                </span>
+                            {% else %}
+                                <span class="badge bg-warning text-dark">
+                                    Fila de Espera
+                                </span>
+                            {% endif %}
+                        </td>
                         <td class="pe-4">
                             <div class="d-flex justify-content-center gap-1">
                                 <a href="{{ url_for('proposta_conta_concessionaria', conta_id=conta.id, slug=(conta.centro_custo.nome|lower|replace(' ', '-'))) }}" 
@@ -145,12 +151,29 @@
                                 </a>
 
                                 {% if conta.validacao_cliente %}
-                                <a href="{{ url_for('termo_adesao_concessionaria', conta_id=conta.id) }}" 
-                                   target="_blank" 
-                                   class="btn btn-sm btn-light border shadow-xs btn-action" 
-                                   title="Termo de Adesão">
+
+                                <a href="{{ url_for('termo_adesao_concessionaria', conta_id=conta.id) }}"
+                                target="_blank"
+                                class="btn btn-sm btn-light border shadow-xs btn-action"
+                                title="{{ 'Termo de Adesão' if conta.alocado else 'Termo Fila de Espera' }}">
                                     <i class="bi bi-file-earmark-richtext text-warning"></i>
                                 </a>
+
+                                {% if not conta.alocado %}
+                                <form method="POST"
+                                    action="{{ url_for('alocar_conta_concessionaria', conta_id=conta.id) }}"
+                                    class="d-inline"
+                                    onsubmit="return confirm('Deseja alocar este cliente ao consórcio?');">
+
+                                    <a href="{{ url_for('alocar_conta_concessionaria', conta_id=conta.id) }}"
+                                    class="btn btn-sm btn-light border shadow-xs btn-action"
+                                    title="Alocar Cliente">
+                                        <i class="bi bi-person-check text-success"></i>
+                                    </a>
+
+                                </form>
+                                {% endif %}
+
                                 {% endif %}
 
                                 {% if not conta.validacao_cliente %}
@@ -188,7 +211,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="9" class="text-center py-5 text-muted bg-white">
+                        <td colspan="8" class="text-center py-5 text-muted bg-white">
                             <i class="bi bi-folder-x display-5 d-block mb-3 text-secondary opacity-50"></i>
                             <p class="mb-0 fw-medium">Nenhuma conta registrada até o momento.</p>
                             <small class="text-muted">Utilize os botões superiores para iniciar um cadastro.</small>

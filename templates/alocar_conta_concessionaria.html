@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="container py-4">
+
+    <div class="card shadow-sm">
+
+        <div class="card-header">
+            <h4>
+                Alocar Cliente em Usina
+            </h4>
+        </div>
+
+        <div class="card-body">
+
+            <p>
+                <strong>Cliente:</strong>
+                {{ conta.centro_custo.nome }}
+            </p>
+
+            <p>
+                <strong>UC:</strong>
+                {{ conta.n_uc }}
+            </p>
+
+            <form method="POST">
+
+                <div class="mb-3">
+
+                    <label class="form-label">
+                        Usina
+                    </label>
+
+                    <select
+                        name="usina_id"
+                        class="form-select"
+                        required>
+
+                        <option value="">
+                            Selecione...
+                        </option>
+
+                        {% for usina in usinas %}
+                        <option value="{{ usina.id }}">
+                            {{ usina.nome }}
+                        </option>
+                        {% endfor %}
+
+                    </select>
+
+                </div>
+
+                <button
+                    type="submit"
+                    class="btn btn-success">
+
+                    Alocar Cliente
+
+                </button>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}
