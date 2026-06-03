@@ -161,59 +161,66 @@
                             <!-- ===== Grupo PRINCIPAL (bonito e sempre na mesma ordem) ===== -->
                             <div class="btn-group acoes-group" role="group" aria-label="Ações principais">
 
-                            {% if not fatura.tem_boleto %}
-                                <a href="{{ url_for('editar_fatura', id=fatura.id) }}" class="btn btn-sm btn-outline-warning" title="Editar">
-                                    <i class="bi bi-pencil-fill"></i>
-                                </a>
-                            {% else %}
-                                <button class="btn btn-sm btn-outline-warning" disabled title="Editar desabilitado (fatura com boleto)">
-                                    <i class="bi bi-pencil-fill"></i>
-                                </button>
-                            {% endif %}
+                                {% if not fatura.tem_boleto %}
+                                    <a href="{{ url_for('editar_fatura', id=fatura.id) }}" class="btn btn-sm btn-outline-warning" title="Editar">
+                                        <i class="bi bi-pencil-fill"></i>
+                                    </a>
 
-                            <form method="POST" action="{{ url_for('excluir_fatura', id=fatura.id) }}"
-                                onsubmit="return confirm('Confirmar exclusão? ATENÇÃO: Esta fatura possui boleto vinculado.');">
-                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir (Forçado)">
-                                    <i class="bi bi-trash-fill"></i>
-                                </button>
-                            </form>
-
-                            <a href="{{ url_for('upload_boleto') }}?fatura_id={{ fatura.id }}"
-                            class="btn btn-sm {% if fatura.tem_boleto %}btn-info{% else %}btn-outline-info{% endif %}"
-                            title="Boleto">
-                                {% if fatura.tem_boleto %}
-                                    <i class="bi bi-paperclip"></i>
+                                    <form method="POST" action="{{ url_for('excluir_fatura', id=fatura.id) }}"
+                                          onsubmit="return confirm('Confirmar exclusão?');">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir">
+                                            <i class="bi bi-trash-fill"></i>
+                                        </button>
+                                    </form>
                                 {% else %}
-                                    <i class="bi bi-receipt-cutoff"></i>
+                                    <button class="btn btn-sm btn-outline-warning" disabled title="Editar desabilitado (fatura com boleto)">
+                                        <i class="bi bi-pencil-fill"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" disabled title="Excluir desabilitado (fatura com boleto)">
+                                        <i class="bi bi-trash-fill"></i>
+                                    </button>
                                 {% endif %}
-                            </a>
 
-                            <a href="{{ url_for('relatorio_fatura', fatura_id=fatura.id) }}" target="_blank"
-                            class="btn btn-sm btn-outline-success" title="Relatório">
-                                <i class="bi bi-file-earmark-text-fill"></i>
-                            </a>
+                                <!-- BOLETO (mantido) -->
+                                <a href="{{ url_for('upload_boleto') }}?fatura_id={{ fatura.id }}"
+                                   class="btn btn-sm {% if fatura.tem_boleto %}btn-info{% else %}btn-outline-info{% endif %}"
+                                   title="Boleto">
+                                    {% if fatura.tem_boleto %}
+                                        <i class="bi bi-paperclip"></i>
+                                    {% else %}
+                                        <i class="bi bi-receipt-cutoff"></i>
+                                    {% endif %}
+                                </a>
 
-                            {% if fatura.cliente.telefone %}
-                                <a href="{{ url_for('enviar_whatsapp', fatura_id=fatura.id) }}"
-                                class="btn btn-sm btn-outline-success"
-                                title="Enviar WhatsApp">
-                                    <i class="bi bi-whatsapp"></i>
-                                    {% if fatura.whatsapp_enviado %}
+                                <!-- Relatório -->
+                                <a href="{{ url_for('relatorio_fatura', fatura_id=fatura.id) }}" target="_blank"
+                                   class="btn btn-sm btn-outline-success" title="Relatório">
+                                    <i class="bi bi-file-earmark-text-fill"></i>
+                                </a>
+
+                                {% if fatura.cliente.telefone %}
+                                    <!-- WhatsApp normal -->
+                                    <a href="{{ url_for('enviar_whatsapp', fatura_id=fatura.id) }}"
+                                       class="btn btn-sm btn-outline-success"
+                                       title="Enviar WhatsApp">
+                                        <i class="bi bi-whatsapp"></i>
+                                        {% if fatura.whatsapp_enviado %}
+                                            <span class="ok-mark ok-success">&#10004;</span>
+                                        {% endif %}
+                                    </a>
+                                {% endif %}
+
+                                <!-- Email normal -->
+                                <a href="{{ url_for('enviar_email', fatura_id=fatura.id, usina_id=usina_id, cliente_id=cliente_id, mes=mes, ano=ano, com_boleto=com_boleto) }}"
+                                   class="btn btn-sm btn-outline-secondary"
+                                   title="Enviar E-mail">
+                                    <i class="bi bi-envelope-fill"></i>
+                                    {% if fatura.email_enviado %}
                                         <span class="ok-mark ok-success">&#10004;</span>
                                     {% endif %}
                                 </a>
-                            {% endif %}
 
-                            <a href="{{ url_for('enviar_email', fatura_id=fatura.id, usina_id=usina_id, cliente_id=cliente_id, mes=mes, ano=ano, com_boleto=com_boleto) }}"
-                            class="btn btn-sm btn-outline-secondary"
-                            title="Enviar E-mail">
-                                <i class="bi bi-envelope-fill"></i>
-                                {% if fatura.email_enviado %}
-                                    <span class="ok-mark ok-success">&#10004;</span>
-                                {% endif %}
-                            </a>
-
-                        </div>
+                            </div>
 
                             {% if fatura.cliente.telefone %}
                                 <!-- Whats + Email lado a lado -->
