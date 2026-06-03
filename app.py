@@ -75,7 +75,7 @@ app.config['MAIL_SERVER'] = 'smtp.gmail.com'  # ou outro servidor
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = 'nuza@cgrenergia.com.br'
-app.config['MAIL_PASSWORD'] = 'mzmn lhcl rwhp tuhb'
+app.config['MAIL_PASSWORD'] = 'gcrc iycx uyuk uism'
 app.config['MAIL_DEFAULT_SENDER'] = 'nuza@cgrenergia.com.br'
 
 mail = Mail(app)

@@ -43,7 +43,10 @@ Cadastrar Usuário
                     <label for="senha" class="form-label fw-medium text-secondary">Nova Senha (Opcional)</label>
                     <div class="input-group">
                         <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-lock"></i></span>
-                        <input type="password" class="form-control border-start-0 ps-0" id="senha" name="senha" placeholder="Deixe em branco para manter a atual">
+                        <input type="password" class="form-control border-start-0 border-end-0 ps-0" id="senhaInput" name="senha" placeholder="Deixe em branco para manter a atual">
+                        <button class="btn btn-outline-secondary bg-white text-muted border-start-0" type="button" id="btnToggleSenha">
+                            <i class="bi bi-eye" id="iconeOlho"></i>
+                        </button>
                     </div>
                 </div>
 
@@ -139,4 +142,21 @@ Cadastrar Usuário
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    document.getElementById('btnToggleSenha').addEventListener('click', function () {
+        const senhaInput = document.getElementById('senhaInput');
+        const iconeOlho = document.getElementById('iconeOlho');
+        
+        if (senhaInput.type === 'password') {
+            senhaInput.type = 'text';
+            iconeOlho.classList.remove('bi-eye');
+            iconeOlho.classList.add('bi-eye-slash');
+        } else {
+            senhaInput.type = 'password';
+            iconeOlho.classList.remove('bi-eye-slash');
+            iconeOlho.classList.add('bi-eye');
+        }
+    });
+</script>
 {% endblock %}
