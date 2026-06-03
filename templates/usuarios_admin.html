@@ -69,6 +69,8 @@
                                 <span class="badge rounded-pill bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1 fw-semibold">Gerente Comercial</span>
                             {% elif usuario.perfil == 'comercial' %}
                                 <span class="badge rounded-pill bg-info-subtle text-info-emphasis border border-info-subtle px-2 py-1 fw-semibold">Comercial</span>
+                            {% elif usuario.perfil == 'monitoramento' %}
+                                <span class="badge rounded-pill bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 fw-semibold">Monitoramento</span>
                             {% else %}
                                 <span class="badge rounded-pill bg-light text-secondary border px-2 py-1 fw-semibold">Usuário</span>
                             {% endif %}
