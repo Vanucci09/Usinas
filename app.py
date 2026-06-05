@@ -103,6 +103,21 @@ class Usina(db.Model):
     boleto_proprio = db.Column(db.Boolean, nullable=False, default=False)
     ficha_dpi_padrao = db.Column(db.Integer, nullable=False, default=300)
     ficha_dpi_boleto = db.Column(db.Integer, nullable=False, default=300)
+    # DADOS DO CONSÓRCIO
+    consorcio_nome = db.Column(
+        db.String(255),
+        nullable=True
+    )
+
+    consorcio_cnpj = db.Column(
+        db.String(20),
+        nullable=True
+    )
+
+    consorcio_endereco = db.Column(
+        db.String(255),
+        nullable=True
+    )
 
     # percentuais (0.0 a 1.0)
     ficha_crop_padrao_top = db.Column(db.Float, nullable=False, default=0.37)
@@ -1155,6 +1170,12 @@ class Usuario(db.Model, UserMixin):
         nullable=False,
         default='usuario'
     )
+    
+    primeiro_login = db.Column(
+        db.Boolean,
+        default=True,
+        nullable=False
+    )
 
     pode_cadastrar_geracao = db.Column(db.Boolean, default=False)
     pode_cadastrar_cliente = db.Column(db.Boolean, default=False)
@@ -1227,10 +1248,25 @@ def cadastrar_usina():
 
         boleto_vals = request.form.getlist('boleto_proprio')
         boleto_proprio = bool(boleto_vals and str(boleto_vals[-1]).lower() in ('1', 'true', 'on', 'sim'))
+        
+        consorcio_nome = request.form.get(
+            'consorcio_nome'
+        )
+
+        consorcio_cnpj = request.form.get(
+            'consorcio_cnpj'
+        )
+
+        consorcio_endereco = request.form.get(
+            'consorcio_endereco'
+        )
 
         nova_usina = Usina(
             cc=cc,
             nome=nome,
+            consorcio_nome=consorcio_nome,
+            consorcio_cnpj=consorcio_cnpj,
+            consorcio_endereco=consorcio_endereco,
             potencia_kw=potencia,
             data_ligacao=data_ligacao,
             valor_investido=valor_investido,
@@ -4016,7 +4052,7 @@ def testar_ficha_usina(usina_id):
         flash(f'Erro ao salvar config da ficha: {e}', 'danger')
         return redirect(url_for('editar_previsoes', usina_id=usina.id, ano=ano) + "#teste-ficha")
 
-    # ✅ Agora gera preview (usa os valores do banco)
+    # Agora gera preview (usa os valores do banco)
     arquivo = request.files.get('pdf_teste')
     if not arquivo or not arquivo.filename:
         flash('Envie um PDF para testar o recorte.', 'warning')
@@ -4107,6 +4143,18 @@ def editar_previsoes(usina_id):
             # Dados gerais da usina
             usina.cc = request.form.get('cc')
             usina.nome = request.form.get('nome')
+            
+            usina.consorcio_nome = request.form.get(
+                'consorcio_nome'
+            )
+
+            usina.consorcio_cnpj = request.form.get(
+                'consorcio_cnpj'
+            )
+
+            usina.consorcio_endereco = request.form.get(
+                'consorcio_endereco'
+            )
 
             potencia = request.form.get('potencia_kw')
             if potencia is not None and str(potencia).strip() != "":
@@ -4217,17 +4265,72 @@ def listar_usinas():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+
     if request.method == 'POST':
+
         email = request.form['email']
         senha = request.form['senha']
-        usuario = Usuario.query.filter_by(email=email).first()
+
+        usuario = Usuario.query.filter_by(
+            email=email
+        ).first()
+
         if usuario and usuario.verificar_senha(senha):
+
             login_user(usuario)
-            return redirect(url_for('index'))
-        else:
-            return render_template('login.html', erro='Credenciais inválidas.')
+
+            if usuario.primeiro_login:
+                return redirect(
+                    url_for('alterar_senha_primeiro_login')
+                )
+
+            return redirect(
+                url_for('index')
+            )
+
+        return render_template(
+            'login.html',
+            erro='Credenciais inválidas.'
+        )
 
     return render_template('login.html')
+
+@app.route(
+    '/primeiro-login',
+    methods=['GET', 'POST']
+)
+@login_required
+def alterar_senha_primeiro_login():
+
+    if request.method == 'POST':
+
+        nova_senha = request.form.get('nova_senha')
+        confirmar_senha = request.form.get('confirmar_senha')
+
+        if nova_senha != confirmar_senha:
+            flash(
+                'As senhas não conferem.',
+                'danger'
+            )
+            return redirect(request.url)
+
+        current_user.set_senha(nova_senha)
+        current_user.primeiro_login = False
+
+        db.session.commit()
+
+        flash(
+            'Senha alterada com sucesso.',
+            'success'
+        )
+
+        return redirect(
+            url_for('index')
+        )
+
+    return render_template(
+        'primeiro_login.html'
+    )
 
 @app.route('/logout')
 @login_required
@@ -18203,6 +18306,17 @@ def termo_adesao_concessionaria(conta_id):
             url_for('listar_contas_concessionaria')
         )
 
+    usina = None
+
+    if conta.alocado:
+
+        cliente = Cliente.query.filter_by(
+            codigo_unidade=conta.n_uc
+        ).first()
+
+        if cliente:
+            usina = cliente.usina
+
     template = (
         'termo_adesao_concessionaria.html'
         if conta.alocado
@@ -18211,7 +18325,8 @@ def termo_adesao_concessionaria(conta_id):
 
     return render_template(
         template,
-        conta=conta
+        conta=conta,
+        usina=usina
     )
     
 @app.route(

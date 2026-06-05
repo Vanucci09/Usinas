@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container d-flex justify-content-center align-items-center" style="min-height: 75vh;">
+    <div class="card shadow-lg border-0" style="width: 100%; max-width: 450px; border-radius: 12px;">
+        
+        <div class="card-body p-4 p-md-5">
+            <!-- Ícone amigável e Cabeçalho -->
+            <div class="text-center mb-4">
+                <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
+                    <i class="bi bi-shield-lock-fill fs-3"></i>
+                </div>
+                <h3 class="fw-bold text-dark mb-1">Primeiro Acesso</h3>
+                <p class="text-muted small">Por segurança, altere sua senha padrão antes de continuar.</p>
+            </div>
+
+            <!-- Exibição de Mensagens Flash (Flask/Django) -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show small" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <form method="POST" class="needs-validation" novalidate>
+                
+                <!-- Nova Senha -->
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small text-secondary">Nova senha</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light text-muted border-end-0"><i class="bi bi-key"></i></span>
+                        <input 
+                            type="password" 
+                            name="nova_senha" 
+                            id="nova_senha"
+                            class="form-control bg-light border-start-0 ps-0" 
+                            placeholder="Digite sua nova senha"
+                            required>
+                        <button class="btn btn-outline-light border text-muted bg-light" type="button" onclick="togglePassword('nova_senha', this)">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                    </div>
+                    <div class="form-text small text-muted">Use pelo menos 8 caracteres com letras e números.</div>
+                </div>
+
+                <!-- Confirmar Senha -->
+                <div class="mb-4">
+                    <label class="form-label fw-semibold small text-secondary">Confirmar senha</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light text-muted border-end-0"><i class="bi bi-check-circle"></i></span>
+                        <input 
+                            type="password" 
+                            name="confirmar_senha" 
+                            id="confirmar_senha"
+                            class="form-control bg-light border-start-0 ps-0" 
+                            placeholder="Repita a nova senha"
+                            required>
+                        <button class="btn btn-outline-light border text-muted bg-light" type="button" onclick="togglePassword('confirmar_senha', this)">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Botão de Ação -->
+                <button type="submit" class="btn btn-primary w-100 fw-bold py-2 shadow-sm" style="border-radius: 8px;">
+                    Atualizar e Continuar <i class="bi bi-arrow-right ms-1"></i>
+                </button>
+            </form>
+        </div>
+
+    </div>
+</div>
+
+<!-- JavaScript para o "olhinho" da senha -->
+<script>
+function togglePassword(inputId, button) {
+    const input = document.getElementById(inputId);
+    const icon = button.querySelector('i');
+    if (input.type === "password") {
+        input.type = "text";
+        icon.classList.replace('bi-eye', 'bi-eye-slash');
+    } else {
+        input.type = "password";
+        icon.classList.replace('bi-eye-slash', 'bi-eye');
+    }
+}
+</script>
+{% endblock %}

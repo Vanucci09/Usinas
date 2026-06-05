@@ -1,289 +1,280 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 
 {% block content %}
-
 <div class="container my-5">
-  <div class="bg-white p-4 rounded shadow-sm">
-
-    <h2 class="text-center text-primary mb-4">
-      Editar Usina - {{ usina.nome }}
-    </h2>
-
-    <!-- Seleção de ano -->
-    <form method="GET" class="row g-3 align-items-end mb-4">
-      <div class="col-auto">
-        <label for="ano" class="form-label">Selecionar Ano:</label>
-        <input type="number" id="ano" name="ano" value="{{ ano }}" class="form-control">
-      </div>
-      <div class="col-auto">
-        <button type="submit" class="btn btn-outline-primary">Carregar</button>
-      </div>
-    </form>
-
-    <!-- FORM PRINCIPAL -->
-    <form method="POST" enctype="multipart/form-data" class="row g-3">
-
-      <!-- DADOS GERAIS -->
-      <div class="col-md-6">
-        <label class="form-label">Código CC:</label>
-        <input type="text" name="cc" class="form-control" value="{{ usina.cc }}" required>
-      </div>
-
-      <div class="col-md-6">
-        <label class="form-label">Nome da Usina:</label>
-        <input type="text" name="nome" class="form-control" value="{{ usina.nome }}" required>
-      </div>
-
-      <div class="col-md-4">
-        <label class="form-label">Potência (kW):</label>
-        <input type="number" step="0.01" name="potencia_kw"
-               class="form-control" value="{{ usina.potencia_kw }}">
-      </div>
-
-      <div class="col-md-4">
-        <label class="form-label">Data de Ligação:</label>
-        <input type="date" name="data_ligacao"
-               class="form-control"
-               value="{{ usina.data_ligacao.strftime('%Y-%m-%d') if usina.data_ligacao }}">
-      </div>
-
-      <div class="col-md-4">
-        <label class="form-label">Valor Investido (R$):</label>
-        <input type="number" step="0.01" name="valor_investido"
-               class="form-control"
-               value="{{ usina.valor_investido }}">
-      </div>
-
-      <div class="col-12">
-        <label class="form-label">Saldo Atual (kWh)</label>
-        <input type="text" name="saldo_kwh"
-               class="form-control"
-               value="{{ usina.saldo_kwh or '' }}">
-      </div>
-
-      <div class="col-12 mt-2">
-        <input type="hidden" name="tusd_fio_b" value="0">
-        <div class="form-check form-check-inline">
-          <input type="checkbox" name="tusd_fio_b" value="1"
-                 class="form-check-input"
-                 {% if usina.tusd_fio_b %}checked{% endif %}>
-          <label class="form-check-label">TUSD Fio B</label>
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
+        <div>
+            <span class="badge bg-primary bg-opacity-10 text-primary fw-bold mb-1">Modo Edição</span>
+            <h2 class="fw-bold text-dark mb-0">Editar Usina: <span class="text-primary">{{ usina.nome }}</span></h2>
         </div>
+        
+        <form method="GET" class="d-flex align-items-center gap-2 bg-white p-2 rounded-3 shadow-sm border">
+            <label for="ano" class="form-label small fw-bold text-secondary mb-0 text-nowrap">Histórico de:</label>
+            <input type="number" id="ano" name="ano" value="{{ ano }}" class="form-control form-control-sm bg-light border-0 fw-bold text-center" style="width: 90px;">
+            <button type="submit" class="btn btn-sm btn-primary fw-semibold">
+                <i class="bi bi-arrow-clockwise"></i> Alterar
+            </button>
+        </form>
+    </div>
 
-        <input type="hidden" name="boleto_proprio" value="0">
-        <div class="form-check form-check-inline">
-          <input type="checkbox" name="boleto_proprio" value="1"
-                 class="form-check-input"
-                 {% if usina.boleto_proprio %}checked{% endif %}>
-          <label class="form-check-label">Boleto Próprio</label>
+    <div class="card shadow-sm border-0 mb-4" style="border-radius: 12px;">
+        <div class="card-body p-4 p-md-5">
+            
+            <form method="POST" enctype="multipart/form-data" class="needs-validation" novalidate>
+                
+                <ul class="nav nav-pills nav-justified mb-4 bg-light p-1 rounded-3 small fw-semibold" id="editUsinaTab" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active rounded-3 py-2" id="geral-tab" data-bs-toggle="tab" data-bs-target="#geral" type="button" role="tab">
+                            <i class="bi bi-sliders me-1"></i> Parâmetros Gerais
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link rounded-3 py-2" id="previsoes-tab" data-bs-toggle="tab" data-bs-target="#previsoes" type="button" role="tab">
+                            <i class="bi bi-graph-up-arrow me-1"></i> Metas Mensais ({{ ano }})
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link rounded-3 py-2" id="recorte-tab" data-bs-toggle="tab" data-bs-target="#recorte" type="button" role="tab">
+                            <i class="bi bi-file-pdf-fill me-1"></i> Automação & Ficha
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content pt-2" id="editUsinaTabConteudo">
+                    
+                    <div class="tab-pane fade show active" id="geral" role="tabpanel">
+                        <div class="row g-4">
+                            <div class="col-12"><h6 class="text-primary fw-bold mb-0"><i class="bi bi-info-circle me-1"></i> Identificação e Engenharia</h6></div>
+                            
+                            <div class="col-md-3">
+                                <label class="form-label small fw-semibold text-secondary">Código CC</label>
+                                <input type="text" name="cc" class="form-control bg-light border-0 fw-semibold" value="{{ usina.cc }}" required>
+                            </div>
+                            <div class="col-md-5">
+                                <label class="form-label small fw-semibold text-secondary">Nome Comercial da Usina</label>
+                                <input type="text" name="nome" class="form-control bg-light border-0" value="{{ usina.nome }}" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-semibold text-secondary">Potência Contratada</label>
+                                <div class="input-group">
+                                    <input type="number" step="0.01" name="potencia_kw" class="form-control bg-light border-0" value="{{ usina.potencia_kw }}">
+                                    <span class="input-group-text bg-light border-0 text-muted small fw-semibold">kW</span>
+                                </div>
+                            </div>
+
+                            <div class="col-12 mt-4"><h6 class="text-primary fw-bold mb-0"><i class="bi bi-building me-1"></i> Estrutura do Consórcio</h6></div>
+                            
+                            <div class="col-md-5">
+                                <label class="form-label small fw-semibold text-secondary">Nome do Consórcio</label>
+                                <input type="text" name="consorcio_nome" class="form-control bg-light border-0" value="{{ usina.consorcio_nome or '' }}" placeholder="Não associado">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-semibold text-secondary">CNPJ</label>
+                                <input type="text" name="consorcio_cnpj" id="cnpj_mask" class="form-control bg-light border-0" value="{{ usina.consorcio_cnpj or '' }}" placeholder="00.000.000/0000-00">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-semibold text-secondary">Endereço Operacional</label>
+                                <input type="text" name="consorcio_endereco" class="form-control bg-light border-0" value="{{ usina.consorcio_endereco or '' }}">
+                            </div>
+
+                            <div class="col-12 mt-4"><h6 class="text-primary fw-bold mb-0"><i class="bi bi-cash-coin me-1"></i> Marcos Financeiros & Saldo</h6></div>
+                            
+                            <div class="col-md-4">
+                                <label class="form-label small fw-semibold text-secondary">Data de Conexão à Rede</label>
+                                <input type="date" name="data_ligacao" class="form-control bg-light border-0" value="{{ usina.data_ligacao.strftime('%Y-%m-%d') if usina.data_ligacao }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-semibold text-secondary">Capital Total Investido</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-0 text-muted small fw-semibold">R$</span>
+                                    <input type="number" step="0.01" name="valor_investido" class="form-control bg-light border-0" value="{{ usina.valor_investido }}">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-semibold text-secondary">Saldo Atual Acumulado</label>
+                                <div class="input-group">
+                                    <input type="text" name="saldo_kwh" class="form-control bg-light border-0 fw-bold text-success" value="{{ usina.saldo_kwh or '' }}" placeholder="0.00">
+                                    <span class="input-group-text bg-light border-0 text-muted small fw-semibold">kWh</span>
+                                </div>
+                            </div>
+
+                            <div class="col-md-6 mt-4">
+                                <div class="p-3 bg-light rounded-3 d-flex gap-4 h-100 align-items-center">
+                                    <div class="form-check form-switch m-0">
+                                        <input type="hidden" name="tusd_fio_b" value="0">
+                                        <input type="checkbox" name="tusd_fio_b" id="tusd_fio_b" value="1" class="form-check-input" {% if usina.tusd_fio_b %}checked{% endif %}>
+                                        <label class="form-check-label small fw-semibold" for="tusd_fio_b">Cobrança TUSD Fio B</label>
+                                    </div>
+                                    <div class="form-check form-switch m-0">
+                                        <input type="hidden" name="boleto_proprio" value="0">
+                                        <input type="checkbox" name="boleto_proprio" id="boleto_proprio" value="1" class="form-check-input" {% if usina.boleto_proprio %}checked{% endif %}>
+                                        <label class="form-check-label small fw-semibold" for="boleto_proprio">Emite Boleto Próprio</label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-md-6 mt-4">
+                                <div class="row align-items-center g-2">
+                                    {% if usina.logo_url %}
+                                    <div class="col-auto">
+                                        <img src="{{ url_for('servir_logo', nome_arquivo=usina.logo_url) if env == 'production' else url_for('static', filename='logos/' + usina.logo_url) }}" class="img-fluid rounded border bg-white p-1" style="max-height: 52px; width: 60px; object-fit: contain;">
+                                    </div>
+                                    {% endif %}
+                                    <div class="col">
+                                        <label class="form-label small fw-semibold text-secondary m-0">Substituir Logo da Marca</label>
+                                        <input type="file" name="logo" class="form-control bg-light border-0 form-control-sm mt-1">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane fade" id="previsoes" role="tabpanel">
+                        <div class="alert alert-primary border-0 bg-primary bg-opacity-10 text-primary small d-flex align-items-center mb-4" role="alert">
+                            <i class="bi bi-calendar-event-fill fs-5 me-2"></i>
+                            <div>Você está editando as metas de projeção energética para o ano de <strong>{{ ano }}</strong>. Use o filtro no topo da página para alternar o ano fiscal.</div>
+                        </div>
+                        <div class="row g-3">
+                            {% set meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'] %}
+                            {% for i in range(12) %}
+                            <div class="col-sm-6 col-md-4 col-lg-3">
+                                <div class="p-2 border rounded-3 bg-light bg-opacity-50">
+                                    <label class="form-label small fw-semibold text-dark mb-1">{{ meses[i] }} / {{ ano }}</label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="number" step="0.01" name="previsoes[{{ i+1 }}]" class="form-control border-0 bg-white shadow-sm fw-bold" value="{{ previsoes.get(i+1, '') }}" placeholder="0.00">
+                                        <span class="input-group-text bg-transparent border-0 text-muted small">kWh</span>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="tab-pane fade" id="recorte" role="tabpanel">
+                        <div class="alert alert-warning border-0 bg-warning bg-opacity-10 text-warning small mb-4" role="alert">
+                            <i class="bi bi-sliders2-vertical me-2"></i><strong>Atenção Engenharia:</strong> Parâmetros de mapeamento geométrico das faturas para o extrator. Coordenadas de proporção baseadas em float ($0.0$ a $1.0$).
+                        </div>
+                        
+                        <div class="row g-4">
+                            <div class="col-md-6">
+                                <div class="p-3 border rounded-3 bg-light bg-opacity-20">
+                                    <h6 class="fw-bold text-dark mb-3"><i class="bi bi-file-earmark-text text-muted me-1"></i> Fluxo Distribuidora (Padrão)</h6>
+                                    <div class="row g-3">
+                                        <div class="col-6">
+                                            <label class="form-label small text-muted">Resolução (DPI)</label>
+                                            <input type="number" name="ficha_dpi_padrao" class="form-control form-control-sm" value="{{ usina.ficha_dpi_padrao }}">
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small text-muted">Seleção de Página</label>
+                                            <select name="ficha_page_select_padrao" class="form-select form-select-sm">
+                                                <option value="first" {% if usina.ficha_page_select_padrao == 'first' %}selected{% endif %}>Primeira</option>
+                                                <option value="last" {% if usina.ficha_page_select_padrao == 'last' %}selected{% endif %}>Última</option>
+                                                <option value="0" {% if usina.ficha_page_select_padrao == '0' %}selected{% endif %}>Pág 1 (Index 0)</option>
+                                                <option value="1" {% if usina.ficha_page_select_padrao == '1' %}selected{% endif %}>Pág 2 (Index 1)</option>
+                                                <option value="-1" {% if usina.ficha_page_select_padrao == '-1' %}selected{% endif %}>Última (Index -1)</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small text-muted">Corte Superior (Top %)</label>
+                                            <input type="number" step="0.001" name="ficha_crop_padrao_top" class="form-control form-control-sm" value="{{ usina.ficha_crop_padrao_top }}">
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small text-muted">Corte Inferior (Bottom %)</label>
+                                            <input type="number" step="0.001" name="ficha_crop_padrao_bottom" class="form-control form-control-sm" value="{{ usina.ficha_crop_padrao_bottom }}">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="p-3 border rounded-3 bg-light bg-opacity-20">
+                                    <h6 class="fw-bold text-dark mb-3"><i class="bi bi-receipt-cutoff text-muted me-1"></i> Fluxo Boleto Bancário Integrado</h6>
+                                    <div class="row g-3">
+                                        <div class="col-6">
+                                            <label class="form-label small text-muted">Resolução (DPI)</label>
+                                            <input type="number" name="ficha_dpi_boleto" class="form-control form-control-sm" value="{{ usina.ficha_dpi_boleto }}">
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small text-muted">Seleção de Página</label>
+                                            <select name="ficha_page_select_boleto" class="form-select form-select-sm">
+                                                <option value="first" {% if usina.ficha_page_select_boleto == 'first' %}selected{% endif %}>Primeira</option>
+                                                <option value="last" {% if usina.ficha_page_select_boleto == 'last' %}selected{% endif %}>Última</option>
+                                                <option value="0" {% if usina.ficha_page_select_boleto == '0' %}selected{% endif %}>Pág 1 (Index 0)</option>
+                                                <option value="1" {% if usina.ficha_page_select_boleto == '1' %}selected{% endif %}>Pág 2 (Index 1)</option>
+                                                <option value="-1" {% if usina.ficha_page_select_boleto == '-1' %}selected{% endif %}>Última (Index -1)</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small text-muted">Corte Superior (Top %)</label>
+                                            <input type="number" step="0.001" name="ficha_crop_boleto_top" class="form-control form-control-sm" value="{{ usina.ficha_crop_boleto_top }}">
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label small text-muted">Corte Inferior (Bottom %)</label>
+                                            <input type="number" step="0.001" name="ficha_crop_boleto_bottom" class="form-control form-control-sm" value="{{ usina.ficha_crop_boleto_bottom }}">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-12 mt-4">
+                                <div class="p-3 border-start border-primary border-3 bg-light rounded-end">
+                                    <h6 class="fw-bold text-dark mb-2"><i class="bi bi-play-circle-fill text-primary me-1"></i> Sandbox de Validação do Algoritmo</h6>
+                                    <p class="text-muted small mb-3">Suba uma fatura real em PDF abaixo para validar visualmente se as coordenadas de corte acima estão corretas sem quebrar o fluxo de produção.</p>
+                                    <div class="row align-items-end g-3">
+                                        <div class="col-md-8">
+                                            <label class="form-label small fw-semibold text-secondary">Carregar Documento PDF de Teste</label>
+                                            <input type="file" name="pdf_teste" accept="application/pdf" class="form-control bg-white form-control-sm shadow-sm">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <button type="submit" formaction="{{ url_for('testar_ficha_usina', usina_id=usina.id, ano=ano) }}" class="btn btn-sm btn-outline-primary fw-bold w-100 py-2">
+                                                <i class="bi bi-bounding-box-circles me-1"></i> Atualizar e Ver Preview
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mt-5 pt-3 border-top">
+                    <a href="/usinas" class="btn btn-link text-secondary fw-semibold text-decoration-none small"><i class="bi bi-x-circle"></i> Cancelar Alterações</a>
+                    <button type="submit" class="btn btn-primary fw-bold px-5 py-2 shadow-sm" style="border-radius: 8px;">
+                        <i class="bi bi-check2-all me-1"></i> Salvar Todas as Alterações
+                    </button>
+                </div>
+
+            </form>
         </div>
-      </div>
+    </div>
 
-      <!-- LOGO -->
-      {% if usina.logo_url %}
-      <div class="col-md-6">
-        <label class="form-label">Logo Atual:</label><br>
-        <img src="{{ url_for('servir_logo', nome_arquivo=usina.logo_url) if env == 'production'
-                     else url_for('static', filename='logos/' + usina.logo_url) }}"
-             class="img-fluid border rounded"
-             style="max-height:100px;">
-      </div>
-      {% endif %}
-
-      <div class="col-md-6">
-        <label class="form-label">Nova Logo (opcional):</label>
-        <input type="file" name="logo" class="form-control">
-      </div>
-
-      <!-- PREVISÕES -->
-      <div class="col-12 mt-4">
-        <label class="form-label">Previsão Mensal (kWh)</label>
-        <div class="row g-3">
-          {% set meses = [
-            'Jan','Fev','Mar','Abr','Mai','Jun',
-            'Jul','Ago','Set','Out','Nov','Dez'
-          ] %}
-          {% for i in range(12) %}
-          <div class="col-md-4">
-            <label class="form-label">{{ meses[i] }}</label>
-            <input type="number" step="0.01"
-                   name="previsoes[{{ i+1 }}]"
-                   class="form-control"
-                   value="{{ previsoes.get(i+1, '') }}">
-          </div>
-          {% endfor %}
-        </div>
-      </div>
-
-      <!-- CONFIGURAÇÃO DA FICHA -->
-      <div class="col-12 mt-5">
-        <hr>
-        <h5 class="text-primary">Configuração da Ficha de Compensação</h5>
-        <small class="text-muted">Percentuais de 0 a 1 (ex: 0.37 = 37%).</small>
-      </div>
-
-      <div class="col-md-3">
-        <label class="form-label">DPI (Padrão)</label>
-        <input type="number" name="ficha_dpi_padrao"
-               class="form-control"
-               value="{{ usina.ficha_dpi_padrao }}">
-      </div>
-
-      <div class="col-md-3">
-        <label class="form-label">DPI (Boleto)</label>
-        <input type="number" name="ficha_dpi_boleto"
-               class="form-control"
-               value="{{ usina.ficha_dpi_boleto }}">
-      </div>
-
-      <div class="col-md-3">
-        <label class="form-label">Página (Padrão)</label>
-        <select name="ficha_page_select_padrao" class="form-select">
-            <option value="first"
-                {% if usina.ficha_page_select_padrao == 'first' %}selected{% endif %}>
-                Primeira Página
-            </option>
-
-            <option value="last"
-                {% if usina.ficha_page_select_padrao == 'last' %}selected{% endif %}>
-                Última Página
-            </option>
-
-            <option value="0"
-                {% if usina.ficha_page_select_padrao == '0' %}selected{% endif %}>
-                Página 1
-            </option>
-
-            <option value="1"
-                {% if usina.ficha_page_select_padrao == '1' %}selected{% endif %}>
-                Página 2
-            </option>
-
-            <option value="2"
-                {% if usina.ficha_page_select_padrao == '2' %}selected{% endif %}>
-                Página 3
-            </option>
-
-            <option value="-1"
-                {% if usina.ficha_page_select_padrao == '-1' %}selected{% endif %}>
-                Última (index -1)
-            </option>
-        </select>
-      </div>
-
-      <div class="col-md-3">
-        <label class="form-label">Página (Boleto)</label>
-        <select name="ficha_page_select_boleto" class="form-select">
-            <option value="first"
-                {% if usina.ficha_page_select_boleto == 'first' %}selected{% endif %}>
-                Primeira Página
-            </option>
-
-            <option value="last"
-                {% if usina.ficha_page_select_boleto == 'last' %}selected{% endif %}>
-                Última Página
-            </option>
-
-            <option value="0"
-                {% if usina.ficha_page_select_boleto == '0' %}selected{% endif %}>
-                Página 1
-            </option>
-
-            <option value="1"
-                {% if usina.ficha_page_select_boleto == '1' %}selected{% endif %}>
-                Página 2
-            </option>
-
-            <option value="2"
-                {% if usina.ficha_page_select_boleto == '2' %}selected{% endif %}>
-                Página 3
-            </option>
-
-            <option value="-1"
-                {% if usina.ficha_page_select_boleto == '-1' %}selected{% endif %}>
-                Última (index -1)
-            </option>
-        </select>
-      </div>
-
-      <div class="col-md-3">
-        <label class="form-label">Top % (Padrão)</label>
-        <input type="number" step="0.001"
-               name="ficha_crop_padrao_top"
-               class="form-control"
-               value="{{ usina.ficha_crop_padrao_top }}">
-      </div>
-
-      <div class="col-md-3">
-        <label class="form-label">Bottom % (Padrão)</label>
-        <input type="number" step="0.001"
-               name="ficha_crop_padrao_bottom"
-               class="form-control"
-               value="{{ usina.ficha_crop_padrao_bottom }}">
-      </div>
-
-      <div class="col-md-3">
-        <label class="form-label">Top % (Boleto)</label>
-        <input type="number" step="0.001"
-               name="ficha_crop_boleto_top"
-               class="form-control"
-               value="{{ usina.ficha_crop_boleto_top }}">
-      </div>
-
-      <div class="col-md-3">
-        <label class="form-label">Bottom % (Boleto)</label>
-        <input type="number" step="0.001"
-               name="ficha_crop_boleto_bottom"
-               class="form-control"
-               value="{{ usina.ficha_crop_boleto_bottom }}">
-      </div>
-
-      <!-- TESTE DE FICHA -->
-      <div class="col-12 mt-4">
-        <hr>
-        <h5 class="text-primary">Testar Recorte</h5>
-
-        <div class="mb-3">
-          <label class="form-label">PDF para Teste</label>
-          <input type="file" name="pdf_teste"
-                 accept="application/pdf"
-                 class="form-control">
-        </div>
-      </div>
-
-      <!-- BOTÕES -->
-      <div class="col-12 text-center mt-4">
-        <button type="submit"
-                class="btn btn-primary px-4">
-          Salvar Alterações
-        </button>
-
-        <button type="submit"
-                formaction="{{ url_for('testar_ficha_usina', usina_id=usina.id, ano=ano) }}"
-                formmethod="POST"
-                formenctype="multipart/form-data"
-                class="btn btn-outline-primary px-4 ms-2">
-          Salvar e Gerar Preview
-        </button>
-      </div>
-
-    </form>
-
-    <!-- PREVIEW -->
     {% if preview_url %}
-    <div class="mt-5 text-center">
-      <h5 class="text-success">Preview do Recorte</h5>
-      <img src="{{ preview_url }}?v={{ preview_cache_bust }}"
-           class="img-fluid border rounded mt-3"
-           style="max-height:500px;">
+    <div class="card shadow-sm border-0 border-top border-success border-3 p-4 text-center mt-4 mb-5" style="border-radius: 12px;">
+        <div class="mb-3">
+            <h5 class="fw-bold text-success mb-1"><i class="bi bi-eye-fill"></i> Output da Matriz de Recorte</h5>
+            <p class="text-muted small">Esta imagem reflete exatamente o pedaço capturado que será anexado na Ficha de Compensação dos clientes.</p>
+        </div>
+        <div class="bg-dark p-3 rounded-3 shadow-inner d-inline-block mx-auto" style="max-width: 100%;">
+            <img src="{{ preview_url }}?v={{ preview_cache_bust }}" class="img-fluid rounded border shadow" style="max-height: 520px; object-fit: contain;">
+        </div>
     </div>
     {% endif %}
-
-    <div class="text-center mt-4">
-      <a href="/usinas" class="btn btn-outline-secondary">Voltar</a>
-    </div>
-
-  </div>
 </div>
 
+<script>
+(() => {
+  'use strict'
+  const forms = document.querySelectorAll('.needs-validation')
+  Array.from(forms).forEach(form => {
+    form.addEventListener('submit', event => {
+      if (!form.checkValidity()) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+      form.classList.add('was-validated')
+    }, false)
+  })
+})()
+</script>
 {% endblock %}
