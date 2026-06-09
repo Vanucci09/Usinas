@@ -17185,8 +17185,30 @@ def proposta_conta_concessionaria(conta_id, slug):
     # GANHO ANUAL
     ganho_anual = ganho_mensal * 12
 
-    # ECONOMIA %
+    # QUANTIDADE DE CONTAS
+    qtd_contas = 0
+
     if total_concessionaria > 0:
+
+        qtd_contas_real = (
+            ganho_anual / total_concessionaria
+        )
+
+        parte_inteira = int(qtd_contas_real)
+
+        parte_decimal = (
+            qtd_contas_real - parte_inteira
+        )
+
+        if parte_decimal >= 0.95:
+            qtd_contas = float(
+                parte_inteira + 1
+            )
+        else:
+            qtd_contas = round(
+                qtd_contas_real,
+                1
+            )
 
         economia_percentual = (
             (ganho_mensal / total_concessionaria) * 100
@@ -17209,6 +17231,7 @@ def proposta_conta_concessionaria(conta_id, slug):
         'total_concessionaria': total_concessionaria,
         'ganho_mensal': ganho_mensal,
         'ganho_anual': ganho_anual,
+        'qtd_contas': qtd_contas,
         'economia_percentual': economia_percentual,
         'desconto': desconto,
         'cip': cip,

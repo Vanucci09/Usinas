@@ -225,8 +225,8 @@
                                 ) %}
 
                                 <span class="fs-5 lh-sm d-block fw-extrabold text-success-dark">
-                                    Economia de quase<br>
-                                    {{ qtd_contas|round(1) }} contas por ano!
+                                    Economia de<br>
+                                    {{ "%.1f"|format(dados.qtd_contas) }} contas por ano!
                                 </span>
                             </div>
                         </td>
