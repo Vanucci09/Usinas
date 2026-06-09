@@ -31,48 +31,88 @@
     </div>
 
     <div class="row g-3 mb-4">
+
+        <!-- Em Análise -->
         <div class="col-6 col-md-3">
             <div class="p-3 bg-white border rounded shadow-xs d-flex align-items-center gap-3">
-                <div class="p-2 bg-light rounded text-muted"><i class="bi bi-files fs-4"></i></div>
-                <div>
-                    <span class="d-block text-muted small">Total</span>
-                    <strong class="fs-5 text-dark">{{ contas|length }}</strong>
+                <div class="p-2 bg-light rounded text-muted">
+                    <i class="bi bi-files fs-4"></i>
                 </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="p-3 bg-white border rounded shadow-xs d-flex align-items-center gap-3">
-                <div class="p-2 bg-success-subtle rounded text-success"><i class="bi bi-check-circle fs-4"></i></div>
                 <div>
-                    <span class="d-block text-muted small">Aprovadas</span>
+                    <span class="d-block text-muted small">
+                        Em Análise
+                    </span>
+
                     <strong class="fs-5 text-dark">
-                        {{ contas|selectattr('validacao_cliente')|list|length }}
+                        {{ contas
+                            | rejectattr('validacao_vendedor')
+                            | rejectattr('validacao_cliente')
+                            | list
+                            | length }}
                     </strong>
                 </div>
             </div>
         </div>
+
+        <!-- Documentação Recebida -->
         <div class="col-6 col-md-3">
             <div class="p-3 bg-white border rounded shadow-xs d-flex align-items-center gap-3">
-                <div class="p-2 bg-warning-subtle rounded text-warning"><i class="bi bi-clock-history fs-4"></i></div>
+                <div class="p-2 bg-success-subtle rounded text-success">
+                    <i class="bi bi-folder-check fs-4"></i>
+                </div>
                 <div>
-                    <span class="d-block text-muted small">Aguardando</span>
+                    <span class="d-block text-muted small">
+                        Documentação Recebida
+                    </span>
                     <strong class="fs-5 text-dark">
-                        {{ contas|selectattr('validacao_vendedor')|rejectattr('validacao_cliente')|list|length }}
+                        {{ contas|selectattr('documentacao_enviada')|list|length }}
                     </strong>
                 </div>
             </div>
         </div>
+
+        <!-- Aguardando Documentação -->
         <div class="col-6 col-md-3">
             <div class="p-3 bg-white border rounded shadow-xs d-flex align-items-center gap-3">
-                <div class="p-2 bg-light rounded text-secondary"><i class="bi bi-hourglass-split fs-4"></i></div>
+                <div class="p-2 bg-warning-subtle rounded text-warning">
+                    <i class="bi bi-file-earmark-arrow-up fs-4"></i>
+                </div>
                 <div>
-                    <span class="d-block text-muted small">Em Análise</span>
+                    <span class="d-block text-muted small">
+                        Aguardando Documentação
+                    </span>
                     <strong class="fs-5 text-dark">
-                        {{ contas|rejectattr('validacao_vendedor')|rejectattr('validacao_cliente')|list|length }}
+                        {{ contas
+                            | selectattr('validacao_cliente')
+                            | rejectattr('documentacao_enviada')
+                            | list
+                            | length }}
                     </strong>
                 </div>
             </div>
         </div>
+
+        <!-- Proposta Enviada -->
+        <div class="col-6 col-md-3">
+            <div class="p-3 bg-white border rounded shadow-xs d-flex align-items-center gap-3">
+                <div class="p-2 bg-info-subtle rounded text-info">
+                    <i class="bi bi-envelope-check fs-4"></i>
+                </div>
+                <div>
+                    <span class="d-block text-muted small">
+                        Proposta Enviada
+                    </span>
+                    <strong class="fs-5 text-dark">
+                        {{ contas
+                            | selectattr('email_enviado')
+                            | rejectattr('validacao_cliente')
+                            | list
+                            | length }}
+                    </strong>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <div class="card shadow-sm border-0 grid-card-modern">
@@ -116,19 +156,29 @@
                             </span>
                         </td>
                         <td class="text-center">
-                            {% if conta.validacao_cliente %}
-                                <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1.5 rounded-pill w-100 d-inline-block text-center">
-                                    <i class="bi bi-check-circle-fill me-1"></i>Aprovado
+
+                            {% if conta.documentacao_enviada %}
+                                <span class="badge bg-primary-subtle text-primary border px-2 py-1.5 rounded-pill w-100 d-inline-block text-center">
+                                    <i class="bi bi-folder-check me-1"></i>Documentação Recebida
                                 </span>
-                            {% elif conta.validacao_vendedor %}
-                                <span class="badge bg-warning-subtle text-warning-dark border border-warning-subtle px-2 py-1.5 rounded-pill w-100 d-inline-block text-center">
-                                    <i class="bi bi-clock-history me-1"></i>Aguardando Enviar
+
+                            {% elif conta.validacao_cliente %}
+                                <span class="badge bg-warning-subtle text-warning-dark border px-2 py-1.5 rounded-pill w-100 d-inline-block text-center">
+                                    <i class="bi bi-file-earmark-arrow-up me-1"></i>Aguardando Documentação
                                 </span>
+
+                            {% elif conta.email_enviado %}
+                                <span class="badge bg-info-subtle text-info border px-2 py-1.5 rounded-pill w-100 d-inline-block text-center">
+                                    <i class="bi bi-envelope-check me-1"></i>Proposta Enviada
+                                </span>
+
                             {% else %}
                                 <span class="badge bg-light text-secondary border px-2 py-1.5 rounded-pill w-100 d-inline-block text-center">
                                     <i class="bi bi-hourglass-split me-1"></i>Em Análise
                                 </span>
+
                             {% endif %}
+
                         </td>
                         <td class="text-center">
                             {% if conta.alocado %}
@@ -155,23 +205,30 @@
                                 <a href="{{ url_for('termo_adesao_concessionaria', conta_id=conta.id) }}"
                                 target="_blank"
                                 class="btn btn-sm btn-light border shadow-xs btn-action"
-                                title="{{ 'Termo de Adesão' if conta.alocado else 'Termo Fila de Espera' }}">
+                                title="Termo de Adesão">
                                     <i class="bi bi-file-earmark-richtext text-warning"></i>
                                 </a>
 
-                                {% if not conta.alocado %}
-                                <form method="POST"
-                                    action="{{ url_for('alocar_conta_concessionaria', conta_id=conta.id) }}"
-                                    class="d-inline"
-                                    onsubmit="return confirm('Deseja alocar este cliente ao consórcio?');">
+                                {% if not conta.documentacao_enviada %}
+                                <a href="{{ url_for(
+                                    'documentos_adesao_concessionaria',
+                                    conta_id=conta.id
+                                ) }}"
+                                class="btn btn-sm btn-light border shadow-xs btn-action"
+                                title="Enviar Documentação">
+                                    <i class="bi bi-cloud-upload text-primary"></i>
+                                </a>
+                                {% endif %}
 
-                                    <a href="{{ url_for('alocar_conta_concessionaria', conta_id=conta.id) }}"
-                                    class="btn btn-sm btn-light border shadow-xs btn-action"
-                                    title="Alocar Cliente">
-                                        <i class="bi bi-person-check text-success"></i>
-                                    </a>
-
-                                </form>
+                                {% if conta.documentacao_enviada %}
+                                <a href="{{ url_for(
+                                    'visualizar_documentos_adesao',
+                                    conta_id=conta.id
+                                ) }}"
+                                class="btn btn-sm btn-light border shadow-xs btn-action"
+                                title="Visualizar Documentação">
+                                    <i class="bi bi-folder2-open text-primary"></i>
+                                </a>
                                 {% endif %}
 
                                 {% endif %}

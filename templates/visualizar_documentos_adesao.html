@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container py-5">
+
+    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mb-4">
+        <div>
+            <h4 class="fw-bold mb-1 text-dark d-flex align-items-center gap-2">
+                <i class="bi bi-folder2-open text-primary"></i>
+                Documentação da Adesão
+            </h4>
+            <span class="badge bg-light text-secondary border">
+                <i class="bi bi-building me-1"></i>
+                {{ conta.centro_custo.nome if conta.centro_custo else 'Sem Centro de Custo' }}
+            </span>
+        </div>
+        <a href="{{ url_for('listar_contas_concessionaria') }}" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2 shadow-sm">
+            <i class="bi bi-arrow-left"></i>
+            Voltar
+        </a>
+    </div>
+
+    <div class="card shadow-sm border-0 overflow-hidden">
+        <div class="card-header bg-white py-3 border-bottom">
+            <h6 class="mb-0 fw-bold text-secondary">
+                <i class="bi bi-files me-2"></i>Documentos Enviados
+            </h6>
+        </div>
+
+        <div class="card-body p-0">
+            {% if documentos %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light text-uppercase fs-7 text-muted tracking-wider">
+                        <tr>
+                            <th class="ps-4">Tipo de Documento</th>
+                            <th>Nome do Arquivo</th>
+                            <th style="width: 220px;" class="text-end pe-4">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for doc in documentos %}
+                        <tr>
+                            <td class="ps-4">
+                                {% if doc.tipo_documento == 'conta' %}
+                                    <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill px-3 py-2">
+                                        <i class="bi bi-receipt me-1"></i> Conta da Concessionária
+                                    </span>
+                                {% elif doc.tipo_documento == 'contrato_social' %}
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-3 py-2">
+                                        <i class="bi bi-file-earmark-text me-1"></i> Contrato Social
+                                    </span>
+                                {% elif doc.tipo_documento == 'cnh' %}
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3 py-2">
+                                        <i class="bi bi-card-id me-1"></i> CNH
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle rounded-pill px-3 py-2">
+                                        <i class="bi bi-file-earmark me-1"></i> {{ doc.tipo_documento | title }}
+                                    </span>
+                                {% endif %}
+                            </td>
+
+                            <td class="text-wrap text-break fw-medium text-dark">
+                                <i class="bi bi-paperclip text-muted me-1"></i>
+                                {{ doc.nome_arquivo }}
+                            </td>
+
+                            <td class="text-end pe-4">
+                                <div class="btn-group shadow-sm" role="group">
+                                    <a href="{{ url_for('static', filename='documentos_adesao/' + doc.caminho) }}"
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1"
+                                       title="Visualizar documento em nova aba">
+                                        <i class="bi bi-eye"></i>
+                                        <span>Visualizar</span>
+                                    </a>
+                                    <a href="{{ url_for('static', filename='documentos_adesao/' + doc.caminho) }}"
+                                       download="{{ doc.nome_arquivo }}"
+                                       class="btn btn-sm btn-outline-primary d-inline-flex align-items-center"
+                                       title="Baixar arquivo">
+                                        <i class="bi bi-download"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="p-5 text-center text-muted">
+                <div class="bg-light d-inline-flex align-items-center justify-content-center rounded-circle p-3 mb-3" style="width: 80px; height: 80px;">
+                    <i class="bi bi-folder-x display-6 text-secondary"></i>
+                </div>
+                <h5 class="fw-bold text-dark mb-1">Nenhum documento anexado</h5>
+                <p class="small text-muted mb-0">Esta adesão ainda não possui nenhum arquivo de comprovação enviado.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

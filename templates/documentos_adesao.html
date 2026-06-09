@@ -1,0 +1,118 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container py-5">
+
+    <div class="card shadow-sm border-0 max-width-700 mx-auto">
+        
+        <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
+            <h5 class="mb-0 fw-bold text-dark d-flex align-items-center gap-2">
+                <i class="bi bi-cloud-upload text-primary fs-4"></i>
+                Envio de Documentação
+            </h5>
+            <a href="{{ url_for('listar_contas_concessionaria') }}" class="btn-close" aria-label="Close" title="Cancelar"></a>
+        </div>
+
+        <div class="card-body p-4">
+
+            <div class="p-3 bg-light rounded-3 border mb-4">
+                <div class="row g-2">
+                    <div class="col-sm-7">
+                        <small class="text-muted d-block text-uppercase fs-8 fw-bold">Cliente</small>
+                        <span class="fw-semibold text-dark">{{ conta.centro_custo.nome }}</span>
+                    </div>
+                    <div class="col-sm-5 text-sm-end">
+                        <small class="text-muted d-block text-uppercase fs-8 fw-bold">Código da UC</small>
+                        <code class="text-primary fw-bold fs-6">{{ conta.n_uc }}</code>
+                    </div>
+                </div>
+            </div>
+
+            {# Lógica de Identificação de Perfil (PF vs PJ) #}
+            {% set cpf_cnpj_limpo = (conta.centro_custo.cpf_cnpj or '')|replace('.','')|replace('-','')|replace('/','') %}
+            {% set eh_pj = cpf_cnpj_limpo|length > 11 %}
+
+            <div class="mb-4">
+                {% if eh_pj %}
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 rounded-pill">
+                        <i class="bi bi-building me-1"></i> Perfil detectado: Pessoa Jurídica (PJ)
+                    </span>
+                {% else %}
+                    <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-pill">
+                        <i class="bi bi-person me-1"></i> Perfil detectado: Pessoa Física (PF)
+                    </span>
+                {% endif %}
+            </div>
+
+            <form method="POST" enctype="multipart/form-data" class="needs-validation" novalidate>
+
+                {% if eh_pj %}
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold text-secondary d-flex align-items-center gap-1">
+                            Conta da Concessionária <span class="text-danger">*</span>
+                        </label>
+                        <input type="file" name="conta" class="form-control shadow-sm" accept=".pdf,.jpg,.jpeg,.png" required>
+                        <div class="form-text">Envie a conta completa e legível do último mês (PDF ou Imagem).</div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold text-secondary d-flex align-items-center gap-1">
+                            Última Alteração Contratual <span class="text-danger">*</span>
+                        </label>
+                        <input type="file" name="contrato_social" class="form-control shadow-sm" accept=".pdf" required>
+                        <div class="form-text">Contrato social consolidado ou última alteração registrada (Apenas PDF).</div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold text-secondary d-flex align-items-center gap-1">
+                            CNH do Administrador <span class="text-danger">*</span>
+                        </label>
+                        <input type="file" name="cnh" class="form-control shadow-sm" accept=".pdf,.jpg,.jpeg,.png" required>
+                        <div class="form-text">Documento de identificação do assinante responsável (Frente e verso).</div>
+                    </div>
+
+                {% else %}
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold text-secondary d-flex align-items-center gap-1">
+                            Conta da Concessionária <span class="text-danger">*</span>
+                        </label>
+                        <input type="file" name="conta" class="form-control shadow-sm" accept=".pdf,.jpg,.jpeg,.png" required>
+                        <div class="form-text">Envie a conta completa e legível do último mês (PDF ou Imagem).</div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold text-secondary d-flex align-items-center gap-1">
+                            CNH / RG do Titular <span class="text-danger">*</span>
+                        </label>
+                        <input type="file" name="cnh" class="form-control shadow-sm" accept=".pdf,.jpg,.jpeg,.png" required>
+                        <div class="form-text">Documento de identificação com foto do titular da UC (Frente e verso).</div>
+                    </div>
+                {% endif %}
+
+                <hr class="text-muted my-4 opacity-25">
+
+                <div class="d-flex flex-column flex-sm-row justify-content-end gap-2">
+                    <a href="{{ url_for('listar_contas_concessionaria') }}" class="btn btn-light border order-2 order-sm-1">
+                        Cancelar
+                    </a>
+                    <button type="submit" class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-2 order-1 order-sm-2 shadow-sm">
+                        <i class="bi bi-cloud-arrow-up-fill"></i>
+                        <span>Enviar Documentação</span>
+                    </button>
+                </div>
+
+            </form>
+
+        </div>
+    </div>
+
+</div>
+
+{# Estilo auxiliar inline opcional para limitar a largura máxima e deixar o form elegante em telas gigantes #}
+<style>
+    @media (min-width: 576px) {
+        .max-width-700 { max-width: 650px; }
+        .fs-8 { font-size: 0.75rem; }
+    }
+</style>
+{% endblock %}

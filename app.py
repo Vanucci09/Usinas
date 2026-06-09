@@ -678,6 +678,11 @@ class ContaConcessionaria(db.Model):
         db.ForeignKey('centros_custos.id'),
         nullable=True
     )
+    
+    documentacao_enviada = db.Column(
+        db.Boolean,
+        default=False
+    )
 
     # Número da unidade consumidora
     n_uc = db.Column(
@@ -853,6 +858,40 @@ class ContaConcessionaria(db.Model):
             'empresa_id',
             'n_uc'
         ),
+    )
+    
+class DocumentoAdesao(db.Model):
+    __tablename__ = 'documentos_adesao'
+
+    id = db.Column(
+        db.Integer,
+        primary_key=True
+    )
+
+    conta_concessionaria_id = db.Column(
+        db.Integer,
+        db.ForeignKey('contas_concessionaria.id'),
+        nullable=False
+    )
+
+    tipo_documento = db.Column(
+        db.String(100),
+        nullable=False
+    )
+
+    nome_arquivo = db.Column(
+        db.String(255),
+        nullable=False
+    )
+
+    caminho = db.Column(
+        db.String(255),
+        nullable=False
+    )
+
+    criado_em = db.Column(
+        db.DateTime,
+        default=datetime.utcnow
     )
     
 class DocumentoCentroCusto(db.Model):
@@ -12942,10 +12981,6 @@ def cadastrar_centro_custo():
         except IntegrityError as e:
             db.session.rollback()
 
-            print("\n========== INTEGRITY ERROR ==========")
-            print(str(e))
-            print("=====================================\n")
-
             flash(
                 f'Erro de integridade: {str(e.orig)}',
                 'danger'
@@ -18168,17 +18203,89 @@ def importar_conta_concessionaria():
 )
 def validar_vendedor_conta_concessionaria(conta_id):
 
-    conta = db.session.get(ContaConcessionaria, conta_id)
+    conta = db.session.get(
+        ContaConcessionaria,
+        conta_id
+    )
 
     if not conta:
-        flash('Conta não encontrada.', 'danger')
+        flash(
+            'Conta não encontrada.',
+            'danger'
+        )
         return redirect(request.referrer)
 
-    conta.validacao_vendedor = True
+    try:
 
-    db.session.commit()
+        conta.validacao_vendedor = True
 
-    flash('Proposta validada pelo vendedor.', 'success')
+        centro = conta.centro_custo
+
+        email_destino = (
+            centro.representante_email
+            or centro.email
+        )
+
+        if email_destino:
+
+            link_proposta = url_for(
+                'proposta_conta_concessionaria',
+                conta_id=conta.id,
+                slug=(
+                    centro.nome
+                    .lower()
+                    .replace(' ', '-')
+                ),
+                _external=True
+            )
+
+            validade_proposta = None
+
+            if conta.criado_em:
+                validade_proposta = (
+                    conta.criado_em +
+                    timedelta(days=15)
+                )
+
+            html_body = render_template(
+                'email_proposta_concessionaria.html',
+                conta=conta,
+                centro=centro,
+                link_proposta=link_proposta,
+                validade_proposta=validade_proposta
+            )
+
+            msg = Message(
+                subject=f'Proposta Comercial de Energia - UC {conta.n_uc}',
+                sender=(
+                    'CGR Energia Solar',
+                    'seuemail@dominio.com'
+                ),
+                recipients=[email_destino],
+                html=html_body
+            )
+
+            mail.send(msg)
+
+            conta.email_enviado = True
+            conta.data_envio_email = datetime.utcnow()
+            conta.email_destinatario = email_destino
+
+        db.session.commit()
+
+        flash(
+            'Proposta aprovada e enviada ao cliente.',
+            'success'
+        )
+
+    except Exception as e:
+
+        db.session.rollback()
+
+        flash(
+            f'Erro ao enviar e-mail: {e}',
+            'danger'
+        )
 
     return redirect(request.referrer)
 
@@ -18464,6 +18571,156 @@ def alocar_conta_concessionaria(conta_id):
         'alocar_conta_concessionaria.html',
         conta=conta,
         usinas=usinas
+    )
+    
+@app.route(
+    '/contas-concessionaria/<int:conta_id>/documentos',
+    methods=['GET', 'POST']
+)
+@login_required
+def documentos_adesao_concessionaria(conta_id):
+
+    conta = ContaConcessionaria.query.get_or_404(
+        conta_id
+    )
+
+    if request.method == 'POST':
+
+        arquivos = request.files
+        
+        cpf_cnpj_limpo = ''.join(
+            filter(
+                str.isdigit,
+                conta.centro_custo.cpf_cnpj or ''
+            )
+        )
+
+        eh_pj = len(cpf_cnpj_limpo) > 11
+
+        if eh_pj:
+
+            if not (
+                arquivos.get('conta') and
+                arquivos.get('contrato_social') and
+                arquivos.get('cnh')
+            ):
+                flash(
+                    'Para Pessoa Jurídica é obrigatório enviar Conta, Contrato Social e CNH do Administrador.',
+                    'warning'
+                )
+                return redirect(request.url)
+
+        else:
+
+            if not (
+                arquivos.get('conta') and
+                arquivos.get('cnh')
+            ):
+                flash(
+                    'Para Pessoa Física é obrigatório enviar Conta e CNH.',
+                    'warning'
+                )
+                return redirect(request.url)
+
+        caminho_base = os.getenv(
+            'DOCUMENTOS_PATH',
+            os.path.join(
+                current_app.root_path,
+                'static',
+                'documentos_adesao'
+            )
+        )
+
+        os.makedirs(
+            caminho_base,
+            exist_ok=True
+        )
+
+        if eh_pj:
+            tipos = [
+                'conta',
+                'contrato_social',
+                'cnh'
+            ]
+        else:
+            tipos = [
+                'conta',
+                'cnh'
+            ]
+
+        for tipo in tipos:
+
+            arquivo = arquivos.get(tipo)
+
+            if not arquivo:
+                continue
+
+            nome_original = secure_filename(
+                arquivo.filename
+            )
+
+            ext = os.path.splitext(
+                nome_original
+            )[1]
+
+            nome_unico = (
+                f"{uuid.uuid4().hex}{ext}"
+            )
+
+            caminho = os.path.join(
+                caminho_base,
+                nome_unico
+            )
+
+            arquivo.save(caminho)
+
+            db.session.add(
+                DocumentoAdesao(
+                    conta_concessionaria_id=conta.id,
+                    tipo_documento=tipo,
+                    nome_arquivo=nome_original,
+                    caminho=nome_unico
+                )
+            )
+
+        conta.documentacao_enviada = True
+
+        db.session.commit()
+
+        flash(
+            'Documentação enviada com sucesso.',
+            'success'
+        )
+
+        return redirect(
+            url_for(
+                'listar_contas_concessionaria'
+            )
+        )
+
+    return render_template(
+        'documentos_adesao.html',
+        conta=conta
+    )
+    
+@app.route(
+    '/contas-concessionaria/<int:conta_id>/documentos/visualizar'
+)
+@login_required
+def visualizar_documentos_adesao(conta_id):
+
+    conta = ContaConcessionaria.query.get_or_404(
+        conta_id
+    )
+
+    documentos = DocumentoAdesao.query.filter_by(
+        conta_concessionaria_id=conta.id
+    ).all()
+
+    return render_template(
+        'visualizar_documentos_adesao.html',
+        conta=conta,
+        documentos=documentos
     )
 
 
