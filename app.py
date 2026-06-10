@@ -16854,6 +16854,101 @@ def recusar_proposta(slug):
 
     return render_template('resposta_cliente.html', tipo='recusada')
 
+def existe_usina_disponivel(conta):
+
+    fase = (conta.fase or '').strip().lower()
+
+    if fase in ['trifásico', 'trifasico']:
+        consumo_disponibilidade = 100
+
+    elif fase in ['bifásico', 'bifasico']:
+        consumo_disponibilidade = 50
+
+    else:
+        consumo_disponibilidade = 30
+
+    energia_injetada = (
+        float(conta.consumo_medio or 0)
+        - consumo_disponibilidade
+    )
+
+    if energia_injetada < 0:
+        energia_injetada = 0
+
+    hoje = date.today()
+
+    if hoje.month == 12:
+        ano_prev = hoje.year + 1
+        mes_prev = 1
+    else:
+        ano_prev = hoje.year
+        mes_prev = hoje.month + 1
+
+    usinas = Usina.query.all()
+
+    for usina in usinas:
+
+        previsao = PrevisaoMensal.query.filter_by(
+            usina_id=usina.id,
+            ano=ano_prev,
+            mes=mes_prev
+        ).first()
+
+        if not previsao:
+            continue
+
+        if not previsao.previsao_kwh:
+            continue
+
+        if previsao.previsao_kwh <= 0:
+            continue
+
+        percentual_necessario = (
+            energia_injetada /
+            float(previsao.previsao_kwh)
+        ) * 100
+
+        percentual_necessario = (
+            math.ceil(percentual_necessario * 10) / 10
+        )
+
+        if (
+            usina.tusd_fio_b
+            and percentual_necessario > 25
+        ):
+            continue
+
+        percentual_ocupado = (
+            db.session.query(
+                db.func.coalesce(
+                    db.func.sum(
+                        Rateio.percentual
+                    ),
+                    0
+                )
+            )
+            .join(
+                Cliente,
+                Cliente.id == Rateio.cliente_id
+            )
+            .filter(
+                Rateio.usina_id == usina.id,
+                Rateio.ativo == True,
+                Cliente.ativo == True
+            )
+            .scalar()
+        )
+
+        ocupacao_final = (
+            float(percentual_ocupado or 0)
+            + percentual_necessario
+        )
+
+        if ocupacao_final <= 100:
+            return True
+
+    return False
+
 @app.route('/contas-concessionaria/nova', methods=['GET', 'POST'])
 @login_required
 def nova_conta_concessionaria():
@@ -18213,14 +18308,14 @@ def validar_vendedor_conta_concessionaria(conta_id):
             'Conta não encontrada.',
             'danger'
         )
-        return redirect(request.referrer)
+        return redirect(
+            url_for('listar_contas_concessionaria')
+        )
 
     try:
 
         conta.validacao_vendedor = True
-
         centro = conta.centro_custo
-
         email_destino = (
             centro.representante_email
             or centro.email
@@ -18287,7 +18382,9 @@ def validar_vendedor_conta_concessionaria(conta_id):
             'danger'
         )
 
-    return redirect(request.referrer)
+    return redirect(
+        url_for('listar_contas_concessionaria')
+    )
 
 
 @app.route(
@@ -18447,9 +18544,13 @@ def termo_adesao_concessionaria(conta_id):
         if cliente:
             usina = cliente.usina
 
+    usina_disponivel = existe_usina_disponivel(
+        conta
+    )
+
     template = (
         'termo_adesao_concessionaria.html'
-        if conta.alocado
+        if usina_disponivel
         else 'termo_fila_espera.html'
     )
 
@@ -18505,7 +18606,6 @@ def alocar_conta_concessionaria(conta_id):
 
         centro = conta.centro_custo
 
-        # evita duplicidade por UC
         cliente_existente = Cliente.query.filter_by(
             codigo_unidade=conta.n_uc
         ).first()
@@ -18522,6 +18622,165 @@ def alocar_conta_concessionaria(conta_id):
             )
 
         try:
+
+            # ---------------------------
+            # PREVISÃO DO MÊS SEGUINTE
+            # ---------------------------
+
+            hoje = date.today()
+
+            if hoje.month == 12:
+                ano_prev = hoje.year + 1
+                mes_prev = 1
+            else:
+                ano_prev = hoje.year
+                mes_prev = hoje.month + 1
+
+            previsao = PrevisaoMensal.query.filter_by(
+                usina_id=usina.id,
+                ano=ano_prev,
+                mes=mes_prev
+            ).first()
+
+            if not previsao:
+
+                flash(
+                    f'Não existe previsão cadastrada para {mes_prev:02d}/{ano_prev}.',
+                    'warning'
+                )
+
+                return redirect(request.url)
+
+            if previsao.previsao_kwh <= 0:
+
+                flash(
+                    'A previsão da usina está zerada.',
+                    'warning'
+                )
+
+                return redirect(request.url)
+
+            # ---------------------------
+            # PERCENTUAL NECESSÁRIO
+            # ---------------------------
+
+            fase = (conta.fase or '').strip().lower()
+
+            if fase in ['trifásico', 'trifasico']:
+                consumo_disponibilidade = 100
+
+            elif fase in ['bifásico', 'bifasico']:
+                consumo_disponibilidade = 50
+
+            else:
+                consumo_disponibilidade = 30
+
+            energia_injetada = (
+                float(conta.consumo_medio or 0)
+                - consumo_disponibilidade
+            )
+
+            fase = (conta.fase or '').strip().lower()
+
+            if fase in ['trifásico', 'trifasico']:
+                consumo_disponibilidade = 100
+
+            elif fase in ['bifásico', 'bifasico']:
+                consumo_disponibilidade = 50
+
+            else:
+                consumo_disponibilidade = 30
+
+            energia_injetada = (
+                float(conta.consumo_medio or 0)
+                - consumo_disponibilidade
+            )
+
+            if energia_injetada < 0:
+                energia_injetada = 0
+
+            if not previsao.previsao_kwh:
+
+                flash(
+                    'A previsão da usina está zerada.',
+                    'warning'
+                )
+
+                return redirect(request.url)
+
+            percentual_necessario = (
+                energia_injetada /
+                float(previsao.previsao_kwh)
+            ) * 100
+
+            percentual_necessario = (
+                math.ceil(percentual_necessario * 10) / 10
+            )
+
+            # ---------------------------
+            # REGRA TUSD FIO B
+            # ---------------------------
+
+            if (
+                usina.tusd_fio_b
+                and percentual_necessario > 25
+            ):
+
+                flash(
+                    f'Esta usina possui TUSD Fio B e o cliente necessita '
+                    f'{percentual_necessario:.2f}% da geração. '
+                    f'O limite é 25%.',
+                    'warning'
+                )
+
+                return redirect(request.url)
+
+            # ---------------------------
+            # OCUPAÇÃO ATUAL DA USINA
+            # ---------------------------
+
+            percentual_ocupado = (
+                db.session.query(
+                    db.func.coalesce(
+                        db.func.sum(
+                            Rateio.percentual
+                        ),
+                        0
+                    )
+                )
+                .join(
+                    Cliente,
+                    Cliente.id == Rateio.cliente_id
+                )
+                .filter(
+                    Rateio.usina_id == usina.id,
+                    Rateio.ativo == True,
+                    Cliente.ativo == True
+                )
+                .scalar()
+            )
+
+            percentual_disponivel = (
+                100 - percentual_ocupado
+            )
+
+            if (
+                percentual_ocupado
+                + percentual_necessario
+            ) > 100:
+
+                flash(
+                    f'Usina sem disponibilidade. '
+                    f'Restam apenas '
+                    f'{percentual_disponivel:.2f}% disponíveis.',
+                    'warning'
+                )
+
+                return redirect(request.url)
+
+            # ---------------------------
+            # CLIENTE
+            # ---------------------------
 
             cliente = Cliente(
                 nome=centro.nome,
@@ -18542,25 +18801,56 @@ def alocar_conta_concessionaria(conta_id):
             )
 
             db.session.add(cliente)
+            db.session.flush()
+
+            # ---------------------------
+            # RATEIO
+            # ---------------------------
+
+            rateio = Rateio(
+                usina_id=usina.id,
+                cliente_id=cliente.id,
+                percentual=percentual_necessario,
+                tarifa_kwh=float(
+                    conta.tarifa_energia or 0
+                ),
+                desconto_percentual=float(
+                    conta.desconto or 0
+                ),
+                cip=float(
+                    conta.cip or 0
+                ),
+                data_inicio=date.today(),
+                ativo=True
+            )
+
+            db.session.add(rateio)
+
             conta.alocado = True
+
             db.session.commit()
 
             flash(
-                'Cliente criado e alocado com sucesso.',
+                f'Cliente alocado com sucesso. '
+                f'Percentual utilizado: '
+                f'{percentual_necessario:.2f}%',
                 'success'
             )
 
         except Exception as e:
 
             db.session.rollback()
+
             print(
                 'Erro ao alocar cliente:',
                 e
             )
+
             flash(
-                'Erro ao realizar a alocação.',
+                f'Erro ao realizar a alocação: {e}',
                 'danger'
             )
+
         return redirect(
             url_for(
                 'listar_contas_concessionaria'
@@ -18580,30 +18870,23 @@ def alocar_conta_concessionaria(conta_id):
 @login_required
 def documentos_adesao_concessionaria(conta_id):
 
-    conta = ContaConcessionaria.query.get_or_404(
-        conta_id
-    )
+    conta = ContaConcessionaria.query.get_or_404(conta_id)
 
     if request.method == 'POST':
 
         arquivos = request.files
-        
+        centro = conta.centro_custo
+
         cpf_cnpj_limpo = ''.join(
-            filter(
-                str.isdigit,
-                conta.centro_custo.cpf_cnpj or ''
-            )
+            filter(str.isdigit, centro.cpf_cnpj or '')
         )
 
         eh_pj = len(cpf_cnpj_limpo) > 11
 
         if eh_pj:
+            tipos = ['conta', 'contrato_social', 'cnh']
 
-            if not (
-                arquivos.get('conta') and
-                arquivos.get('contrato_social') and
-                arquivos.get('cnh')
-            ):
+            if not all(arquivos.get(tipo) and arquivos.get(tipo).filename for tipo in tipos):
                 flash(
                     'Para Pessoa Jurídica é obrigatório enviar Conta, Contrato Social e CNH do Administrador.',
                     'warning'
@@ -18611,92 +18894,272 @@ def documentos_adesao_concessionaria(conta_id):
                 return redirect(request.url)
 
         else:
+            tipos = ['conta', 'cnh']
 
-            if not (
-                arquivos.get('conta') and
-                arquivos.get('cnh')
-            ):
+            if not all(arquivos.get(tipo) and arquivos.get(tipo).filename for tipo in tipos):
                 flash(
                     'Para Pessoa Física é obrigatório enviar Conta e CNH.',
                     'warning'
                 )
                 return redirect(request.url)
 
-        caminho_base = os.getenv(
-            'DOCUMENTOS_PATH',
-            os.path.join(
-                current_app.root_path,
-                'static',
-                'documentos_adesao'
-            )
-        )
+        try:
 
-        os.makedirs(
-            caminho_base,
-            exist_ok=True
-        )
-
-        if eh_pj:
-            tipos = [
-                'conta',
-                'contrato_social',
-                'cnh'
-            ]
-        else:
-            tipos = [
-                'conta',
-                'cnh'
-            ]
-
-        for tipo in tipos:
-
-            arquivo = arquivos.get(tipo)
-
-            if not arquivo:
-                continue
-
-            nome_original = secure_filename(
-                arquivo.filename
-            )
-
-            ext = os.path.splitext(
-                nome_original
-            )[1]
-
-            nome_unico = (
-                f"{uuid.uuid4().hex}{ext}"
-            )
-
-            caminho = os.path.join(
-                caminho_base,
-                nome_unico
-            )
-
-            arquivo.save(caminho)
-
-            db.session.add(
-                DocumentoAdesao(
-                    conta_concessionaria_id=conta.id,
-                    tipo_documento=tipo,
-                    nome_arquivo=nome_original,
-                    caminho=nome_unico
+            caminho_base = os.getenv(
+                'DOCUMENTOS_PATH',
+                os.path.join(
+                    current_app.root_path,
+                    'static',
+                    'documentos_adesao'
                 )
             )
 
-        conta.documentacao_enviada = True
+            os.makedirs(caminho_base, exist_ok=True)
 
-        db.session.commit()
+            for tipo in tipos:
 
-        flash(
-            'Documentação enviada com sucesso.',
-            'success'
-        )
+                arquivo = arquivos.get(tipo)
 
-        return redirect(
-            url_for(
-                'listar_contas_concessionaria'
+                if not arquivo or not arquivo.filename:
+                    continue
+
+                nome_original = secure_filename(arquivo.filename)
+                ext = os.path.splitext(nome_original)[1]
+                nome_unico = f"{uuid.uuid4().hex}{ext}"
+
+                caminho = os.path.join(caminho_base, nome_unico)
+
+                arquivo.save(caminho)
+
+                db.session.add(
+                    DocumentoAdesao(
+                        conta_concessionaria_id=conta.id,
+                        tipo_documento=tipo,
+                        nome_arquivo=nome_original,
+                        caminho=nome_unico
+                    )
+                )
+
+            conta.documentacao_enviada = True
+
+            cliente_existente = Cliente.query.filter_by(
+                codigo_unidade=conta.n_uc
+            ).first()
+
+            if cliente_existente:
+                conta.alocado = True
+                db.session.commit()
+
+                flash(
+                    'Documentação enviada. Cliente já existia no sistema.',
+                    'warning'
+                )
+
+                return redirect(
+                    url_for('listar_contas_concessionaria')
+                )
+
+            fase = (conta.fase or '').strip().lower()
+
+            if fase in ['trifásico', 'trifasico']:
+                consumo_disponibilidade = 100
+            elif fase in ['bifásico', 'bifasico']:
+                consumo_disponibilidade = 50
+            else:
+                consumo_disponibilidade = 30
+
+            energia_injetada = (
+                float(conta.consumo_medio or 0)
+                - consumo_disponibilidade
             )
-        )
+
+            if energia_injetada < 0:
+                energia_injetada = 0
+
+            hoje = date.today()
+
+            if hoje.month == 12:
+                ano_prev = hoje.year + 1
+                mes_prev = 1
+            else:
+                ano_prev = hoje.year
+                mes_prev = hoje.month + 1
+
+            melhor_usina = None
+            melhor_percentual = None
+            melhor_ocupacao_final = None
+
+            usinas = Usina.query.order_by(Usina.nome).all()
+
+            for usina in usinas:
+
+                previsao = PrevisaoMensal.query.filter_by(
+                    usina_id=usina.id,
+                    ano=ano_prev,
+                    mes=mes_prev
+                ).first()
+
+                if not previsao:
+                    print('SEM PREVISÃO')
+                    continue
+
+                if not previsao.previsao_kwh or previsao.previsao_kwh <= 0:
+                    print('PREVISÃO ZERADA')
+                    continue
+
+                percentual_necessario = (
+                    energia_injetada /
+                    float(previsao.previsao_kwh)
+                ) * 100
+
+                percentual_necessario = (
+                    math.ceil(percentual_necessario * 10) / 10
+                )
+
+                print('ENERGIA INJETADA:', energia_injetada)
+                print('PERCENTUAL NECESSÁRIO:', percentual_necessario)
+
+                if usina.tusd_fio_b and percentual_necessario > 25:
+                    print('BLOQUEOU: TUSD FIO B MAIOR QUE 25%')
+                    continue
+
+                percentual_ocupado = (
+                    db.session.query(
+                        db.func.coalesce(
+                            db.func.sum(Rateio.percentual),
+                            0
+                        )
+                    )
+                    .join(
+                        Cliente,
+                        Cliente.id == Rateio.cliente_id
+                    )
+                    .filter(
+                        Rateio.usina_id == usina.id,
+                        Rateio.ativo == True,
+                        Cliente.ativo == True
+                    )
+                    .scalar()
+                )
+
+                print('PERCENTUAL OCUPADO:', percentual_ocupado)
+
+                ocupacao_final = float(percentual_ocupado or 0) + percentual_necessario
+
+                print('OCUPAÇÃO FINAL:', ocupacao_final)
+
+                if ocupacao_final > 100:
+                    print('BLOQUEOU: PASSOU DE 100%')
+                    continue
+
+                print('USINA ELEGÍVEL')
+
+                if (
+                    melhor_ocupacao_final is None
+                    or ocupacao_final < melhor_ocupacao_final
+                ):
+                    melhor_usina = usina
+                    melhor_percentual = percentual_necessario
+                    melhor_ocupacao_final = ocupacao_final
+
+            if melhor_usina:
+
+                cliente = Cliente(
+                    nome=centro.nome,
+                    cpf_cnpj=centro.cpf_cnpj,
+                    endereco=centro.endereco or '',
+                    codigo_unidade=conta.n_uc,
+                    usina_id=melhor_usina.id,
+                    email=centro.email,
+                    telefone=centro.telefone,
+                    email_cc=None,
+                    mostrar_saldo=True,
+                    consumo_instantaneo=False,
+                    login_concessionaria=None,
+                    senha_concessionaria=None,
+                    dia_relatorio=None,
+                    relatorio_automatico=False,
+                    ativo=True
+                )
+
+                db.session.add(cliente)
+                db.session.flush()
+                
+                ultimo_codigo = (
+                    db.session.query(
+                        db.func.max(
+                            Rateio.codigo_rateio
+                        )
+                    )
+                    .filter(
+                        Rateio.usina_id == melhor_usina.id
+                    )
+                    .scalar()
+                )
+
+                proximo_codigo = (
+                    1
+                    if ultimo_codigo is None
+                    else ultimo_codigo + 1
+                )
+
+                rateio = Rateio(
+                    usina_id=melhor_usina.id,
+                    cliente_id=cliente.id,
+                    percentual=round(
+                        melhor_percentual,
+                        1
+                    ),
+                    tarifa_kwh=float(conta.tarifa_energia or 0),
+                    desconto_percentual=float(conta.desconto or 0),
+                    cip=float(conta.cip or 0),
+                    codigo_rateio=proximo_codigo,
+                    data_inicio=date.today(),
+                    ativo=True
+                )
+
+                db.session.add(rateio)
+
+                conta.alocado = True
+
+                db.session.commit()
+
+                flash(
+                    f'Documentação enviada e cliente alocado automaticamente na usina {melhor_usina.nome}. '
+                    f'Percentual do rateio: {melhor_percentual:.1f}%.',
+                    'success'
+                )
+
+            else:
+
+                conta.alocado = False
+
+                db.session.commit()
+
+                flash(
+                    'Documentação enviada, mas nenhuma usina possui disponibilidade. Cliente ficou na fila de espera.',
+                    'warning'
+                )
+
+            return redirect(
+                url_for('listar_contas_concessionaria')
+            )
+
+        except Exception as e:
+
+            db.session.rollback()
+
+            print(
+                'Erro ao enviar documentação/alocar cliente:',
+                e
+            )
+
+            flash(
+                f'Erro ao enviar documentação: {e}',
+                'danger'
+            )
+
+            return redirect(request.url)
 
     return render_template(
         'documentos_adesao.html',
@@ -18721,6 +19184,37 @@ def visualizar_documentos_adesao(conta_id):
         'visualizar_documentos_adesao.html',
         conta=conta,
         documentos=documentos
+    )
+    
+@app.route(
+    '/contas-concessionaria/<int:conta_id>/realocar'
+)
+@login_required
+def realocar_conta_concessionaria(conta_id):
+
+    conta = ContaConcessionaria.query.get_or_404(
+        conta_id
+    )
+
+    if conta.alocado:
+
+        flash(
+            'Cliente já está alocado.',
+            'warning'
+        )
+
+        return redirect(
+            url_for(
+                'visualizar_documentos_adesao',
+                conta_id=conta.id
+            )
+        )
+
+    return redirect(
+        url_for(
+            'alocar_conta_concessionaria',
+            conta_id=conta.id
+        )
     )
 
 

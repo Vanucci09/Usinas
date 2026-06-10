@@ -5,19 +5,37 @@
 
     <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mb-4">
         <div>
-            <h4 class="fw-bold mb-1 text-dark d-flex align-items-center gap-2">
-                <i class="bi bi-folder2-open text-primary"></i>
-                Documentação da Adesão
-            </h4>
-            <span class="badge bg-light text-secondary border">
-                <i class="bi bi-building me-1"></i>
-                {{ conta.centro_custo.nome if conta.centro_custo else 'Sem Centro de Custo' }}
-            </span>
-        </div>
-        <a href="{{ url_for('listar_contas_concessionaria') }}" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2 shadow-sm">
-            <i class="bi bi-arrow-left"></i>
-            Voltar
-        </a>
+    <h4 class="fw-bold mb-1 text-dark d-flex align-items-center gap-2">
+        <i class="bi bi-folder2-open text-primary"></i>
+        Documentação da Adesão
+    </h4>
+
+    <span class="badge bg-light text-secondary border">
+        <i class="bi bi-building me-1"></i>
+        {{ conta.centro_custo.nome if conta.centro_custo else 'Sem Centro de Custo' }}
+    </span>
+</div>
+
+<div class="d-flex gap-2">
+
+    {% if not conta.alocado %}
+    <a href="{{ url_for(
+        'realocar_conta_concessionaria',
+        conta_id=conta.id
+    ) }}"
+    class="btn btn-warning d-inline-flex align-items-center gap-2 shadow-sm">
+        <i class="bi bi-arrow-repeat"></i>
+        Tentar Alocação Novamente
+    </a>
+    {% endif %}
+
+    <a href="{{ url_for('listar_contas_concessionaria') }}"
+       class="btn btn-outline-secondary d-inline-flex align-items-center gap-2 shadow-sm">
+        <i class="bi bi-arrow-left"></i>
+        Voltar
+    </a>
+
+</div>
     </div>
 
     <div class="card shadow-sm border-0 overflow-hidden">
