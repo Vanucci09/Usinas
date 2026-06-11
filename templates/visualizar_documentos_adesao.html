@@ -53,7 +53,7 @@
                         <tr>
                             <th class="ps-4">Tipo de Documento</th>
                             <th>Nome do Arquivo</th>
-                            <th style="width: 220px;" class="text-end pe-4">Ações</th>
+                            <th style="width: 320px;" class="text-end pe-4">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -72,6 +72,11 @@
                                     <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3 py-2">
                                         <i class="bi bi-card-id me-1"></i> CNH
                                     </span>
+                                {% elif doc.tipo_documento == 'termo_assinado' %}
+                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill px-3 py-2">
+                                        <i class="bi bi-file-earmark-check me-1"></i>
+                                        Termo Assinado
+                                    </span>
                                 {% else %}
                                     <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle rounded-pill px-3 py-2">
                                         <i class="bi bi-file-earmark me-1"></i> {{ doc.tipo_documento | title }}
@@ -86,21 +91,153 @@
 
                             <td class="text-end pe-4">
                                 <div class="btn-group shadow-sm" role="group">
-                                    <a href="{{ url_for('static', filename='documentos_adesao/' + doc.caminho) }}"
-                                       target="_blank"
-                                       rel="noopener noreferrer"
-                                       class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1"
-                                       title="Visualizar documento em nova aba">
+
+                                    <!-- Visualizar -->
+                                    <a href="{{ url_for(
+                                        'baixar_documento_adesao',
+                                        arquivo=doc.caminho
+                                    ) }}"
+                                    target="_blank"
+                                    class="btn btn-sm btn-outline-primary"
+                                    title="Visualizar">
+
                                         <i class="bi bi-eye"></i>
-                                        <span>Visualizar</span>
+
                                     </a>
-                                    <a href="{{ url_for('static', filename='documentos_adesao/' + doc.caminho) }}"
-                                       download="{{ doc.nome_arquivo }}"
-                                       class="btn btn-sm btn-outline-primary d-inline-flex align-items-center"
-                                       title="Baixar arquivo">
+
+                                    <!-- Baixar -->
+                                    <a href="{{ url_for(
+                                        'baixar_documento_adesao',
+                                        arquivo=doc.caminho
+                                    ) }}"
+                                    download="{{ doc.nome_arquivo }}"
+                                    class="btn btn-sm btn-outline-primary"
+                                    title="Baixar">
+
                                         <i class="bi bi-download"></i>
+
                                     </a>
+
+                                    <!-- Editar -->
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm btn-outline-warning"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#editarDocumento{{ doc.id }}"
+                                        title="Substituir Arquivo">
+
+                                        <i class="bi bi-pencil"></i>
+
+                                    </button>
+
+                                    <!-- Excluir -->
+                                    <form method="POST"
+                                        action="{{ url_for(
+                                            'excluir_documento_adesao',
+                                            documento_id=doc.id
+                                        ) }}"
+                                        class="d-inline">
+
+                                        <button type="submit"
+                                                class="btn btn-sm btn-outline-danger"
+                                                title="Excluir"
+                                                onclick="return confirm('Deseja realmente excluir este documento?')">
+
+                                            <i class="bi bi-trash"></i>
+
+                                        </button>
+
+                                    </form>
+
                                 </div>
+
+                                <!-- Modal Editar -->
+                                <div class="modal fade"
+                                    id="editarDocumento{{ doc.id }}"
+                                    tabindex="-1">
+
+                                    <div class="modal-dialog">
+
+                                        <form method="POST"
+                                            enctype="multipart/form-data"
+                                            action="{{ url_for(
+                                                'editar_documento_adesao',
+                                                documento_id=doc.id
+                                            ) }}">
+
+                                            <div class="modal-content">
+
+                                                <div class="modal-header">
+
+                                                    <h5 class="modal-title">
+                                                        Substituir Documento
+                                                    </h5>
+
+                                                    <button type="button"
+                                                            class="btn-close"
+                                                            data-bs-dismiss="modal">
+                                                    </button>
+
+                                                </div>
+
+                                                <div class="modal-body">
+
+                                                    <div class="mb-3">
+
+                                                        <label class="form-label">
+                                                            Arquivo Atual
+                                                        </label>
+
+                                                        <input type="text"
+                                                            class="form-control"
+                                                            value="{{ doc.nome_arquivo }}"
+                                                            readonly>
+
+                                                    </div>
+
+                                                    <div>
+
+                                                        <label class="form-label">
+                                                            Novo Arquivo
+                                                        </label>
+
+                                                        <input type="file"
+                                                            name="arquivo"
+                                                            class="form-control"
+                                                            required>
+
+                                                    </div>
+
+                                                </div>
+
+                                                <div class="modal-footer">
+
+                                                    <button type="button"
+                                                            class="btn btn-secondary"
+                                                            data-bs-dismiss="modal">
+
+                                                        Cancelar
+
+                                                    </button>
+
+                                                    <button type="submit"
+                                                            class="btn btn-warning">
+
+                                                        <i class="bi bi-save"></i>
+                                                        Salvar Alterações
+
+                                                    </button>
+
+                                                </div>
+
+                                            </div>
+
+                                        </form>
+
+                                    </div>
+
+                                </div>
+
                             </td>
                         </tr>
                         {% endfor %}

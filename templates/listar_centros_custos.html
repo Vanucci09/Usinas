@@ -33,20 +33,17 @@
           <td class="text-end">
             <div class="btn-group btn-group-sm">
 
-              <!-- ✏️ Editar -->
               <a class="btn btn-outline-primary"
                  href="{{ url_for('editar_centro_custo', cc_id=cc.id) }}">
                 <i class="bi bi-pencil"></i>
               </a>
 
-              <!-- 📄 Documentos -->
               <button class="btn btn-outline-secondary"
                       data-bs-toggle="modal"
                       data-bs-target="#modalDocs{{ cc.id }}">
                 <i class="bi bi-file-earmark-text"></i>
               </button>
 
-              <!-- 🗑 Excluir -->
               <button class="btn btn-outline-danger"
                       data-bs-toggle="modal"
                       data-bs-target="#modalExcluir{{ cc.id }}">
@@ -55,97 +52,69 @@
 
             </div>
 
-            <!-- MODAL DOCUMENTOS -->
-          <div class="modal fade" id="modalDocs{{ cc.id }}" tabindex="-1">
-            <div class="modal-dialog modal-lg modal-dialog-centered">
-              <div class="modal-content">
-
-                <div class="modal-header">
-                  <h5 class="modal-title">
-                    Documentos - {{ cc.codigo }} {{ cc.nome }}
-                  </h5>
-                  <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-
-                <div class="modal-body">
-
-                  <!-- 🚀 UPLOAD -->
-                  <form id="formUpload{{ cc.id }}" enctype="multipart/form-data">
-                    <input type="file" name="documentos" multiple class="form-control mb-3">
-                    <button type="button"
-                            class="btn btn-success btn-sm mb-3"
-                            onclick="uploadDocs({{ cc.id }})">
-                      Enviar arquivos
-                    </button>
-                  </form>
-
-                  <!-- 📄 LISTA -->
-                  <div id="listaDocs{{ cc.id }}">
-
-                    {% if cc.documentos %}
-                      <div class="list-group">
-
-                        {% for doc in cc.documentos %}
-                        <div class="list-group-item d-flex justify-content-between align-items-center">
-
-                          <div>
-                            <i class="bi bi-file-earmark me-2"></i>
-                            {{ doc.nome_arquivo }}
-                          </div>
-
-                          <a href="{{ url_for('media_documentos', filename=doc.caminho) }}"
-                            target="_blank"
-                            class="btn btn-sm btn-primary">
-                            Abrir
-                          </a>
-
-                        </div>
-                        {% endfor %}
-
-                      </div>
-                    {% else %}
-                      <div class="text-muted text-center">
-                        Nenhum documento anexado
-                      </div>
-                    {% endif %}
-
+            <div class="modal fade" id="modalDocs{{ cc.id }}" tabindex="-1">
+              <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title">Documentos - {{ cc.codigo }} {{ cc.nome }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                   </div>
+                  <div class="modal-body">
+                    <form id="formUpload{{ cc.id }}" enctype="multipart/form-data">
+                      <input type="file" name="documentos" multiple class="form-control mb-3">
+                      <button type="button"
+                              class="btn btn-success btn-sm mb-3"
+                              onclick="uploadDocs({{ cc.id }})">
+                        Enviar arquivos
+                      </button>
+                    </form>
 
+                    <div id="listaDocs{{ cc.id }}">
+                      {% if cc.documentos %}
+                        <div class="list-group">
+                          {% for doc in cc.documentos %}
+                          <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                              <i class="bi bi-file-earmark me-2"></i>
+                              {{ doc.nome_arquivo }}
+                            </div>
+                            <a href="{{ url_for('media_documentos', filename=doc.caminho) }}"
+                               target="_blank"
+                               class="btn btn-sm btn-primary">
+                              Abrir
+                            </a>
+                          </div>
+                          {% endfor %}
+                        </div>
+                      {% else %}
+                        <div class="text-muted text-center">Nenhum documento anexado</div>
+                      {% endif %}
+                    </div>
+                  </div>
+                  <div class="modal-footer">
+                    <button class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                  </div>
                 </div>
-
-                <div class="modal-footer">
-                  <button class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
-                </div>
-
               </div>
             </div>
-          </div>
 
-            <!-- 🔥 MODAL EXCLUIR -->
             <div class="modal fade" id="modalExcluir{{ cc.id }}" tabindex="-1">
               <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">
-
                   <div class="modal-header">
                     <h5 class="modal-title">Excluir Centro</h5>
                     <button class="btn-close" data-bs-dismiss="modal"></button>
                   </div>
-
                   <div class="modal-body">
                     Confirma excluir <strong>{{ cc.codigo }} - {{ cc.nome }}</strong>?
                   </div>
-
                   <div class="modal-footer">
-                    <button class="btn btn-secondary" data-bs-dismiss="modal">
-                      Cancelar
-                    </button>
-
+                    <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                     <form action="{{ url_for('excluir_centro_custo', cc_id=cc.id) }}" method="POST">
                       {% if csrf_token %}{{ csrf_token() }}{% endif %}
                       <button class="btn btn-danger">Excluir</button>
                     </form>
                   </div>
-
                 </div>
               </div>
             </div>
@@ -156,6 +125,29 @@
       </tbody>
     </table>
   </div>
+
+  {% if total_paginas > 1 %}
+  <nav class="mt-3">
+    <ul class="pagination justify-content-center">
+      
+      <li class="page-item {% if pagina_atual == 1 %}disabled{% endif %}">
+        <a class="page-link" href="{{ url_for(request.endpoint, page=pagina_atual - 1) }}">Anterior</a>
+      </li>
+
+      {% for p in range(1, total_paginas + 1) %}
+      <li class="page-item {% if p == pagina_atual %}active{% endif %}">
+        <a class="page-link" href="{{ url_for(request.endpoint, page=p) }}">{{ p }}</a>
+      </li>
+      {% endfor %}
+
+      <li class="page-item {% if pagina_atual == total_paginas %}disabled{% endif %}">
+        <a class="page-link" href="{{ url_for(request.endpoint, page=pagina_atual + 1) }}">Próximo</a>
+      </li>
+
+    </ul>
+  </nav>
+  {% endif %}
+
   {% else %}
     <div class="alert alert-info">Nenhum centro de custo cadastrado.</div>
   {% endif %}
@@ -164,15 +156,14 @@
     <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
       <i class="bi bi-arrow-left"></i> Voltar
     </a>
-
     <a href="{{ url_for('cadastrar_centro_custo') }}" class="btn btn-success">
-      <i class="bi bi-person-plus"></i> Novo Centro
+      <i class="bi bi-person-plus"></i> Novo Cliente
     </a>
   </div>
 </div>
+
 <script>
 function uploadDocs(ccId){
-
   const form = document.getElementById(`formUpload${ccId}`);
   const formData = new FormData(form);
 
@@ -184,7 +175,7 @@ function uploadDocs(ccId){
   .then(data => {
     if(data.sucesso){
       alert('Arquivo enviado com sucesso!');
-      location.reload(); // 🔥 recarrega para mostrar na lista
+      location.reload();
     } else {
       alert('Erro ao enviar arquivo');
     }
@@ -192,7 +183,6 @@ function uploadDocs(ccId){
   .catch(() => {
     alert('Erro na requisição');
   });
-
 }
 </script>
 {% endblock %}

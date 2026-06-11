@@ -13041,6 +13041,13 @@ def listar_centros_custos():
         'empresa_id',
         type=int
     )
+    
+    # 🔢 Pega o número da página atual vindo da URL (ex: /centros_custos?page=2). Padrão é 1.
+    pagina = request.args.get(
+        'page',
+        1,
+        type=int
+    )
 
     empresas = Empresa.query.order_by(
         Empresa.nome
@@ -13071,13 +13078,22 @@ def listar_centros_custos():
             CentroCusto.empresa_id == empresa_id
         )
 
-    centros = query.order_by(
-        CentroCusto.nome
-    ).all()
+    # Ordenamos a query primeiro
+    query = query.order_by(CentroCusto.nome)
+
+    # paginação do SQLAlchemy (10 itens por página)
+    # error_out=False impede que o app quebre caso alguém digite uma página que não existe
+    paginacao = query.paginate(
+        page=pagina,
+        per_page=10,
+        error_out=False
+    )
 
     return render_template(
         'listar_centros_custos.html',
-        centros=centros,
+        centros=paginacao.items,          # .items traz apenas os 10 registros da página atual
+        pagina_atual=pagina,             # Passa o número da página atual para o HTML
+        total_paginas=paginacao.pages,   # Passa o total de páginas calculadas
         empresas=empresas,
         empresa_id=empresa_id
     )
@@ -18884,7 +18900,7 @@ def documentos_adesao_concessionaria(conta_id):
         eh_pj = len(cpf_cnpj_limpo) > 11
 
         if eh_pj:
-            tipos = ['conta', 'contrato_social', 'cnh']
+            tipos = ['conta', 'contrato_social', 'cnh', 'termo_assinado']
 
             if not all(arquivos.get(tipo) and arquivos.get(tipo).filename for tipo in tipos):
                 flash(
@@ -18894,7 +18910,7 @@ def documentos_adesao_concessionaria(conta_id):
                 return redirect(request.url)
 
         else:
-            tipos = ['conta', 'cnh']
+            tipos = ['conta', 'cnh', 'termo_assinado']
 
             if not all(arquivos.get(tipo) and arquivos.get(tipo).filename for tipo in tipos):
                 flash(
@@ -18930,6 +18946,7 @@ def documentos_adesao_concessionaria(conta_id):
                 caminho = os.path.join(caminho_base, nome_unico)
 
                 arquivo.save(caminho)
+                print('ARQUIVO SALVO EM:', caminho)
 
                 db.session.add(
                     DocumentoAdesao(
@@ -19214,6 +19231,179 @@ def realocar_conta_concessionaria(conta_id):
         url_for(
             'alocar_conta_concessionaria',
             conta_id=conta.id
+        )
+    )
+    
+@app.route(
+    '/documentos-adesao/<path:arquivo>'
+)
+@login_required
+def baixar_documento_adesao(arquivo):
+
+    caminho_base = os.getenv(
+        'DOCUMENTOS_PATH',
+        os.path.join(
+            current_app.root_path,
+            'static',
+            'documentos_adesao'
+        )
+    )
+
+    caminho_completo = os.path.join(
+        caminho_base,
+        arquivo
+    )
+
+    if not os.path.exists(caminho_completo):
+        abort(404)
+
+    return send_from_directory(
+        caminho_base,
+        arquivo
+    )
+    
+@app.route(
+    '/documentos-adesao/<int:documento_id>/excluir',
+    methods=['POST']
+)
+@login_required
+def excluir_documento_adesao(documento_id):
+
+    documento = DocumentoAdesao.query.get_or_404(
+        documento_id
+    )
+
+    caminho_base = os.getenv(
+        'DOCUMENTOS_PATH',
+        os.path.join(
+            current_app.root_path,
+            'static',
+            'documentos_adesao'
+        )
+    )
+
+    caminho_arquivo = os.path.join(
+        caminho_base,
+        documento.caminho
+    )
+
+    try:
+
+        if os.path.exists(caminho_arquivo):
+            os.remove(caminho_arquivo)
+
+        conta_id = documento.conta_concessionaria_id
+
+        db.session.delete(documento)
+        db.session.commit()
+
+        flash(
+            'Documento excluído com sucesso.',
+            'success'
+        )
+
+    except Exception as e:
+
+        db.session.rollback()
+
+        flash(
+            f'Erro ao excluir documento: {e}',
+            'danger'
+        )
+
+    return redirect(
+        url_for(
+            'visualizar_documentos_adesao',
+            conta_id=conta_id
+        )
+    )
+    
+@app.route(
+    '/documentos-adesao/<int:documento_id>/editar',
+    methods=['POST']
+)
+@login_required
+def editar_documento_adesao(documento_id):
+
+    documento = DocumentoAdesao.query.get_or_404(
+        documento_id
+    )
+
+    arquivo = request.files.get(
+        'arquivo'
+    )
+
+    if not arquivo:
+        flash(
+            'Nenhum arquivo enviado.',
+            'warning'
+        )
+
+        return redirect(request.referrer)
+
+    caminho_base = os.getenv(
+        'DOCUMENTOS_PATH',
+        os.path.join(
+            current_app.root_path,
+            'static',
+            'documentos_adesao'
+        )
+    )
+
+    try:
+
+        arquivo_antigo = os.path.join(
+            caminho_base,
+            documento.caminho
+        )
+
+        if os.path.exists(arquivo_antigo):
+            os.remove(arquivo_antigo)
+
+        nome_original = secure_filename(
+            arquivo.filename
+        )
+
+        ext = os.path.splitext(
+            nome_original
+        )[1]
+
+        nome_unico = (
+            f'{uuid.uuid4().hex}{ext}'
+        )
+
+        novo_caminho = os.path.join(
+            caminho_base,
+            nome_unico
+        )
+
+        arquivo.save(
+            novo_caminho
+        )
+
+        documento.nome_arquivo = nome_original
+        documento.caminho = nome_unico
+
+        db.session.commit()
+
+        flash(
+            'Documento atualizado com sucesso.',
+            'success'
+        )
+
+    except Exception as e:
+
+        db.session.rollback()
+
+        flash(
+            f'Erro ao atualizar documento: {e}',
+            'danger'
+        )
+
+    return redirect(
+        url_for(
+            'visualizar_documentos_adesao',
+            conta_id=documento.conta_concessionaria_id
         )
     )
 
