@@ -275,43 +275,67 @@
 
     <div class="assinatura">
 
-    {% if assinatura_url %}
-    <img
-        src="{{ assinatura_url }}"
-        style="
-            max-width: 250px;
-            max-height: 90px;
-            display: block;
-            margin: 0 auto 5px auto;
-        "
-    >
-{% endif %}
+    <div style="text-align: center; margin-top: 20px;">
 
-<div class="linha"></div>
+        {% if assinatura_url %}
+            <img
+                src="{{ assinatura_url }}"
+                style="
+                    max-width: 250px;
+                    max-height: 90px;
+                    display: block;
+                    margin: 0 auto 5px auto;
+                "
+            >
+        {% endif %}
 
-    <strong>
-        {{ conta.centro_custo.nome if conta.centro_custo else '-' }}
-    </strong>
-    <br>
+        <div style="
+            width: 350px;
+            margin: 0 auto;
+            border-top: 1px solid #000;
+            padding-top: 5px;
+            font-size: 12px;
+            line-height: 1.5;
+        ">
 
-    {{ conta.centro_custo.representante_nome
-        if conta.centro_custo and conta.centro_custo.representante_nome
-        else 'Representante Legal' }}
+            <strong>
+                {{ conta.centro_custo.nome if conta.centro_custo else '-' }}
+            </strong>
+
+            <br>
+
+            {{ conta.centro_custo.representante_nome
+                if conta.centro_custo
+                and conta.centro_custo.representante_nome
+                else 'Representante Legal' }}
+
+            <br>
+
+            {% if conta.termo_assinado_em %}
+                Assinado em
+                {{ conta.termo_assinado_em.strftime('%d/%m/%Y às %H:%M') }}
+            {% endif %}
+
+            <br>
+
+            IP: {{ conta.ip_assinatura }}
+
+        </div>
+
+    </div>
 
 </div>
 
-    <div class="assinatura">
-        <div class="linha"></div>
-        Testemunha 01<br>
-        CPF:
-    </div>
+<div class="assinatura">
+    <div class="linha"></div>
+    Testemunha 01<br>
+    CPF:
+</div>
 
-    <div class="assinatura">
-        <div class="linha"></div>
-        Testemunha 02<br>
-        CPF:
-    </div>
-
+<div class="assinatura">
+    <div class="linha"></div>
+    Testemunha 02<br>
+    CPF:
 </div>
 
 <!-- PÁGINA 3 -->

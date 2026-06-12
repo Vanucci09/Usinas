@@ -19516,16 +19516,16 @@ def assinar_termo_adesao(conta_id):
 
             conta.termo_assinado = True
 
-            conta.termo_assinado_em = (
-                datetime.utcnow()
+            conta.termo_assinado_em = datetime.now(
+                ZoneInfo("America/Sao_Paulo")
             )
 
-            conta.ip_assinatura = (
-                request.headers.get(
-                    'X-Forwarded-For',
-                    request.remote_addr
-                )
+            ip = request.headers.get(
+                'X-Forwarded-For',
+                request.remote_addr
             )
+
+            conta.ip_assinatura = ip.split(',')[0].strip()
 
             conta.user_agent_assinatura = (
                 request.headers.get(
