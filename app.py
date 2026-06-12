@@ -683,6 +683,23 @@ class ContaConcessionaria(db.Model):
         db.Boolean,
         default=False
     )
+    
+    termo_enviado = db.Column(
+        db.Boolean,
+        default=False,
+        nullable=False
+    )
+
+    data_envio_termo = db.Column(
+        db.DateTime(timezone=True),
+        nullable=True
+    )
+    
+    termo_assinado = db.Column(db.Boolean, default=False)
+    termo_assinado_em = db.Column(db.DateTime, nullable=True)
+    ip_assinatura = db.Column(db.String(100), nullable=True)
+    user_agent_assinatura = db.Column(db.Text, nullable=True)
+    assinatura_arquivo = db.Column(db.String(255), nullable=True)
 
     # Número da unidade consumidora
     n_uc = db.Column(
@@ -18818,11 +18835,8 @@ def alocar_conta_concessionaria(conta_id):
 
             db.session.add(cliente)
             db.session.flush()
-
-            # ---------------------------
+            
             # RATEIO
-            # ---------------------------
-
             rateio = Rateio(
                 usina_id=usina.id,
                 cliente_id=cliente.id,
@@ -18900,7 +18914,7 @@ def documentos_adesao_concessionaria(conta_id):
         eh_pj = len(cpf_cnpj_limpo) > 11
 
         if eh_pj:
-            tipos = ['conta', 'contrato_social', 'cnh', 'termo_assinado']
+            tipos = ['conta', 'contrato_social', 'cnh']
 
             if not all(arquivos.get(tipo) and arquivos.get(tipo).filename for tipo in tipos):
                 flash(
@@ -18910,7 +18924,7 @@ def documentos_adesao_concessionaria(conta_id):
                 return redirect(request.url)
 
         else:
-            tipos = ['conta', 'cnh', 'termo_assinado']
+            tipos = ['conta', 'cnh']
 
             if not all(arquivos.get(tipo) and arquivos.get(tipo).filename for tipo in tipos):
                 flash(
@@ -19404,6 +19418,311 @@ def editar_documento_adesao(documento_id):
         url_for(
             'visualizar_documentos_adesao',
             conta_id=documento.conta_concessionaria_id
+        )
+    )
+    
+@app.route(
+    '/contas-concessionaria/<int:conta_id>/assinar-termo',
+    methods=['GET', 'POST']
+)
+def assinar_termo_adesao(conta_id):
+
+    conta = ContaConcessionaria.query.get_or_404(
+        conta_id
+    )
+
+    usina = None
+
+    if conta.alocado:
+
+        cliente = Cliente.query.filter_by(
+            codigo_unidade=conta.n_uc
+        ).first()
+
+        if cliente:
+            usina = cliente.usina
+
+    if request.method == 'POST':
+
+        aceite = request.form.get(
+            'aceite'
+        )
+
+        assinatura_base64 = request.form.get(
+            'assinatura'
+        )
+
+        if not aceite:
+
+            flash(
+                'Você precisa aceitar os termos.',
+                'warning'
+            )
+
+            return redirect(
+                request.url
+            )
+
+        if not assinatura_base64:
+
+            flash(
+                'É necessário assinar o termo.',
+                'warning'
+            )
+
+            return redirect(
+                request.url
+            )
+
+        try:
+
+            caminho_base = os.getenv(
+                'DOCUMENTOS_PATH',
+                os.path.join(
+                    current_app.root_path,
+                    'static',
+                    'documentos_adesao'
+                )
+            )
+
+            os.makedirs(
+                caminho_base,
+                exist_ok=True
+            )
+
+            assinatura_base64 = assinatura_base64.split(',')[1]
+
+            assinatura_bytes = base64.b64decode(
+                assinatura_base64
+            )
+
+            nome_assinatura = (
+                f'assinatura_{uuid.uuid4().hex}.png'
+            )
+
+            caminho_assinatura = os.path.join(
+                caminho_base,
+                nome_assinatura
+            )
+
+            with open(
+                caminho_assinatura,
+                'wb'
+            ) as f:
+
+                f.write(
+                    assinatura_bytes
+                )
+
+            conta.termo_assinado = True
+
+            conta.termo_assinado_em = (
+                datetime.utcnow()
+            )
+
+            conta.ip_assinatura = (
+                request.headers.get(
+                    'X-Forwarded-For',
+                    request.remote_addr
+                )
+            )
+
+            conta.user_agent_assinatura = (
+                request.headers.get(
+                    'User-Agent'
+                )
+            )
+
+            conta.assinatura_arquivo = (
+                nome_assinatura
+            )
+
+            # Remove termo antigo se existir
+            DocumentoAdesao.query.filter_by(
+                conta_concessionaria_id=conta.id,
+                tipo_documento='termo_assinado'
+            ).delete()
+
+            db.session.add(
+                DocumentoAdesao(
+                    conta_concessionaria_id=conta.id,
+                    tipo_documento='termo_assinado',
+                    nome_arquivo='Termo Assinado Eletronicamente',
+                    caminho=nome_assinatura
+                )
+            )
+
+            db.session.commit()
+
+            flash(
+                'Termo assinado com sucesso.',
+                'success'
+            )
+
+            return render_template(
+                    'termo_assinado_sucesso.html',
+                    conta=conta
+                )
+
+        except Exception as e:
+
+            db.session.rollback()
+
+            print(
+                'ERRO AO ASSINAR TERMO:',
+                e
+            )
+
+            flash(
+                f'Erro ao assinar termo: {e}',
+                'danger'
+            )
+
+            return redirect(
+                request.url
+            )
+
+    assinatura_url = None
+
+    if conta.assinatura_arquivo:
+
+        assinatura_url = url_for(
+            'baixar_documento_adesao',
+            arquivo=conta.assinatura_arquivo
+        )
+
+    return render_template(
+        'termo_adesao_concessionaria.html',
+        conta=conta,
+        usina=usina,
+        assinatura_url=assinatura_url
+    )
+    
+@app.route(
+    '/contas-concessionaria/<int:conta_id>/termo-assinado'
+)
+def visualizar_termo_assinado(conta_id):
+
+    conta = ContaConcessionaria.query.get_or_404(
+        conta_id
+    )
+
+    usina = None
+
+    if conta.alocado:
+
+        cliente = Cliente.query.filter_by(
+            codigo_unidade=conta.n_uc
+        ).first()
+
+        if cliente:
+            usina = cliente.usina
+
+    assinatura_url = None
+
+    if conta.assinatura_arquivo:
+
+        assinatura_url = url_for(
+            'baixar_documento_adesao',
+            arquivo=conta.assinatura_arquivo
+        )
+
+    return render_template(
+        'termo_adesao_concessionaria.html',
+        conta=conta,
+        usina=usina,
+        assinatura_url=assinatura_url
+    )
+    
+@app.route(
+    '/contas-concessionaria/<int:conta_id>/enviar-termo'
+)
+@login_required
+def enviar_termo_concessionaria(conta_id):
+
+    conta = ContaConcessionaria.query.get_or_404(
+        conta_id
+    )
+
+    centro = conta.centro_custo
+
+    email_destino = (
+        centro.representante_email
+        or centro.email
+    )
+
+    if not email_destino:
+
+        flash(
+            'Nenhum e-mail cadastrado para este cliente.',
+            'warning'
+        )
+
+        return redirect(
+            url_for(
+                'listar_contas_concessionaria'
+            )
+        )
+
+    # LINK PARA ASSINATURA
+    link_termo = url_for(
+        'assinar_termo_adesao',
+        conta_id=conta.id,
+        _external=True
+    )
+
+    html_body = render_template(
+        'email_termo_concessionaria.html',
+        conta=conta,
+        centro=centro,
+        link_termo=link_termo
+    )
+
+    msg = Message(
+
+        subject=(
+            f'Termo de Adesão - UC {conta.n_uc}'
+        ),
+
+        sender=(
+            'CGR Energia Solar',
+            'seuemail@dominio.com'
+        ),
+
+        recipients=[email_destino],
+
+        html=html_body
+    )
+
+    try:
+
+        mail.send(msg)
+
+        conta.termo_enviado = True
+
+        conta.data_envio_termo = (
+            datetime.utcnow()
+        )
+
+        db.session.commit()
+
+        flash(
+            'Termo enviado com sucesso!',
+            'success'
+        )
+
+    except Exception as e:
+
+        db.session.rollback()
+
+        flash(
+            f'Erro ao enviar termo: {e}',
+            'danger'
+        )
+
+    return redirect(
+        url_for(
+            'listar_contas_concessionaria'
         )
     )
 

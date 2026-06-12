@@ -116,7 +116,9 @@
 <body>
 
 <div class="print-actions">
-    <button onclick="window.print()">Imprimir Termo</button>
+    <button type="button" onclick="window.print()">
+        Imprimir Termo
+    </button>
 </div>
 
 <!-- PÁGINA 1 -->
@@ -272,10 +274,31 @@
     </p>
 
     <div class="assinatura">
-        <div class="linha"></div>
-        {{ conta.centro_custo.nome if conta.centro_custo else '-' }}<br>
-        {{ conta.centro_custo.representante_nome if conta.centro_custo and conta.centro_custo.representante_nome else 'Representante Legal' }}
-    </div>
+
+    {% if assinatura_url %}
+    <img
+        src="{{ assinatura_url }}"
+        style="
+            max-width: 250px;
+            max-height: 90px;
+            display: block;
+            margin: 0 auto 5px auto;
+        "
+    >
+{% endif %}
+
+<div class="linha"></div>
+
+    <strong>
+        {{ conta.centro_custo.nome if conta.centro_custo else '-' }}
+    </strong>
+    <br>
+
+    {{ conta.centro_custo.representante_nome
+        if conta.centro_custo and conta.centro_custo.representante_nome
+        else 'Representante Legal' }}
+
+</div>
 
     <div class="assinatura">
         <div class="linha"></div>
@@ -388,12 +411,178 @@
     </p>
 
     <div class="assinatura">
-        <div class="linha"></div>
-        {{ conta.centro_custo.nome if conta.centro_custo else '-' }}<br>
-        {{ conta.centro_custo.representante_nome if conta.centro_custo and conta.centro_custo.representante_nome else 'Representante Legal' }}
-    </div>
+
+    {% if assinatura_url %}
+    <img
+        src="{{ assinatura_url }}"
+        style="
+            max-width: 250px;
+            max-height: 90px;
+            display: block;
+            margin: 0 auto 5px auto;
+        "
+    >
+{% endif %}
+
+<div class="linha"></div>
+
+    <strong>
+        {{ conta.centro_custo.nome if conta.centro_custo else '-' }}
+    </strong>
+    <br>
+
+    {{ conta.centro_custo.representante_nome
+        if conta.centro_custo and conta.centro_custo.representante_nome
+        else 'Representante Legal' }}
 
 </div>
+
+</div>
+
+{% if not conta.termo_assinado %}
+
+<form method="POST"
+      action="{{ url_for(
+          'assinar_termo_adesao',
+          conta_id=conta.id
+      ) }}"
+      id="formAssinatura">
+
+    <div class="page">
+
+        <h1>ASSINATURA ELETRÔNICA</h1>
+
+        <p>
+            Declaro que li e concordo com todos os termos apresentados neste documento.
+        </p>
+
+        <label>
+            <input type="checkbox"
+                   name="aceite"
+                   required>
+
+            Li e concordo com os termos.
+        </label>
+
+        <br><br>
+
+        <canvas id="signature-pad"
+                style="
+                    border:1px solid #000;
+                    width:100%;
+                    height:200px;
+                ">
+        </canvas>
+
+        <input type="hidden"
+               name="assinatura"
+               id="assinatura">
+
+        <br><br>
+
+        <button type="button"
+                onclick="limparAssinatura()">
+
+            Limpar
+
+        </button>
+
+        <button type="submit">
+
+            Assinar e Finalizar
+
+        </button>
+
+    </div>
+
+</form>
+
+{% endif %}
+
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.6/dist/signature_pad.umd.min.js"></script>
+
+<script>
+    const canvas = document.getElementById(
+        'signature-pad'
+    );
+
+    if (canvas) {
+
+        function resizeCanvas() {
+
+            const ratio = Math.max(
+                window.devicePixelRatio || 1,
+                1
+            );
+
+            canvas.width =
+                canvas.offsetWidth * ratio;
+
+            canvas.height =
+                canvas.offsetHeight * ratio;
+
+            canvas
+                .getContext('2d')
+                .scale(ratio, ratio);
+        }
+
+        window.addEventListener(
+            'resize',
+            resizeCanvas
+        );
+
+        resizeCanvas();
+
+        const signaturePad =
+            new SignaturePad(
+                canvas
+            );
+
+        window.limparAssinatura =
+            function () {
+
+                signaturePad.clear();
+
+            };
+
+        const form =
+            document.getElementById(
+                'formAssinatura'
+            );
+
+        if (form) {
+
+            form.addEventListener(
+                'submit',
+                function (e) {
+
+                    if (
+                        signaturePad.isEmpty()
+                    ) {
+
+                        e.preventDefault();
+
+                        alert(
+                            'Por favor, assine antes de finalizar.'
+                        );
+
+                        return;
+                    }
+
+                    document
+                        .getElementById(
+                            'assinatura'
+                        )
+                        .value =
+                        signaturePad.toDataURL();
+
+                }
+            );
+
+        }
+
+    }
+</script>
 
 </body>
 </html>

@@ -93,17 +93,35 @@
                                 <div class="btn-group shadow-sm" role="group">
 
                                     <!-- Visualizar -->
-                                    <a href="{{ url_for(
-                                        'baixar_documento_adesao',
-                                        arquivo=doc.caminho
-                                    ) }}"
-                                    target="_blank"
-                                    class="btn btn-sm btn-outline-primary"
-                                    title="Visualizar">
+                                    {% if doc.tipo_documento == 'termo_assinado' %}
 
-                                        <i class="bi bi-eye"></i>
+                                        <a href="{{ url_for(
+                                            'visualizar_termo_assinado',
+                                            conta_id=conta.id
+                                        ) }}"
+                                        target="_blank"
+                                        class="btn btn-sm btn-outline-primary"
+                                        title="Visualizar">
 
-                                    </a>
+                                            <i class="bi bi-eye"></i>
+
+                                        </a>
+
+                                    {% else %}
+
+                                        <a href="{{ url_for(
+                                            'baixar_documento_adesao',
+                                            arquivo=doc.caminho
+                                        ) }}"
+                                        target="_blank"
+                                        class="btn btn-sm btn-outline-primary"
+                                        title="Visualizar">
+
+                                            <i class="bi bi-eye"></i>
+
+                                        </a>
+
+                                    {% endif %}
 
                                     <!-- Baixar -->
                                     <a href="{{ url_for(

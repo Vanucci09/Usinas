@@ -129,7 +129,7 @@
                         <th scope="col" class="text-center" style="width: 140px;">
                             Alocação
                         </th>
-                        <th scope="col" class="text-center pe-4" style="width: 180px;">Ações</th>
+                        <th scope="col" class="text-center pe-4" style="width: 260px;">Ações</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -157,10 +157,26 @@
                         </td>
                         <td class="text-center">
 
-                            {% if conta.documentacao_enviada %}
-                                <span class="badge bg-primary-subtle text-primary border px-2 py-1.5 rounded-pill w-100 d-inline-block text-center">
-                                    <i class="bi bi-folder-check me-1"></i>Documentação Recebida
-                                </span>
+                            {% if conta.termo_assinado %}
+
+    <span class="badge bg-success-subtle text-success border px-2 py-1.5 rounded-pill w-100 d-inline-block text-center">
+        <i class="bi bi-pen me-1"></i>
+        Termo Assinado
+    </span>
+
+{% elif conta.termo_enviado %}
+
+    <span class="badge bg-info-subtle text-info border px-2 py-1.5 rounded-pill w-100 d-inline-block text-center">
+        <i class="bi bi-envelope-check me-1"></i>
+        Aguardando Assinatura
+    </span>
+
+{% elif conta.documentacao_enviada %}
+
+    <span class="badge bg-primary-subtle text-primary border px-2 py-1.5 rounded-pill w-100 d-inline-block text-center">
+        <i class="bi bi-folder-check me-1"></i>
+        Documentação Recebida
+    </span>
 
                             {% elif conta.validacao_cliente %}
                                 <span class="badge bg-warning-subtle text-warning-dark border px-2 py-1.5 rounded-pill w-100 d-inline-block text-center">
@@ -202,12 +218,66 @@
 
                                 {% if conta.validacao_cliente %}
 
-                                <a href="{{ url_for('termo_adesao_concessionaria', conta_id=conta.id) }}"
-                                target="_blank"
-                                class="btn btn-sm btn-light border shadow-xs btn-action"
-                                title="Termo de Adesão">
-                                    <i class="bi bi-file-earmark-richtext text-warning"></i>
-                                </a>
+<a href="{{ url_for(
+    'termo_adesao_concessionaria',
+    conta_id=conta.id
+) }}"
+target="_blank"
+class="btn btn-sm btn-light border shadow-xs btn-action"
+title="Termo de Adesão">
+
+    <i class="bi bi-file-earmark-richtext text-warning"></i>
+
+</a>
+
+{% if conta.documentacao_enviada
+      and not conta.termo_assinado
+      and not conta.termo_enviado %}
+
+<a href="{{ url_for(
+    'enviar_termo_concessionaria',
+    conta_id=conta.id
+) }}"
+class="btn btn-sm btn-light border shadow-xs btn-action"
+title="Enviar Termo para Assinatura">
+
+    <i class="bi bi-envelope-paper text-primary"></i>
+
+</a>
+
+{% endif %}
+
+{% if conta.termo_assinado %}
+
+<a href="{{ url_for(
+    'visualizar_termo_assinado',
+    conta_id=conta.id
+) }}"
+target="_blank"
+class="btn btn-sm btn-light border shadow-xs btn-action"
+title="Visualizar Termo Assinado">
+
+    <i class="bi bi-file-earmark-check text-success"></i>
+
+</a>
+
+{% endif %}
+
+{% if conta.termo_enviado
+      and not conta.termo_assinado %}
+
+<a href="{{ url_for(
+    'enviar_termo_concessionaria',
+    conta_id=conta.id
+) }}"
+class="btn btn-sm btn-light border shadow-xs btn-action"
+title="Reenviar Termo">
+
+    <i class="bi bi-arrow-repeat text-info"></i>
+
+</a>
+
+{% endif %}
 
                                 {% if not conta.documentacao_enviada %}
                                 <a href="{{ url_for(

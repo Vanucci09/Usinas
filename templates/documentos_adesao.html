@@ -77,15 +77,6 @@
                             <span class="text-danger">*</span>
                         </label>
 
-                        <input type="file"
-                            name="termo_assinado"
-                            class="form-control shadow-sm"
-                            accept=".pdf"
-                            required>
-
-                        <div class="form-text">
-                            Termo de adesão assinado pelo responsável.
-                        </div>
                     </div>
 
                 {% else %}
@@ -103,23 +94,6 @@
                         </label>
                         <input type="file" name="cnh" class="form-control shadow-sm" accept=".pdf,.jpg,.jpeg,.png" required>
                         <div class="form-text">Documento de identificação com foto do titular da UC (Frente e verso).</div>
-                    </div>
-
-                    <div class="mb-4">
-                        <label class="form-label fw-semibold text-secondary d-flex align-items-center gap-1">
-                            Termo Assinado
-                            <span class="text-danger">*</span>
-                        </label>
-
-                        <input type="file"
-                            name="termo_assinado"
-                            class="form-control shadow-sm"
-                            accept=".pdf"
-                            required>
-
-                        <div class="form-text">
-                            Termo de adesão assinado pelo titular.
-                        </div>
                     </div>
                 {% endif %}
 
