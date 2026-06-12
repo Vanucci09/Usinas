@@ -136,6 +136,8 @@
 
                                     </a>
 
+                                    {% if current_user.perfil == 'admin' %}
+
                                     <!-- Editar -->
                                     <button
                                         type="button"
@@ -164,6 +166,10 @@
                                             <i class="bi bi-trash"></i>
 
                                         </button>
+
+                                    </form>
+
+                                {% endif %}
 
                                     </form>
 
