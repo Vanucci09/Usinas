@@ -19283,8 +19283,20 @@ def baixar_documento_adesao(arquivo):
 @login_required
 def excluir_documento_adesao(documento_id):
 
+    if current_user.perfil != 'admin':
+        abort(403)
+
     documento = DocumentoAdesao.query.get_or_404(
         documento_id
+    )
+
+    conta = db.session.get(
+        ContaConcessionaria,
+        documento.conta_concessionaria_id
+    )
+
+    conta_id = (
+        documento.conta_concessionaria_id
     )
 
     caminho_base = os.getenv(
@@ -19296,29 +19308,108 @@ def excluir_documento_adesao(documento_id):
         )
     )
 
-    caminho_arquivo = os.path.join(
-        caminho_base,
-        documento.caminho
-    )
-
     try:
 
-        if os.path.exists(caminho_arquivo):
-            os.remove(caminho_arquivo)
+        # Se for o termo assinado,
+        # reinicia todo o processo
+        if (
+            documento.tipo_documento
+            == 'termo_assinado'
+        ):
 
-        conta_id = documento.conta_concessionaria_id
+            # Remove arquivo da assinatura
+            if conta.assinatura_arquivo:
 
-        db.session.delete(documento)
-        db.session.commit()
+                caminho_assinatura = os.path.join(
+                    caminho_base,
+                    conta.assinatura_arquivo
+                )
 
-        flash(
-            'Documento excluído com sucesso.',
-            'success'
-        )
+                if os.path.exists(
+                    caminho_assinatura
+                ):
+                    os.remove(
+                        caminho_assinatura
+                    )
+
+            # Remove todos os documentos
+            # relacionados ao termo
+            documentos_termo = (
+                DocumentoAdesao.query.filter_by(
+                    conta_concessionaria_id=conta.id,
+                    tipo_documento='termo_assinado'
+                ).all()
+            )
+
+            for doc in documentos_termo:
+
+                caminho_doc = os.path.join(
+                    caminho_base,
+                    doc.caminho
+                )
+
+                if os.path.exists(
+                    caminho_doc
+                ):
+                    os.remove(
+                        caminho_doc
+                    )
+
+                db.session.delete(
+                    doc
+                )
+
+            # Limpa informações da assinatura
+            conta.termo_assinado = False
+            conta.termo_assinado_em = None
+            conta.ip_assinatura = None
+            conta.user_agent_assinatura = None
+            conta.assinatura_arquivo = None
+
+            # Permite reenviar o termo
+            conta.termo_enviado = False
+            conta.data_envio_termo = None
+
+            db.session.commit()
+
+            flash(
+                'Processo de assinatura reiniciado com sucesso.',
+                'success'
+            )
+
+        else:
+
+            caminho_arquivo = os.path.join(
+                caminho_base,
+                documento.caminho
+            )
+
+            if os.path.exists(
+                caminho_arquivo
+            ):
+                os.remove(
+                    caminho_arquivo
+                )
+
+            db.session.delete(
+                documento
+            )
+
+            db.session.commit()
+
+            flash(
+                'Documento excluído com sucesso.',
+                'success'
+            )
 
     except Exception as e:
 
         db.session.rollback()
+
+        print(
+            'ERRO AO EXCLUIR DOCUMENTO:',
+            e
+        )
 
         flash(
             f'Erro ao excluir documento: {e}',
@@ -19525,7 +19616,12 @@ def assinar_termo_adesao(conta_id):
                 request.remote_addr
             )
 
-            conta.ip_assinatura = ip.split(',')[0].strip()
+            print('IP BRUTO:', ip)
+
+            if ip:
+                ip = ip.split(',')[0].strip()
+
+            conta.ip_assinatura = ip
 
             conta.user_agent_assinatura = (
                 request.headers.get(
