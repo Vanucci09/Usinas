@@ -128,6 +128,38 @@
             <i class="bi bi-cart3"></i> Comercial
         </button>
 
+    {% elif current_user.perfil == 'monitoramento' %}
+
+        <button class="nav-link-custom active" data-target="geracao">
+            <i class="bi bi-lightning-charge"></i> Geração
+        </button>
+
+        <button class="nav-link-custom" data-target="monitoramento">
+            <i class="bi bi-activity"></i> Monitoramento
+        </button>
+
+        <button class="nav-link-custom" data-target="consorcios">
+            <i class="bi bi-people"></i> Consórcios
+        </button>
+
+    {% elif current_user.perfil == 'financeiro' %}
+
+        <button class="nav-link-custom active" data-target="financeiro_empresa">
+            <i class="bi bi-briefcase"></i> Finan. Empresa
+        </button>
+
+        <button class="nav-link-custom" data-target="financeiro_usinas">
+            <i class="bi bi-cash-stack"></i> Finan. Usinas
+        </button>
+
+        <button class="nav-link-custom" data-target="consorcios">
+            <i class="bi bi-people"></i> Consórcios
+        </button>
+
+        <button class="nav-link-custom" data-target="investidores">
+            <i class="bi bi-building-up"></i> Investidores
+        </button>
+
     {% else %}
 
         <button class="nav-link-custom active" data-target="geracao">
@@ -156,12 +188,11 @@
 
     {% endif %}
 
-    {# Nova regra unificada para administradores acessar investidores e administração #}
     {% if current_user.perfil == 'admin' %}
         <button class="nav-link-custom" data-target="investidores">
             <i class="bi bi-building-up"></i> Investidores
         </button>
-        
+
         <button class="nav-link-custom" data-target="admin">
             <i class="bi bi-shield-lock"></i> Administração
         </button>
@@ -183,7 +214,7 @@
 <main class="main-content">
     
     <section id="geracao"
-    {% if current_user.perfil != 'comercial' %}
+    {% if current_user.perfil not in ['comercial', 'gerente_comercial'] %}
         class="active-section"
     {% endif %}>
         <h2 class="section-title">⚡ Geração</h2>
@@ -333,7 +364,7 @@
     </section>
 
     {# Seções protegidas usando a nova validação de perfil 'admin' #}
-    {% if current_user.perfil == 'admin' %}
+    {% if current_user.perfil in ['admin', 'financeiro'] %}
     <section id="investidores">
         <h2 class="section-title">🏢 Investidores</h2>
         <div class="row g-3">
@@ -389,10 +420,16 @@
     });
 
     // Lógica ao carregar a página (Verifica parâmetro ?aba=)
-    document.addEventListener("DOMContentLoaded", function() {
+   document.addEventListener("DOMContentLoaded", function() {
 
     {% if current_user.perfil in ['comercial', 'gerente_comercial'] %}
         switchSection('comercial');
+        return;
+    {% elif current_user.perfil == 'monitoramento' %}
+        switchSection('geracao');
+        return;
+    {% elif current_user.perfil == 'financeiro' %}
+        switchSection('financeiro_empresa');
         return;
     {% endif %}
 
