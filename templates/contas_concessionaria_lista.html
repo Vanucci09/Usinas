@@ -123,8 +123,9 @@
                         <th scope="col" class="ps-4" style="width: 80px;">ID</th>
                         <th scope="col">Cliente</th>
                         <th scope="col" style="width: 140px;">Nº UC</th>
-                        <th scope="col" style="width: 110px;">Fase</th>
-                        <th scope="col" style="width: 120px;">Bandeira</th>
+                        <th scope="col" style="width: 180px;">Vendedor</th>
+                        <th scope="col" style="width: 120px;">Data Proposta</th>
+                        <th scope="col" style="width: 120px;">Consumo Médio</th>
                         <th scope="col" class="text-center" style="width: 160px;">Status</th>
                         <th scope="col" class="text-center" style="width: 140px;">
                             Alocação
@@ -146,14 +147,17 @@
                         <td class="font-monospace text-secondary small">
                             {{ conta.n_uc }}
                         </td>
+
                         <td>
-                            <span class="badge bg-light text-dark border text-capitalize small-badge">{{ conta.fase }}</span>
+                            {{ conta.vendedor.nome if conta.vendedor else '-' }}
                         </td>
-                        <td>
-                            <span class="d-inline-flex align-items-center gap-1">
-                                <i class="bi bi-circle-fill fs-8 text-{{ 'success' if 'Verde' in conta.bandeira else 'warning' if 'Amarela' in conta.bandeira else 'danger' }}"></i>
-                                {{ conta.bandeira }}
-                            </span>
+
+                        <td class="small text-muted">
+                            {{ conta.criado_em.strftime('%d/%m/%Y') if conta.criado_em else '-' }}
+                        </td>
+
+                        <td class="text-end">
+                            {{ '{:,.0f}'.format(conta.consumo_medio or 0).replace(',', '.') }} kWh
                         </td>
                         <td class="text-center">
 
@@ -338,7 +342,7 @@ title="Reenviar Termo">
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="8" class="text-center py-5 text-muted bg-white">
+                        <td colspan="9" class="text-center py-5 text-muted bg-white">
                             <i class="bi bi-folder-x display-5 d-block mb-3 text-secondary opacity-50"></i>
                             <p class="mb-0 fw-medium">Nenhuma conta registrada até o momento.</p>
                             <small class="text-muted">Utilize os botões superiores para iniciar um cadastro.</small>
