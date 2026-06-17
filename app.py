@@ -684,6 +684,11 @@ class ContaConcessionaria(db.Model):
         default=False
     )
     
+    observacao = db.Column(
+        db.Text,
+        nullable=True
+    )
+    
     termo_enviado = db.Column(
         db.Boolean,
         default=False,
@@ -17107,6 +17112,10 @@ def nova_conta_concessionaria():
                     'centro_custo_id',
                     type=int
                 ),
+                
+                observacao=request.form.get(
+                    'observacao'
+                ),
 
                 # DADOS PRINCIPAIS
                 n_uc=request.form.get('n_uc'),
@@ -17560,6 +17569,10 @@ def editar_conta_concessionaria(conta_id):
                 True
                 if request.form.get('me_epp')
                 else False
+            )
+            
+            conta.observacao = request.form.get(
+                'observacao'
             )
 
             # Consumos

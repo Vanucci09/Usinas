@@ -159,6 +159,7 @@
                             </div>
                         </div>
 
+                        
                         <div class="col-12">
                             <div class="form-check form-switch card-switch p-3 border rounded">
                                 <input class="form-check-input ms-0 me-2" type="checkbox" name="me_epp" id="me_epp" {% if conta and conta.me_epp %}checked{% endif %}>
@@ -167,6 +168,17 @@
                                 </label>
                             </div>
                         </div>
+
+                        <div class="mt-3 p-3 bg-light rounded border">
+    <label class="form-label fw-semibold">
+        Observação
+    </label>
+
+    <textarea
+        name="observacao"
+        class="form-control"
+        rows="3">{{ conta.observacao if conta else '' }}</textarea>
+</div>
                     </div>
                 </div>
 

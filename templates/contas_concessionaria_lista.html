@@ -163,24 +163,24 @@
 
                             {% if conta.termo_assinado %}
 
-    <span class="badge bg-success-subtle text-success border px-2 py-1.5 rounded-pill w-100 d-inline-block text-center">
-        <i class="bi bi-pen me-1"></i>
-        Termo Assinado
-    </span>
+                                <span class="badge bg-success-subtle text-success border px-2 py-1.5 rounded-pill w-100 d-inline-block text-center">
+                                    <i class="bi bi-pen me-1"></i>
+                                    Termo Assinado
+                                </span>
 
-{% elif conta.termo_enviado %}
+                            {% elif conta.termo_enviado %}
 
-    <span class="badge bg-info-subtle text-info border px-2 py-1.5 rounded-pill w-100 d-inline-block text-center">
-        <i class="bi bi-envelope-check me-1"></i>
-        Aguardando Assinatura
-    </span>
+                                <span class="badge bg-info-subtle text-info border px-2 py-1.5 rounded-pill w-100 d-inline-block text-center">
+                                    <i class="bi bi-envelope-check me-1"></i>
+                                    Aguardando Assinatura
+                                </span>
 
-{% elif conta.documentacao_enviada %}
+                            {% elif conta.documentacao_enviada %}
 
-    <span class="badge bg-primary-subtle text-primary border px-2 py-1.5 rounded-pill w-100 d-inline-block text-center">
-        <i class="bi bi-folder-check me-1"></i>
-        Documentação Recebida
-    </span>
+                                <span class="badge bg-primary-subtle text-primary border px-2 py-1.5 rounded-pill w-100 d-inline-block text-center">
+                                    <i class="bi bi-folder-check me-1"></i>
+                                    Documentação Recebida
+                                </span>
 
                             {% elif conta.validacao_cliente %}
                                 <span class="badge bg-warning-subtle text-warning-dark border px-2 py-1.5 rounded-pill w-100 d-inline-block text-center">
@@ -218,70 +218,82 @@
                                    class="btn btn-sm btn-light border shadow-xs btn-action" 
                                    title="Visualizar Proposta">
                                     <i class="bi bi-file-earmark-text text-success"></i>
+                                </a>                                
+
+                                {% if conta.observacao %}
+                                <a href="#"
+                                class="btn btn-sm btn-light border shadow-xs btn-action"
+                                data-bs-toggle="modal"
+                                data-bs-target="#observacaoModal{{ conta.id }}"
+                                title="Visualizar Observação">
+
+                                    <i class="bi bi-journal-text text-info"></i>
+
                                 </a>
+                                {% endif %}
 
                                 {% if conta.validacao_cliente %}
 
-<a href="{{ url_for(
-    'termo_adesao_concessionaria',
-    conta_id=conta.id
-) }}"
-target="_blank"
-class="btn btn-sm btn-light border shadow-xs btn-action"
-title="Termo de Adesão">
+                                <a href="{{ url_for(
+                                    'termo_adesao_concessionaria',
+                                    conta_id=conta.id
+                                ) }}"
+                                target="_blank"
+                                class="btn btn-sm btn-light border shadow-xs btn-action"
+                                title="Termo de Adesão">
 
-    <i class="bi bi-file-earmark-richtext text-warning"></i>
+                                    <i class="bi bi-file-earmark-richtext text-warning"></i>
 
-</a>
+                                </a>
 
-{% if conta.documentacao_enviada
-      and not conta.termo_assinado
-      and not conta.termo_enviado %}
+                                {% if conta.documentacao_enviada
+                                    and not conta.termo_assinado
+                                    and not conta.termo_enviado %}
 
-<a href="{{ url_for(
-    'enviar_termo_concessionaria',
-    conta_id=conta.id
-) }}"
-class="btn btn-sm btn-light border shadow-xs btn-action"
-title="Enviar Termo para Assinatura">
+                                <a href="{{ url_for(
+                                    'enviar_termo_concessionaria',
+                                    conta_id=conta.id
+                                ) }}"
+                                class="btn btn-sm btn-light border shadow-xs btn-action"
+                                title="Enviar Termo para Assinatura">
 
-    <i class="bi bi-envelope-paper text-primary"></i>
+                                    <i class="bi bi-envelope-paper text-primary"></i>
 
-</a>
+                                </a>
 
-{% endif %}
+                                {% endif %}
 
-{% if conta.termo_assinado %}
+                                {% if conta.termo_assinado %}
 
-<a href="{{ url_for(
-    'visualizar_termo_assinado',
-    conta_id=conta.id
-) }}"
-target="_blank"
-class="btn btn-sm btn-light border shadow-xs btn-action"
-title="Visualizar Termo Assinado">
+                                <a href="{{ url_for(
+                                    'visualizar_termo_assinado',
+                                    conta_id=conta.id
+                                ) }}"
+                                target="_blank"
+                                class="btn btn-sm btn-light border shadow-xs btn-action"
+                                title="Visualizar Termo Assinado">
 
-    <i class="bi bi-file-earmark-check text-success"></i>
+                                    <i class="bi bi-file-earmark-check text-success"></i>
 
-</a>
+                                </a>
 
-{% endif %}
+                                {% endif %}
 
-{% if conta.termo_enviado
-      and not conta.termo_assinado %}
+                                {% if conta.termo_enviado
+                                    and not conta.termo_assinado %}
 
-<a href="{{ url_for(
-    'enviar_termo_concessionaria',
-    conta_id=conta.id
-) }}"
-class="btn btn-sm btn-light border shadow-xs btn-action"
-title="Reenviar Termo">
+                                <a href="{{ url_for(
+                                    'enviar_termo_concessionaria',
+                                    conta_id=conta.id
+                                ) }}"
+                                class="btn btn-sm btn-light border shadow-xs btn-action"
+                                title="Reenviar Termo">
 
-    <i class="bi bi-arrow-repeat text-info"></i>
+                                    <i class="bi bi-arrow-repeat text-info"></i>
 
-</a>
+                                </a>
 
-{% endif %}
+                                {% endif %}
 
                                 {% if not conta.documentacao_enviada %}
                                 <a href="{{ url_for(
@@ -340,6 +352,39 @@ title="Reenviar Termo">
                             </div>
                         </td>
                     </tr>
+
+                    {% if conta.observacao %}
+                    <div class="modal fade"
+                        id="observacaoModal{{ conta.id }}"
+                        tabindex="-1"
+                        aria-hidden="true">
+
+                        <div class="modal-dialog modal-lg modal-dialog-centered">
+                            <div class="modal-content">
+
+                                <div class="modal-header">
+                                    <h5 class="modal-title">
+                                        <i class="bi bi-chat-left-text me-2"></i>
+                                        Observação da Conta #{{ conta.id }} - {{ conta.centro_custo.nome }}
+                                    </h5>
+
+                                    <button type="button"
+                                            class="btn-close"
+                                            data-bs-dismiss="modal">
+                                    </button>
+                                </div>
+
+                                <div class="modal-body">
+                                    <p class="mb-0 text-muted"
+                                    style="white-space: pre-wrap; word-break: break-word;">
+                                        {{ conta.observacao }}
+                                    </p>
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
                     {% else %}
                     <tr>
                         <td colspan="9" class="text-center py-5 text-muted bg-white">
