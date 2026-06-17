@@ -187,7 +187,7 @@
             <td>{{ conta.desconto|int }}% Sobre a TE</td>
         </tr>
 
-        {% set prazo_fidelidade = 36 if conta.me_epp else 12 %}
+        {% set prazo_fidelidade = 36 if (conta.desconto or 0) > 15 else 12 %}
 
         <tr>
             <td class="label">Multa por Rescisão Antecipada:</td>
