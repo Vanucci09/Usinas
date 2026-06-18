@@ -299,6 +299,14 @@ class FinanceiroUsina(db.Model):
     juros = db.Column(Numeric(10, 2), default=0)
     credor_id = db.Column(db.Integer, db.ForeignKey('credores.id'), nullable=True)
     comprovante_arquivo = db.Column(db.String(255))
+    caixa_banco_id = db.Column(
+        db.Integer,
+        db.ForeignKey('caixas_bancos.id')
+    )
+
+    caixa_banco = db.relationship(
+        'CaixaBanco'
+    )
     
     usina = db.relationship('Usina', backref='financeiros')    
     credor = db.relationship(
@@ -6078,6 +6086,10 @@ def financeiro():
     financeiro = []
     total_receitas = Decimal('0')
     total_despesas = Decimal('0')
+    
+    contas_bancos = CaixaBanco.query.order_by(
+        CaixaBanco.nome
+    ).all()
 
     for r in registros:
         valor = Decimal(str(r.valor or 0))
@@ -6106,6 +6118,7 @@ def financeiro():
         financeiro=financeiro,
         usinas=usinas,
         categorias=categorias,
+        contas_bancos=contas_bancos,
         mes=mes,
         ano=ano,
         usina_id=usina_id,
@@ -6306,37 +6319,137 @@ def imagem_para_base64(caminho):
 @app.route('/atualizar_pagamento/<int:id>', methods=['POST'])
 @login_required
 def atualizar_pagamento(id):
+
     financeiro = FinanceiroUsina.query.get_or_404(id)
+
     data_str = request.form.get('data_pagamento')
     juros_str = request.form.get('juros')
+    conta_id = request.form.get('conta_id', type=int)
+    
+    if financeiro.data_pagamento:
+
+        flash(
+            'Este lançamento já foi baixado.',
+            'warning'
+        )
+
+        return redirect(
+            request.referrer or url_for('financeiro')
+        )
 
     try:
-        # Se for uma despesa já paga, bloqueia alteração
-        if financeiro.tipo == 'despesa' and financeiro.data_pagamento:
-            flash('Despesa já paga! Alteração não permitida.', 'warning')
-            return redirect(request.referrer or url_for('financeiro'))
 
-        # Atualiza data de pagamento
+        if not conta_id:
+            flash(
+                'Selecione uma conta bancária.',
+                'warning'
+            )
+
+            return redirect(
+                request.referrer or url_for('financeiro')
+            )
+
+        conta = db.session.get(
+            CaixaBanco,
+            conta_id
+        )
+
+        if not conta:
+            flash(
+                'Conta bancária não encontrada.',
+                'warning'
+            )
+
+            return redirect(
+                request.referrer or url_for('financeiro')
+            )
+        financeiro.caixa_banco_id = conta.id
+
+        # Atualiza data pagamento
         if data_str:
-            financeiro.data_pagamento = datetime.strptime(data_str, '%Y-%m-%d').date()
+            financeiro.data_pagamento = datetime.strptime(
+                data_str,
+                '%Y-%m-%d'
+            ).date()
+
         else:
             financeiro.data_pagamento = None
 
-        # Atualiza juros se informados
+        # Atualiza juros
         if juros_str:
-            juros_normalizado = juros_str.replace(',', '.')
-            financeiro.juros = Decimal(juros_normalizado)
+            financeiro.juros = Decimal(
+                juros_str.replace(',', '.')
+            )
+
         else:
             financeiro.juros = Decimal('0.00')
 
+        # Evita movimentação duplicada
+        movimento_existente = MovimentoCaixaBanco.query.filter_by(
+            origem='financeiro',
+            referencia_id=financeiro.id
+        ).first()
+
+        if not movimento_existente:
+
+            valor_movimento = Decimal(
+                str(financeiro.valor or 0)
+            )
+
+            if financeiro.tipo == 'receita':
+                valor_movimento += Decimal(
+                    str(financeiro.juros or 0)
+                )
+
+            movimento = MovimentoCaixaBanco(
+                conta_id=conta.id,
+                data=financeiro.data_pagamento,
+                tipo='entrada'
+                    if financeiro.tipo == 'receita'
+                    else 'saida',
+                descricao=financeiro.descricao,
+                valor=valor_movimento,
+                origem='financeiro',
+                referencia_id=financeiro.id
+            )
+
+            db.session.add(movimento)
+
+            saldo_atual = Decimal(
+                str(conta.saldo_atual or 0)
+            )
+
+            if financeiro.tipo == 'receita':
+                conta.saldo_atual = (
+                    saldo_atual +
+                    valor_movimento
+                )
+
+            else:
+                conta.saldo_atual = (
+                    saldo_atual -
+                    valor_movimento
+                )
+
         db.session.commit()
-        flash('Pagamento atualizado com sucesso!', 'success')
+
+        flash(
+            'Pagamento atualizado com sucesso!',
+            'success'
+        )
 
     except Exception as e:
-        db.session.rollback()
-        flash(f'Erro ao atualizar pagamento: {e}', 'danger')
 
-    return redirect(request.referrer or url_for('financeiro'))
+        db.session.rollback()
+
+        flash(
+            f'Erro ao atualizar pagamento: {e}',
+            'danger'
+        )
+
+    return redirect(
+        request.referrer or url_for('financeiro')
+    )
 
 def extensao_permitida(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -9056,45 +9169,63 @@ def excluir_credor(credor_id):
 @app.route('/extrato_usina/<int:usina_id>')
 @login_required
 def extrato_usina(usina_id):
-    # permissões
+
     if not current_user.pode_acessar_financeiro:
         abort(403)
 
-    # parâmetros de filtro
     mes = request.args.get('mes', type=int)
     ano = request.args.get('ano', type=int)
+    banco_filtro = request.args.get('banco')
+
     usina = Usina.query.get_or_404(usina_id)
 
-    # --- Saldo inicial do mês (até o último dia do mês anterior) ---
-    # 1º dia do mês corrente
     first_of_month = date(ano, mes, 1)
-    # último dia do mês anterior
     prev_month_last = first_of_month - timedelta(days=1)
 
-    # busca todos os registros pagos até prev_month_last
-    prev_records = (
+    prev_query = (
         FinanceiroUsina.query
+        .options(
+            joinedload(FinanceiroUsina.caixa_banco)
+        )
         .filter(
             FinanceiroUsina.usina_id == usina_id,
             FinanceiroUsina.data_pagamento.isnot(None),
             FinanceiroUsina.data_pagamento <= prev_month_last
         )
-        .all()
     )
 
+    if banco_filtro:
+
+        prev_query = prev_query.join(
+            CaixaBanco,
+            FinanceiroUsina.caixa_banco_id == CaixaBanco.id
+        ).filter(
+            CaixaBanco.nome == banco_filtro
+        )
+
+    prev_records = prev_query.all()
+
     initial_saldo = Decimal('0')
+
     for r in prev_records:
-        val = Decimal(str(r.valor  or 0))
-        j = Decimal(str(r.juros  or 0))
-        mov = (val + j) if r.tipo == 'receita' else -val
+
+        val = Decimal(str(r.valor or 0))
+        j = Decimal(str(r.juros or 0))
+
+        mov = (
+            val + j
+            if r.tipo == 'receita'
+            else -val
+        )
+
         initial_saldo += mov
 
-    # --- Movimentações do mês corrente filtradas por data_pagamento ---
     registros = (
         FinanceiroUsina.query
         .options(
             joinedload(FinanceiroUsina.credor),
-            joinedload(FinanceiroUsina.categoria)
+            joinedload(FinanceiroUsina.categoria),
+            joinedload(FinanceiroUsina.caixa_banco)
         )
         .filter(
             FinanceiroUsina.usina_id == usina_id,
@@ -9106,37 +9237,86 @@ def extrato_usina(usina_id):
         .all()
     )
 
-    # --- Monta o extrato dia a dia com saldo acumulado ---
     extrato = []
+
     saldo_corrente = initial_saldo
+
+    totais_bancos = {}
+
     for r in registros:
-        val = Decimal(str(r.valor  or 0))
-        j = Decimal(str(r.juros  or 0))
-        movimento = (val + j) if r.tipo == 'receita' else -val
+
+        val = Decimal(str(r.valor or 0))
+        j = Decimal(str(r.juros or 0))
+
+        movimento = (
+            val + j
+            if r.tipo == 'receita'
+            else -val
+        )
+
         saldo_corrente += movimento
 
-        # descrição: em despesa com credor, mostra apenas o nome do credor
         if r.tipo == 'despesa' and r.credor:
             texto = r.credor.nome
         else:
             texto = r.descricao
+
+            if '|' in texto:
+                partes = texto.split('|')
+                texto = partes[0].strip()
+
+        banco = (
+            r.caixa_banco.nome
+            if r.caixa_banco
+            else 'Sem Banco'
+        )
+
+        totais_bancos[banco] = (
+            totais_bancos.get(
+                banco,
+                Decimal('0')
+            ) + movimento
+        )
 
         extrato.append({
             'data_pagamento': r.data_pagamento,
             'tipo': r.tipo,
             'descricao': texto,
             'valor': movimento,
-            'saldo': saldo_corrente
+            'saldo': saldo_corrente,
+            'banco': banco
         })
+        
+    if banco_filtro:
 
-    # renderiza template passando initial_saldo e extrato
+        extrato = [
+            e for e in extrato
+            if e['banco'] == banco_filtro
+        ]
+
+        saldo_banco = Decimal('0')
+
+        for item in extrato:
+
+            saldo_banco += item['valor']
+
+            item['saldo'] = saldo_banco
+
+    total_geral = sum(
+        totais_bancos.values(),
+        Decimal('0')
+    )
+
     return render_template(
         'extrato_usina.html',
         usina=usina,
         extrato=extrato,
         mes=mes,
         ano=ano,
-        initial_saldo=initial_saldo
+        initial_saldo=initial_saldo,
+        totais_bancos=totais_bancos,
+        total_geral=total_geral,
+        banco_filtro=banco_filtro
     )
 
 @app.route('/comprovantes/<path:nome_arquivo>')
@@ -11034,17 +11214,11 @@ def empresa_financeiro_lancar():
     if request.method == 'POST':
 
         form = request.form
-
         empresa_id = form.get('empresa_id', type=int)
-
         tipo = (form.get('tipo') or '').lower().strip()
-
         descricao = (form.get('descricao') or '').strip()
-
         data_tit = _parse_date(form.get('data'))
-
         valor_tot = _parse_decimal_br(form.get('valor'))
-
         status = (form.get('status') or 'pendente').lower().strip()
 
         data_venc_base = _parse_date(
@@ -11052,6 +11226,19 @@ def empresa_financeiro_lancar():
         )
 
         conta_id = form.get('conta_id', type=int)
+        
+        if (
+            status in ('pago', 'recebido')
+            and not conta_id
+        ):
+            flash(
+                'Selecione uma conta bancária.',
+                'warning'
+            )
+
+            return redirect(
+                url_for('empresa_financeiro_lancar')
+            )
 
         numero_documento = (
             form.get('numero_documento') or ''
@@ -11264,9 +11451,7 @@ def empresa_financeiro_lancar():
             )
 
             lst = [base] * partes
-
             diff = total_dec - sum(lst)
-
             if diff != Decimal('0.00'):
 
                 lst[-1] = _q2(
@@ -11280,9 +11465,7 @@ def empresa_financeiro_lancar():
         try:
 
             criados = 0
-
             grupo = str(uuid.uuid4())
-
             for item in apropriacoes:
 
                 parcelas = ratear(
@@ -11291,22 +11474,16 @@ def empresa_financeiro_lancar():
                 )
 
                 for parc in range(parcelas_qtd):
-
                     valor_parte = parcelas[parc]
-
                     data_venc_parc = (
                         data_venc_base +
                         relativedelta(months=parc)
                     )
 
                     titulo = FinanceiroEmpresa(
-
                         empresa_id=empresa_id,
-
                         data=data_tit,
-
                         tipo=tipo,
-
                         descricao=(
                             descricao
                             if parcelas_qtd == 1
@@ -11314,20 +11491,15 @@ def empresa_financeiro_lancar():
                         ),
 
                         valor=valor_parte,
-
                         status=status,
-
                         data_vencimento=data_venc_parc,
-
                         conta_id=(
                             conta.id
                             if conta else None
                         ),
 
                         plano_financeiro_id=item['plano_id'],
-
                         centro_custo_id=item['centro_id'],
-
                         credor_id=(
                             credor.id
                             if credor else None
@@ -11339,16 +11511,12 @@ def empresa_financeiro_lancar():
                         ),
 
                         aprovado=False,
-
                         numero_documento=numero_documento,
-
                         comprovante_arquivo=first_filename,
-
                         grupo_lancamento=grupo
                     )
 
                     db.session.add(titulo)
-
                     db.session.flush()
 
                     for sf in saved_files:
@@ -11366,11 +11534,8 @@ def empresa_financeiro_lancar():
 
                         db.session.add(
                             MovimentoCaixaBanco(
-
                                 conta_id=conta.id,
-
                                 data=data_venc_parc,
-
                                 tipo=(
                                     'saida'
                                     if tipo == 'despesa'
@@ -11383,15 +11548,38 @@ def empresa_financeiro_lancar():
                                 ),
 
                                 valor=valor_parte,
-
                                 origem='financeiro_empresa',
-
                                 referencia_id=titulo.id
                             )
                         )
 
                     criados += 1
+                    
+            # RECALCULA SALDO DA CONTA
+            if conta and status in ('pago', 'recebido'):
 
+                db.session.flush()
+
+                saldo = Decimal(
+                    str(conta.saldo_inicial or 0)
+                )
+
+                movimentos = MovimentoCaixaBanco.query.filter_by(
+                    conta_id=conta.id
+                ).all()
+
+                for mov in movimentos:
+
+                    valor = Decimal(
+                        str(mov.valor or 0)
+                    )
+
+                    if mov.tipo == 'entrada':
+                        saldo += valor
+                    else:
+                        saldo -= valor
+
+                conta.saldo_atual = saldo
             db.session.commit()
 
             flash(
@@ -11404,11 +11592,8 @@ def empresa_financeiro_lancar():
             )
 
         except Exception as e:
-
             db.session.rollback()
-
             print(e)
-
             flash(
                 'Erro ao salvar lançamento.',
                 'danger'
@@ -11580,6 +11765,22 @@ def empresa_financeiro_editar(lanc_id):
         'conta_id',
         type=int
     )
+    
+    if (
+        status in ('pago', 'recebido')
+        and not conta_id
+    ):
+        flash(
+            'Selecione uma conta bancária.',
+            'warning'
+        )
+
+        return redirect(
+            url_for(
+                'empresa_financeiro_editar',
+                lanc_id=lanc_id
+            )
+        )
 
     numero_documento = (
         form.get('numero_documento') or ''
@@ -11894,6 +12095,51 @@ def empresa_financeiro_editar(lanc_id):
                         )
                     )
                 criados += 1
+                
+        # RECALCULA SALDOS DAS CONTAS AFETADAS
+        db.session.flush()
+        contas_afetadas = set()
+
+        # conta nova
+        if conta:
+            contas_afetadas.add(conta.id)
+
+        # contas antigas dos movimentos removidos
+        for mov in movimentos_antigos:
+            if mov.conta_id:
+                contas_afetadas.add(mov.conta_id)
+
+        for conta_id_recalc in contas_afetadas:
+
+            conta_recalc = db.session.get(
+                CaixaBanco,
+                conta_id_recalc
+            )
+
+            if not conta_recalc:
+                continue
+
+            saldo = Decimal(
+                str(conta_recalc.saldo_inicial or 0)
+            )
+
+            movimentos = MovimentoCaixaBanco.query.filter_by(
+                conta_id=conta_id_recalc
+            ).all()
+
+            for mov in movimentos:
+
+                valor = Decimal(
+                    str(mov.valor or 0)
+                )
+
+                if mov.tipo == 'entrada':
+                    saldo += valor
+                else:
+                    saldo -= valor
+
+            conta_recalc.saldo_atual = saldo
+            
         db.session.commit()
         flash(
             'Lançamento atualizado com sucesso!',
@@ -12212,7 +12458,6 @@ def empresa_financeiro_listar():
     )
     
     # 7. ORDENAÇÃO CONSOLIDADA
-
     if sort == 'valor':
         if dir_ == 'asc':
             qry = qry.order_by(
@@ -12395,11 +12640,25 @@ def empresa_financeiro_atualizar_status_data(lanc_id):
 
     if novo_juros is None:
         novo_juros = Decimal('0.00')
-
+        
     conta_id = request.form.get(
         'conta_id',
         type=int
     )
+
+    if (
+        novo_status in ('pago', 'recebido')
+        and not conta_id
+    ):
+        flash(
+            'Selecione uma conta bancária.',
+            'warning'
+        )
+
+        return redirect(
+            request.form.get('next')
+            or url_for('empresa_financeiro_listar')
+        )
 
     # UPLOAD COMPROVANTE
     comp_file = request.files.get('comprovante_pgto')
@@ -12499,10 +12758,7 @@ def empresa_financeiro_atualizar_status_data(lanc_id):
                 url_for('empresa_financeiro_listar')
             )
 
-        # ====================================================
         # ATUALIZA TODOS DA MESMA PARCELA/APROPRIAÇÃO
-        # ====================================================
-
         for titulo_item in titulos_grupo:
 
             titulo_item.status = novo_status
@@ -12542,10 +12798,7 @@ def empresa_financeiro_atualizar_status_data(lanc_id):
                         )
                     )
 
-        # ====================================================
         # SINCRONIZA MOVIMENTOS
-        # ====================================================
-
         for titulo_item in titulos_grupo:
 
             mov_exist = MovimentoCaixaBanco.query.filter_by(
@@ -12615,6 +12868,47 @@ def empresa_financeiro_atualizar_status_data(lanc_id):
 
                 if mov_exist:
                     db.session.delete(mov_exist)
+                    
+        # RECALCULA SALDOS DAS CONTAS ENVOLVIDAS
+        contas_afetadas = set()
+
+        for titulo_item in titulos_grupo:
+
+            if titulo_item.conta_id:
+                contas_afetadas.add(
+                    titulo_item.conta_id
+                )
+
+        for conta_id in contas_afetadas:
+
+            conta = db.session.get(
+                CaixaBanco,
+                conta_id
+            )
+
+            if not conta:
+                continue
+
+            saldo = Decimal(
+                str(conta.saldo_inicial or 0)
+            )
+
+            movimentos = MovimentoCaixaBanco.query.filter_by(
+                conta_id=conta.id
+            ).all()
+
+            for mov in movimentos:
+
+                valor = Decimal(
+                    str(mov.valor or 0)
+                )
+
+                if mov.tipo == 'entrada':
+                    saldo += valor
+                else:
+                    saldo -= valor
+
+            conta.saldo_atual = saldo
 
         db.session.commit()
 

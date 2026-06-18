@@ -5,80 +5,271 @@
 {% endblock %}
 
 {% block content %}
+
+<style>
+.banco-card{
+    cursor:pointer;
+    transition:all .2s ease;
+}
+
+.banco-card:hover{
+    transform:translateY(-3px);
+    box-shadow:0 .5rem 1rem rgba(0,0,0,.15)!important;
+}
+</style>
+
 <div class="container mt-4">
-  <h2 class="mb-4">
-    Extrato de Movimentações – {{ usina.nome }}
-    <small class="text-muted">({{ "%02d"|format(mes) }}/{{ ano }})</small>
-  </h2>
 
-  {# Seleciona e ordena registros com data_pagamento #}
-  {% set pagos = extrato
-       | selectattr('data_pagamento')
-       | list
-       | sort(attribute='data_pagamento') %}
+    <h2 class="mb-4">
+        Extrato de Movimentações – {{ usina.nome }}
+        <small class="text-muted">
+            ({{ "%02d"|format(mes) }}/{{ ano }})
+        </small>
+    </h2>
 
-  <table class="table table-bordered table-striped">
-    <thead class="table-light">
-      <tr>
-        <th>Data Pagamento</th>
-        <th>Tipo</th>
-        <th>Descrição</th>
-        <th style="white-space: nowrap;">Crédito (R$)</th>
-        <th style="white-space: nowrap;">Débito (R$)</th>
-      </tr>
-    </thead>
-    <tbody>
-      {# Saldo inicial do mês anterior #}
-      {% if initial_saldo is defined and initial_saldo != 0 %}
-      <tr class="table-secondary">
-        <td colspan="4" class="text-end"><strong>Saldo anterior:</strong></td>
-        <td><strong>{{ initial_saldo | formato_brasileiro }}</strong></td>
-      </tr>
-      {% endif %}
-      {# Saldo inicial do mês, vindo da view #}
-      {% if initial_saldo is defined and initial_saldo != 0 %}
-      <tr class="table-secondary">
-        <td colspan="4" class="text-end"><strong>Saldo inicial:</strong></td>
-        <td><strong>{{ initial_saldo | formato_brasileiro }}</strong></td>
-      </tr>
-      {% endif %}
-      {% set prev_date = namespace(value=None) %}
-      {% for mov in pagos %}
-        {% set curr = mov.data_pagamento.strftime('%d/%m/%Y') %}
-        <tr>
-          <td>
-            {% if curr != prev_date.value %}
-              {{ curr }}
-              {% set prev_date.value = curr %}
-            {% endif %}
-          </td>
-          <td>{{ mov.tipo.title() }}</td>
-          <td>{{ mov.descricao }}</td>
-          <td style="white-space: nowrap;">
-            {% if mov.valor > 0 %}
-              {{ mov.valor | formato_brasileiro }}
-            {% endif %}
-          </td>
-          <td style="white-space: nowrap;">
-            {% if mov.valor < 0 %}
-              {{ mov.valor | formato_brasileiro }}
-            {% endif %}
-          </td>
-        </tr>
-        {# exibe saldo ao final de cada dia #}
-        {% set next = (pagos[loop.index].data_pagamento.strftime('%d/%m/%Y') if not loop.last else None) %}
-        {% if loop.last or curr != next %}
-        <tr class="table-secondary">
-          <td colspan="4" class="text-end"><strong>Saldo em {{ curr }}:</strong></td>
-          <td><strong>{{ mov.saldo | formato_brasileiro }}</strong></td>
-        </tr>
-        {% endif %}
-      {% endfor %}
-    </tbody>
-  </table>
+    {% if banco_filtro %}
+    <div class="alert alert-info d-flex justify-content-between align-items-center">
 
-  <a href="{{ url_for('relatorio_consolidado', mes=mes, ano=ano) }}" class="btn btn-secondary mt-3">
-    ← Voltar ao Consolidado
-  </a>
+        <div>
+            Exibindo apenas movimentações do banco:
+            <strong>{{ banco_filtro }}</strong>
+        </div>
+
+        <a href="{{ url_for(
+                'extrato_usina',
+                usina_id=usina.id,
+                mes=mes,
+                ano=ano
+            ) }}"
+           class="btn btn-sm btn-outline-secondary">
+            Limpar filtro
+        </a>
+
+    </div>
+    {% endif %}
+
+    <!-- RESUMO POR BANCO -->
+    <div class="row mb-4">
+
+        {% for banco, valor in totais_bancos.items() %}
+        <div class="col-md-3 mb-3">
+
+            <a href="{{ url_for(
+                    'extrato_usina',
+                    usina_id=usina.id,
+                    mes=mes,
+                    ano=ano,
+                    banco=banco
+                ) }}"
+               class="text-decoration-none">
+
+                <div class="card border-primary shadow-sm h-100 banco-card
+                    {% if banco_filtro == banco %}
+                        border-success border-3
+                    {% endif %}
+                ">
+
+                    <div class="card-body text-center">
+
+                        <h6 class="text-muted mb-2">
+                            {{ banco }}
+                        </h6>
+
+                        <h4 class="mb-0 text-dark">
+                            {{ valor | formato_brasileiro }}
+                        </h4>
+
+                    </div>
+
+                </div>
+
+            </a>
+
+        </div>
+        {% endfor %}
+
+        <div class="col-md-3 mb-3">
+
+            <a href="{{ url_for(
+                    'extrato_usina',
+                    usina_id=usina.id,
+                    mes=mes,
+                    ano=ano
+                ) }}"
+               class="text-decoration-none">
+
+                <div class="card bg-primary text-white shadow-sm h-100 banco-card">
+
+                    <div class="card-body text-center">
+
+                        <h6>Total Geral</h6>
+
+                        <h3 class="mb-0">
+                            {{ total_geral | formato_brasileiro }}
+                        </h3>
+
+                    </div>
+
+                </div>
+
+            </a>
+
+        </div>
+
+    </div>
+
+    {% set pagos = extrato
+        | selectattr('data_pagamento')
+        | list
+        | sort(attribute='data_pagamento') %}
+
+    <div class="card shadow-sm">
+
+        <div class="card-body">
+
+            <div class="table-responsive">
+
+                <table class="table table-bordered table-striped align-middle">
+
+                    <thead class="table-light">
+                        <tr>
+                            <th>Data Pagamento</th>
+                            <th>Tipo</th>
+                            <th>Banco</th>
+                            <th>Descrição</th>
+                            <th>Crédito (R$)</th>
+                            <th>Débito (R$)</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+
+                        {% if initial_saldo is defined and initial_saldo != 0 %}
+                        <tr class="table-secondary">
+
+                            <td colspan="5" class="text-end">
+                                <strong>Saldo Inicial:</strong>
+                            </td>
+
+                            <td>
+                                <strong>
+                                    {{ initial_saldo | formato_brasileiro }}
+                                </strong>
+                            </td>
+
+                        </tr>
+                        {% endif %}
+
+                        {% set prev_date = namespace(value=None) %}
+
+                        {% for mov in pagos %}
+
+                            {% set curr = mov.data_pagamento.strftime('%d/%m/%Y') %}
+
+                            <tr>
+
+                                <td>
+                                    {% if curr != prev_date.value %}
+                                        {{ curr }}
+                                        {% set prev_date.value = curr %}
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    {% if mov.tipo == 'receita' %}
+                                        <span class="badge bg-success">
+                                            Receita
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-danger">
+                                            Despesa
+                                        </span>
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    {{ mov.banco }}
+                                </td>
+
+                                <td>
+                                    {{ mov.descricao }}
+                                </td>
+
+                                <td>
+
+                                    {% if mov.valor > 0 %}
+                                        <span class="text-success fw-bold">
+                                            {{ mov.valor | formato_brasileiro }}
+                                        </span>
+                                    {% endif %}
+
+                                </td>
+
+                                <td>
+
+                                    {% if mov.valor < 0 %}
+                                        <span class="text-danger fw-bold">
+                                            {{ mov.valor | formato_brasileiro }}
+                                        </span>
+                                    {% endif %}
+
+                                </td>
+
+                            </tr>
+
+                            {% set next = (
+                                pagos[loop.index].data_pagamento.strftime('%d/%m/%Y')
+                                if not loop.last
+                                else None
+                            ) %}
+
+                            {% if loop.last or curr != next %}
+                            <tr class="table-secondary">
+
+                                <td colspan="5" class="text-end">
+
+                                    <strong>
+                                        Saldo em {{ curr }}:
+                                    </strong>
+
+                                </td>
+
+                                <td>
+
+                                    <strong>
+                                        {{ mov.saldo | formato_brasileiro }}
+                                    </strong>
+
+                                </td>
+
+                            </tr>
+                            {% endif %}
+
+                        {% else %}
+
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">
+                                    Nenhuma movimentação encontrada.
+                                </td>
+                            </tr>
+
+                        {% endfor %}
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <a href="{{ url_for('relatorio_consolidado', mes=mes, ano=ano) }}"
+       class="btn btn-secondary mt-3">
+        ← Voltar ao Consolidado
+    </a>
+
 </div>
+
 {% endblock %}

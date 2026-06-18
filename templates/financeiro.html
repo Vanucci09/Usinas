@@ -171,18 +171,49 @@
                                     {{ item.data_pagamento.strftime('%d/%m/%Y') }}
                                 </div>
                             {% else %}
-                                <form method="POST" action="{{ url_for('atualizar_pagamento', id=item.id) }}" class="row g-1">
+                                <form method="POST"
+                                    action="{{ url_for('atualizar_pagamento', id=item.id) }}"
+                                    class="row g-1">
+
                                     <div class="col-auto">
-                                        <input type="date" name="data_pagamento" class="form-control form-control-sm" required>
+                                        <input type="date"
+                                            name="data_pagamento"
+                                            class="form-control form-control-sm"
+                                            required>
                                     </div>
+
+                                    <div class="col-auto">
+                                        <select name="conta_id"
+                                                class="form-select form-select-sm"
+                                                required>
+                                            <option value="">Banco</option>
+
+                                            {% for conta in contas_bancos %}
+                                                <option value="{{ conta.id }}">
+                                                    {{ conta.nome }}
+                                                </option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+
                                     {% if item.tipo == 'receita' %}
                                     <div class="col-auto">
-                                        <input type="number" step="0.01" name="juros" class="form-control form-control-sm" placeholder="Juros" style="width: 80px;">
+                                        <input type="number"
+                                            step="0.01"
+                                            name="juros"
+                                            class="form-control form-control-sm"
+                                            placeholder="Juros"
+                                            style="width:80px;">
                                     </div>
                                     {% endif %}
+
                                     <div class="col-auto">
-                                        <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-save"></i></button>
+                                        <button type="submit"
+                                                class="btn btn-sm btn-success">
+                                            <i class="bi bi-save"></i>
+                                        </button>
                                     </div>
+
                                 </form>
                             {% endif %}
                         </td>
