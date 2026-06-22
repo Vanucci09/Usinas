@@ -122,14 +122,8 @@
 
     <nav class="flex-grow-1">
 
-    {% if current_user.perfil in ['comercial', 'gerente_comercial'] %}
-
-        <button class="nav-link-custom active" data-target="comercial">
-            <i class="bi bi-cart3"></i> Comercial
-        </button>
-
-    {% elif current_user.perfil == 'monitoramento' %}
-
+    {% if current_user.pode_cadastrar_geracao
+        or current_user.perfil in ['admin', 'monitoramento'] %}
         <button class="nav-link-custom active" data-target="geracao">
             <i class="bi bi-lightning-charge"></i> Geração
         </button>
@@ -137,46 +131,26 @@
         <button class="nav-link-custom" data-target="monitoramento">
             <i class="bi bi-activity"></i> Monitoramento
         </button>
+    {% endif %}
 
-        <button class="nav-link-custom" data-target="consorcios">
-            <i class="bi bi-people"></i> Consórcios
-        </button>
-
-    {% elif current_user.perfil == 'financeiro' %}
-
-        <button class="nav-link-custom active" data-target="financeiro_empresa">
-            <i class="bi bi-briefcase"></i> Finan. Empresa
-        </button>
-
-        <button class="nav-link-custom" data-target="financeiro_usinas">
-            <i class="bi bi-cash-stack"></i> Finan. Usinas
-        </button>
-
-        <button class="nav-link-custom" data-target="consorcios">
-            <i class="bi bi-people"></i> Consórcios
-        </button>
-
-        <button class="nav-link-custom" data-target="investidores">
-            <i class="bi bi-building-up"></i> Investidores
-        </button>
-
-    {% else %}
-
-        <button class="nav-link-custom active" data-target="geracao">
-            <i class="bi bi-lightning-charge"></i> Geração
-        </button>
-
-        <button class="nav-link-custom" data-target="monitoramento">
-            <i class="bi bi-activity"></i> Monitoramento
-        </button>
-
+    {% if current_user.perfil in ['comercial', 'gerente_comercial', 'admin']
+        or current_user.pode_acessar_comercial %}
         <button class="nav-link-custom" data-target="comercial">
             <i class="bi bi-cart3"></i> Comercial
         </button>
+    {% endif %}
 
-        <button class="nav-link-custom" data-target="consorcios">
-            <i class="bi bi-people"></i> Consórcios
-        </button>
+    {% if current_user.pode_cadastrar_fatura
+      or current_user.perfil in ['admin'] %}
+
+    <button class="nav-link-custom" data-target="consorcios">
+        <i class="bi bi-people"></i> Consórcios
+    </button>
+
+    {% endif %}
+
+    {% if current_user.perfil in ['financeiro', 'admin']
+        or current_user.pode_acessar_financeiro %}
 
         <button class="nav-link-custom" data-target="financeiro_empresa">
             <i class="bi bi-briefcase"></i> Finan. Empresa
@@ -186,13 +160,13 @@
             <i class="bi bi-cash-stack"></i> Finan. Usinas
         </button>
 
-    {% endif %}
-
-    {% if current_user.perfil == 'admin' %}
         <button class="nav-link-custom" data-target="investidores">
             <i class="bi bi-building-up"></i> Investidores
         </button>
 
+    {% endif %}
+
+    {% if current_user.perfil == 'admin' %}
         <button class="nav-link-custom" data-target="admin">
             <i class="bi bi-shield-lock"></i> Administração
         </button>
@@ -214,7 +188,8 @@
 <main class="main-content">
     
     <section id="geracao"
-    {% if current_user.perfil not in ['comercial', 'gerente_comercial'] %}
+    {% if current_user.pode_cadastrar_geracao
+        or current_user.perfil in ['admin', 'monitoramento'] %}
         class="active-section"
     {% endif %}>
         <h2 class="section-title">⚡ Geração</h2>
@@ -236,7 +211,8 @@
     </section>
 
     <section id="comercial"
-    {% if current_user.perfil in ['comercial', 'gerente_comercial'] %}
+    {% if current_user.perfil in ['comercial', 'gerente_comercial']
+        or current_user.pode_acessar_comercial %}
         class="active-section"
     {% endif %}>
     <h2 class="section-title">🛒 Comercial</h2>
@@ -326,6 +302,9 @@
     </div>
 </section>
 
+    {% if current_user.pode_cadastrar_fatura
+        or current_user.perfil == 'admin' %}
+
     <section id="consorcios">
         <h2 class="section-title">👥 Gestão de Consórcios</h2>
         <div class="row g-3">
@@ -337,6 +316,7 @@
             <div class="col-md-4 col-lg-3"><a href="{{ url_for('relatorio_cliente') }}" class="card-menu"><div class="icon-box"><i class="bi bi-file-earmark-bar-graph"></i></div><h5>Relatório</h5><p>Geral</p></a></div>
         </div>
     </section>
+    {% endif %}
 
     <section id="financeiro_empresa">
         <h2 class="section-title">💼 Financeiro da Empresa</h2>
@@ -364,7 +344,9 @@
     </section>
 
     {# Seções protegidas usando a nova validação de perfil 'admin' #}
-    {% if current_user.perfil in ['admin', 'financeiro'] %}
+    {% if current_user.perfil in ['admin', 'financeiro']
+        or current_user.pode_acessar_financeiro %}
+
     <section id="investidores">
         <h2 class="section-title">🏢 Investidores</h2>
         <div class="row g-3">
@@ -379,13 +361,26 @@
         </div>
     </section>
 
-    <section id="admin">
-        <h2 class="section-title">👤 Administração</h2>
-        <div class="row g-3">
-            <div class="col-md-4"><a href="{{ url_for('cadastrar_usuario') }}" class="card-menu"><div class="icon-box"><i class="bi bi-shield-lock"></i></div><h5>Gerenciar Usuários</h5><p>Acessos e permissões</p></a></div>
-        </div>
-    </section>
     {% endif %}
+
+{% if current_user.perfil == 'admin' %}
+
+<section id="admin">
+    <h2 class="section-title">👤 Administração</h2>
+    <div class="row g-3">
+        <div class="col-md-4">
+            <a href="{{ url_for('cadastrar_usuario') }}" class="card-menu">
+                <div class="icon-box">
+                    <i class="bi bi-shield-lock"></i>
+                </div>
+                <h5>Gerenciar Usuários</h5>
+                <p>Acessos e permissões</p>
+            </a>
+        </div>
+    </div>
+</section>
+
+{% endif %}
 
 </main>
 
@@ -415,30 +410,49 @@
     // Evento de clique manual nos links do menu
     document.querySelectorAll('.nav-link-custom').forEach(link => {
         link.addEventListener('click', function() {
-            switchSection(this.dataset.target);
+
+            const target = this.dataset.target;
+
+            localStorage.setItem(
+                'aba_dashboard',
+                target
+            );
+
+            switchSection(target);
         });
     });
 
     // Lógica ao carregar a página (Verifica parâmetro ?aba=)
-   document.addEventListener("DOMContentLoaded", function() {
+document.addEventListener("DOMContentLoaded", function() {
 
-    {% if current_user.perfil in ['comercial', 'gerente_comercial'] %}
+    // Recupera a última aba aberta
+    const abaSalva = localStorage.getItem('aba_dashboard');
+
+    if (
+        abaSalva &&
+        document.getElementById(abaSalva)
+    ) {
+        switchSection(abaSalva);
+        return;
+    }
+
+    {% if current_user.perfil in ['comercial', 'gerente_comercial']
+        or current_user.pode_acessar_comercial %}
         switchSection('comercial');
         return;
-    {% elif current_user.perfil == 'monitoramento' %}
-        switchSection('geracao');
-        return;
-    {% elif current_user.perfil == 'financeiro' %}
+    {% endif %}
+
+    {% if current_user.perfil == 'financeiro'
+        or current_user.pode_acessar_financeiro %}
         switchSection('financeiro_empresa');
         return;
     {% endif %}
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const abaAtiva = urlParams.get('aba');
+    {% if current_user.perfil == 'monitoramento' %}
+        switchSection('geracao');
+        return;
+    {% endif %}
 
-    if (abaAtiva === 'financeiro') {
-        switchSection('financeiro_usinas');
-    }
 });
 </script>
 

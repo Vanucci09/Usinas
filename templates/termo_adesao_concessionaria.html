@@ -98,18 +98,19 @@
                 display: none;
             }
 
-            .page {
-                margin: 0;
+             .page {
                 width: 100%;
-                min-height: 297mm;
-                page-break-after: always;
+                margin: 0;
                 box-shadow: none;
+                break-after: always;
             }
 
             .page:last-child {
-                page-break-after: auto;
+                break-after: auto;
             }
+
         }
+        
     </style>
 </head>
 
@@ -338,6 +339,8 @@
     CPF:
 </div>
 
+</div>
+
 <!-- PÁGINA 3 -->
 <div class="page">
 
@@ -437,33 +440,55 @@
     <div class="assinatura">
 
     {% if assinatura_url %}
-    <img
-        src="{{ assinatura_url }}"
-        style="
-            max-width: 250px;
-            max-height: 90px;
-            display: block;
-            margin: 0 auto 5px auto;
-        "
-    >
-{% endif %}
+        <img
+            src="{{ assinatura_url }}"
+            style="
+                max-width: 250px;
+                max-height: 90px;
+                display: block;
+                margin: 0 auto 5px auto;
+            "
+        >
+    {% endif %}
 
-<div class="linha"></div>
+    <div style="
+        width: 350px;
+        margin: 0 auto;
+        border-top: 1px solid #000;
+        padding-top: 5px;
+        font-size: 12px;
+        line-height: 1.5;
+    ">
 
-    <strong>
-        {{ conta.centro_custo.nome if conta.centro_custo else '-' }}
-    </strong>
-    <br>
+        <strong>
+            {{ conta.centro_custo.nome if conta.centro_custo else '-' }}
+        </strong>
 
-    {{ conta.centro_custo.representante_nome
-        if conta.centro_custo and conta.centro_custo.representante_nome
-        else 'Representante Legal' }}
+        <br>
 
-</div>
+        {{ conta.centro_custo.representante_nome
+            if conta.centro_custo
+            and conta.centro_custo.representante_nome
+            else 'Representante Legal' }}
 
-</div>
+        <br>
 
-{% if not conta.termo_assinado %}
+        {% if conta.termo_assinado_em %}
+            Assinado em
+            {{ conta.termo_assinado_em.strftime('%d/%m/%Y às %H:%M') }}
+        {% endif %}
+
+            <br>
+
+    IP: {{ conta.ip_assinatura }}
+
+    </div>
+
+</div> <!-- fecha assinatura -->
+
+</div> <!-- fecha página 4 -->
+
+{% if conta.termo_enviado and not conta.termo_assinado %}
 
 <form method="POST"
       action="{{ url_for(

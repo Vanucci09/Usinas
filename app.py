@@ -13224,7 +13224,10 @@ def cadastrar_centro_custo():
             
         vendedor_id = None
 
-        if current_user.perfil == 'comercial':
+        if (
+            current_user.pode_acessar_comercial
+            and current_user.perfil not in ['admin', 'gerente_comercial']
+        ):
 
             vendedor = Vendedor.query.filter_by(
                 usuario_id=current_user.id,
@@ -13377,7 +13380,10 @@ def listar_centros_custos():
         )
     )
 
-    if current_user.perfil == 'comercial':
+    if (
+        current_user.pode_acessar_comercial
+        and current_user.perfil not in ['admin', 'gerente_comercial']
+    ):
 
         vendedor = Vendedor.query.filter_by(
             usuario_id=current_user.id,
@@ -13388,6 +13394,8 @@ def listar_centros_custos():
             query = query.filter(
                 CentroCusto.vendedor_id == vendedor.id
             )
+        else:
+            query = query.filter(False)
 
     if empresa_id:
         query = query.filter(
@@ -13448,6 +13456,18 @@ def editar_centro_custo(cc_id):
         try:
             cc.empresa_id = int(empresa_id)
             cc.cliente_id = int(cliente_id)
+            if (
+                current_user.pode_acessar_comercial
+                and current_user.perfil not in ['admin', 'gerente_comercial']
+            ):
+
+                vendedor = Vendedor.query.filter_by(
+                    usuario_id=current_user.id,
+                    ativo=True
+                ).first()
+
+                if vendedor and not cc.vendedor_id:
+                    cc.vendedor_id = vendedor.id
         except:
             flash('Empresa ou Cliente inválidos.', 'danger')
             return redirect(url_for('editar_centro_custo', cc_id=cc.id))
@@ -14029,7 +14049,10 @@ def cadastrar_vendedor():
     )
 
     comerciais = Usuario.query.filter(
-        Usuario.perfil == 'comercial',
+        db.or_(
+            Usuario.perfil == 'comercial',
+            Usuario.pode_acessar_comercial == True
+        ),
         ~Usuario.id.in_(usuarios_vinculados)
     ).order_by(
         Usuario.nome
@@ -14187,7 +14210,10 @@ def editar_vendedor(vendedor_id):
     )
 
     comerciais = Usuario.query.filter(
-        Usuario.perfil == 'comercial',
+        db.or_(
+            Usuario.perfil == 'comercial',
+            Usuario.pode_acessar_comercial.is_(True)
+        ),
         ~Usuario.id.in_(usuarios_vinculados)
     ).order_by(
         Usuario.nome
@@ -17295,7 +17321,10 @@ def nova_conta_concessionaria():
         Vendedor.nome
     ).all()
 
-    if current_user.perfil == 'comercial':
+    if (
+        current_user.pode_acessar_comercial
+        and current_user.perfil not in ['admin', 'gerente_comercial']
+    ):
 
         vendedor_logado = Vendedor.query.filter_by(
             usuario_id=current_user.id,
@@ -17305,7 +17334,7 @@ def nova_conta_concessionaria():
         if vendedor_logado:
 
             centros = CentroCusto.query.filter(
-                CentroCusto.ativo == True,
+                CentroCusto.ativo.is_(True),
                 CentroCusto.vendedor_id == vendedor_logado.id
             ).order_by(
                 CentroCusto.nome
@@ -17326,7 +17355,10 @@ def nova_conta_concessionaria():
     # NOVO: identifica automaticamente o vendedor do usuário comercial
     vendedor_logado = None
 
-    if current_user.perfil == 'comercial':
+    if (
+        current_user.pode_acessar_comercial
+        and current_user.perfil not in ['admin', 'gerente_comercial']
+    ):
         vendedor_logado = Vendedor.query.filter_by(
             usuario_id=current_user.id,
             ativo=True
@@ -17502,7 +17534,10 @@ def listar_contas_concessionaria():
 
     query = ContaConcessionaria.query
 
-    if current_user.perfil == 'comercial':
+    if (
+        current_user.pode_acessar_comercial
+        and current_user.perfil not in ['admin', 'gerente_comercial']
+    ):
 
         vendedor = Vendedor.query.filter_by(
             usuario_id=current_user.id,

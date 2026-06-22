@@ -68,7 +68,9 @@
                         </div>
 
                         <div class="col-md-4">
-                            {% if current_user.perfil == 'comercial' and vendedor_logado %}
+                            {% if current_user.pode_acessar_comercial
+                                and current_user.perfil not in ['admin', 'gerente_comercial']
+                                and vendedor_logado %}
 
                             <input type="hidden"
                                 name="vendedor_id"
