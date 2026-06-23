@@ -121,10 +121,27 @@
                                         <input type="number" step="0.0001" name="desconto" class="form-control" value="{{ conta.desconto if conta else '' }}"
                                                {% if current_user.perfil == 'comercial' %} max="15" {% elif current_user.perfil == 'gerente_comercial' %} max="20" {% endif %}>
                                     </div>
-                                    {% if current_user.perfil == 'comercial' %}
-                                    <div class="form-text text-danger small">Desconto máximo permitido: 15%.</div>
+                                    {% if current_user.perfil == 'admin' %}
+
+                                    <div class="form-text text-success">
+                                        <i class="bi bi-shield-check"></i>
+                                        Administrador sem limite de desconto.
+                                    </div>
+
                                     {% elif current_user.perfil == 'gerente_comercial' %}
-                                    <div class="form-text text-danger small">Desconto máximo permitido: 20%.</div>
+
+                                    <div class="form-text text-warning">
+                                        <i class="bi bi-info-circle"></i>
+                                        Limite de desconto: <strong>20%</strong>.
+                                    </div>
+
+                                    {% else %}
+
+                                    <div class="form-text text-warning">
+                                        <i class="bi bi-info-circle"></i>
+                                        Limite de desconto: <strong>15%</strong>.
+                                    </div>
+
                                     {% endif %}
                                 </div>
                             </div>

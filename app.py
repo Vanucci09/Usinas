@@ -17367,59 +17367,36 @@ def nova_conta_concessionaria():
             usuario_id=current_user.id,
             ativo=True
         ).first()
-        
-    desconto = float(
-        request.form.get('desconto') or 0
-    )
-
-    limite_desconto = 15
-
-    if current_user.perfil == 'gerente_comercial':
-        limite_desconto = 20
-
-    if current_user.perfil in ['comercial', 'gerente_comercial'] and desconto > limite_desconto:
-        flash(
-            'Usuários comerciais podem informar no máximo 15% de desconto.',
-            'warning'
-        )
-
-        return render_template(
-            'contas_concessionaria_form.html',
-            empresas=empresas,
-            vendedores=vendedores,
-            centros=centros,
-            vendedor_logado=vendedor_logado
-        )
 
     if request.method == 'POST':
 
         try:
-
             desconto = float(
                 request.form.get('desconto') or 0
             )
 
-            limite_desconto = 15
+            # ADMIN = sem limite
+            if current_user.perfil != 'admin':
 
-            if current_user.perfil == 'gerente_comercial':
-                limite_desconto = 20
+                limite_desconto = 15
 
-            if (
-                current_user.perfil in ['comercial', 'gerente_comercial']
-                and desconto > limite_desconto
-            ):
-                flash(
-                    'Usuários comerciais podem informar no máximo 15% de desconto.',
-                    'warning'
-                )
+                if current_user.perfil == 'gerente_comercial':
+                    limite_desconto = 20
 
-                return render_template(
-                    'contas_concessionaria_form.html',
-                    empresas=empresas,
-                    vendedores=vendedores,
-                    centros=centros,
-                    vendedor_logado=vendedor_logado
-                )
+                if desconto > limite_desconto:
+
+                    flash(
+                        f'Desconto máximo permitido para seu perfil é {limite_desconto}%.',
+                        'warning'
+                    )
+
+                    return render_template(
+                        'contas_concessionaria_form.html',
+                        empresas=empresas,
+                        vendedores=vendedores,
+                        centros=centros,
+                        vendedor_logado=vendedor_logado
+                    )
 
             conta = ContaConcessionaria(
 
@@ -17799,11 +17776,15 @@ def editar_conta_concessionaria(conta_id):
         ).first()
 
         if not vendedor_logado:
+
             flash(
                 'Seu usuário comercial não está vinculado a nenhum vendedor.',
                 'danger'
             )
-            return redirect(url_for('index'))
+
+            return redirect(
+                url_for('index')
+            )
 
         centros = (
             CentroCusto.query
@@ -17811,7 +17792,9 @@ def editar_conta_concessionaria(conta_id):
                 CentroCusto.ativo == True,
                 CentroCusto.vendedor_id == vendedor_logado.id
             )
-            .order_by(CentroCusto.nome)
+            .order_by(
+                CentroCusto.nome
+            )
             .all()
         )
 
@@ -17819,25 +17802,14 @@ def editar_conta_concessionaria(conta_id):
 
         centros = (
             CentroCusto.query
-            .filter_by(ativo=True)
-            .order_by(CentroCusto.nome)
+            .filter_by(
+                ativo=True
+            )
+            .order_by(
+                CentroCusto.nome
+            )
             .all()
         )
-
-    vendedor_logado = None
-
-    if current_user.perfil == 'comercial':
-        vendedor_logado = Vendedor.query.filter_by(
-            usuario_id=current_user.id,
-            ativo=True
-        ).first()
-
-        if not vendedor_logado:
-            flash(
-                'Seu usuário comercial não está vinculado a nenhum vendedor.',
-                'danger'
-            )
-            return redirect(url_for('index'))
 
     if request.method == 'POST':
 
@@ -17847,30 +17819,29 @@ def editar_conta_concessionaria(conta_id):
                 request.form.get('desconto') or 0
             )
 
-            limite_desconto = None
+            # ADMIN = sem limite
+            if current_user.perfil != 'admin':
 
-            if current_user.perfil == 'comercial':
                 limite_desconto = 15
-            elif current_user.perfil == 'gerente_comercial':
-                limite_desconto = 20
 
-            if (
-                limite_desconto is not None
-                and desconto > limite_desconto
-            ):
-                flash(
-                    f'Usuários com este perfil podem informar no máximo {limite_desconto}% de desconto.',
-                    'warning'
-                )
+                if current_user.perfil == 'gerente_comercial':
+                    limite_desconto = 20
 
-                return render_template(
-                    'contas_concessionaria_form.html',
-                    conta=conta,
-                    empresas=empresas,
-                    vendedores=vendedores,
-                    centros=centros,
-                    vendedor_logado=vendedor_logado
-                )
+                if desconto > limite_desconto:
+
+                    flash(
+                        f'Desconto máximo permitido para seu perfil é {limite_desconto}%.',
+                        'warning'
+                    )
+
+                    return render_template(
+                        'contas_concessionaria_form.html',
+                        conta=conta,
+                        empresas=empresas,
+                        vendedores=vendedores,
+                        centros=centros,
+                        vendedor_logado=vendedor_logado
+                    )
 
             # Identificação
             conta.empresa_id = request.form.get(
@@ -17892,10 +17863,19 @@ def editar_conta_concessionaria(conta_id):
                 )
             )
 
-            # Dados Técnicos
-            conta.n_uc = request.form.get('n_uc')
-            conta.fase = request.form.get('fase') or None
-            conta.bandeira = request.form.get('bandeira') or None
+            # Dados principais
+            conta.n_uc = request.form.get(
+                'n_uc'
+            )
+
+            conta.fase = request.form.get(
+                'fase'
+            ) or None
+
+            conta.bandeira = request.form.get(
+                'bandeira'
+            ) or None
+
             conta.desconto = desconto
 
             conta.me_epp = (
@@ -17903,12 +17883,12 @@ def editar_conta_concessionaria(conta_id):
                 if request.form.get('me_epp')
                 else False
             )
-            
+
             conta.observacao = request.form.get(
                 'observacao'
             )
 
-            # Consumos
+            # Consumo dos últimos 12 meses
             for i in range(1, 13):
 
                 campo_mes = f'consumo_mes_{i}'
@@ -17926,7 +17906,7 @@ def editar_conta_concessionaria(conta_id):
                     else None
                 )
 
-            # Tarifas
+            # Tarifas e consumo
             conta.consumo_medio = request.form.get(
                 'consumo_medio',
                 type=float
