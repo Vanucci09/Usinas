@@ -44,6 +44,7 @@ import platform
 import cv2
 import pytesseract
 from PIL import Image
+from sqlalchemy import Integer
 
 
 app = Flask(__name__)
@@ -13185,7 +13186,6 @@ def cadastrar_centro_custo():
         empresa_id = request.form.get('empresa_id') or (empresa_unica.id if empresa_unica else None)
         cliente_id = request.form.get('cliente_id') or (cliente_unico.id if cliente_unico else None)
 
-        codigo = request.form.get('codigo')
         nome = request.form.get('nome')
         cpf_cnpj = request.form.get('cpf_cnpj')
         endereco = request.form.get('endereco')
@@ -13199,7 +13199,7 @@ def cadastrar_centro_custo():
         representante_email = request.form.get('representante_email')
 
         if not empresa_id or not cliente_id or not nome:
-            flash('Empresa, Cliente, Código e Nome são obrigatórios.', 'danger')
+            flash('Empresa, Cliente e Nome são obrigatórios.', 'danger')
             return redirect(url_for('cadastrar_centro_custo'))
 
         try:
@@ -13237,17 +13237,21 @@ def cadastrar_centro_custo():
             if vendedor:
                 vendedor_id = vendedor.id
 
-            print(
-                f"[CENTRO] Usuário={current_user.nome} "
-                f"Perfil={current_user.perfil} "
-                f"Vendedor={vendedor.id if vendedor else None}"
-            )
+        ultimo_codigo = db.session.execute(
+            db.text("""
+                SELECT MAX(codigo::integer)
+                FROM centros_custos
+                WHERE codigo ~ '^[0-9]+$'
+            """)
+        ).scalar()
+
+        codigo = str((ultimo_codigo or 9999) + 1)
 
         novo_centro = CentroCusto(
             empresa_id=empresa_id_int,
             cliente_id=cliente_id_int,
             vendedor_id=vendedor_id,
-            codigo=codigo.strip() if codigo else None,
+            codigo=codigo,
             nome=nome.strip(),
             cpf_cnpj=cpf_cnpj.strip() if cpf_cnpj else None,
             endereco=endereco.strip() if endereco else None,
@@ -18998,10 +19002,7 @@ def alocar_conta_concessionaria(conta_id):
 
         try:
 
-            # ---------------------------
             # PREVISÃO DO MÊS SEGUINTE
-            # ---------------------------
-
             hoje = date.today()
 
             if hoje.month == 12:
@@ -19035,10 +19036,7 @@ def alocar_conta_concessionaria(conta_id):
 
                 return redirect(request.url)
 
-            # ---------------------------
             # PERCENTUAL NECESSÁRIO
-            # ---------------------------
-
             fase = (conta.fase or '').strip().lower()
 
             if fase in ['trifásico', 'trifasico']:
@@ -19092,10 +19090,7 @@ def alocar_conta_concessionaria(conta_id):
                 math.ceil(percentual_necessario * 10) / 10
             )
 
-            # ---------------------------
             # REGRA TUSD FIO B
-            # ---------------------------
-
             if (
                 usina.tusd_fio_b
                 and percentual_necessario > 25
@@ -19110,10 +19105,7 @@ def alocar_conta_concessionaria(conta_id):
 
                 return redirect(request.url)
 
-            # ---------------------------
             # OCUPAÇÃO ATUAL DA USINA
-            # ---------------------------
-
             percentual_ocupado = (
                 db.session.query(
                     db.func.coalesce(
@@ -19153,10 +19145,7 @@ def alocar_conta_concessionaria(conta_id):
 
                 return redirect(request.url)
 
-            # ---------------------------
             # CLIENTE
-            # ---------------------------
-
             cliente = Cliente(
                 nome=centro.nome,
                 cpf_cnpj=centro.cpf_cnpj,

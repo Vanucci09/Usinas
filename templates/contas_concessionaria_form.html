@@ -50,56 +50,32 @@
                         <div class="col-md-4">
                             <label class="form-label fw-semibold">Cliente <span class="text-danger">*</span></label>
                             <select name="centro_custo_id" class="form-select" required>
-                            <option value="">Selecione...</option>
-
-                            {% for centro in centros %}
-                            <option value="{{ centro.id }}"
-                                {% if conta and conta.centro_custo_id == centro.id %}
-                                    selected
-                                {% endif %}>
-                                {% if centro.codigo %}
-                                    {{ centro.codigo }} - {{ centro.nome }}
-                                {% else %}
-                                    {{ centro.nome }}
-                                {% endif %}
-                            </option>
-                            {% endfor %}
-                        </select>
+                                <option value="">Selecione...</option>
+                                {% for centro in centros %}
+                                <option value="{{ centro.id }}" {% if conta and conta.centro_custo_id == centro.id %}selected{% endif %}>
+                                    {{ centro.codigo ~ ' - ' if centro.codigo else '' }}{{ centro.nome }}
+                                </option>
+                                {% endfor %}
+                            </select>
                         </div>
 
                         <div class="col-md-4">
-                            {% if current_user.pode_acessar_comercial
-                                and current_user.perfil not in ['admin', 'gerente_comercial']
-                                and vendedor_logado %}
-
-                            <input type="hidden"
-                                name="vendedor_id"
-                                value="{{ vendedor_logado.id }}">
-
+                            {% if current_user.pode_acessar_comercial and current_user.perfil not in ['admin', 'gerente_comercial'] and vendedor_logado %}
+                            <input type="hidden" name="vendedor_id" value="{{ vendedor_logado.id }}">
                             <div class="mb-3">
                                 <label class="form-label">Vendedor</label>
-                                <input type="text"
-                                    class="form-control"
-                                    value="{{ vendedor_logado.nome }}"
-                                    readonly>
+                                <input type="text" class="form-control" value="{{ vendedor_logado.nome }}" readonly>
                             </div>
-
                             {% else %}
-
                             <label class="form-label">Vendedor</label>
                             <select name="vendedor_id" class="form-select">
-                            <option value="">Selecione...</option>
-
-                            {% for vendedor in vendedores %}
-                            <option value="{{ vendedor.id }}"
-                                {% if conta and conta.vendedor_id == vendedor.id %}
-                                    selected
-                                {% endif %}>
-                                {{ vendedor.nome }}
-                            </option>
-                            {% endfor %}
-                        </select>
-
+                                <option value="">Selecione...</option>
+                                {% for vendedor in vendedores %}
+                                <option value="{{ vendedor.id }}" {% if conta and conta.vendedor_id == vendedor.id %}selected{% endif %}>
+                                    {{ vendedor.nome }}
+                                </option>
+                                {% endfor %}
+                            </select>
                             {% endif %}
                         </div>
                     </div>
@@ -109,78 +85,64 @@
                     <h5 class="section-title text-primary mb-3">
                         <i class="bi bi-gear me-2"></i>Dados Técnicos
                     </h5>
+                    
                     <div class="row g-3">
-                        <div class="col-md-3">
-                            <label class="form-label fw-semibold">Nº UC <span class="text-danger">*</span></label>
-                            <input type="text" name="n_uc" class="form-control" value="{{ conta.n_uc if conta else '' }}" required>
-                        </div>
-
-                        <div class="col-md-3">
-                            <label class="form-label fw-semibold">Tipo de Fase</label>
-                            <select name="fase" class="form-select">
-                                <option value="">Selecione...</option>
-                                <option value="Monofásico" {% if conta and conta.fase == 'Monofásico' %}selected{% endif %}>Monofásico</option>
-                                <option value="Bifásico" {% if conta and conta.fase == 'Bifásico' %}selected{% endif %}>Bifásico</option>
-                                <option value="Trifásico" {% if conta and conta.fase == 'Trifásico' %}selected{% endif %}>Trifásico</option>
-                            </select>
-                        </div>
-
-                        <div class="col-md-3">
-                            <label class="form-label fw-semibold">Bandeira</label>
-                            <select name="bandeira" class="form-select">
-                                <option value="">Selecione...</option>
-                                <option value="Verde" {% if conta and conta.bandeira == 'Verde' %}selected{% endif %}>Verde</option>
-                                <option value="Amarela" {% if conta and conta.bandeira == 'Amarela' %}selected{% endif %}>Amarela</option>
-                                <option value="Vermelha_1" {% if conta and conta.bandeira == 'Vermelha_1' %}selected{% endif %}>Vermelha 1</option>
-                                <option value="Vermelha_2" {% if conta and conta.bandeira == 'Vermelha_2' %}selected{% endif %}>Vermelha 2</option>
-                            </select>
-                        </div>
-
-                        <div class="col-md-3">
-                            <label class="form-label fw-semibold">Desconto (%)</label>
-                            <div class="input-group">
-                                <input type="number"
-                                        step="0.0001"
-                                        name="desconto"
-                                        class="form-control"
-                                        value="{{ conta.desconto if conta else '' }}"
-                                        {% if current_user.perfil == 'comercial' %}
-                                        max="15"
-                                        {% elif current_user.perfil == 'gerente_comercial' %}
-                                        max="20"
-                                        {% endif %}
-                                {% if current_user.perfil == 'comercial' %}
-                                <div class="form-text text-danger">
-                                    Desconto máximo permitido para perfil comercial: 15%.
+                        <div class="col-md-9">
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label class="form-label fw-semibold">Nº UC <span class="text-danger">*</span></label>
+                                    <input type="text" name="n_uc" class="form-control" value="{{ conta.n_uc if conta else '' }}" required>
                                 </div>
-                                {% elif current_user.perfil == 'gerente_comercial' %}
-                                <div class="form-text text-danger">
-                                    Desconto máximo permitido para gerente comercial: 20%.
+
+                                <div class="col-md-4">
+                                    <label class="form-label fw-semibold">Tipo de Fase</label>
+                                    <select name="fase" class="form-select">
+                                        <option value="">Selecione...</option>
+                                        <option value="Monofásico" {% if conta and conta.fase == 'Monofásico' %}selected{% endif %}>Monofásico</option>
+                                        <option value="Bifásico" {% if conta and conta.fase == 'Bifásico' %}selected{% endif %}>Bifásico</option>
+                                        <option value="Trifásico" {% if conta and conta.fase == 'Trifásico' %}selected{% endif %}>Trifásico</option>
+                                    </select>
                                 </div>
-                                {% endif %}
+
+                                <div class="col-md-4">
+                                    <label class="form-label fw-semibold">Bandeira</label>
+                                    <select name="bandeira" class="form-select">
+                                        <option value="">Selecione...</option>
+                                        <option value="Verde" {% if conta and conta.bandeira == 'Verde' %}selected{% endif %}>Verde</option>
+                                        <option value="Amarela" {% if conta and conta.bandeira == 'Amarela' %}selected{% endif %}>Amarela</option>
+                                        <option value="Vermelha_1" {% if conta and conta.bandeira == 'Vermelha_1' %}selected{% endif %}>Vermelha 1</option>
+                                        <option value="Vermelha_2" {% if conta and conta.bandeira == 'Vermelha_2' %}selected{% endif %}>Vermelha 2</option>
+                                    </select>
+                                </div>
+
+                                <div class="col-md-4">
+                                    <label class="form-label fw-semibold">Desconto (%)</label>
+                                    <div class="input-group">
+                                        <input type="number" step="0.0001" name="desconto" class="form-control" value="{{ conta.desconto if conta else '' }}"
+                                               {% if current_user.perfil == 'comercial' %} max="15" {% elif current_user.perfil == 'gerente_comercial' %} max="20" {% endif %}>
+                                    </div>
+                                    {% if current_user.perfil == 'comercial' %}
+                                    <div class="form-text text-danger small">Desconto máximo permitido: 15%.</div>
+                                    {% elif current_user.perfil == 'gerente_comercial' %}
+                                    <div class="form-text text-danger small">Desconto máximo permitido: 20%.</div>
+                                    {% endif %}
+                                </div>
                             </div>
                         </div>
 
-                        
-                        <div class="col-12">
-                            <div class="form-check form-switch card-switch p-3 border rounded">
+                        <div class="col-md-3 d-flex flex-column gap-3">
+                            <div class="form-check form-switch card-switch p-3 border rounded mb-0">
                                 <input class="form-check-input ms-0 me-2" type="checkbox" name="me_epp" id="me_epp" {% if conta and conta.me_epp %}checked{% endif %}>
                                 <label class="form-check-label fw-semibold" for="me_epp">
                                     Cliente enquadrado como ME/EPP
                                 </label>
                             </div>
+
+                            <div class="d-flex flex-column flex-grow-1">
+                                <label class="form-label fw-semibold">Observação</label>
+                                <textarea name="observacao" class="form-control flex-grow-1" style="min-height: 84px; resize: vertical;">{{ conta.observacao if conta else '' }}</textarea>
+                            </div>
                         </div>
-
-                        <div class="mt-3 p-3 bg-light rounded border">
-    <label class="form-label fw-semibold">
-        Observação
-    </label>
-
-    <textarea
-        name="observacao"
-        class="form-control"
-        rows="3">{{ conta.observacao if conta else '' }}</textarea>
-</div>
                     </div>
                 </div>
 
@@ -188,10 +150,27 @@
                     <h5 class="section-title text-primary mb-3">
                         <i class="bi bi-bar-chart-line me-2"></i>Histórico de Consumo (Últimos 12 Meses)
                     </h5>
-                    <div class="bg-light p-3 rounded mb-3">
-                        <p class="small text-muted mb-0">
-                            <i class="bi bi-info-circle me-1"></i> Preencha os meses disponíveis. Valores discrepantes (muito acima ou muito abaixo da média) serão destacados em <span class="text-danger fw-bold">vermelho</span> e desconsiderados automaticamente do cálculo da média.
-                        </p>
+                    <div class="alert alert-light border small mb-3">
+                        <i class="bi bi-info-circle me-1"></i>
+
+                        Valores discrepantes (muito acima ou muito abaixo da média)
+                        serão destacados em vermelho.
+
+                        <div class="form-check mt-2">
+                            <input
+                                class="form-check-input"
+                                type="checkbox"
+                                id="ignorar_discrepantes"
+                                checked
+                            >
+
+                            <label
+                                class="form-check-label"
+                                for="ignorar_discrepantes"
+                            >
+                                Desconsiderar valores discrepantes no cálculo da média
+                            </label>
+                        </div>
                     </div>
                     
                     <div class="row g-2">
@@ -276,52 +255,16 @@
 </div>
 
 <style>
-    .card {
-        border-radius: 16px;
-    }
-    .backend-back-btn {
-        width: 38px;
-        height: 38px;
-        transition: all 0.2s ease;
-    }
-    .backend-back-btn:hover {
-        background-color: #6c757d;
-        color: white;
-        transform: scale(1.05);
-    }
-    .section-title {
-        font-size: 1.1rem;
-        font-weight: 700;
-        letter-spacing: 0.5px;
-        text-transform: uppercase;
-        border-bottom: 2px solid #f0f0f0;
-        padding-bottom: 6px;
-    }
-    .form-control, .form-select, .input-group-text {
-        border-radius: 8px;
-        min-height: 42px;
-    }
-    .form-control:focus, .form-select:focus {
-        border-color: #0d6efd;
-        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
-    }
-    .month-input-box {
-        transition: all 0.2s ease;
-    }
-    .month-input-box:focus-within {
-        border-color: #0d6efd !important;
-        box-shadow: 0 2px 6px rgba(13, 110, 253, 0.1);
-    }
-    .card-switch {
-        background-color: #f8f9fa;
-    }
-    /* Estilo para inputs identificados como Outliers */
-    .outlier-input {
-        background-color: #fff5f5 !important;
-        border-color: #dc3545 !important;
-        color: #dc3545 !important;
-        font-weight: bold;
-    }
+    .card { border-radius: 16px; }
+    .backend-back-btn { width: 38px; height: 38px; transition: all 0.2s ease; }
+    .backend-back-btn:hover { background-color: #6c757d; color: white; transform: scale(1.05); }
+    .section-title { font-size: 1.1rem; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; border-bottom: 2px solid #f0f0f0; padding-bottom: 6px; }
+    .form-control, .form-select, .input-group-text { border-radius: 8px; min-height: 42px; }
+    .form-control:focus, .form-select:focus { border-color: #0d6efd; box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15); }
+    .month-input-box { transition: all 0.2s ease; }
+    .month-input-box:focus-within { border-color: #0d6efd !important; box-shadow: 0 2px 6px rgba(13, 110, 253, 0.1); }
+    .card-switch { background-color: #f8f9fa; }
+    .outlier-input { background-color: #fff5f5 !important; border-color: #dc3545 !important; color: #dc3545 !important; font-weight: bold; }
 </style>
 
 <script>
@@ -330,74 +273,129 @@ document.addEventListener('DOMContentLoaded', function() {
     const inputMedia = document.getElementById('consumo_medio');
 
     function calcularMediaInteligente() {
+
+        const ignorarDiscrepantes =
+            document.getElementById('ignorar_discrepantes').checked;
+
         let valores = [];
-        
-        // 1. Coleta apenas os campos válidos e maiores que zero
+
         inputsConsumo.forEach(input => {
-            input.classList.remove('outlier-input'); // Reseta a cor antes de reavaliar
+
+            input.classList.remove('outlier-input');
+
             let val = parseFloat(input.value);
+
             if (!isNaN(val) && val > 0) {
-                valores.push({ element: input, value: val });
+                valores.push({
+                    element: input,
+                    value: val
+                });
             }
         });
 
         const n = valores.length;
 
-        // Se não houver meses preenchidos
         if (n === 0) {
             inputMedia.value = '';
             return;
         }
 
-        // Se houver menos de 4 meses, faz a média simples (amostragem muito pequena para filtrar)
         if (n < 4) {
-            let somaSimples = valores.reduce((acc, curr) => acc + curr.value, 0);
-            inputMedia.value = (somaSimples / n).toFixed(2);
+
+            let somaSimples = valores.reduce(
+                (acc, curr) => acc + curr.value,
+                0
+            );
+
+            inputMedia.value = (
+                somaSimples / n
+            ).toFixed(2);
+
             return;
         }
 
-        // 2. Calcula a média inicial
-        let somaInicial = valores.reduce((acc, curr) => acc + curr.value, 0);
+        let somaInicial = valores.reduce(
+            (acc, curr) => acc + curr.value,
+            0
+        );
+
         let mediaInicial = somaInicial / n;
 
-        // 3. Calcula o Desvio Padrão
-        let somaVariancia = valores.reduce((acc, curr) => acc + Math.pow(curr.value - mediaInicial, 2), 0);
-        let desvioPadrao = Math.sqrt(somaVariancia / n);
+        let somaVariancia = valores.reduce(
+            (acc, curr) =>
+                acc + Math.pow(
+                    curr.value - mediaInicial,
+                    2
+                ),
+            0
+        );
+
+        let desvioPadrao = Math.sqrt(
+            somaVariancia / n
+        );
 
         if (desvioPadrao === 0) {
-            inputMedia.value = mediaInicial.toFixed(2);
+
+            inputMedia.value =
+                mediaInicial.toFixed(2);
+
             return;
         }
 
-        // 4. Filtra Outliers usando uma tolerância estatística calibrada (2.0)
         let valoresFiltrados = [];
+
         valores.forEach(item => {
-            let zScore = Math.abs(item.value - mediaInicial) / desvioPadrao;
-            
-            // Se o valor estiver muito distante da realidade dos outros meses, isola
-            if (zScore > 1.8) { 
-                item.element.classList.add('outlier-input');
+
+            let zScore = Math.abs(
+                item.value - mediaInicial
+            ) / desvioPadrao;
+
+            if (zScore > 1.8) {
+
+                item.element.classList.add(
+                    'outlier-input'
+                );
+
             } else {
-                valoresFiltrados.push(item.value);
+
+                valoresFiltrados.push(
+                    item.value
+                );
             }
         });
 
-        // 5. Calcula a Média Final com os meses válidos
-        if (valoresFiltrados.length > 0) {
-            let somatorioFinal = valoresFiltrados.reduce((acc, curr) => acc + curr, 0);
-            let mediaFinal = somatorioFinal / valoresFiltrados.length;
-            inputMedia.value = mediaFinal.toFixed(2);
+        let valoresCalculo;
+
+        if (ignorarDiscrepantes) {
+
+            valoresCalculo =
+                valoresFiltrados.length > 0
+                    ? valoresFiltrados
+                    : valores.map(v => v.value);
+
         } else {
-            inputMedia.value = mediaInicial.toFixed(2);
+
+            valoresCalculo =
+                valores.map(v => v.value);
         }
+
+        let mediaFinal = valoresCalculo.reduce(
+            (acc, curr) => acc + curr,
+            0
+        ) / valoresCalculo.length;
+
+        inputMedia.value =
+            mediaFinal.toFixed(2);
     }
+    
+document
+    .getElementById('ignorar_discrepantes')
+    .addEventListener(
+        'change',
+        calcularMediaInteligente
+    );
 
-    // Monitora a digitação em tempo real
-    inputsConsumo.forEach(input => {
-        input.addEventListener('input', calcularMediaInteligente);
-    });
-
-    // Executa ao carregar a página (caso já venha preenchido do banco)
+    inputsConsumo.forEach(input => { input.addEventListener('input', calcularMediaInteligente); });
     calcularMediaInteligente();
 });
 </script>
