@@ -43,7 +43,7 @@
                     Total
                 </span>
                 <strong class="fs-5 text-dark">
-                    {{ contas|length }}
+                    {{ total }}
                 </strong>
             </div>
         </div>
@@ -60,7 +60,7 @@
                     Aceitas
                 </span>
                 <strong class="fs-5 text-dark">
-                    {{ contas|selectattr('validacao_cliente')|list|length }}
+                    {{ aceitas }}
                 </strong>
             </div>
         </div>
@@ -77,11 +77,7 @@
                     Cliente Aprovar
                 </span>
                 <strong class="fs-5 text-dark">
-                    {{ contas
-                        | selectattr('email_enviado')
-                        | rejectattr('validacao_cliente')
-                        | list
-                        | length }}
+                    {{ cliente_aprovar }}
                 </strong>
             </div>
         </div>
@@ -98,11 +94,7 @@
                     Documentação
                 </span>
                 <strong class="fs-5 text-dark">
-                    {{ contas
-                        | selectattr('validacao_cliente')
-                        | rejectattr('documentacao_enviada')
-                        | list
-                        | length }}
+                    {{ documentacao }}
                 </strong>
             </div>
         </div>
@@ -119,11 +111,7 @@
                     Assinatura
                 </span>
                 <strong class="fs-5 text-dark">
-                    {{ contas
-                        | selectattr('termo_enviado')
-                        | rejectattr('termo_assinado')
-                        | list
-                        | length }}
+                    {{ assinatura }}
                 </strong>
             </div>
         </div>
@@ -137,18 +125,102 @@
             </div>
             <div>
                 <span class="d-block text-muted small">
-                    Proposta Enviada
+                    Prop. Enviada
                 </span>
                 <strong class="fs-5 text-dark">
-                    {{ contas
-                        | selectattr('email_enviado')
-                        | list
-                        | length }}
+                    {{ proposta_enviada }}
                 </strong>
             </div>
         </div>
     </div>
+    </div> <!-- fecha row dos cards -->
 
+    <div class="card shadow-sm border-0 mb-3">
+    <div class="card-body">
+
+        <form method="GET" class="row g-3">
+
+            {% if current_user.perfil in ['admin', 'gerente_comercial'] %}
+            <div class="col-md-4">
+                <label class="form-label">
+                    Vendedor
+                </label>
+
+                <select
+                    name="vendedor_id"
+                    class="form-select">
+
+                    <option value="">
+                        Todos
+                    </option>
+
+                    {% for vendedor in vendedores %}
+                    <option
+                        value="{{ vendedor.id }}"
+                        {% if vendedor_id == vendedor.id %}selected{% endif %}>
+                        {{ vendedor.nome }}
+                    </option>
+                    {% endfor %}
+
+                </select>
+            </div>
+            {% endif %}
+
+            <div class="col-md-4">
+                <label class="form-label">
+                    Status
+                </label>
+
+                <select
+                    name="status"
+                    class="form-select">
+
+                    <option value="">Todos</option>
+
+                    <option value="analise"
+                        {% if status == 'analise' %}selected{% endif %}>
+                        Em Análise
+                    </option>
+
+                    <option value="proposta_enviada"
+                        {% if status == 'proposta_enviada' %}selected{% endif %}>
+                        Proposta Enviada
+                    </option>
+
+                    <option value="aprovado"
+                        {% if status == 'aprovado' %}selected{% endif %}>
+                        Cliente Aprovou
+                    </option>
+
+                    <option value="documentacao"
+                        {% if status == 'documentacao' %}selected{% endif %}>
+                        Aguardando Documentação
+                    </option>
+
+                    <option value="assinatura"
+                        {% if status == 'assinatura' %}selected{% endif %}>
+                        Aguardando Assinatura
+                    </option>
+
+                    <option value="assinado"
+                        {% if status == 'assinado' %}selected{% endif %}>
+                        Termo Assinado
+                    </option>
+
+                </select>
+            </div>
+
+            <div class="col-md-2 d-flex align-items-end">
+                <button
+                    type="submit"
+                    class="btn btn-primary w-100">
+                    Filtrar
+                </button>
+            </div>
+
+        </form>
+
+    </div>
 </div>
 
     <div class="card shadow-sm border-0 grid-card-modern">
@@ -170,7 +242,9 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for conta in contas %}
+                    {% if contas.items %}
+
+                    {% for conta in contas.items %}
                     <tr>
                         <td class="ps-4 font-monospace text-muted small">
                             #{{ conta.id }}
@@ -425,19 +499,64 @@
                         </div>
                     </div>
                     {% endif %}
+                    {% endfor %}
                     {% else %}
                     <tr>
                         <td colspan="9" class="text-center py-5 text-muted bg-white">
                             <i class="bi bi-folder-x display-5 d-block mb-3 text-secondary opacity-50"></i>
-                            <p class="mb-0 fw-medium">Nenhuma conta registrada até o momento.</p>
+                            <p class="mb-0 fw-medium">Nenhuma conta encontrada.</p>
                             <small class="text-muted">Utilize os botões superiores para iniciar um cadastro.</small>
                         </td>
                     </tr>
-                    {% endfor %}
+
+                    {% endif %}
                 </tbody>
             </table>
         </div>
     </div>
+    <nav class="mt-4">
+    <ul class="pagination justify-content-center">
+
+        {% if contas.has_prev %}
+        <li class="page-item">
+            <a class="page-link"
+               href="{{ url_for('listar_contas_concessionaria',
+                                page=contas.prev_num,
+                                vendedor_id=vendedor_id,
+                                status=status) }}">
+                Anterior
+            </a>
+        </li>
+        {% endif %}
+
+        {% for page_num in contas.iter_pages() %}
+            {% if page_num %}
+                <li class="page-item {% if page_num == contas.page %}active{% endif %}">
+                    <a class="page-link"
+                       href="{{ url_for('listar_contas_concessionaria',
+                                        page=page_num,
+                                        vendedor_id=vendedor_id,
+                                        status=status) }}">
+                        {{ page_num }}
+                    </a>
+                </li>
+            {% endif %}
+        {% endfor %}
+
+        {% if contas.has_next %}
+        <li class="page-item">
+            <a class="page-link"
+               href="{{ url_for('listar_contas_concessionaria',
+                                page=contas.next_num,
+                                vendedor_id=vendedor_id,
+                                status=status) }}">
+                Próxima
+            </a>
+        </li>
+        {% endif %}
+
+    </ul>
+</nav>
 </div>
 
 <script>

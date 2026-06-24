@@ -85,82 +85,133 @@
                     <h5 class="section-title text-primary mb-3">
                         <i class="bi bi-gear me-2"></i>Dados Técnicos
                     </h5>
-                    
+
+                    <!-- Linha 1 -->
                     <div class="row g-3">
-                        <div class="col-md-9">
-                            <div class="row g-3">
-                                <div class="col-md-4">
-                                    <label class="form-label fw-semibold">Nº UC <span class="text-danger">*</span></label>
-                                    <input type="text" name="n_uc" class="form-control" value="{{ conta.n_uc if conta else '' }}" required>
-                                </div>
 
-                                <div class="col-md-4">
-                                    <label class="form-label fw-semibold">Tipo de Fase</label>
-                                    <select name="fase" class="form-select">
-                                        <option value="">Selecione...</option>
-                                        <option value="Monofásico" {% if conta and conta.fase == 'Monofásico' %}selected{% endif %}>Monofásico</option>
-                                        <option value="Bifásico" {% if conta and conta.fase == 'Bifásico' %}selected{% endif %}>Bifásico</option>
-                                        <option value="Trifásico" {% if conta and conta.fase == 'Trifásico' %}selected{% endif %}>Trifásico</option>
-                                    </select>
-                                </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">
+                                Nº UC <span class="text-danger">*</span>
+                            </label>
 
-                                <div class="col-md-4">
-                                    <label class="form-label fw-semibold">Bandeira</label>
-                                    <select name="bandeira" class="form-select">
-                                        <option value="">Selecione...</option>
-                                        <option value="Verde" {% if conta and conta.bandeira == 'Verde' %}selected{% endif %}>Verde</option>
-                                        <option value="Amarela" {% if conta and conta.bandeira == 'Amarela' %}selected{% endif %}>Amarela</option>
-                                        <option value="Vermelha_1" {% if conta and conta.bandeira == 'Vermelha_1' %}selected{% endif %}>Vermelha 1</option>
-                                        <option value="Vermelha_2" {% if conta and conta.bandeira == 'Vermelha_2' %}selected{% endif %}>Vermelha 2</option>
-                                    </select>
-                                </div>
-
-                                <div class="col-md-4">
-                                    <label class="form-label fw-semibold">Desconto (%)</label>
-                                    <div class="input-group">
-                                        <input type="number" step="0.0001" name="desconto" class="form-control" value="{{ conta.desconto if conta else '' }}"
-                                               {% if current_user.perfil == 'comercial' %} max="15" {% elif current_user.perfil == 'gerente_comercial' %} max="20" {% endif %}>
-                                    </div>
-                                    {% if current_user.perfil == 'admin' %}
-
-                                    <div class="form-text text-success">
-                                        <i class="bi bi-shield-check"></i>
-                                        Administrador sem limite de desconto.
-                                    </div>
-
-                                    {% elif current_user.perfil == 'gerente_comercial' %}
-
-                                    <div class="form-text text-warning">
-                                        <i class="bi bi-info-circle"></i>
-                                        Limite de desconto: <strong>20%</strong>.
-                                    </div>
-
-                                    {% else %}
-
-                                    <div class="form-text text-warning">
-                                        <i class="bi bi-info-circle"></i>
-                                        Limite de desconto: <strong>15%</strong>.
-                                    </div>
-
-                                    {% endif %}
-                                </div>
-                            </div>
+                            <input
+                                type="text"
+                                name="n_uc"
+                                class="form-control"
+                                value="{{ conta.n_uc if conta else '' }}"
+                                required
+                            >
                         </div>
 
-                        <div class="col-md-3 d-flex flex-column gap-3">
-                            <div class="form-check form-switch card-switch p-3 border rounded mb-0">
-                                <input class="form-check-input ms-0 me-2" type="checkbox" name="me_epp" id="me_epp" {% if conta and conta.me_epp %}checked{% endif %}>
-                                <label class="form-check-label fw-semibold" for="me_epp">
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">
+                                Tipo de Fase
+                            </label>
+
+                            <select name="fase" class="form-select">
+                                <option value="">Selecione...</option>
+                                <option value="Monofásico" {% if conta and conta.fase == 'Monofásico' %}selected{% endif %}>Monofásico</option>
+                                <option value="Bifásico" {% if conta and conta.fase == 'Bifásico' %}selected{% endif %}>Bifásico</option>
+                                <option value="Trifásico" {% if conta and conta.fase == 'Trifásico' %}selected{% endif %}>Trifásico</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">
+                                Bandeira
+                            </label>
+
+                            <select name="bandeira" class="form-select">
+                                <option value="">Selecione...</option>
+                                <option value="Verde" {% if conta and conta.bandeira == 'Verde' %}selected{% endif %}>Verde</option>
+                                <option value="Amarela" {% if conta and conta.bandeira == 'Amarela' %}selected{% endif %}>Amarela</option>
+                                <option value="Vermelha_1" {% if conta and conta.bandeira == 'Vermelha_1' %}selected{% endif %}>Vermelha 1</option>
+                                <option value="Vermelha_2" {% if conta and conta.bandeira == 'Vermelha_2' %}selected{% endif %}>Vermelha 2</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-3">
+                            <div class="form-check form-switch card-switch p-3 border rounded h-100">
+                                <input
+                                    class="form-check-input ms-0 me-2"
+                                    type="checkbox"
+                                    name="me_epp"
+                                    id="me_epp"
+                                    {% if conta and conta.me_epp %}checked{% endif %}
+                                >
+
+                                <label
+                                    class="form-check-label fw-semibold"
+                                    for="me_epp"
+                                >
                                     Cliente enquadrado como ME/EPP
                                 </label>
                             </div>
-
-                            <div class="d-flex flex-column flex-grow-1">
-                                <label class="form-label fw-semibold">Observação</label>
-                                <textarea name="observacao" class="form-control flex-grow-1" style="min-height: 84px; resize: vertical;">{{ conta.observacao if conta else '' }}</textarea>
-                            </div>
                         </div>
+
                     </div>
+
+                    <!-- Linha 2 -->
+                    <div class="row g-3 mt-2">
+
+                        <div class="col-md-3">
+
+                            <label class="form-label fw-semibold">
+                                Desconto (%)
+                            </label>
+
+                            <input
+                                type="number"
+                                step="0.0001"
+                                name="desconto"
+                                class="form-control"
+                                value="{{ conta.desconto if conta else '' }}"
+                                {% if current_user.perfil == 'comercial' %}
+                                    max="15"
+                                {% elif current_user.perfil == 'gerente_comercial' %}
+                                    max="20"
+                                {% endif %}
+                            >
+
+                            {% if current_user.perfil == 'admin' %}
+                            <div class="form-text text-success">
+                                <i class="bi bi-shield-check"></i>
+                                Administrador sem limite de desconto.
+                            </div>
+
+                            {% elif current_user.perfil == 'gerente_comercial' %}
+                            <div class="form-text text-warning">
+                                <i class="bi bi-info-circle"></i>
+                                Limite de desconto: <strong>20%</strong>.
+                            </div>
+
+                            {% else %}
+                            <div class="form-text text-warning">
+                                <i class="bi bi-info-circle"></i>
+                                Limite de desconto: <strong>15%</strong>.
+                            </div>
+                            {% endif %}
+
+                        </div>
+
+                        <div class="col-md-9">
+
+                            <label class="form-label fw-semibold">
+                                Observação
+                            </label>
+
+                            <textarea
+                                name="observacao"
+                                class="form-control"
+                                rows="5"
+                                placeholder="Digite observações sobre esta conta..."
+                                style="resize: vertical;"
+                            >{{ conta.observacao if conta else '' }}</textarea>
+
+                        </div>
+
+                    </div>
+
                 </div>
 
                 <div class="mb-4">

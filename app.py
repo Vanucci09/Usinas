@@ -17513,8 +17513,24 @@ def nova_conta_concessionaria():
 @login_required
 def listar_contas_concessionaria():
 
+    pagina = request.args.get(
+        'page',
+        1,
+        type=int
+    )
+
+    vendedor_id = request.args.get(
+        'vendedor_id',
+        type=int
+    )
+
+    status = request.args.get(
+        'status'
+    )
+
     query = ContaConcessionaria.query
 
+    # Comercial vê apenas os próprios registros
     if (
         current_user.pode_acessar_comercial
         and current_user.perfil not in ['admin', 'gerente_comercial']
@@ -17526,23 +17542,119 @@ def listar_contas_concessionaria():
         ).first()
 
         if vendedor:
+
             query = query.filter(
                 ContaConcessionaria.vendedor_id == vendedor.id
             )
+
         else:
+
             query = query.filter(False)
+
+    # Filtro por vendedor
+    if vendedor_id:
+        query = query.filter(
+            ContaConcessionaria.vendedor_id == vendedor_id
+        )
+
+    # Filtro por status
+    if status == 'analise':
+
+        query = query.filter(
+            ContaConcessionaria.email_enviado == False,
+            ContaConcessionaria.validacao_cliente == False
+        )
+
+    elif status == 'proposta_enviada':
+
+        query = query.filter(
+            ContaConcessionaria.email_enviado == True,
+            ContaConcessionaria.validacao_cliente == False
+        )
+
+    elif status == 'aprovado':
+
+        query = query.filter(
+            ContaConcessionaria.validacao_cliente == True
+        )
+
+    elif status == 'documentacao':
+
+        query = query.filter(
+            ContaConcessionaria.validacao_cliente == True,
+            ContaConcessionaria.documentacao_enviada == False
+        )
+
+    elif status == 'assinatura':
+
+        query = query.filter(
+            ContaConcessionaria.termo_enviado == True,
+            ContaConcessionaria.termo_assinado == False
+        )
+
+    elif status == 'assinado':
+
+        query = query.filter(
+            ContaConcessionaria.termo_assinado == True
+        )
+
+    # KPIs
+    total = query.count()
+
+    aceitas = query.filter(
+        ContaConcessionaria.validacao_cliente == True
+    ).count()
+
+    cliente_aprovar = query.filter(
+        ContaConcessionaria.email_enviado == True,
+        ContaConcessionaria.validacao_cliente == False
+    ).count()
+
+    documentacao = query.filter(
+        ContaConcessionaria.validacao_cliente == True,
+        ContaConcessionaria.documentacao_enviada == False
+    ).count()
+
+    assinatura = query.filter(
+        ContaConcessionaria.termo_enviado == True,
+        ContaConcessionaria.termo_assinado == False
+    ).count()
+
+    proposta_enviada = query.filter(
+        ContaConcessionaria.email_enviado == True
+    ).count()
 
     contas = (
         query
         .order_by(
             ContaConcessionaria.id.desc()
         )
+        .paginate(
+            page=pagina,
+            per_page=10,
+            error_out=False
+        )
+    )
+
+    vendedores = (
+        Vendedor.query
+        .filter_by(ativo=True)
+        .order_by(Vendedor.nome)
         .all()
     )
 
     return render_template(
         'contas_concessionaria_lista.html',
-        contas=contas
+        contas=contas,
+        vendedores=vendedores,
+        vendedor_id=vendedor_id,
+        status=status,
+        total=total,
+        aceitas=aceitas,
+        cliente_aprovar=cliente_aprovar,
+        documentacao=documentacao,
+        assinatura=assinatura,
+        proposta_enviada=proposta_enviada
     )
     
 @app.route('/contas-concessionaria/<int:conta_id>/proposta/<slug>')
