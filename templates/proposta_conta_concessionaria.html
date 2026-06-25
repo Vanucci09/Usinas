@@ -42,8 +42,16 @@
             <div class="row g-4 align-items-stretch m-0">
                 
                 <div class="col-md-3 text-center hide-on-print ps-0">
-                    <div class="p-3 bg-white rounded border d-flex align-items-center justify-content-center h-100" style="min-height: 160px;">
-                        <img src="{{ url_for('static', filename='Nova_logo_CGR.jpeg') }}" alt="Logo CGR Energia" class="img-fluid" style="max-height: 130px; width: auto; object-fit: contain;">
+                    <div class="bg-white rounded border h-100 d-flex align-items-center justify-content-center overflow-hidden"
+                        style="min-height: 250px;">
+
+                        <img src="{{ url_for('static', filename='Nova_logo_CGR.jpeg') }}"
+                    alt="Logo CGR Energia"
+                    style="
+                        width: 95%;
+                        height: 95%;
+                        object-fit: contain;
+                    ">
                     </div>
                 </div>
 
@@ -59,9 +67,36 @@
                                     <strong class="text-dark">{{ conta.centro_custo.nome if conta.centro_custo else '-' }}</strong>
                                 </div>
                                 <div>
-                                    <span class="text-muted d-block small text-uppercase fw-semibold" style="font-size: 0.75rem;">CNPJ / CPF</span>
+                                    <span class="text-muted d-block small text-uppercase fw-semibold" style="font-size: 0.75rem;">
+                                        CNPJ / CPF
+                                    </span>
+
                                     <span class="text-dark fw-medium">
-                                        {{ conta.centro_custo.cpf_cnpj if conta.centro_custo and conta.centro_custo.cpf_cnpj else 'Não informado' }}
+                                        {% if conta.centro_custo and conta.centro_custo.cpf_cnpj %}
+
+                                            {% set doc = conta.centro_custo.cpf_cnpj|string %}
+
+                                            {% if '.' in doc or '/' in doc or '-' in doc %}
+                                                {{ doc }}
+
+                                            {% else %}
+                                                {% set numeros = doc|replace(' ', '') %}
+
+                                                {% if numeros|length == 11 %}
+                                                    {{ numeros[:3] }}.{{ numeros[3:6] }}.{{ numeros[6:9] }}-{{ numeros[9:] }}
+
+                                                {% elif numeros|length == 14 %}
+                                                    {{ numeros[:2] }}.{{ numeros[2:5] }}.{{ numeros[5:8] }}/{{ numeros[8:12] }}-{{ numeros[12:] }}
+
+                                                {% else %}
+                                                    {{ doc }}
+                                                {% endif %}
+
+                                            {% endif %}
+
+                                        {% else %}
+                                            Não informado
+                                        {% endif %}
                                     </span>
                                 </div>
                             </div>
@@ -98,7 +133,31 @@
                                     </td>
 
                                     <td class="text-end fw-medium py-1 pe-0 text-dark">
-                                        {{ conta.vendedor.telefone if conta.vendedor and conta.vendedor.telefone else '-' }}
+                                        {% if conta.vendedor and conta.vendedor.telefone %}
+
+                                            {% set telefone = conta.vendedor.telefone|string %}
+
+                                            {% if '(' in telefone or '-' in telefone %}
+                                                {{ telefone }}
+
+                                            {% else %}
+                                                {% set numero = telefone|replace(' ', '') %}
+
+                                                {% if numero|length == 11 %}
+                                                    ({{ numero[:2] }}) {{ numero[2:7] }}-{{ numero[7:] }}
+
+                                                {% elif numero|length == 10 %}
+                                                    ({{ numero[:2] }}) {{ numero[2:6] }}-{{ numero[6:] }}
+
+                                                {% else %}
+                                                    {{ telefone }}
+                                                {% endif %}
+
+                                            {% endif %}
+
+                                        {% else %}
+                                            -
+                                        {% endif %}
                                     </td>
                                 </tr>
                                 <tr>
