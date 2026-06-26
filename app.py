@@ -2019,7 +2019,8 @@ def reequilibrio_rateios(usina_id):
             Cliente.id == Rateio.cliente_id
         )
         .filter(
-            Cliente.ativo.is_(True)
+            Cliente.ativo.is_(True),
+            Rateio.ativo.is_(True)
         )
         .order_by(
             Cliente.nome
