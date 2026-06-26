@@ -5,12 +5,45 @@
 {% block content %}
 <div class="container mt-5 p-4 bg-white rounded shadow">
     <div class="d-flex justify-content-between align-items-center flex-wrap mb-4 border-bottom pb-3">
+
         <h2 class="text-primary m-0">
-            <i class="bi bi-grid-3x3-gap-fill me-2"></i>Rateios Cadastrados
+            <i class="bi bi-grid-3x3-gap-fill me-2"></i>
+            Rateios Cadastrados
         </h2>
-        <a href="{{ url_for('cadastrar_rateio') }}" class="btn btn-success mt-2 mt-sm-0">
-            <i class="bi bi-plus-circle-fill me-2"></i>Novo Rateio
-        </a>
+
+        <div class="d-flex gap-2 mt-2 mt-sm-0">
+
+            {% if usina_id_filtro %}
+
+            <a href="{{ url_for('reequilibrio_rateios', usina_id=usina_id_filtro) }}"
+            class="btn btn-warning">
+
+                <i class="bi bi-arrow-repeat me-2"></i>
+                Reequilíbrio
+
+            </a>
+
+            <a href="{{ url_for('gerar_formulario_neoenergia', usina_id=usina_id_filtro) }}"
+            class="btn btn-primary"
+            target="_blank">
+
+                <i class="bi bi-printer-fill me-2"></i>
+                Imprimir Termo Atual
+
+            </a>
+
+            {% endif %}
+
+            <a href="{{ url_for('cadastrar_rateio') }}"
+            class="btn btn-success">
+
+                <i class="bi bi-plus-circle-fill me-2"></i>
+                Novo Rateio
+
+            </a>
+
+        </div>
+
     </div>
 
     <form method="GET" id="filtro-form" class="row g-3 mb-4 align-items-end">

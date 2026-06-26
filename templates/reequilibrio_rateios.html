@@ -1,0 +1,372 @@
+{% extends 'base.html' %}
+
+{% block title %}Reequilíbrio de Rateios{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+
+    <div class="card shadow-sm border-0">
+
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+
+            <div>
+                <h4 class="mb-0">
+                    <i class="bi bi-arrow-repeat me-2"></i>
+                    Reequilíbrio de Rateios
+                </h4>
+
+                <small>
+                    {{ usina.nome }}
+                </small>
+            </div>
+
+            <a href="{{ url_for('listar_rateios', usina_id=usina.id) }}"
+               class="btn btn-light">
+
+                <i class="bi bi-arrow-left"></i>
+                Voltar
+
+            </a>
+
+        </div>
+
+        <form method="POST">
+
+            <div class="card-body">
+
+                <div class="row mb-4">
+
+                    <div class="col-md-4">
+
+                        <div class="card border-success">
+
+                            <div class="card-body">
+
+                                <small class="text-muted">
+                                    Total Atual
+                                </small>
+
+                                <h3 class="mb-0 text-success">
+
+                                    {{ "%.2f"|format(total_atual) }}%
+
+                                </h3>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                    <div class="col-md-4">
+
+                        <div class="card border-primary">
+
+                            <div class="card-body">
+
+                                <small class="text-muted">
+                                    Novo Total
+                                </small>
+
+                                <h3
+                                    id="novo-total"
+                                    class="mb-0 text-danger">
+
+                                    0.00%
+
+                                </h3>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                    <div class="col-md-4">
+
+                        <div class="card border-warning">
+
+                            <div class="card-body">
+
+                                <small class="text-muted">
+                                    Diferença para 100%
+                                </small>
+
+                                <h3
+                                    id="diferenca"
+                                    class="mb-0">
+
+                                    100.00%
+
+                                </h3>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <div class="table-responsive">
+
+                    <table class="table table-hover align-middle">
+
+                        <thead class="table-light">
+
+                            <tr>
+
+                                <th>Cliente</th>
+
+                                <th>UC</th>
+
+                                <th>Status</th>
+
+                                <th class="text-end">
+                                    Atual
+                                </th>
+
+                                <th style="width:180px;" class="text-end">
+                                    Novo %
+                                </th>
+
+                                <th class="text-end">
+                                    Diferença
+                                </th>
+
+                            </tr>
+
+                        </thead>
+
+                        <tbody>
+
+                            {% for rateio in rateios %}
+
+                            <tr>
+
+                                <td>
+
+                                    <strong>
+
+                                        {{ rateio.cliente.nome }}
+
+                                    </strong>
+
+                                </td>
+
+                                <td>
+
+                                    {{ rateio.cliente.codigo_unidade }}
+
+                                </td>
+
+                                <td>
+
+                                    {% if rateio.cliente.ativo %}
+
+                                        <span class="badge bg-success">
+
+                                            Ativo
+
+                                        </span>
+
+                                    {% else %}
+
+                                        <span class="badge bg-danger">
+
+                                            Inativo
+
+                                        </span>
+
+                                    {% endif %}
+
+                                </td>
+
+                                <td class="text-end">
+
+                                    {{ "%.2f"|format(rateio.percentual) }}%
+
+                                </td>
+
+                                <td>
+
+                                    <input
+                                        type="number"
+                                        class="form-control text-end novo-percentual"
+                                        step="0.01"
+                                        min="0"
+                                        max="100"
+                                        name="percentual_{{ rateio.id }}"
+                                        value="{{ "%.2f"|format(rateio.percentual) }}"
+                                        data-atual="{{ rateio.percentual }}">
+
+                                </td>
+
+                                <td class="text-end">
+
+                                    <span class="diferenca fw-bold">
+
+                                        0.00%
+
+                                    </span>
+
+                                </td>
+
+                            </tr>
+
+                            {% endfor %}
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+            </div>
+
+            <div class="card-footer d-flex justify-content-between">
+
+                <button
+                    type="button"
+                    id="fechar100"
+                    class="btn btn-outline-warning">
+
+                    <i class="bi bi-magic"></i>
+
+                    Fechar em 100%
+
+                </button>
+
+                <button
+                    class="btn btn-success">
+
+                    <i class="bi bi-check-circle"></i>
+
+                    Salvar Novo Rateio
+
+                </button>
+
+            </div>
+
+        </form>
+
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+
+<script>
+
+function atualizarTotais(){
+
+    let total = 0;
+
+    document.querySelectorAll(".novo-percentual").forEach(function(input){
+
+        let valor = parseFloat(input.value);
+
+        if(isNaN(valor))
+            valor = 0;
+
+        total += valor;
+
+        let atual = parseFloat(input.dataset.atual);
+
+        input.closest("tr")
+             .querySelector(".diferenca")
+             .innerHTML =
+                (valor-atual).toFixed(2) + "%";
+
+    });
+
+    document.getElementById("novo-total").innerHTML =
+        total.toFixed(2) + "%";
+
+    let dif = 100-total;
+
+    document.getElementById("diferenca").innerHTML =
+        dif.toFixed(2) + "%";
+
+    let totalLabel =
+        document.getElementById("novo-total");
+
+    if(Math.abs(dif)<0.001){
+
+        totalLabel.classList.remove(
+            "text-danger"
+        );
+
+        totalLabel.classList.add(
+            "text-success"
+        );
+
+    }else{
+
+        totalLabel.classList.remove(
+            "text-success"
+        );
+
+        totalLabel.classList.add(
+            "text-danger"
+        );
+
+    }
+
+}
+
+document
+.querySelectorAll(".novo-percentual")
+.forEach(function(i){
+
+    i.addEventListener(
+        "input",
+        atualizarTotais
+    );
+
+});
+
+document
+.getElementById("fechar100")
+.addEventListener(
+"click",
+function(){
+
+    let inputs =
+        document.querySelectorAll(".novo-percentual");
+
+    let total = 0;
+
+    inputs.forEach(function(i){
+
+        total += parseFloat(i.value)||0;
+
+    });
+
+    let diferenca =
+        100-total;
+
+    if(inputs.length){
+
+        let ultimo =
+            inputs[inputs.length-1];
+
+        ultimo.value =
+            (
+                parseFloat(ultimo.value)
+                +
+                diferenca
+            ).toFixed(2);
+
+    }
+
+    atualizarTotais();
+
+});
+
+atualizarTotais();
+
+</script>
+
+{% endblock %}

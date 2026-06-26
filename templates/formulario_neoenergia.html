@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Formulário Neoenergia</title>
+    <style>
+        :root {
+            --primary-green: #5b8f17;
+            --dark-green: #198754;
+            --text-color: #000000;
+            --link-blue: #1b5e9e;
+            --border-color: #000000;
+            --bg-white: #ffffff;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            padding: 20px;
+            background: #f4f4f4;
+            color: var(--text-color);
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 9px;
+        }
+
+        .no-print {
+            max-width: 210mm;
+            margin: 0 auto 15px auto;
+            text-align: right;
+        }
+
+        .btn-print {
+            background: var(--dark-green);
+            color: var(--bg-white);
+            border: none;
+            padding: 10px 20px;
+            font-size: 13px;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-print:hover {
+            background: #146c43;
+        }
+
+        .form-page {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 0 auto;
+            background: var(--bg-white);
+            border: 1px solid var(--border-color);
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .top-container {
+            border: 1px solid var(--border-color);
+            display: grid;
+            grid-template-columns: 45mm 1fr;
+        }
+
+        .logo-area {
+            padding: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-right: 1px solid var(--border-color);
+            background: var(--bg-white);
+        }
+
+        .logo-neoenergia {
+            width: 140px;
+            max-width: 100%;
+            height: auto;
+        }
+
+        .header-area {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .green-header {
+            background: var(--primary-green);
+            color: var(--bg-white);
+            text-align: center;
+            padding: 6px;
+            font-size: 9px;
+            font-weight: bold;
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .address-line {
+            text-align: center;
+            color: var(--link-blue);
+            padding: 5px;
+            font-size: 8px;
+            border-bottom: 1px solid var(--border-color);
+            line-height: 1.3;
+        }
+
+        .title-box {
+            text-align: center;
+            padding: 10px 5px;
+            font-size: 11px;
+            font-weight: bold;
+            line-height: 1.4;
+            background: #f9f9f9;
+            border-bottom: 1px solid var(--border-color);
+            text-transform: uppercase;
+        }
+
+        .request-box {
+            background: var(--primary-green);
+            color: var(--bg-white);
+            padding: 10px;
+            font-size: 8.5px;
+            line-height: 1.4;
+        }
+
+        .section-title {
+            text-align: center;
+            font-weight: bold;
+            font-size: 9px;
+            padding: 6px;
+            border: 1px solid var(--border-color);
+            background: #eeeeee;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 8.5px;
+        }
+
+        .data-table th {
+            background: #f2f2f2;
+            font-weight: bold;
+            border: 1px solid var(--border-color);
+            padding: 5px 4px;
+            text-align: center;
+        }
+
+        .data-table td {
+            border: 1px solid var(--border-color);
+            padding: 5px 4px;
+            vertical-align: middle;
+        }
+
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+
+        .declaration-box {
+            border: 1px solid var(--border-color);
+            padding: 10px;
+            font-size: 8.5px;
+            line-height: 1.5;
+            background: #fafafa;
+        }
+
+        .declaration-title {
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 8px;
+            font-size: 9px;
+            text-transform: uppercase;
+        }
+
+        .declaration-box p {
+            margin-bottom: 6px;
+        }
+        .declaration-box p:last-child {
+            margin-bottom: 0;
+        }
+
+        .info-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 8.5px;
+        }
+
+        .info-table th {
+            background: #eeeeee;
+            border: 1px solid var(--border-color);
+            padding: 6px;
+            text-align: center;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .info-table td {
+            border: 1px solid var(--border-color);
+            padding: 6px;
+        }
+
+        .signature-container {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: auto; /* Empurra para o final da página se houver espaço */
+        }
+
+        .signature-container td {
+            border: 1px solid var(--border-color);
+            padding: 10px;
+            font-size: 8.5px;
+            height: 75px;
+        }
+
+        @media print {
+            body {
+                padding: 0;
+                background: none;
+            }
+
+            .no-print {
+                display: none;
+            }
+
+            .form-page {
+                width: 100%;
+                height: 100%;
+                min-height: auto;
+                border: none;
+                padding: 0;
+            }
+
+            @page {
+                size: A4 portrait;
+                margin: 10mm;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="no-print">
+    <button class="btn-print" onclick="window.print()">Imprimir Formulário</button>
+</div>
+
+<div class="form-page">
+
+    <div class="top-container">
+        <div class="logo-area">
+            <img src="{{ url_for('static', filename='logo-neoenergia.png') }}" alt="Neoenergia" class="logo-neoenergia">
+        </div>
+        <div class="header-area">
+            <div class="green-header">Neoenergia Brasília</div>
+            <div class="address-line">
+                SEDE: SIA Área de Serviço Público – lote C – Guará – DF<br>
+                <strong>www.neoenergiabrasilia.com.br</strong> | CEP: 71.915-902
+            </div>
+            <div class="title-box">
+                Alteração de Unidades Consumidoras Participantes do<br>Sistema de Compensação
+            </div>
+            <div class="request-box">
+                Solicito que a parcela de energia injetada na rede pela UC nº <strong>{{ usina.cc }}</strong>, que esteja disponível para alocação nos termos da REN Aneel 482/2012, seja rateada entre as unidades consumidoras abaixo relacionadas, por meio de preferência na ordem determinada abaixo.
+            </div>
+        </div>
+    </div>
+
+    <div class="section-title">
+        Dados da(s) Unidade(s) Consumidora(s) Beneficiária(s)
+    </div>
+
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th style="width: 50px;">ORDEM</th>
+                <th style="width: 100px;">CÓDIGO CLIENTE</th>
+                <th>NOME DO TITULAR</th>
+                <th style="width: 110px;">CPF/CNPJ</th>
+                <th>ENDEREÇO</th>
+                <th style="width: 80px;">PERCENTUAL</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for rateio in rateios %}
+            <tr>
+                <td class="text-center">{{ rateio.codigo_rateio or "-" }}</td>
+                <td class="text-center">{{ rateio.cliente.codigo_unidade }}</td>
+                <td>{{ rateio.cliente.nome }}</td>
+                <td class="text-center">{{ rateio.cliente.cpf_cnpj }}</td>
+                <td>{{ rateio.cliente.endereco }}</td>
+                <td class="text-right">{{ '%.2f'|format(rateio.percentual)|replace('.', ',') }}%</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="5" class="text-right" style="font-weight: bold; padding: 6px;">TOTAL</td>
+                <td class="text-right" style="font-weight: bold; padding: 6px;">
+                    {{ '%.2f'|format(total)|replace('.', ',') }}%
+                </td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <div class="declaration-box">
+        <div class="declaration-title">Declaração</div>
+        <p>Declaro ainda estar ciente e concordar que:</p>
+        <p><strong>a)</strong> A soma dos percentuais informados limita-se a 100%, sendo que, caso resulte em valor inferior, o residual será compensado na unidade consumidora geradora.</p>
+        <p><strong>b)</strong> Em caso de encerramento da relação contratual do atual titular de qualquer dessas unidades consumidoras, o percentual alocado retornará para a unidade consumidora geradora até o envio de novo formulário.</p>
+        <p><strong>c)</strong> Este documento cancela e substitui qualquer solicitação anterior de cadastro de beneficiários.</p>
+        <p><strong>d)</strong> Compete ao titular da unidade geradora solicitar a alteração junto à distribuidora com antecedência mínima de 60 dias.</p>
+    </div>
+
+    <table class="info-table">
+        <thead>
+            <tr>
+                <th colspan="2">Representante Legal</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td style="width: 130px;"><strong>NOME:</strong></td>
+                <td>BARBARA SANTANA RIOS</td>
+            </tr>
+            <tr>
+                <td><strong>CPF:</strong></td>
+                <td>035.681.321-50</td>
+            </tr>
+            <tr>
+                <td><strong>TELEFONE:</strong></td>
+                <td>(61) 98104-3551</td>
+            </tr>
+            <tr>
+                <td><strong>E-MAIL:</strong></td>
+                <td>GC@CGRENERGIA.COM.BR</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <table class="signature-container">
+        <tr>
+            <td style="width: 45%; vertical-align: top;">
+                <strong>LOCAL / DATA</strong>
+                <br><br><br>
+                BRASÍLIA, _____ / _____ / _________
+            </td>
+            <td style="text-align: center; vertical-align: bottom; padding-bottom: 12px;">
+                ___________________________________________________
+                <br><br>
+                <strong>ASSINATURA DO TITULAR / REPRESENTANTE LEGAL</strong>
+            </td>
+        </tr>
+    </table>
+
+</div>
+
+</body>
+</html>

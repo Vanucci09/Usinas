@@ -1967,6 +1967,280 @@ def listar_rateios():
         usinas=usinas,
         usina_id_filtro=usina_id_filtro
     )
+    
+@app.route(
+    '/rateios/<int:usina_id>/reequilibrio',
+    methods=['GET', 'POST']
+)
+@login_required
+def reequilibrio_rateios(usina_id):
+
+    usina = db.session.get(
+        Usina,
+        usina_id
+    )
+
+    if not usina:
+
+        flash(
+            'Usina não encontrada.',
+            'warning'
+        )
+
+        return redirect(
+            url_for(
+                'listar_rateios'
+            )
+        )
+
+    subquery = (
+        db.session.query(
+            Rateio.cliente_id,
+            func.max(Rateio.id).label('max_id')
+        )
+        .filter(
+            Rateio.usina_id == usina_id,
+            Rateio.ativo.is_(True)
+        )
+        .group_by(
+            Rateio.cliente_id
+        )
+        .subquery()
+    )
+
+    rateios = (
+        db.session.query(Rateio)
+        .join(
+            subquery,
+            Rateio.id == subquery.c.max_id
+        )
+        .join(
+            Cliente,
+            Cliente.id == Rateio.cliente_id
+        )
+        .order_by(
+            Cliente.ativo.desc(),
+            Cliente.nome
+        )
+        .all()
+    )
+
+    if request.method == 'POST':
+
+        total = Decimal('0')
+
+        for rateio in rateios:
+
+            valor = (
+                request.form.get(
+                    f'percentual_{rateio.id}',
+                    '0'
+                )
+                .replace(',', '.')
+            )
+
+            try:
+
+                total += Decimal(valor)
+
+            except:
+
+                flash(
+                    'Percentual inválido.',
+                    'danger'
+                )
+
+                return redirect(
+                    request.url
+                )
+
+        if abs(total - Decimal('100')) > Decimal('0.01'):
+
+            flash(
+                f'O total informado foi {total:.2f}% e deve ser exatamente 100%.',
+                'danger'
+            )
+
+            return redirect(
+                request.url
+            )
+
+        try:
+
+            # Desativa os rateios atuais
+            for rateio in rateios:
+
+                rateio.ativo = False
+
+            db.session.flush()
+
+            # Cria os novos
+            for rateio in rateios:
+
+                percentual = float(
+
+                    request.form.get(
+                        f'percentual_{rateio.id}',
+                        '0'
+                    ).replace(',', '.')
+
+                )
+
+                novo_rateio = Rateio(
+
+                    usina_id=rateio.usina_id,
+
+                    cliente_id=rateio.cliente_id,
+
+                    percentual=percentual,
+
+                    tarifa_kwh=rateio.tarifa_kwh,
+
+                    usar_tarifa_neoenergia=rateio.usar_tarifa_neoenergia,
+
+                    desconto_percentual=rateio.desconto_percentual,
+
+                    codigo_rateio=rateio.codigo_rateio,
+
+                    cip=rateio.cip,
+
+                    data_inicio=date.today(),
+
+                    ativo=True
+
+                )
+
+                db.session.add(
+                    novo_rateio
+                )
+
+            db.session.commit()
+
+            flash(
+                'Reequilíbrio realizado com sucesso.',
+                'success'
+            )
+
+            return redirect(
+                url_for(
+                    'gerar_formulario_neoenergia',
+                    usina_id=usina.id
+                )
+            )
+
+        except Exception as e:
+
+            db.session.rollback()
+
+            print(e)
+
+            flash(
+                'Erro ao salvar o reequilíbrio.',
+                'danger'
+            )
+
+            return redirect(
+                request.url
+            )
+
+    total_atual = round(
+
+        sum(
+            r.percentual
+            for r in rateios
+        ),
+
+        2
+
+    )
+
+    return render_template(
+
+        'reequilibrio_rateios.html',
+
+        usina=usina,
+
+        rateios=rateios,
+
+        total_atual=total_atual
+
+    )
+    
+@app.route(
+    '/rateios/<int:usina_id>/formulario-neoenergia'
+)
+@login_required
+def gerar_formulario_neoenergia(usina_id):
+
+    usina = db.session.get(
+        Usina,
+        usina_id
+    )
+
+    if not usina:
+
+        flash(
+            'Usina não encontrada.',
+            'warning'
+        )
+
+        return redirect(
+            url_for(
+                'listar_rateios'
+            )
+        )
+
+    subquery = (
+        db.session.query(
+            Rateio.cliente_id,
+            func.max(
+                Rateio.id
+            ).label(
+                'max_id'
+            )
+        )
+        .filter(
+            Rateio.usina_id == usina_id,
+            Rateio.ativo.is_(True)
+        )
+        .group_by(
+            Rateio.cliente_id
+        )
+        .subquery()
+    )
+
+    rateios = (
+        db.session.query(
+            Rateio
+        )
+        .join(
+            subquery,
+            Rateio.id == subquery.c.max_id
+        )
+        .join(
+            Cliente,
+            Cliente.id == Rateio.cliente_id
+        )
+        .order_by(
+            Rateio.codigo_rateio.asc()
+        )
+        .all()
+    )
+
+    total = round(
+        sum(
+            r.percentual
+            for r in rateios
+        ),
+        2
+    )
+
+    return render_template(
+        'formulario_neoenergia.html',
+        usina=usina,
+        rateios=rateios,
+        total=total
+    )
 
 @app.route('/editar_rateio/<int:id>', methods=['GET', 'POST'])
 @login_required
