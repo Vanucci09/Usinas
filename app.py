@@ -2210,9 +2210,7 @@ def gerar_formulario_neoenergia(usina_id):
     )
 
     rateios = (
-        db.session.query(
-            Rateio
-        )
+        db.session.query(Rateio)
         .join(
             subquery,
             Rateio.id == subquery.c.max_id
@@ -2220,6 +2218,11 @@ def gerar_formulario_neoenergia(usina_id):
         .join(
             Cliente,
             Cliente.id == Rateio.cliente_id
+        )
+        .filter(
+            Rateio.usina_id == usina_id,
+            Rateio.ativo.is_(True),
+            Rateio.percentual > 0
         )
         .order_by(
             Rateio.codigo_rateio.asc()
