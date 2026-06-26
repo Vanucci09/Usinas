@@ -2222,7 +2222,8 @@ def gerar_formulario_neoenergia(usina_id):
         .filter(
             Rateio.usina_id == usina_id,
             Rateio.ativo.is_(True),
-            Rateio.percentual > 0
+            Rateio.percentual > 0,
+            Cliente.ativo.is_(True)
         )
         .order_by(
             Rateio.codigo_rateio.asc()
