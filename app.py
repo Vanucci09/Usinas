@@ -2018,8 +2018,10 @@ def reequilibrio_rateios(usina_id):
             Cliente,
             Cliente.id == Rateio.cliente_id
         )
+        .filter(
+            Cliente.ativo.is_(True)
+        )
         .order_by(
-            Cliente.ativo.desc(),
             Cliente.nome
         )
         .all()
@@ -2089,23 +2091,14 @@ def reequilibrio_rateios(usina_id):
                 novo_rateio = Rateio(
 
                     usina_id=rateio.usina_id,
-
                     cliente_id=rateio.cliente_id,
-
                     percentual=percentual,
-
                     tarifa_kwh=rateio.tarifa_kwh,
-
                     usar_tarifa_neoenergia=rateio.usar_tarifa_neoenergia,
-
                     desconto_percentual=rateio.desconto_percentual,
-
                     codigo_rateio=rateio.codigo_rateio,
-
                     cip=rateio.cip,
-
                     data_inicio=date.today(),
-
                     ativo=True
 
                 )
@@ -2131,9 +2124,7 @@ def reequilibrio_rateios(usina_id):
         except Exception as e:
 
             db.session.rollback()
-
             print(e)
-
             flash(
                 'Erro ao salvar o reequilíbrio.',
                 'danger'
@@ -2157,13 +2148,9 @@ def reequilibrio_rateios(usina_id):
     return render_template(
 
         'reequilibrio_rateios.html',
-
         usina=usina,
-
         rateios=rateios,
-
         total_atual=total_atual
-
     )
     
 @app.route(
