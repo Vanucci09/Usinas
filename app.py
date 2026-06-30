@@ -2145,13 +2145,31 @@ def reequilibrio_rateios(usina_id):
         2
 
     )
+    
+    hoje = date.today()
+
+    if hoje.month == 12:
+        mes_previsao = 1
+        ano_previsao = hoje.year + 1
+    else:
+        mes_previsao = hoje.month + 1
+        ano_previsao = hoje.year
+
+    previsao = PrevisaoMensal.query.filter_by(
+        usina_id=usina.id,
+        ano=ano_previsao,
+        mes=mes_previsao
+    ).first()
+
+    previsao_kwh = previsao.previsao_kwh if previsao else 0
 
     return render_template(
 
         'reequilibrio_rateios.html',
         usina=usina,
         rateios=rateios,
-        total_atual=total_atual
+        total_atual=total_atual,
+        previsao_kwh=previsao_kwh
     )
     
 @app.route(

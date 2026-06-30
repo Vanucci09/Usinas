@@ -126,6 +126,10 @@
                                     Atual
                                 </th>
 
+                                <th class="text-end">
+                                    Geração Reservada
+                                </th>
+
                                 <th style="width:180px;" class="text-end">
                                     Novo %
                                 </th>
@@ -188,6 +192,16 @@
 
                                 </td>
 
+                                <td class="text-end">
+
+                                    <strong class="geracao-reservada">
+
+                                        {{ "{:,.0f}".format(previsao_kwh * rateio.percentual / 100).replace(",", ".") }} kWh
+
+                                    </strong>
+
+                                </td>
+
                                 <td>
 
                                     <input
@@ -198,7 +212,8 @@
                                         max="100"
                                         name="percentual_{{ rateio.id }}"
                                         value="{{ "%.2f"|format(rateio.percentual) }}"
-                                        data-atual="{{ rateio.percentual }}">
+                                        data-atual="{{ rateio.percentual }}"
+                                        data-previsao="{{ previsao_kwh }}">
 
                                 </td>
 
@@ -275,9 +290,23 @@ function atualizarTotais(){
         let atual = parseFloat(input.dataset.atual);
 
         input.closest("tr")
-             .querySelector(".diferenca")
-             .innerHTML =
+            .querySelector(".diferenca")
+            .innerHTML =
                 (valor-atual).toFixed(2) + "%";
+
+        let previsao = parseFloat(input.dataset.previsao);
+
+        let geracao = previsao * valor / 100;
+
+        input.closest("tr")
+            .querySelector(".geracao-reservada")
+            .innerHTML =
+                geracao.toLocaleString(
+                    'pt-BR',
+                    {
+                        maximumFractionDigits: 0
+                    }
+                ) + " kWh";
 
     });
 
