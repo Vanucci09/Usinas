@@ -13,8 +13,6 @@
         <tr>
           <th>Código</th>
           <th>Nome</th>
-          <th>Cliente</th>
-          <th>Empresa</th>
           <th>Email</th>
           <th>Telefone</th>
           <th class="text-end">Ações</th>
@@ -25,8 +23,6 @@
         <tr>
           <td>{{ cc.codigo }}</td>
           <td>{{ cc.nome }}</td>
-          <td>{{ cc.cliente_operacional.nome }}</td>
-          <td>{{ cc.empresa.nome }}</td>
           <td>{{ cc.email or '-' }}</td>
           <td>{{ cc.telefone or '-' }}</td>
 
