@@ -168,6 +168,19 @@
 
             <div class="col-md-4">
                 <label class="form-label">
+                    Cliente
+                </label>
+
+                <input
+                    type="text"
+                    name="nome"
+                    class="form-control"
+                    placeholder="Pesquisar por nome..."
+                    value="{{ nome }}">
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">
                     Status
                 </label>
 
@@ -520,10 +533,13 @@
         {% if contas.has_prev %}
         <li class="page-item">
             <a class="page-link"
-               href="{{ url_for('listar_contas_concessionaria',
-                                page=contas.prev_num,
-                                vendedor_id=vendedor_id,
-                                status=status) }}">
+               href="{{ url_for(
+                'listar_contas_concessionaria',
+                page=contas.prev_num,
+                vendedor_id=vendedor_id,
+                status=status,
+                nome=nome
+            ) }}">
                 Anterior
             </a>
         </li>
@@ -533,10 +549,13 @@
             {% if page_num %}
                 <li class="page-item {% if page_num == contas.page %}active{% endif %}">
                     <a class="page-link"
-                       href="{{ url_for('listar_contas_concessionaria',
-                                        page=page_num,
-                                        vendedor_id=vendedor_id,
-                                        status=status) }}">
+                       href="{{ url_for(
+                        'listar_contas_concessionaria',
+                        page=page_num,
+                        vendedor_id=vendedor_id,
+                        status=status,
+                        nome=nome
+                    ) }}">
                         {{ page_num }}
                     </a>
                 </li>
@@ -546,10 +565,13 @@
         {% if contas.has_next %}
         <li class="page-item">
             <a class="page-link"
-               href="{{ url_for('listar_contas_concessionaria',
-                                page=contas.next_num,
-                                vendedor_id=vendedor_id,
-                                status=status) }}">
+               href="{{ url_for(
+                'listar_contas_concessionaria',
+                page=contas.next_num,
+                vendedor_id=vendedor_id,
+                status=status,
+                nome=nome
+            ) }}">
                 Próxima
             </a>
         </li>

@@ -17812,7 +17812,18 @@ def listar_contas_concessionaria():
         'status'
     )
 
-    query = ContaConcessionaria.query
+    nome = request.args.get(
+        'nome',
+        ''
+    ).strip()
+
+    query = (
+        ContaConcessionaria.query
+        .join(
+            CentroCusto,
+            ContaConcessionaria.centro_custo_id == CentroCusto.id
+        )
+    )
 
     # Comercial vê apenas os próprios registros
     if (
@@ -17841,71 +17852,77 @@ def listar_contas_concessionaria():
             ContaConcessionaria.vendedor_id == vendedor_id
         )
 
+    # Filtro por nome
+    if nome:
+        query = query.filter(
+            CentroCusto.nome.ilike(f'%{nome}%')
+        )
+
     # Filtro por status
     if status == 'analise':
 
         query = query.filter(
-            ContaConcessionaria.email_enviado == False,
-            ContaConcessionaria.validacao_cliente == False
+            ContaConcessionaria.email_enviado.is_(False),
+            ContaConcessionaria.validacao_cliente.is_(False)
         )
 
     elif status == 'proposta_enviada':
 
         query = query.filter(
-            ContaConcessionaria.email_enviado == True,
-            ContaConcessionaria.validacao_cliente == False
+            ContaConcessionaria.email_enviado.is_(True),
+            ContaConcessionaria.validacao_cliente.is_(False)
         )
 
     elif status == 'aprovado':
 
         query = query.filter(
-            ContaConcessionaria.validacao_cliente == True
+            ContaConcessionaria.validacao_cliente.is_(True)
         )
 
     elif status == 'documentacao':
 
         query = query.filter(
-            ContaConcessionaria.validacao_cliente == True,
-            ContaConcessionaria.documentacao_enviada == False
+            ContaConcessionaria.validacao_cliente.is_(True),
+            ContaConcessionaria.documentacao_enviada.is_(False)
         )
 
     elif status == 'assinatura':
 
         query = query.filter(
-            ContaConcessionaria.termo_enviado == True,
-            ContaConcessionaria.termo_assinado == False
+            ContaConcessionaria.termo_enviado.is_(True),
+            ContaConcessionaria.termo_assinado.is_(False)
         )
 
     elif status == 'assinado':
 
         query = query.filter(
-            ContaConcessionaria.termo_assinado == True
+            ContaConcessionaria.termo_assinado.is_(True)
         )
 
-    # KPIs
+    # KPIs já considerando todos os filtros
     total = query.count()
 
     aceitas = query.filter(
-        ContaConcessionaria.validacao_cliente == True
+        ContaConcessionaria.validacao_cliente.is_(True)
     ).count()
 
     cliente_aprovar = query.filter(
-        ContaConcessionaria.email_enviado == True,
-        ContaConcessionaria.validacao_cliente == False
+        ContaConcessionaria.email_enviado.is_(True),
+        ContaConcessionaria.validacao_cliente.is_(False)
     ).count()
 
     documentacao = query.filter(
-        ContaConcessionaria.validacao_cliente == True,
-        ContaConcessionaria.documentacao_enviada == False
+        ContaConcessionaria.validacao_cliente.is_(True),
+        ContaConcessionaria.documentacao_enviada.is_(False)
     ).count()
 
     assinatura = query.filter(
-        ContaConcessionaria.termo_enviado == True,
-        ContaConcessionaria.termo_assinado == False
+        ContaConcessionaria.termo_enviado.is_(True),
+        ContaConcessionaria.termo_assinado.is_(False)
     ).count()
 
     proposta_enviada = query.filter(
-        ContaConcessionaria.email_enviado == True
+        ContaConcessionaria.email_enviado.is_(True)
     ).count()
 
     contas = (
@@ -17933,6 +17950,7 @@ def listar_contas_concessionaria():
         vendedores=vendedores,
         vendedor_id=vendedor_id,
         status=status,
+        nome=nome,
         total=total,
         aceitas=aceitas,
         cliente_aprovar=cliente_aprovar,
