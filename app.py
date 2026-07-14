@@ -9458,80 +9458,64 @@ def extrato_usina(usina_id):
     if not current_user.pode_acessar_financeiro:
         abort(403)
 
-    mes = request.args.get('mes', type=int)
-    ano = request.args.get('ano', type=int)
-    banco_filtro = request.args.get('banco')
+    mes = request.args.get(
+        'mes',
+        type=int
+    )
 
-    usina = Usina.query.get_or_404(usina_id)
+    ano = request.args.get(
+        'ano',
+        type=int
+    )
 
-    first_of_month = date(ano, mes, 1)
-    prev_month_last = first_of_month - timedelta(days=1)
+    banco_filtro = request.args.get(
+        'banco'
+    )
 
-    prev_query = (
+    usina = db.session.get(
+        Usina,
+        usina_id
+    )
+
+    if not usina:
+        abort(404)
+
+    first_of_month = date(
+        ano,
+        mes,
+        1
+    )
+
+    prev_month_last = (
+        first_of_month
+        - timedelta(days=1)
+    )
+
+    # SALDO ANTERIOR AO MÊS, SEPARADO POR BANCO
+    prev_records = (
         FinanceiroUsina.query
         .options(
-            joinedload(FinanceiroUsina.caixa_banco)
+            joinedload(
+                FinanceiroUsina.caixa_banco
+            )
         )
         .filter(
             FinanceiroUsina.usina_id == usina_id,
             FinanceiroUsina.data_pagamento.isnot(None),
             FinanceiroUsina.data_pagamento <= prev_month_last
         )
-    )
-
-    if banco_filtro:
-
-        prev_query = prev_query.join(
-            CaixaBanco,
-            FinanceiroUsina.caixa_banco_id == CaixaBanco.id
-        ).filter(
-            CaixaBanco.nome == banco_filtro
-        )
-
-    prev_records = prev_query.all()
-
-    initial_saldo = Decimal('0')
-
-    for r in prev_records:
-
-        val = Decimal(str(r.valor or 0))
-        j = Decimal(str(r.juros or 0))
-
-        mov = (
-            val + j
-            if r.tipo == 'receita'
-            else -val
-        )
-
-        initial_saldo += mov
-
-    registros = (
-        FinanceiroUsina.query
-        .options(
-            joinedload(FinanceiroUsina.credor),
-            joinedload(FinanceiroUsina.categoria),
-            joinedload(FinanceiroUsina.caixa_banco)
-        )
-        .filter(
-            FinanceiroUsina.usina_id == usina_id,
-            FinanceiroUsina.data_pagamento.isnot(None),
-            extract('year', FinanceiroUsina.data_pagamento) == ano,
-            extract('month', FinanceiroUsina.data_pagamento) == mes
-        )
-        .order_by(FinanceiroUsina.data_pagamento)
         .all()
     )
 
-    extrato = []
+    saldos_iniciais_bancos = {}
+    for r in prev_records:
+        val = Decimal(
+            str(r.valor or 0)
+        )
 
-    saldo_corrente = initial_saldo
-
-    totais_bancos = {}
-
-    for r in registros:
-
-        val = Decimal(str(r.valor or 0))
-        j = Decimal(str(r.juros or 0))
+        j = Decimal(
+            str(r.juros or 0)
+        )
 
         movimento = (
             val + j
@@ -9539,16 +9523,80 @@ def extrato_usina(usina_id):
             else -val
         )
 
-        saldo_corrente += movimento
+        banco = (
+            r.caixa_banco.nome
+            if r.caixa_banco
+            else 'Sem Banco'
+        )
 
-        if r.tipo == 'despesa' and r.credor:
-            texto = r.credor.nome
-        else:
-            texto = r.descricao
+        saldos_iniciais_bancos[banco] = (
+            saldos_iniciais_bancos.get(
+                banco,
+                Decimal('0')
+            )
+            + movimento
+        )
 
-            if '|' in texto:
-                partes = texto.split('|')
-                texto = partes[0].strip()
+    # Saldo inicial geral, considerando todos os bancos
+    initial_saldo_geral = sum(
+        saldos_iniciais_bancos.values(),
+        Decimal('0')
+    )
+
+    # MOVIMENTAÇÕES DO MÊS
+    registros = (
+        FinanceiroUsina.query
+        .options(
+            joinedload(
+                FinanceiroUsina.credor
+            ),
+            joinedload(
+                FinanceiroUsina.categoria
+            ),
+            joinedload(
+                FinanceiroUsina.caixa_banco
+            )
+        )
+        .filter(
+            FinanceiroUsina.usina_id == usina_id,
+            FinanceiroUsina.data_pagamento.isnot(None),
+            extract(
+                'year',
+                FinanceiroUsina.data_pagamento
+            ) == ano,
+            extract(
+                'month',
+                FinanceiroUsina.data_pagamento
+            ) == mes
+        )
+        .order_by(
+            FinanceiroUsina.data_pagamento,
+            FinanceiroUsina.id
+        )
+        .all()
+    )
+
+    extrato_completo = []
+    movimentos_bancos = {}
+    saldo_corrente_geral = (
+        initial_saldo_geral
+    )
+
+    for r in registros:
+
+        val = Decimal(
+            str(r.valor or 0)
+        )
+
+        j = Decimal(
+            str(r.juros or 0)
+        )
+
+        movimento = (
+            val + j
+            if r.tipo == 'receita'
+            else -val
+        )
 
         banco = (
             r.caixa_banco.nome
@@ -9556,41 +9604,111 @@ def extrato_usina(usina_id):
             else 'Sem Banco'
         )
 
-        totais_bancos[banco] = (
-            totais_bancos.get(
+        movimentos_bancos[banco] = (
+            movimentos_bancos.get(
                 banco,
                 Decimal('0')
-            ) + movimento
+            )
+            + movimento
         )
 
-        extrato.append({
+        saldo_corrente_geral += movimento
+        if (
+            r.tipo == 'despesa'
+            and r.credor
+        ):
+            texto = r.credor.nome
+
+        else:
+            texto = r.descricao or '-'
+
+            if '|' in texto:
+                texto = (
+                    texto
+                    .split('|')[0]
+                    .strip()
+                )
+
+        extrato_completo.append({
             'data_pagamento': r.data_pagamento,
             'tipo': r.tipo,
             'descricao': texto,
             'valor': movimento,
-            'saldo': saldo_corrente,
+            'saldo': saldo_corrente_geral,
             'banco': banco
         })
-        
+
+    # SALDO FINAL DE CADA BANCO
+    bancos = set(
+        saldos_iniciais_bancos.keys()
+    ) | set(
+        movimentos_bancos.keys()
+    )
+
+    totais_bancos = {}
+    for banco in bancos:
+        saldo_anterior = (
+            saldos_iniciais_bancos.get(
+                banco,
+                Decimal('0')
+            )
+        )
+
+        movimento_mes = (
+            movimentos_bancos.get(
+                banco,
+                Decimal('0')
+            )
+        )
+
+        totais_bancos[banco] = (
+            saldo_anterior
+            + movimento_mes
+        )
+
+    # Ordenação alfabética dos cartões
+    totais_bancos = dict(
+        sorted(
+            totais_bancos.items(),
+            key=lambda item: item[0].lower()
+        )
+    )
+
+    # Total geral acumulado
+    total_geral = (
+        initial_saldo_geral
+        + sum(
+            movimentos_bancos.values(),
+            Decimal('0')
+        )
+    )
+
+    # FILTRO POR BANCO
     if banco_filtro:
 
         extrato = [
-            e for e in extrato
-            if e['banco'] == banco_filtro
+            item
+            for item in extrato_completo
+            if item['banco'] == banco_filtro
         ]
 
-        saldo_banco = Decimal('0')
+        initial_saldo = (
+            saldos_iniciais_bancos.get(
+                banco_filtro,
+                Decimal('0')
+            )
+        )
 
+        saldo_banco = initial_saldo
         for item in extrato:
-
             saldo_banco += item['valor']
-
             item['saldo'] = saldo_banco
 
-    total_geral = sum(
-        totais_bancos.values(),
-        Decimal('0')
-    )
+    else:
+        extrato = extrato_completo
+        initial_saldo = (
+            initial_saldo_geral
+        )
 
     return render_template(
         'extrato_usina.html',
