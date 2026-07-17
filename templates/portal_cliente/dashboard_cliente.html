@@ -1,0 +1,670 @@
+{% extends 'base.html' %}
+
+{% block title %}
+Dashboard do Cliente
+{% endblock %}
+
+{% block content %}
+
+<div class="container-fluid py-4">
+
+    <!-- CABEÇALHO -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+
+        <div>
+            <h3 class="fw-bold mb-1">
+                <i class="bi bi-speedometer2 me-2 text-success"></i>
+                Dashboard de Energia
+            </h3>
+
+            {% if cliente %}
+                <p class="text-muted mb-0">
+                    {{ cliente.nome }}
+                    {% if usina %}
+                        · {{ usina.nome }}
+                    {% endif %}
+                </p>
+            {% endif %}
+        </div>
+
+        <a
+            href="{{ url_for('portal_cliente_relatorios') }}"
+            class="btn btn-outline-secondary"
+        >
+            <i class="bi bi-file-earmark-text me-1"></i>
+            Relatórios
+        </a>
+
+    </div>
+
+    {% if erro %}
+
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            {{ erro }}
+        </div>
+
+    {% endif %}
+
+    {% if not cliente %}
+
+        <div class="alert alert-info">
+            Nenhum cliente foi encontrado para este usuário.
+        </div>
+
+    {% else %}
+
+        <!-- SELETOR DO CLIENTE -->
+        {% if clientes_disponiveis|length > 1 %}
+
+            <div class="card shadow-sm border-0 mb-4">
+
+                <div class="card-body">
+
+                    <form
+                        method="GET"
+                        class="row align-items-end g-3"
+                    >
+
+                        <div class="col-md-8 col-lg-5">
+
+                            <label
+                                for="cliente_id"
+                                class="form-label fw-semibold"
+                            >
+                                Cliente
+                            </label>
+
+                            <select
+                                name="cliente_id"
+                                id="cliente_id"
+                                class="form-select"
+                            >
+
+                                {% for item in clientes_disponiveis %}
+
+                                    <option
+                                        value="{{ item.id }}"
+                                        {% if item.id == cliente.id %}
+                                            selected
+                                        {% endif %}
+                                    >
+                                        Unidade Consumidora {{ item.codigo_unidade or '-' }}
+                                    </option>
+
+                                {% endfor %}
+
+                            </select>
+
+                        </div>
+
+                        <div class="col-auto">
+
+                            <button
+                                type="submit"
+                                class="btn btn-success"
+                            >
+                                <i class="bi bi-search me-1"></i>
+                                Visualizar
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+        {% endif %}
+
+        <!-- INFORMAÇÕES DA ADESÃO -->
+        <div class="card shadow-sm border-0 mb-4">
+
+            <div class="card-body">
+
+                <div class="row g-4">
+
+                    <div class="col-md-3">
+
+                        <small class="text-muted d-block">
+                            Unidade Consumidora
+                        </small>
+
+                        <strong>
+                            {{ cliente.codigo_unidade or '-' }}
+                        </strong>
+
+                    </div>
+
+                    <div class="col-md-3">
+
+                        <small class="text-muted d-block">
+                            Data de Adesão
+                        </small>
+
+                        <strong>
+                            {% if data_adesao %}
+                                {{ data_adesao.strftime('%d/%m/%Y') }}
+                            {% else %}
+                                Não informada
+                            {% endif %}
+                        </strong>
+
+                    </div>
+
+                    <div class="col-md-3">
+
+                        <small class="text-muted d-block">
+                            Tempo de Adesão
+                        </small>
+
+                        <strong>
+                            {{ tempo_adesao }}
+                        </strong>
+
+                    </div>
+
+                    <div class="col-md-3">
+
+                        <small class="text-muted d-block">
+                            Rateio Atual
+                        </small>
+
+                        <strong class="text-success">
+                            {{ "%.4f"|format(percentual_atual or 0)|replace('.', ',') }}%
+                        </strong>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- CARDS -->
+        <div class="row g-3 mb-4">
+
+            <div class="col-sm-6 col-xl-4">
+
+                <div class="card dashboard-card shadow-sm border-0 h-100">
+
+                    <div class="card-body">
+
+                        <div class="dashboard-icon bg-primary-subtle text-primary">
+                            <i class="bi bi-sun"></i>
+                        </div>
+
+                        <small class="text-muted">
+                            Geração Total da Usina
+                        </small>
+
+                        <h4 class="fw-bold mt-2 mb-0">
+                            {{ "{:,.2f}".format(geracao_usina_total or 0)
+                                .replace(",", "X")
+                                .replace(".", ",")
+                                .replace("X", ".") }}
+                            kWh
+                        </h4>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="col-sm-6 col-xl-4">
+
+                <div class="card dashboard-card shadow-sm border-0 h-100">
+
+                    <div class="card-body">
+
+                        <div class="dashboard-icon bg-warning-subtle text-warning">
+                            <i class="bi bi-lightning-charge"></i>
+                        </div>
+
+                        <small class="text-muted">
+                            Energia Destinada ao Cliente
+                        </small>
+
+                        <h4 class="fw-bold mt-2 mb-0">
+                            {{ "{:,.2f}".format(energia_destinada_total or 0)
+                                .replace(",", "X")
+                                .replace(".", ",")
+                                .replace("X", ".") }}
+                            kWh
+                        </h4>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="col-sm-6 col-xl-4">
+
+                <div class="card dashboard-card shadow-sm border-0 h-100">
+
+                    <div class="card-body">
+
+                        <div class="dashboard-icon bg-success-subtle text-success">
+                            <i class="bi bi-battery-charging"></i>
+                        </div>
+
+                        <small class="text-muted">
+                            Energia Compensada
+                        </small>
+
+                        <h4 class="fw-bold mt-2 mb-0 text-success">
+                            {{ "{:,.2f}".format(energia_compensada_total or 0)
+                                .replace(",", "X")
+                                .replace(".", ",")
+                                .replace("X", ".") }}
+                            kWh
+                        </h4>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="col-sm-6 col-xl-4">
+
+                <div class="card dashboard-card shadow-sm border-0 h-100">
+
+                    <div class="card-body">
+
+                        <div class="dashboard-icon bg-info-subtle text-info">
+                            <i class="bi bi-battery-half"></i>
+                        </div>
+
+                        <small class="text-muted">
+                            Saldo Atual da Unidade
+                        </small>
+
+                        <h4 class="fw-bold mt-2 mb-0">
+                            {{ "{:,.2f}".format(saldo_atual or 0)
+                                .replace(",", "X")
+                                .replace(".", ",")
+                                .replace("X", ".") }}
+                            kWh
+                        </h4>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="col-sm-6 col-xl-4">
+
+                <div class="card dashboard-card shadow-sm border-0 h-100">
+
+                    <div class="card-body">
+
+                        <div class="dashboard-icon bg-success-subtle text-success">
+                            <i class="bi bi-graph-up-arrow"></i>
+                        </div>
+
+                        <small class="text-muted">
+                            Economia Total
+                        </small>
+
+                        <h4 class="fw-bold mt-2 mb-0 text-success">
+                            {{ economia_total|formato_brasileiro }}
+                        </h4>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="col-sm-6 col-xl-4">
+
+                <div class="card dashboard-card shadow-sm border-0 h-100">
+
+                    <div class="card-body">
+
+                        <div class="dashboard-icon bg-secondary-subtle text-secondary">
+                            <i class="bi bi-cash-coin"></i>
+                        </div>
+
+                        <small class="text-muted">
+                            Total Pago
+                        </small>
+
+                        <h4 class="fw-bold mt-2 mb-0">
+                            {{ total_pago|formato_brasileiro }}
+                        </h4>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- GRÁFICO -->
+        <div class="card shadow-sm border-0 mb-4">
+
+            <div class="card-header bg-white border-0 pt-4 px-4">
+
+                <h5 class="fw-bold mb-0">
+                    <i class="bi bi-bar-chart-line me-2 text-success"></i>
+                    Evolução Mensal de Energia
+                </h5>
+
+            </div>
+
+            <div class="card-body">
+
+                {% if labels_grafico %}
+
+                    <div style="height: 380px;">
+                        <canvas id="graficoEnergia"></canvas>
+                    </div>
+
+                {% else %}
+
+                    <div class="text-center text-muted py-5">
+                        Não existem dados de geração para o período.
+                    </div>
+
+                {% endif %}
+
+            </div>
+
+        </div>
+
+        <!-- TABELA -->
+        <div class="card shadow-sm border-0">
+
+            <div class="card-header bg-white border-0 pt-4 px-4">
+
+                <h5 class="fw-bold mb-0">
+                    <i class="bi bi-table me-2 text-success"></i>
+                    Demonstrativo Mensal
+                </h5>
+
+            </div>
+
+            <div class="card-body p-0">
+
+                <div class="table-responsive">
+
+                    <table class="table table-hover align-middle mb-0">
+
+                        <thead class="table-light">
+
+                            <tr>
+                                <th class="ps-4">Mês</th>
+                                <th class="text-end">Geração da Usina</th>
+                                <th class="text-end">Rateio</th>
+                                <th class="text-end">Energia Destinada</th>
+                                <th class="text-end">Compensada</th>
+                                <th class="text-end">Saldo</th>
+                                <th class="text-end">Economia</th>
+                                <th class="text-end pe-4">Valor Pago</th>
+                            </tr>
+
+                        </thead>
+
+                        <tbody>
+
+                            {% for item in dados_mensais %}
+
+                                <tr>
+
+                                    <td class="ps-4 fw-semibold">
+                                        {{ item.mes_nome }}
+                                    </td>
+
+                                    <td class="text-end">
+                                        {{ "{:,.2f}".format(item.geracao_usina)
+                                            .replace(",", "X")
+                                            .replace(".", ",")
+                                            .replace("X", ".") }}
+                                        kWh
+                                    </td>
+
+                                    <td class="text-end">
+                                        {{ "%.4f"|format(item.percentual)
+                                            |replace('.', ',') }}%
+                                    </td>
+
+                                    <td class="text-end fw-semibold text-warning-emphasis">
+                                        {{ "{:,.2f}".format(item.energia_destinada)
+                                            .replace(",", "X")
+                                            .replace(".", ",")
+                                            .replace("X", ".") }}
+                                        kWh
+                                    </td>
+
+                                    <td class="text-end text-success fw-semibold">
+                                        {{ "{:,.2f}".format(item.energia_compensada)
+                                            .replace(",", "X")
+                                            .replace(".", ",")
+                                            .replace("X", ".") }}
+                                        kWh
+                                    </td>
+
+                                    <td class="text-end">
+                                        {{ "{:,.2f}".format(item.saldo_unidade)
+                                            .replace(",", "X")
+                                            .replace(".", ",")
+                                            .replace("X", ".") }}
+                                        kWh
+                                    </td>
+
+                                    <td class="text-end text-success">
+                                        {{ item.economia|formato_brasileiro }}
+                                    </td>
+
+                                    <td class="text-end pe-4">
+                                        {{ item.valor_pago|formato_brasileiro }}
+                                    </td>
+
+                                </tr>
+
+                            {% else %}
+
+                                <tr>
+
+                                    <td
+                                        colspan="8"
+                                        class="text-center text-muted py-5"
+                                    >
+                                        Nenhum dado mensal encontrado.
+                                    </td>
+
+                                </tr>
+
+                            {% endfor %}
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    {% endif %}
+
+</div>
+
+<style>
+
+    .dashboard-card {
+        border-radius: 16px;
+        transition:
+            transform 0.2s ease,
+            box-shadow 0.2s ease;
+    }
+
+    .dashboard-card:hover {
+        transform: translateY(-3px);
+        box-shadow:
+            0 10px 24px rgba(0, 0, 0, 0.08) !important;
+    }
+
+    .dashboard-icon {
+        width: 46px;
+        height: 46px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 22px;
+        margin-bottom: 16px;
+    }
+
+    .table th {
+        white-space: nowrap;
+        font-size: 0.82rem;
+        text-transform: uppercase;
+        letter-spacing: 0.02rem;
+        color: #6c757d;
+    }
+
+    .table td {
+        white-space: nowrap;
+    }
+
+</style>
+
+{% if labels_grafico %}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+
+    document.addEventListener(
+        'DOMContentLoaded',
+        function () {
+
+            const elemento = document.getElementById(
+                'graficoEnergia'
+            );
+
+            if (!elemento) {
+                return;
+            }
+
+            const labels = {{ labels_grafico|tojson }};
+            const geracao = {{ geracao_grafico|tojson }};
+            const destinada = {{ destinada_grafico|tojson }};
+            const compensada = {{ compensada_grafico|tojson }};
+
+            new Chart(
+                elemento,
+                {
+                    type: 'line',
+
+                    data: {
+                        labels: labels,
+
+                        datasets: [
+                            {
+                                label: 'Geração da Usina',
+                                data: geracao,
+                                borderColor: '#0d6efd',
+                                backgroundColor: 'rgba(13, 110, 253, 0.10)',
+                                borderWidth: 2,
+                                tension: 0.3,
+                                pointRadius: 3
+                            },
+                            {
+                                label: 'Energia Destinada',
+                                data: destinada,
+                                borderColor: '#f0ad00',
+                                backgroundColor: 'rgba(240, 173, 0, 0.10)',
+                                borderWidth: 2,
+                                tension: 0.3,
+                                pointRadius: 3
+                            },
+                            {
+                                label: 'Energia Compensada',
+                                data: compensada,
+                                borderColor: '#198754',
+                                backgroundColor: 'rgba(25, 135, 84, 0.10)',
+                                borderWidth: 2,
+                                tension: 0.3,
+                                pointRadius: 3
+                            }
+                        ]
+                    },
+
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+
+                        interaction: {
+                            mode: 'index',
+                            intersect: false
+                        },
+
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            },
+
+                            tooltip: {
+                                callbacks: {
+                                    label: function (context) {
+
+                                        const valor = Number(
+                                            context.raw || 0
+                                        );
+
+                                        return (
+                                            context.dataset.label +
+                                            ': ' +
+                                            valor.toLocaleString(
+                                                'pt-BR',
+                                                {
+                                                    minimumFractionDigits: 2,
+                                                    maximumFractionDigits: 2
+                                                }
+                                            ) +
+                                            ' kWh'
+                                        );
+                                    }
+                                }
+                            }
+                        },
+
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+
+                                ticks: {
+                                    callback: function (valor) {
+
+                                        return Number(
+                                            valor
+                                        ).toLocaleString(
+                                            'pt-BR'
+                                        ) + ' kWh';
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            );
+
+        }
+    );
+
+</script>
+
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,135 @@
+{% extends 'base.html' %}
+
+{% block title %}
+Meus Relatórios
+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    
+    <!-- Cabeçalho Principal -->
+    <div class="row align-items-center mb-5">
+        <div class="col-12 col-md mb-3 mb-md-0">
+            <div class="d-flex align-items-center gap-3">
+                <div class="p-3 bg-primary bg-opacity-10 text-primary rounded-3">
+                    <i class="bi bi-file-earmark-bar-graph fs-3"></i>
+                </div>
+                <div>
+                    <h2 class="fw-bold text-dark mb-1">Meus Relatórios</h2>
+                    <p class="text-muted mb-0">Consulte e visualize os relatórios de faturamento dos clientes vinculados à sua conta.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-auto">
+            <a href="{{ url_for('index') }}?aba=portal_cliente" class="btn btn-light border px-4 py-2 text-secondary">
+                <i class="bi bi-arrow-left me-2"></i>Voltar
+            </a>
+        </div>
+    </div>
+
+    {% if faturas %}
+        <!-- Barra de Ferramentas / Filtros (Opcional, melhora muito a usabilidade) -->
+        <div class="card border-0 bg-transparent mb-4">
+            <div class="row g-3 align-items-center">
+                <div class="col-12 col-md-6 col-lg-4">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted">
+                            <i class="bi bi-search"></i>
+                        </span>
+                        <input type="text" id="inputBusca" class="form-control border-start-0" placeholder="Buscar por cliente ou UC...">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabela de Relatórios -->
+        <div class="card shadow-sm border-0 rounded-4 overflow-hidden">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="tabelaRelatorios">
+                    <thead class="bg-light border-bottom text-uppercase fs-7 tracking-wider text-muted">
+                        <tr>
+                            <th class="ps-4 py-3">Cliente</th>
+                            <th class="py-3">Unidade Consumidora (UC)</th>
+                            <th class="py-3">Mês de Referência</th>
+                            <th class="text-end pe-4 py-3">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody class="border-top-0">
+                        {% for fatura in faturas %}
+                            <tr>
+                                <td class="ps-4 py-3">
+                                    <div class="d-flex align-items-center gap-3">
+                                        <div class="avatar-placeholder rounded-circle bg-secondary bg-opacity-10 text-secondary d-flex align-items-center justify-content-center fw-bold text-uppercase" style="width: 40px; height: 40px; min-width: 40px;">
+                                            {{ fatura.cliente.nome[:2] }}
+                                        </div>
+                                        <div>
+                                            <span class="fw-bold text-dark d-block match-nome">{{ fatura.cliente.nome }}</span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="py-3">
+                                    {% if fatura.cliente.codigo_unidade %}
+                                        <code class="text-dark bg-light px-2 py-1 rounded border text-monospace match-uc">
+                                            {{ fatura.cliente.codigo_unidade }}
+                                        </code>
+                                    {% else %}
+                                        <span class="text-muted small">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="py-3">
+                                    <div class="d-flex align-items-center text-secondary gap-2">
+                                        <i class="bi bi-calendar3 text-muted"></i>
+                                        <span>{{ '%02d'|format(fatura.mes_referencia) }}/{{ fatura.ano_referencia }}</span>
+                                    </div>
+                                </td>
+                                <td class="text-end pe-4 py-3">
+                                    <a href="{{ url_for('relatorio_fatura', fatura_id=fatura.id) }}" 
+                                       class="btn btn-sm btn-primary rounded-3 px-3 py-2 d-inline-flex align-items-center gap-2 shadow-sm" 
+                                       target="_blank">
+                                        <i class="bi bi-eye-fill"></i>
+                                        <span>Visualizar</span>
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% else %}
+        <!-- Estado Vazio Modernizado -->
+        <div class="card border-0 shadow-sm rounded-4 py-5 my-4">
+            <div class="card-body text-center py-5">
+                <div class="bg-light text-muted rounded-circle d-inline-flex align-items-center justify-content-center mb-4 shadow-sm"
+                     style="width: 80px; height: 80px;">
+                    <i class="bi bi-file-earmark-x fs-1 text-secondary opacity-50"></i>
+                </div>
+                <h4 class="fw-bold text-dark mb-2">Nenhum relatório por aqui</h4>
+                <p class="text-muted mx-auto mb-0" style="max-width: 400px;">
+                    Ainda não existem relatórios de faturamento gerados ou disponíveis para as unidades vinculadas ao seu perfil.
+                </p>
+            </div>
+        </div>
+    {% endif %}
+
+</div>
+
+<!-- Script opcional para fazer o campo de busca funcionar em tempo real sem recarregar a página -->
+<script>
+    document.getElementById('inputBusca')?.addEventListener('keyup', function() {
+        const busca = this.value.toLowerCase();
+        const linhas = document.querySelectorAll('#tabelaRelatorios tbody tr');
+        
+        linhas.forEach(linha => {
+            const nome = linha.querySelector('.match-nome').textContent.toLowerCase();
+            const uc = linha.querySelector('.match-uc')?.textContent.toLowerCase() || '';
+            
+            if (nome.includes(busca) || uc.includes(busca)) {
+                linha.style.display = '';
+            } else {
+                linha.style.display = 'none';
+            }
+        });
+    });
+</script>
+{% endblock %}

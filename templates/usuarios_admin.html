@@ -1,193 +1,668 @@
 {% extends 'base.html' %}
-{% block title %}Usuários Cadastrados{% endblock %}
+
+{% block title %}
+Usuários Cadastrados
+{% endblock %}
 
 {% block content %}
-<div class="container mt-5 mb-5">
-    
+
+<div class="container-fluid mt-5 mb-5 px-3 px-lg-4">
+
     <div class="card p-4 shadow-sm border-0 bg-white rounded-3">
-        
+
+        <!-- Cabeçalho -->
         <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mb-4 pb-3 border-bottom">
+
             <div>
-                <h3 class="mb-1 text-dark fw-bold d-flex align-items-center gap-2" style="letter-spacing: -0.5px;">
-                    <i class="bi bi-people-fill text-primary"></i> 
+
+                <h3
+                    class="mb-1 text-dark fw-bold d-flex align-items-center gap-2"
+                    style="letter-spacing: -0.5px;"
+                >
+                    <i class="bi bi-people-fill text-primary"></i>
                     Usuários Cadastrados
                 </h3>
-                <p class="text-muted small mb-0">Gerencie os colaboradores da plataforma e controle os níveis de acesso.</p>
+
+                <p class="text-muted small mb-0">
+                    Gerencie os usuários, clientes vinculados e níveis de acesso.
+                </p>
+
             </div>
-            
+
             <div class="d-flex gap-2">
-                <a href="{{ url_for('index') }}" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2 px-3 fw-medium">
-                    <i class="bi bi-arrow-left"></i> Início
+
+                <a
+                    href="{{ url_for('index') }}"
+                    class="btn btn-outline-secondary d-inline-flex align-items-center gap-2 px-3 fw-medium"
+                >
+                    <i class="bi bi-arrow-left"></i>
+                    Início
                 </a>
-                <a href="{{ url_for('cadastrar_usuario') }}" class="btn btn-success d-inline-flex align-items-center gap-2 px-3 fw-medium shadow-sm">
-                    <i class="bi bi-person-plus-fill"></i> Novo Usuário
+
+                <a
+                    href="{{ url_for('cadastrar_usuario') }}"
+                    class="btn btn-success d-inline-flex align-items-center gap-2 px-3 fw-medium shadow-sm"
+                >
+                    <i class="bi bi-person-plus-fill"></i>
+                    Novo Usuário
                 </a>
+
             </div>
+
         </div>
 
+        <!-- Mensagens -->
         {% with messages = get_flashed_messages(with_categories=true) %}
+
             {% if messages %}
+
                 <div class="mb-3">
+
                     {% for category, message in messages %}
-                        <div class="alert alert-{{ category if category != 'error' else 'danger' }} alert-dismissible fade show mb-2 small fw-medium" role="alert">
+
+                        <div
+                            class="alert alert-{{ category if category != 'error' else 'danger' }} alert-dismissible fade show mb-2 small fw-medium"
+                            role="alert"
+                        >
+
                             {{ message|safe }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+
+                            <button
+                                type="button"
+                                class="btn-close"
+                                data-bs-dismiss="alert"
+                                aria-label="Fechar"
+                            ></button>
+
                         </div>
+
                     {% endfor %}
+
                 </div>
+
             {% endif %}
+
         {% endwith %}
 
+        <!-- Tabela -->
         <div class="table-responsive">
-            <table id="usuarios-table" class="table table-hover align-middle border-top mb-0" style="font-size: 0.92rem;">
-                <thead class="table-light text-secondary text-uppercase" style="font-size: 0.75rem; letter-spacing: 0.5px;">
+
+            <table
+                id="usuarios-table"
+                class="table table-hover align-middle border-top mb-0"
+                style="font-size: 0.92rem;"
+            >
+
+                <thead
+                    class="table-light text-secondary text-uppercase"
+                    style="font-size: 0.75rem; letter-spacing: 0.5px;"
+                >
+
                     <tr>
-                        <th class="ps-3">Colaborador / E-mail</th>
-                        <th>Perfil</th>
-                        <th class="text-center">Geração</th>
-                        <th class="text-center">Clientes</th>
-                        <th class="text-center">Faturas</th>
-                        <th class="text-center">Financeiro</th>
-                        <th class="text-center">Comercial</th>
-                        <th class="text-center">Status Especial</th>
-                        <th class="text-center pe-3">Ações</th>
+
+                        <th class="ps-3">
+                            Usuário / E-mail
+                        </th>
+
+                        <th>
+                            Perfil
+                        </th>
+
+                        <th class="text-center">
+                            Clientes vinculados
+                        </th>
+
+                        <th class="text-center">
+                            Geração
+                        </th>
+
+                        <th class="text-center">
+                            Cad. clientes
+                        </th>
+
+                        <th class="text-center">
+                            Faturas
+                        </th>
+
+                        <th class="text-center">
+                            Financeiro
+                        </th>
+
+                        <th class="text-center">
+                            Comercial
+                        </th>
+
+                        <th class="text-center">
+                            Status especial
+                        </th>
+
+                        <th class="text-center pe-3">
+                            Ações
+                        </th>
+
                     </tr>
+
                 </thead>
+
                 <tbody>
+
                     {% for usuario in usuarios %}
-                    <tr {% if usuario.pode_aprovar_financeiro %}class="table-info-subtle"{% endif %}>
-                        
-                        <td class="ps-3 py-3">
-                            <div class="fw-bold text-dark">{{ usuario.nome }}</div>
-                            <div class="text-muted small font-monospace">{{ usuario.email }}</div>
-                        </td>
 
-                        <td>
-                            {% if usuario.perfil == 'admin' %}
-                                <span class="badge rounded-pill bg-danger-subtle text-danger border border-danger-subtle px-2 py-1 fw-semibold">Admin</span>
-                            {% elif usuario.perfil == 'gerente_comercial' %}
-                                <span class="badge rounded-pill bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1 fw-semibold">Gerente Comercial</span>
-                            {% elif usuario.perfil == 'comercial' %}
-                                <span class="badge rounded-pill bg-info-subtle text-info-emphasis border border-info-subtle px-2 py-1 fw-semibold">Comercial</span>
-                            {% elif usuario.perfil == 'monitoramento' %}
-                                <span class="badge rounded-pill bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 fw-semibold">Monitoramento</span>
-                            {% elif usuario.perfil == 'financeiro' %}
-                                <span class="badge rounded-pill bg-success-subtle text-success border border-success-subtle px-2 py-1 fw-semibold">
-                                    Financeiro
-                                </span>
-                            {% else %}
-                                <span class="badge rounded-pill bg-light text-secondary border px-2 py-1 fw-semibold">Usuário</span>
-                            {% endif %}
-                        </td>
-
-                        <td class="text-center">
-                            <span class="badge rounded-circle p-1.5 {{ 'bg-success-subtle text-success' if usuario.pode_cadastrar_geracao else 'bg-danger-subtle text-danger' }}">
-                                <i class="bi {{ 'bi-check' if usuario.pode_cadastrar_geracao else 'bi-x' }} fs-6 lh-1"></i>
-                            </span>
-                        </td>
-
-                        <td class="text-center">
-                            <span class="badge rounded-circle p-1.5 {{ 'bg-success-subtle text-success' if usuario.pode_cadastrar_cliente else 'bg-danger-subtle text-danger' }}">
-                                <i class="bi {{ 'bi-check' if usuario.pode_cadastrar_cliente else 'bi-x' }} fs-6 lh-1"></i>
-                            </span>
-                        </td>
-
-                        <td class="text-center">
-                            <span class="badge rounded-circle p-1.5 {{ 'bg-success-subtle text-success' if usuario.pode_cadastrar_fatura else 'bg-danger-subtle text-danger' }}">
-                                <i class="bi {{ 'bi-check' if usuario.pode_cadastrar_fatura else 'bi-x' }} fs-6 lh-1"></i>
-                            </span>
-                        </td>
-
-                        <td class="text-center">
-                            <span class="badge rounded-circle p-1.5 {{ 'bg-success-subtle text-success' if usuario.pode_acessar_financeiro else 'bg-danger-subtle text-danger' }}">
-                                <i class="bi {{ 'bi-check' if usuario.pode_acessar_financeiro else 'bi-x' }} fs-6 lh-1"></i>
-                            </span>
-                        </td>
-
-                        <td class="text-center">
-                            <span class="badge rounded-circle p-1.5 {{ 'bg-success-subtle text-success' if usuario.pode_acessar_comercial else 'bg-danger-subtle text-danger' }}">
-                                <i class="bi {{ 'bi-check' if usuario.pode_acessar_comercial else 'bi-x' }} fs-6 lh-1"></i>
-                            </span>
-                        </td>
-
-                        <td class="text-center">
+                        <tr
                             {% if usuario.pode_aprovar_financeiro %}
-                                <span class="badge bg-primary px-2 py-1.5 shadow-sm rounded-3">
-                                    <i class="bi bi-shield-check me-1"></i> Aprovador Fin.
-                                </span>
-                            {% else %}
-                                <span class="text-muted font-monospace small">—</span>
+                                class="table-info-subtle"
                             {% endif %}
-                        </td>
+                        >
 
-                        <td class="text-center pe-3">
-                            <div class="btn-group shadow-sm border rounded-2 bg-white" role="group">
-                                <a href="{{ url_for('editar_usuario', id=usuario.id) }}" class="btn btn-sm btn-light border-0 text-primary px-2.5 py-1.5" title="Editar Colaborador">
-                                    <i class="bi bi-pencil-square fs-6"></i>
-                                </a>
-                                <form method="POST" action="{{ url_for('excluir_usuario', id=usuario.id) }}" class="d-inline m-0">
-                                    {% if csrf_token %} {{ csrf_token() }} {% endif %}
-                                    <button type="submit" class="btn btn-sm btn-light border-0 text-danger px-2.5 py-1.5"
-                                            onclick="return confirm('Tem certeza absoluta que deseja desativar/excluir este colaborador?')"
-                                            title="Excluir Colaborador">
-                                        <i class="bi bi-trash3-fill fs-6"></i>
+                            <!-- Usuário -->
+                            <td class="ps-3 py-3">
+
+                                <div class="fw-bold text-dark">
+                                    {{ usuario.nome }}
+                                </div>
+
+                                <div class="text-muted small font-monospace">
+                                    {{ usuario.email }}
+                                </div>
+
+                            </td>
+
+                            <!-- Perfil -->
+                            <td>
+
+                                {% if usuario.perfil == 'admin' %}
+
+                                    <span class="badge rounded-pill bg-danger-subtle text-danger border border-danger-subtle px-2 py-1 fw-semibold">
+                                        Administrador
+                                    </span>
+
+                                {% elif usuario.perfil == 'gerente_comercial' %}
+
+                                    <span class="badge rounded-pill bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1 fw-semibold">
+                                        Gerente Comercial
+                                    </span>
+
+                                {% elif usuario.perfil == 'comercial' %}
+
+                                    <span class="badge rounded-pill bg-info-subtle text-info-emphasis border border-info-subtle px-2 py-1 fw-semibold">
+                                        Comercial
+                                    </span>
+
+                                {% elif usuario.perfil == 'monitoramento' %}
+
+                                    <span class="badge rounded-pill bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 fw-semibold">
+                                        Monitoramento
+                                    </span>
+
+                                {% elif usuario.perfil == 'financeiro' %}
+
+                                    <span class="badge rounded-pill bg-success-subtle text-success border border-success-subtle px-2 py-1 fw-semibold">
+                                        Financeiro
+                                    </span>
+
+                                {% elif usuario.perfil == 'cliente' %}
+
+                                    <span class="badge rounded-pill bg-dark-subtle text-dark border px-2 py-1 fw-semibold">
+                                        <i class="bi bi-person-badge me-1"></i>
+                                        Cliente
+                                    </span>
+
+                                {% else %}
+
+                                    <span class="badge rounded-pill bg-light text-secondary border px-2 py-1 fw-semibold">
+                                        Usuário
+                                    </span>
+
+                                {% endif %}
+
+                            </td>
+
+                            <!-- Clientes vinculados -->
+                            <td class="text-center">
+
+                                {% set clientes_usuario = usuario.clientes.all() %}
+
+                                {% if clientes_usuario %}
+
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm btn-outline-primary position-relative px-3"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#modalClientesUsuario{{ usuario.id }}"
+                                        title="Visualizar clientes vinculados"
+                                    >
+                                        <i class="bi bi-people me-1"></i>
+
+                                        Visualizar
+
+                                        <span class="badge text-bg-primary ms-1">
+                                            {{ clientes_usuario|length }}
+                                        </span>
                                     </button>
-                                </form>
-                            </div>
-                        </td>
-                    </tr>
+
+                                {% else %}
+
+                                    <span class="text-muted small">
+                                        <i class="bi bi-dash-circle me-1"></i>
+                                        Nenhum
+                                    </span>
+
+                                {% endif %}
+
+                            </td>
+
+                            <!-- Geração -->
+                            <td class="text-center">
+
+                                <span class="badge rounded-circle p-2 {{ 'bg-success-subtle text-success' if usuario.pode_cadastrar_geracao else 'bg-danger-subtle text-danger' }}">
+
+                                    <i class="bi {{ 'bi-check' if usuario.pode_cadastrar_geracao else 'bi-x' }} fs-6 lh-1"></i>
+
+                                </span>
+
+                            </td>
+
+                            <!-- Cadastrar clientes -->
+                            <td class="text-center">
+
+                                <span class="badge rounded-circle p-2 {{ 'bg-success-subtle text-success' if usuario.pode_cadastrar_cliente else 'bg-danger-subtle text-danger' }}">
+
+                                    <i class="bi {{ 'bi-check' if usuario.pode_cadastrar_cliente else 'bi-x' }} fs-6 lh-1"></i>
+
+                                </span>
+
+                            </td>
+
+                            <!-- Faturas -->
+                            <td class="text-center">
+
+                                <span class="badge rounded-circle p-2 {{ 'bg-success-subtle text-success' if usuario.pode_cadastrar_fatura else 'bg-danger-subtle text-danger' }}">
+
+                                    <i class="bi {{ 'bi-check' if usuario.pode_cadastrar_fatura else 'bi-x' }} fs-6 lh-1"></i>
+
+                                </span>
+
+                            </td>
+
+                            <!-- Financeiro -->
+                            <td class="text-center">
+
+                                <span class="badge rounded-circle p-2 {{ 'bg-success-subtle text-success' if usuario.pode_acessar_financeiro else 'bg-danger-subtle text-danger' }}">
+
+                                    <i class="bi {{ 'bi-check' if usuario.pode_acessar_financeiro else 'bi-x' }} fs-6 lh-1"></i>
+
+                                </span>
+
+                            </td>
+
+                            <!-- Comercial -->
+                            <td class="text-center">
+
+                                <span class="badge rounded-circle p-2 {{ 'bg-success-subtle text-success' if usuario.pode_acessar_comercial else 'bg-danger-subtle text-danger' }}">
+
+                                    <i class="bi {{ 'bi-check' if usuario.pode_acessar_comercial else 'bi-x' }} fs-6 lh-1"></i>
+
+                                </span>
+
+                            </td>
+
+                            <!-- Status especial -->
+                            <td class="text-center">
+
+                                {% if usuario.pode_aprovar_financeiro %}
+
+                                    <span class="badge bg-primary px-2 py-2 shadow-sm rounded-3">
+
+                                        <i class="bi bi-shield-check me-1"></i>
+                                        Aprovador Fin.
+
+                                    </span>
+
+                                {% else %}
+
+                                    <span class="text-muted font-monospace small">
+                                        —
+                                    </span>
+
+                                {% endif %}
+
+                            </td>
+
+                            <!-- Ações -->
+                            <td class="text-center pe-3">
+
+                                <div
+                                    class="btn-group shadow-sm border rounded-2 bg-white"
+                                    role="group"
+                                >
+
+                                    <a
+                                        href="{{ url_for('editar_usuario', id=usuario.id) }}"
+                                        class="btn btn-sm btn-light border-0 text-primary px-2 py-1"
+                                        title="Editar usuário"
+                                    >
+                                        <i class="bi bi-pencil-square fs-6"></i>
+                                    </a>
+
+                                    <form
+                                        method="POST"
+                                        action="{{ url_for('excluir_usuario', id=usuario.id) }}"
+                                        class="d-inline m-0"
+                                    >
+
+                                        {% if csrf_token %}
+                                            {{ csrf_token() }}
+                                        {% endif %}
+
+                                        <button
+                                            type="submit"
+                                            class="btn btn-sm btn-light border-0 text-danger px-2 py-1"
+                                            onclick="return confirm('Tem certeza que deseja excluir este usuário?')"
+                                            title="Excluir usuário"
+                                        >
+                                            <i class="bi bi-trash3-fill fs-6"></i>
+                                        </button>
+
+                                    </form>
+
+                                </div>
+
+                            </td>
+
+                        </tr>
+
                     {% endfor %}
+
                 </tbody>
+
             </table>
+
         </div>
 
-        <div class="alert alert-light border border-start border-primary border-3 mb-0 mt-4 py-2.5 px-3">
+        <div class="alert alert-light border border-start border-primary border-3 mb-0 mt-4 py-2 px-3">
+
             <div class="d-flex align-items-center gap-2 text-dark small">
+
                 <i class="bi bi-info-circle-fill text-primary"></i>
-                <span>Os registros em destaque azul identificam usuários com status ativo de <strong>Aprovador Financeiro</strong>
+
+                <span>
+                    Use o botão <strong>Visualizar</strong> para conferir os clientes vinculados a cada usuário.
+                </span>
+
             </div>
+
         </div>
 
     </div>
+
 </div>
 
+<!-- Modais dos clientes -->
+{% for usuario in usuarios %}
+
+    {% set clientes_usuario = usuario.clientes.all() %}
+
+    {% if clientes_usuario %}
+
+        <div
+            class="modal fade"
+            id="modalClientesUsuario{{ usuario.id }}"
+            tabindex="-1"
+            aria-labelledby="tituloModalClientes{{ usuario.id }}"
+            aria-hidden="true"
+        >
+
+            <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+
+                <div class="modal-content border-0 shadow">
+
+                    <div class="modal-header bg-primary text-white">
+
+                        <div>
+
+                            <h5
+                                class="modal-title"
+                                id="tituloModalClientes{{ usuario.id }}"
+                            >
+                                <i class="bi bi-people-fill me-2"></i>
+                                Clientes vinculados
+                            </h5>
+
+                            <small class="text-white-50">
+                                {{ usuario.nome }} — {{ usuario.email }}
+                            </small>
+
+                        </div>
+
+                        <button
+                            type="button"
+                            class="btn-close btn-close-white"
+                            data-bs-dismiss="modal"
+                            aria-label="Fechar"
+                        ></button>
+
+                    </div>
+
+                    <div class="modal-body p-0">
+
+                        <div class="list-group list-group-flush">
+
+                            {% for cliente in clientes_usuario %}
+
+                                {% set rateios_cliente = cliente.rateios
+                                    | selectattr('ativo', 'equalto', true)
+                                    | list
+                                %}
+
+                                <div class="list-group-item p-3">
+
+                                    <div class="d-flex align-items-start gap-3">
+
+                                        <div class="bg-primary-subtle text-primary rounded-circle p-3">
+
+                                            <i class="bi bi-person-fill"></i>
+
+                                        </div>
+
+                                        <div class="flex-grow-1">
+
+                                            <div class="d-flex flex-column flex-md-row justify-content-between gap-2">
+
+                                                <div>
+
+                                                    <h6 class="fw-bold text-dark mb-1">
+                                                        {{ cliente.nome }}
+                                                    </h6>
+
+                                                    <div class="small text-muted">
+
+                                                        {% if cliente.codigo_unidade %}
+
+                                                            <span class="me-3">
+
+                                                                <i class="bi bi-hash me-1"></i>
+                                                                UC {{ cliente.codigo_unidade }}
+
+                                                            </span>
+
+                                                        {% endif %}
+
+                                                        {% if cliente.cpf_cnpj %}
+
+                                                            <span>
+
+                                                                <i class="bi bi-person-vcard me-1"></i>
+                                                                {{ cliente.cpf_cnpj }}
+
+                                                            </span>
+
+                                                        {% endif %}
+
+                                                    </div>
+
+                                                </div>
+
+                                                <span class="badge text-bg-success align-self-start">
+                                                    Ativo
+                                                </span>
+
+                                            </div>
+
+                                            <div class="mt-3">
+
+                                                <div class="small fw-semibold text-secondary mb-2">
+                                                    Usinas e rateios
+                                                </div>
+
+                                                {% if rateios_cliente %}
+
+                                                    <div class="d-flex flex-wrap gap-2">
+
+                                                        {% for rateio in rateios_cliente %}
+
+                                                            <span class="badge rounded-pill bg-light text-dark border px-3 py-2">
+
+                                                                <i class="bi bi-lightning-charge-fill text-warning me-1"></i>
+
+                                                                {% if rateio.usina %}
+                                                                    {{ rateio.usina.nome }}
+                                                                {% else %}
+                                                                    Usina {{ rateio.usina_id }}
+                                                                {% endif %}
+
+                                                                <span class="mx-1">•</span>
+
+                                                                {{ '%.4f'|format(rateio.percentual or 0) }}%
+
+                                                            </span>
+
+                                                        {% endfor %}
+
+                                                    </div>
+
+                                                {% else %}
+
+                                                    <span class="small text-muted">
+                                                        Nenhum rateio ativo encontrado.
+                                                    </span>
+
+                                                {% endif %}
+
+                                            </div>
+
+                                        </div>
+
+                                    </div>
+
+                                </div>
+
+                            {% endfor %}
+
+                        </div>
+
+                    </div>
+
+                    <div class="modal-footer">
+
+                        <span class="me-auto text-muted small">
+
+                            {{ clientes_usuario|length }}
+
+                            {% if clientes_usuario|length == 1 %}
+                                cliente vinculado
+                            {% else %}
+                                clientes vinculados
+                            {% endif %}
+
+                        </span>
+
+                        <a
+                            href="{{ url_for('editar_usuario', id=usuario.id) }}"
+                            class="btn btn-outline-primary"
+                        >
+                            <i class="bi bi-pencil-square me-1"></i>
+                            Editar vínculos
+                        </a>
+
+                        <button
+                            type="button"
+                            class="btn btn-secondary"
+                            data-bs-dismiss="modal"
+                        >
+                            Fechar
+                        </button>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    {% endif %}
+
+{% endfor %}
+
 <style>
-    /* Estilização customizada para a linha do aprovador */
+
     .table-info-subtle {
         background-color: rgba(13, 110, 253, 0.04) !important;
     }
-    
-    /* Mantém os botões do DataTables bonitos */
+
+    #usuarios-table th,
+    #usuarios-table td {
+        white-space: nowrap;
+        vertical-align: middle;
+    }
+
+    .btn-group .btn-light:hover {
+        background-color: #f1f3f5;
+    }
+
+    .modal-body .list-group-item:hover {
+        background-color: #f8f9fa;
+    }
+
     .dataTables_wrapper .dataTables_paginate .paginate_button.current {
         background: #0d6efd !important;
         color: white !important;
         border-color: #0d6efd !important;
         border-radius: 4px;
     }
-    
-    /* Ajustes nos paddings internos da tabela */
-    #usuarios-table th, #usuarios-table td {
-        white-space: nowrap;
-    }
-    
-    /* Customização dos botões de ação para efeito hover suave */
-    .btn-group .btn-light:hover {
-        background-color: #f1f3f5;
-    }
+
 </style>
 
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+<link
+    rel="stylesheet"
+    href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css"
+>
+
 <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
 <script>
-$(function() {
-    $('#usuarios-table').DataTable({
-        language: { url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json' },
-        pageLength: 25,
-        columnDefs: [
-            { orderable: false, targets: [2, 3, 4, 5, 6, 8] } // desabilita ordenação nas permissões e ações
-        ]
+    $(function () {
+
+        $('#usuarios-table').DataTable({
+
+            language: {
+                url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json'
+            },
+
+            pageLength: 25,
+
+            columnDefs: [
+                {
+                    orderable: false,
+                    targets: [2, 3, 4, 5, 6, 7, 8, 9]
+                }
+            ]
+
+        });
+
     });
-});
 </script>
+
 {% endblock %}

@@ -1,163 +1,1103 @@
 {% extends 'base.html' %}
 
 {% block title %}
-Cadastrar Usuário
+Editar Usuário
 {% endblock %}
 
 {% block content %}
+
 <div class="container py-5">
+
     <div class="card p-4 p-md-5 shadow-sm mx-auto card-auth bg-white">
 
         <div class="d-flex align-items-center gap-3 mb-4 border-bottom pb-3">
+
             <div class="bg-primary-subtle text-primary rounded-circle p-3 d-inline-flex">
                 <i class="bi bi-pencil-square fs-3"></i>
             </div>
+
             <div>
-                <h3 class="mb-1 text-dark fw-bold" style="letter-spacing: -0.5px;">Editar Usuário</h3>
-                <p class="text-muted small mb-0">Modifique as informações cadastrais e redefina os níveis de acesso do colaborador.</p>
+
+                <h3
+                    class="mb-1 text-dark fw-bold"
+                    style="letter-spacing: -0.5px;"
+                >
+                    Editar Usuário
+                </h3>
+
+                <p class="text-muted small mb-0">
+                    Modifique as informações cadastrais, vínculos e níveis de acesso.
+                </p>
+
             </div>
+
         </div>
 
-        <form method="POST">
-            {% if csrf_token %} {{ csrf_token() }} {% endif %}
+        <form
+            method="POST"
+            id="formUsuario"
+        >
 
-            <h5 class="text-secondary fw-semibold mb-3 small text-uppercase" style="letter-spacing: 0.5px;">Informações Cadastrais</h5>
+            {% if csrf_token %}
+                {{ csrf_token() }}
+            {% endif %}
+
+            <h5
+                class="text-secondary fw-semibold mb-3 small text-uppercase"
+                style="letter-spacing: 0.5px;"
+            >
+                Informações cadastrais
+            </h5>
+
             <div class="row g-3 mb-4">
+
                 <div class="col-md-6">
-                    <label for="nome" class="form-label fw-medium text-secondary">Nome Completo</label>
+
+                    <label
+                        for="nome"
+                        class="form-label fw-medium text-secondary"
+                    >
+                        Nome completo
+                    </label>
+
                     <div class="input-group">
-                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-person"></i></span>
-                        <input type="text" class="form-control border-start-0 ps-0" id="nome" name="nome" value="{{ usuario.nome }}" required>
+
+                        <span class="input-group-text bg-white border-end-0 text-muted">
+                            <i class="bi bi-person"></i>
+                        </span>
+
+                        <input
+                            type="text"
+                            class="form-control border-start-0 ps-0"
+                            id="nome"
+                            name="nome"
+                            value="{{ request.form.get('nome', usuario.nome) }}"
+                            required
+                        >
+
                     </div>
+
                 </div>
 
                 <div class="col-md-6">
-                    <label for="email" class="form-label fw-medium text-secondary">E-mail Corporativo</label>
+
+                    <label
+                        for="email"
+                        class="form-label fw-medium text-secondary"
+                    >
+                        E-mail
+                    </label>
+
                     <div class="input-group">
-                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-envelope"></i></span>
-                        <input type="email" class="form-control border-start-0 ps-0" id="email" name="email" value="{{ usuario.email }}" required>
+
+                        <span class="input-group-text bg-white border-end-0 text-muted">
+                            <i class="bi bi-envelope"></i>
+                        </span>
+
+                        <input
+                            type="email"
+                            class="form-control border-start-0 ps-0"
+                            id="email"
+                            name="email"
+                            value="{{ request.form.get('email', usuario.email) }}"
+                            required
+                        >
+
                     </div>
+
                 </div>
 
                 <div class="col-md-6">
-                    <label for="senha" class="form-label fw-medium text-secondary">Nova Senha (Opcional)</label>
+
+                    <label
+                        for="senhaInput"
+                        class="form-label fw-medium text-secondary"
+                    >
+                        Nova senha
+                    </label>
+
                     <div class="input-group">
-                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-lock"></i></span>
-                        <input type="password" class="form-control border-start-0 border-end-0 ps-0" id="senhaInput" name="senha" placeholder="Deixe em branco para manter a atual">
-                        <button class="btn btn-outline-secondary bg-white text-muted border-start-0" type="button" id="btnToggleSenha">
-                            <i class="bi bi-eye" id="iconeOlho"></i>
+
+                        <span class="input-group-text bg-white border-end-0 text-muted">
+                            <i class="bi bi-lock"></i>
+                        </span>
+
+                        <input
+                            type="password"
+                            class="form-control border-start-0 border-end-0 ps-0"
+                            id="senhaInput"
+                            name="senha"
+                            placeholder="Deixe em branco para manter a atual"
+                        >
+
+                        <button
+                            class="btn btn-outline-secondary bg-white text-muted border-start-0"
+                            type="button"
+                            id="btnToggleSenha"
+                        >
+                            <i
+                                class="bi bi-eye"
+                                id="iconeOlho"
+                            ></i>
                         </button>
+
                     </div>
+
                 </div>
 
                 <div class="col-md-6">
-                    <label class="form-label fw-medium text-secondary">Perfil do Usuário</label>
+
+                    <label
+                        for="perfilUsuario"
+                        class="form-label fw-medium text-secondary"
+                    >
+                        Perfil do usuário
+                    </label>
+
                     <div class="input-group">
-                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-shield-lock"></i></span>
-                        <select name="perfil" class="form-select border-start-0 ps-0">
-                            <option value="usuario" {% if usuario.perfil == 'usuario' %}selected{% endif %}>Usuário comum</option>
-                            <option value="comercial" {% if usuario.perfil == 'comercial' %}selected{% endif %}>Comercial</option>
-                            <option value="gerente_comercial" {% if usuario.perfil == 'gerente_comercial' %}selected{% endif %}>Gerente Comercial</option>
-                            <option value="monitoramento" {% if usuario.perfil == 'monitoramento' %}selected{% endif %}>Monitoramento</option>
-                            <option value="financeiro" {% if usuario.perfil == 'financeiro' %}selected{% endif %}>Financeiro</option>
-                            <option value="admin" {% if usuario.perfil == 'admin' %}selected{% endif %}>Administrador</option>
+
+                        <span class="input-group-text bg-white border-end-0 text-muted">
+                            <i class="bi bi-shield-lock"></i>
+                        </span>
+
+                        <select
+                            name="perfil"
+                            id="perfilUsuario"
+                            class="form-select border-start-0 ps-0"
+                            required
+                        >
+
+                            {% set perfil_atual = request.form.get(
+                                'perfil',
+                                usuario.perfil
+                            ) %}
+
+                            <option
+                                value="usuario"
+                                {% if perfil_atual == 'usuario' %}selected{% endif %}
+                            >
+                                Usuário comum
+                            </option>
+
+                            <option
+                                value="comercial"
+                                {% if perfil_atual == 'comercial' %}selected{% endif %}
+                            >
+                                Comercial
+                            </option>
+
+                            <option
+                                value="gerente_comercial"
+                                {% if perfil_atual == 'gerente_comercial' %}selected{% endif %}
+                            >
+                                Gerente Comercial
+                            </option>
+
+                            <option
+                                value="monitoramento"
+                                {% if perfil_atual == 'monitoramento' %}selected{% endif %}
+                            >
+                                Monitoramento
+                            </option>
+
+                            <option
+                                value="financeiro"
+                                {% if perfil_atual == 'financeiro' %}selected{% endif %}
+                            >
+                                Financeiro
+                            </option>
+
+                            <option
+                                value="admin"
+                                {% if perfil_atual == 'admin' %}selected{% endif %}
+                            >
+                                Administrador
+                            </option>
+
+                            <option
+                                value="cliente"
+                                {% if perfil_atual == 'cliente' %}selected{% endif %}
+                            >
+                                Cliente
+                            </option>
+
                         </select>
+
                     </div>
+
                 </div>
+
             </div>
 
-            <div class="permission-section mb-4">
-                <h6 class="fw-bold text-primary text-uppercase mb-3 d-flex align-items-center gap-2" style="font-size: 0.85rem; letter-spacing: 0.5px;">
-                    <i class="bi bi-sliders"></i> Níveis de Acesso & Módulos Disponíveis
+            <!-- Vinculação de clientes -->
+            <div
+                id="containerCliente"
+                class="mb-4"
+                style="display: none;"
+            >
+
+                <div class="card border-primary-subtle bg-primary-subtle bg-opacity-10">
+
+                    <div class="card-body">
+
+                        <div class="d-flex align-items-center gap-2 mb-4">
+
+                            <i class="bi bi-person-badge text-primary fs-4"></i>
+
+                            <div>
+
+                                <h6 class="mb-0 fw-bold text-primary">
+                                    Vinculação de clientes
+                                </h6>
+
+                                <small class="text-muted">
+                                    Selecione uma usina e escolha os clientes acessíveis.
+                                </small>
+
+                            </div>
+
+                        </div>
+
+                        <div class="row g-3 align-items-end mb-4">
+
+                            <div class="col-md-8">
+
+                                <label
+                                    for="usinaFiltro"
+                                    class="form-label fw-medium text-secondary"
+                                >
+                                    Usina
+                                </label>
+
+                                <div class="input-group">
+
+                                    <span class="input-group-text bg-white border-end-0 text-muted">
+                                        <i class="bi bi-lightning-charge"></i>
+                                    </span>
+
+                                    <select
+                                        id="usinaFiltro"
+                                        class="form-select border-start-0 ps-0"
+                                    >
+
+                                        <option value="">
+                                            Selecione uma usina
+                                        </option>
+
+                                        {% for usina in usinas %}
+
+                                            <option
+                                                value="{{ usina.id }}"
+                                                data-nome="{{ usina.nome }}"
+                                            >
+                                                {{ usina.nome }}
+                                            </option>
+
+                                        {% endfor %}
+
+                                    </select>
+
+                                </div>
+
+                            </div>
+
+                            <div class="col-md-4">
+
+                                <button
+                                    type="button"
+                                    id="btnSelecionarTodos"
+                                    class="btn btn-outline-primary w-100"
+                                    disabled
+                                >
+                                    <i class="bi bi-check2-square me-1"></i>
+                                    Selecionar todos
+                                </button>
+
+                            </div>
+
+                        </div>
+
+                        <div
+                            id="mensagemSelecioneUsina"
+                            class="alert alert-light border text-center text-muted mb-0"
+                        >
+                            <i class="bi bi-info-circle me-1"></i>
+                            Selecione uma usina para visualizar seus clientes.
+                        </div>
+
+                        <div
+                            id="carregandoClientes"
+                            class="text-center py-4"
+                            style="display: none;"
+                        >
+
+                            <div
+                                class="spinner-border text-primary"
+                                role="status"
+                            ></div>
+
+                            <div class="text-muted small mt-2">
+                                Carregando clientes...
+                            </div>
+
+                        </div>
+
+                        <div
+                            id="areaClientesUsina"
+                            style="display: none;"
+                        >
+
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+
+                                <label class="form-label fw-medium text-secondary mb-0">
+                                    Clientes encontrados
+                                </label>
+
+                                <span
+                                    id="quantidadeClientesEncontrados"
+                                    class="badge text-bg-secondary"
+                                >
+                                    0
+                                </span>
+
+                            </div>
+
+                            <div
+                                id="listaClientesUsina"
+                                class="border rounded bg-white p-3"
+                                style="max-height: 320px; overflow-y: auto;"
+                            ></div>
+
+                            <div class="text-end mt-3">
+
+                                <button
+                                    type="button"
+                                    id="btnAdicionarClientes"
+                                    class="btn btn-primary"
+                                    disabled
+                                >
+                                    <i class="bi bi-person-plus-fill me-1"></i>
+                                    Adicionar selecionados
+                                </button>
+
+                            </div>
+
+                        </div>
+
+                        <div
+                            id="areaClientesVinculados"
+                            class="mt-4"
+                            style="display: none;"
+                        >
+
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+
+                                <div>
+
+                                    <h6 class="fw-bold text-dark mb-0">
+                                        Clientes vinculados
+                                    </h6>
+
+                                    <small class="text-muted">
+                                        Remova ou acrescente clientes antes de salvar.
+                                    </small>
+
+                                </div>
+
+                                <span
+                                    id="quantidadeClientesVinculados"
+                                    class="badge text-bg-primary"
+                                >
+                                    0
+                                </span>
+
+                            </div>
+
+                            <div
+                                id="listaClientesVinculados"
+                                class="list-group"
+                            ></div>
+
+                        </div>
+
+                        <div id="camposClientesSelecionados"></div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- Permissões -->
+            <div
+                class="permission-section mb-4"
+                id="secaoPermissoes"
+            >
+
+                <h6
+                    class="fw-bold text-primary text-uppercase mb-3 d-flex align-items-center gap-2"
+                    style="font-size: 0.85rem; letter-spacing: 0.5px;"
+                >
+                    <i class="bi bi-sliders"></i>
+                    Níveis de acesso e módulos disponíveis
                 </h6>
 
-                <div class="alert alert-warning border-0 shadow-sm d-flex align-items-start gap-2 mb-3 py-2.5">
+                <div class="alert alert-warning border-0 shadow-sm d-flex align-items-start gap-2 mb-3">
+
                     <i class="bi bi-exclamation-triangle-fill fs-5 text-warning"></i>
+
                     <div class="small text-dark-emphasis">
-                        <strong>Aviso sobre Aprovador Financeiro:</strong> Apenas <em>um</em> colaborador do sistema pode ter essa função ativa por vez. Ao salvar este usuário como aprovador, o sistema removerá automaticamente a função dos outros usuários.
+
+                        <strong>Aviso:</strong>
+
+                        apenas um usuário pode ser o aprovador geral financeiro.
+
                     </div>
+
                 </div>
 
                 <div class="row g-3">
-                    <div class="col-md-6 col-lg-4">
-                        <div class="form-check form-switch bg-white p-3 rounded border shadow-sm h-100 ps-5 d-flex align-items-center">
-                            <input class="form-check-input ms-4" type="checkbox" name="pode_cadastrar_geracao" id="geracao" style="transform: scale(1.2); margin-top: 0;" {% if usuario.pode_cadastrar_geracao %}checked{% endif %}>
-                            <label class="form-check-label fw-medium text-dark ms-2" for="geracao">Cadastrar Geração</label>
-                        </div>
-                    </div>
 
                     <div class="col-md-6 col-lg-4">
-                        <div class="form-check form-switch bg-white p-3 rounded border shadow-sm h-100 ps-5 d-flex align-items-center">
-                            <input class="form-check-input ms-4" type="checkbox" name="pode_acessar_comercial" id="comercial" style="transform: scale(1.2); margin-top: 0;" {% if usuario.pode_acessar_comercial %}checked{% endif %}>
-                            <label class="form-check-label fw-medium text-dark ms-2" for="comercial">Acessar Comercial</label>
-                        </div>
-                    </div>
 
-                    <div class="col-md-6 col-lg-4">
                         <div class="form-check form-switch bg-white p-3 rounded border shadow-sm h-100 ps-5 d-flex align-items-center">
-                            <input class="form-check-input ms-4" type="checkbox" name="pode_cadastrar_cliente" id="cliente" style="transform: scale(1.2); margin-top: 0;" {% if usuario.pode_cadastrar_cliente %}checked{% endif %}>
-                            <label class="form-check-label fw-medium text-dark ms-2" for="cliente">Cadastrar Cliente</label>
-                        </div>
-                    </div>
 
-                    <div class="col-md-6 col-lg-4">
-                        <div class="form-check form-switch bg-white p-3 rounded border shadow-sm h-100 ps-5 d-flex align-items-center">
-                            <input class="form-check-input ms-4" type="checkbox" name="pode_cadastrar_fatura" id="fatura" style="transform: scale(1.2); margin-top: 0;" {% if usuario.pode_cadastrar_fatura %}checked{% endif %}>
-                            <label class="form-check-label fw-medium text-dark ms-2" for="fatura">Cadastrar Fatura</label>
-                        </div>
-                    </div>
+                            <input
+                                class="form-check-input ms-4"
+                                type="checkbox"
+                                name="pode_cadastrar_geracao"
+                                id="geracao"
+                                {% if usuario.pode_cadastrar_geracao %}checked{% endif %}
+                            >
 
-                    <div class="col-md-6 col-lg-4">
-                        <div class="form-check form-switch bg-white p-3 rounded border shadow-sm h-100 ps-5 d-flex align-items-center">
-                            <input class="form-check-input ms-4" type="checkbox" name="pode_acessar_financeiro" id="financeiro" style="transform: scale(1.2); margin-top: 0;" {% if usuario.pode_acessar_financeiro %}checked{% endif %}>
-                            <label class="form-check-label fw-medium text-dark ms-2" for="financeiro">Acessar Financeiro</label>
-                        </div>
-                    </div>
-
-                    <div class="col-md-6 col-lg-4">
-                        <div class="form-check form-switch bg-white p-3 rounded border border-primary-subtle shadow-sm h-100 ps-5 d-flex align-items-center" style="background-color: rgba(13, 110, 253, 0.02) !important;">
-                            <input class="form-check-input switch-aprovador ms-4" type="checkbox" name="pode_aprovar_financeiro" id="aprovador" style="transform: scale(1.2); margin-top: 0;" {% if usuario.pode_aprovar_financeiro %}checked{% endif %}>
-                            <label class="form-check-label fw-bold text-primary ms-2" for="aprovador">
-                                <i class="bi bi-shield-check-fill me-1"></i> Aprovador Geral
+                            <label
+                                class="form-check-label fw-medium text-dark ms-2"
+                                for="geracao"
+                            >
+                                Cadastrar Geração
                             </label>
+
                         </div>
+
                     </div>
+
+                    <div class="col-md-6 col-lg-4">
+
+                        <div class="form-check form-switch bg-white p-3 rounded border shadow-sm h-100 ps-5 d-flex align-items-center">
+
+                            <input
+                                class="form-check-input ms-4"
+                                type="checkbox"
+                                name="pode_acessar_comercial"
+                                id="comercial"
+                                {% if usuario.pode_acessar_comercial %}checked{% endif %}
+                            >
+
+                            <label
+                                class="form-check-label fw-medium text-dark ms-2"
+                                for="comercial"
+                            >
+                                Acessar Comercial
+                            </label>
+
+                        </div>
+
+                    </div>
+
+                    <div class="col-md-6 col-lg-4">
+
+                        <div class="form-check form-switch bg-white p-3 rounded border shadow-sm h-100 ps-5 d-flex align-items-center">
+
+                            <input
+                                class="form-check-input ms-4"
+                                type="checkbox"
+                                name="pode_cadastrar_cliente"
+                                id="permissaoCliente"
+                                {% if usuario.pode_cadastrar_cliente %}checked{% endif %}
+                            >
+
+                            <label
+                                class="form-check-label fw-medium text-dark ms-2"
+                                for="permissaoCliente"
+                            >
+                                Cadastrar Cliente
+                            </label>
+
+                        </div>
+
+                    </div>
+
+                    <div class="col-md-6 col-lg-4">
+
+                        <div class="form-check form-switch bg-white p-3 rounded border shadow-sm h-100 ps-5 d-flex align-items-center">
+
+                            <input
+                                class="form-check-input ms-4"
+                                type="checkbox"
+                                name="pode_cadastrar_fatura"
+                                id="fatura"
+                                {% if usuario.pode_cadastrar_fatura %}checked{% endif %}
+                            >
+
+                            <label
+                                class="form-check-label fw-medium text-dark ms-2"
+                                for="fatura"
+                            >
+                                Cadastrar Fatura
+                            </label>
+
+                        </div>
+
+                    </div>
+
+                    <div class="col-md-6 col-lg-4">
+
+                        <div class="form-check form-switch bg-white p-3 rounded border shadow-sm h-100 ps-5 d-flex align-items-center">
+
+                            <input
+                                class="form-check-input ms-4"
+                                type="checkbox"
+                                name="pode_acessar_financeiro"
+                                id="financeiro"
+                                {% if usuario.pode_acessar_financeiro %}checked{% endif %}
+                            >
+
+                            <label
+                                class="form-check-label fw-medium text-dark ms-2"
+                                for="financeiro"
+                            >
+                                Acessar Financeiro
+                            </label>
+
+                        </div>
+
+                    </div>
+
+                    <div class="col-md-6 col-lg-4">
+
+                        <div class="form-check form-switch bg-white p-3 rounded border border-primary-subtle shadow-sm h-100 ps-5 d-flex align-items-center">
+
+                            <input
+                                class="form-check-input ms-4"
+                                type="checkbox"
+                                name="pode_aprovar_financeiro"
+                                id="aprovador"
+                                {% if usuario.pode_aprovar_financeiro %}checked{% endif %}
+                            >
+
+                            <label
+                                class="form-check-label fw-bold text-primary ms-2"
+                                for="aprovador"
+                            >
+                                <i class="bi bi-shield-check-fill me-1"></i>
+                                Aprovador Geral
+                            </label>
+
+                        </div>
+
+                    </div>
+
                 </div>
+
             </div>
 
             <div class="row pt-2 align-items-center g-3">
-                <div class="col-sm-6 order-2 order-sm-1 text-center text-sm-start">
-                    <a href="{{ url_for('listar_usuarios') }}" class="btn btn-link text-muted text-decoration-none p-0">
-                        <i class="bi bi-arrow-left-short fs-5 align-middle"></i> Voltar para a lista
+
+                <div class="col-sm-6 order-2 order-sm-1">
+
+                    <a
+                        href="{{ url_for('listar_usuarios') }}"
+                        class="btn btn-link text-muted text-decoration-none p-0"
+                    >
+                        <i class="bi bi-arrow-left-short fs-5"></i>
+                        Voltar para a lista
                     </a>
+
                 </div>
-                <div class="col-sm-6 order-1 order-sm-2 text-center text-sm-end">
-                    <button type="submit" class="btn btn-primary px-5 py-2 fw-semibold shadow-sm w-100 w-sm-auto">
-                        <i class="bi bi-check2-circle me-1"></i> Salvar Alterações
+
+                <div class="col-sm-6 order-1 order-sm-2 text-end">
+
+                    <button
+                        type="submit"
+                        class="btn btn-primary px-5 py-2 fw-semibold shadow-sm w-100"
+                    >
+                        <i class="bi bi-check2-circle me-1"></i>
+                        Salvar alterações
                     </button>
+
                 </div>
+
             </div>
 
         </form>
+
     </div>
+
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-
 <script>
-    document.getElementById('btnToggleSenha').addEventListener('click', function () {
-        const senhaInput = document.getElementById('senhaInput');
-        const iconeOlho = document.getElementById('iconeOlho');
-        
-        if (senhaInput.type === 'password') {
-            senhaInput.type = 'text';
-            iconeOlho.classList.remove('bi-eye');
-            iconeOlho.classList.add('bi-eye-slash');
-        } else {
-            senhaInput.type = 'password';
-            iconeOlho.classList.remove('bi-eye-slash');
-            iconeOlho.classList.add('bi-eye');
+    document.addEventListener('DOMContentLoaded', function () {
+
+        const perfilUsuario =
+            document.getElementById('perfilUsuario');
+
+        const containerCliente =
+            document.getElementById('containerCliente');
+
+        const secaoPermissoes =
+            document.getElementById('secaoPermissoes');
+
+        const usinaFiltro =
+            document.getElementById('usinaFiltro');
+
+        const mensagemSelecioneUsina =
+            document.getElementById('mensagemSelecioneUsina');
+
+        const carregandoClientes =
+            document.getElementById('carregandoClientes');
+
+        const areaClientesUsina =
+            document.getElementById('areaClientesUsina');
+
+        const listaClientesUsina =
+            document.getElementById('listaClientesUsina');
+
+        const quantidadeClientesEncontrados =
+            document.getElementById('quantidadeClientesEncontrados');
+
+        const btnSelecionarTodos =
+            document.getElementById('btnSelecionarTodos');
+
+        const btnAdicionarClientes =
+            document.getElementById('btnAdicionarClientes');
+
+        const areaClientesVinculados =
+            document.getElementById('areaClientesVinculados');
+
+        const listaClientesVinculados =
+            document.getElementById('listaClientesVinculados');
+
+        const quantidadeClientesVinculados =
+            document.getElementById('quantidadeClientesVinculados');
+
+        const camposClientesSelecionados =
+            document.getElementById('camposClientesSelecionados');
+
+        const camposPermissao =
+            secaoPermissoes.querySelectorAll(
+                'input[type="checkbox"]'
+            );
+
+        const clientesVinculados = new Map();
+
+        const clientesIniciais = {{ clientes_vinculados | tojson }};
+
+        clientesIniciais.forEach(function (cliente) {
+
+            clientesVinculados.set(
+                String(cliente.id),
+                cliente
+            );
+
+        });
+
+        function escaparHtml(texto) {
+
+            const elemento =
+                document.createElement('div');
+
+            elemento.textContent =
+                texto || '';
+
+            return elemento.innerHTML;
+
         }
+
+        function atualizarCamposPorPerfil() {
+
+            const perfilCliente =
+                perfilUsuario.value === 'cliente';
+
+            containerCliente.style.display =
+                perfilCliente ? 'block' : 'none';
+
+            secaoPermissoes.style.display =
+                perfilCliente ? 'none' : 'block';
+
+            camposPermissao.forEach(function (campo) {
+
+                campo.disabled = perfilCliente;
+
+                if (perfilCliente) {
+                    campo.checked = false;
+                }
+
+            });
+
+        }
+
+        function atualizarClientesVinculados() {
+
+            listaClientesVinculados.innerHTML = '';
+            camposClientesSelecionados.innerHTML = '';
+
+            quantidadeClientesVinculados.textContent =
+                clientesVinculados.size;
+
+            areaClientesVinculados.style.display =
+                clientesVinculados.size
+                    ? 'block'
+                    : 'none';
+
+            clientesVinculados.forEach(function (cliente) {
+
+                const item =
+                    document.createElement('div');
+
+                item.className =
+                    'list-group-item d-flex justify-content-between align-items-center';
+
+                item.innerHTML = `
+                    <div>
+                        <div class="fw-semibold">
+                            ${escaparHtml(cliente.nome)}
+                        </div>
+
+                        <small class="text-muted">
+                            ${escaparHtml(cliente.usina_nome)}
+                            ${
+                                cliente.codigo_unidade
+                                    ? ` • UC ${escaparHtml(cliente.codigo_unidade)}`
+                                    : ''
+                            }
+                        </small>
+                    </div>
+
+                    <button
+                        type="button"
+                        class="btn btn-sm btn-outline-danger btn-remover"
+                        data-id="${cliente.id}"
+                    >
+                        <i class="bi bi-trash"></i>
+                    </button>
+                `;
+
+                listaClientesVinculados.appendChild(
+                    item
+                );
+
+                const input =
+                    document.createElement('input');
+
+                input.type = 'hidden';
+                input.name = 'clientes_ids';
+                input.value = cliente.id;
+
+                camposClientesSelecionados.appendChild(
+                    input
+                );
+
+            });
+
+            document
+                .querySelectorAll('.btn-remover')
+                .forEach(function (botao) {
+
+                    botao.addEventListener(
+                        'click',
+                        function () {
+
+                            clientesVinculados.delete(
+                                String(this.dataset.id)
+                            );
+
+                            atualizarClientesVinculados();
+
+                            if (usinaFiltro.value) {
+                                carregarClientes();
+                            }
+
+                        }
+                    );
+
+                });
+
+        }
+
+        async function carregarClientes() {
+
+            const usinaId =
+                usinaFiltro.value;
+
+            listaClientesUsina.innerHTML = '';
+            areaClientesUsina.style.display = 'none';
+
+            if (!usinaId) {
+
+                mensagemSelecioneUsina.style.display =
+                    'block';
+
+                return;
+
+            }
+
+            mensagemSelecioneUsina.style.display =
+                'none';
+
+            carregandoClientes.style.display =
+                'block';
+
+            const opcao =
+                usinaFiltro.options[
+                    usinaFiltro.selectedIndex
+                ];
+
+            const usinaNome =
+                opcao.dataset.nome;
+
+            try {
+
+                const resposta = await fetch(
+                    `/api/usinas/${usinaId}/clientes`
+                );
+
+                if (!resposta.ok) {
+                    throw new Error('Erro na consulta');
+                }
+
+                const clientes =
+                    await resposta.json();
+
+                quantidadeClientesEncontrados.textContent =
+                    clientes.length;
+
+                clientes.forEach(function (cliente) {
+
+                    const jaVinculado =
+                        clientesVinculados.has(
+                            String(cliente.id)
+                        );
+
+                    const item =
+                        document.createElement('div');
+
+                    item.className =
+                        'form-check border rounded p-3 ps-5 mb-2 bg-light';
+
+                    item.innerHTML = `
+                        <input
+                            class="form-check-input checkbox-cliente"
+                            type="checkbox"
+                            id="cliente_${cliente.id}"
+                            data-id="${cliente.id}"
+                            data-nome="${escaparHtml(cliente.nome)}"
+                            data-codigo-unidade="${escaparHtml(cliente.codigo_unidade || '')}"
+                            data-usina-id="${usinaId}"
+                            data-usina-nome="${escaparHtml(usinaNome)}"
+                            ${jaVinculado ? 'checked disabled' : ''}
+                        >
+
+                        <label
+                            class="form-check-label w-100"
+                            for="cliente_${cliente.id}"
+                        >
+                            <strong>
+                                ${escaparHtml(cliente.nome)}
+                            </strong>
+
+                            <div class="small text-muted">
+                                ${
+                                    cliente.codigo_unidade
+                                        ? `UC ${escaparHtml(cliente.codigo_unidade)}`
+                                        : 'UC não informada'
+                                }
+                            </div>
+                        </label>
+                    `;
+
+                    listaClientesUsina.appendChild(
+                        item
+                    );
+
+                });
+
+                areaClientesUsina.style.display =
+                    'block';
+
+                btnSelecionarTodos.disabled =
+                    clientes.length === 0;
+
+                atualizarBotaoAdicionar();
+
+                listaClientesUsina
+                    .querySelectorAll('.checkbox-cliente')
+                    .forEach(function (checkbox) {
+
+                        checkbox.addEventListener(
+                            'change',
+                            atualizarBotaoAdicionar
+                        );
+
+                    });
+
+            } catch (erro) {
+
+                areaClientesUsina.style.display =
+                    'block';
+
+                listaClientesUsina.innerHTML = `
+                    <div class="alert alert-danger mb-0">
+                        Não foi possível carregar os clientes.
+                    </div>
+                `;
+
+            } finally {
+
+                carregandoClientes.style.display =
+                    'none';
+
+            }
+
+        }
+
+        function atualizarBotaoAdicionar() {
+
+            const marcados =
+                listaClientesUsina.querySelectorAll(
+                    '.checkbox-cliente:checked:not(:disabled)'
+                );
+
+            btnAdicionarClientes.disabled =
+                marcados.length === 0;
+
+        }
+
+        usinaFiltro.addEventListener(
+            'change',
+            carregarClientes
+        );
+
+        btnSelecionarTodos.addEventListener(
+            'click',
+            function () {
+
+                const checkboxes =
+                    listaClientesUsina.querySelectorAll(
+                        '.checkbox-cliente:not(:disabled)'
+                    );
+
+                const todosMarcados =
+                    Array.from(checkboxes).every(
+                        checkbox => checkbox.checked
+                    );
+
+                checkboxes.forEach(function (checkbox) {
+
+                    checkbox.checked =
+                        !todosMarcados;
+
+                });
+
+                atualizarBotaoAdicionar();
+
+            }
+        );
+
+        btnAdicionarClientes.addEventListener(
+            'click',
+            function () {
+
+                const selecionados =
+                    listaClientesUsina.querySelectorAll(
+                        '.checkbox-cliente:checked:not(:disabled)'
+                    );
+
+                selecionados.forEach(function (checkbox) {
+
+                    clientesVinculados.set(
+                        String(checkbox.dataset.id),
+                        {
+                            id: Number(checkbox.dataset.id),
+                            nome: checkbox.dataset.nome,
+                            codigo_unidade:
+                                checkbox.dataset.codigoUnidade,
+                            usina_id:
+                                Number(checkbox.dataset.usinaId),
+                            usina_nome:
+                                checkbox.dataset.usinaNome
+                        }
+                    );
+
+                });
+
+                atualizarClientesVinculados();
+                carregarClientes();
+
+            }
+        );
+
+        perfilUsuario.addEventListener(
+            'change',
+            atualizarCamposPorPerfil
+        );
+
+        document
+            .getElementById('btnToggleSenha')
+            .addEventListener(
+                'click',
+                function () {
+
+                    const senhaInput =
+                        document.getElementById('senhaInput');
+
+                    const icone =
+                        document.getElementById('iconeOlho');
+
+                    const mostrar =
+                        senhaInput.type === 'password';
+
+                    senhaInput.type =
+                        mostrar ? 'text' : 'password';
+
+                    icone.classList.toggle(
+                        'bi-eye',
+                        !mostrar
+                    );
+
+                    icone.classList.toggle(
+                        'bi-eye-slash',
+                        mostrar
+                    );
+
+                }
+            );
+
+        document
+            .getElementById('formUsuario')
+            .addEventListener(
+                'submit',
+                function (event) {
+
+                    if (
+                        perfilUsuario.value === 'cliente' &&
+                        clientesVinculados.size === 0
+                    ) {
+
+                        event.preventDefault();
+
+                        alert(
+                            'Selecione pelo menos um cliente.'
+                        );
+
+                    }
+
+                }
+            );
+
+        atualizarCamposPorPerfil();
+        atualizarClientesVinculados();
+
     });
 </script>
+
 {% endblock %}

@@ -290,6 +290,7 @@ class FinanceiroUsina(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     usina_id = db.Column(db.Integer, db.ForeignKey('usinas.id'), nullable=False)
     categoria_id = db.Column(db.Integer, db.ForeignKey('categorias_despesa.id'), nullable=True)
+    cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id'), nullable=True)
     data = db.Column(db.Date, nullable=False)
     tipo = db.Column(db.String(20), nullable=False)  # 'receita' ou 'despesa'
     descricao = db.Column(db.String(255), nullable=False)
@@ -300,19 +301,31 @@ class FinanceiroUsina(db.Model):
     juros = db.Column(Numeric(10, 2), default=0)
     credor_id = db.Column(db.Integer, db.ForeignKey('credores.id'), nullable=True)
     comprovante_arquivo = db.Column(db.String(255))
-    caixa_banco_id = db.Column(
-        db.Integer,
-        db.ForeignKey('caixas_bancos.id')
-    )
+    caixa_banco_id = db.Column(db.Integer, db.ForeignKey('caixas_bancos.id'))
 
     caixa_banco = db.relationship(
         'CaixaBanco'
     )
-    
-    usina = db.relationship('Usina', backref='financeiros')    
+
+    usina = db.relationship(
+        'Usina',
+        backref='financeiros'
+    )
+
+    cliente = db.relationship(
+        'Cliente',
+        backref=db.backref(
+            'pagamentos_usina',
+            lazy='dynamic'
+        )
+    )
+
     credor = db.relationship(
         'Credor',
-        backref=db.backref('financeiros', lazy='dynamic'),
+        backref=db.backref(
+            'financeiros',
+            lazy='dynamic'
+        ),
         lazy='joined'
     )
 
@@ -1227,6 +1240,41 @@ class FotoVistoria(db.Model):
 
     vistoria = db.relationship('Vistoria', backref='fotos')
     
+class UsuarioCliente(db.Model):
+
+    __tablename__ = 'usuarios_clientes'
+
+    id = db.Column(
+        db.Integer,
+        primary_key=True
+    )
+
+    usuario_id = db.Column(
+        db.Integer,
+        db.ForeignKey(
+            'usuarios.id',
+            ondelete='CASCADE'
+        ),
+        nullable=False
+    )
+
+    cliente_id = db.Column(
+        db.Integer,
+        db.ForeignKey(
+            'clientes.id',
+            ondelete='CASCADE'
+        ),
+        nullable=False
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            'usuario_id',
+            'cliente_id',
+            name='uq_usuario_cliente'
+        ),
+    )
+    
 class Usuario(db.Model, UserMixin):
     __tablename__ = 'usuarios'
 
@@ -1253,6 +1301,16 @@ class Usuario(db.Model, UserMixin):
     pode_acessar_financeiro = db.Column(db.Boolean, default=False)
     pode_aprovar_financeiro = db.Column(db.Boolean, default=False)
     pode_acessar_comercial = db.Column(db.Boolean, default=False)
+    
+    clientes = db.relationship(
+        'Cliente',
+        secondary='usuarios_clientes',
+        backref=db.backref(
+            'usuarios_portal',
+            lazy='dynamic'
+        ),
+        lazy='dynamic'
+    )
 
     def set_senha(self, senha):
         self.senha_hash = generate_password_hash(senha)
@@ -2444,8 +2502,8 @@ def faturamento():
             if not cliente_id or not usina_id:
                 raise ValueError("Cliente e Usina são obrigatórios")
 
-            cliente = Cliente.query.get(cliente_id)
-            usina = Usina.query.get(usina_id)
+            cliente = db.session.get(Cliente, cliente_id)
+            usina = db.session.get(Usina, usina_id)
 
             # usa rateio vigente, não mais cliente.rateios[0]
             rateio = obter_rateio_vigente(cliente.id, usina.id) if (cliente and usina) else None
@@ -2636,6 +2694,7 @@ def faturamento():
 
                     receita = FinanceiroUsina(
                         usina_id=rateio.usina_id,
+                        cliente_id=cliente.id,
                         categoria_id=None,
                         data=date(
                             referencia_ano_receita,
@@ -2643,7 +2702,10 @@ def faturamento():
                             1
                         ),
                         tipo='receita',
-                        descricao=f"Fatura {fatura.identificador} - {cliente.nome} | {desc_tarifa}",
+                        descricao=(
+                            f"Fatura {fatura.identificador} - "
+                            f"{cliente.nome} | {desc_tarifa}"
+                        ),
                         valor=receita_valor,
                         referencia_mes=referencia_mes_receita,
                         referencia_ano=referencia_ano_receita
@@ -4692,29 +4754,288 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
-@app.route('/cadastrar_usuario', methods=['GET', 'POST'])
+@app.route('/api/usinas/<int:usina_id>/clientes')
+@login_required
+def api_clientes_da_usina(usina_id):
+
+    if not current_user.is_admin:
+        return jsonify({
+            'erro': 'Acesso não autorizado.'
+        }), 403
+
+    usina = db.session.get(
+        Usina,
+        usina_id
+    )
+
+    if not usina:
+        return jsonify({
+            'erro': 'Usina não encontrada.'
+        }), 404
+
+    clientes = (
+        Cliente.query
+        .join(
+            Rateio,
+            Rateio.cliente_id == Cliente.id
+        )
+        .filter(
+            Rateio.usina_id == usina_id,
+            Rateio.ativo.is_(True),
+            Rateio.percentual > 0,
+            Cliente.ativo.is_(True)
+        )
+        .distinct()
+        .order_by(
+            Cliente.nome
+        )
+        .all()
+    )
+
+    resultado = []
+
+    for cliente in clientes:
+
+        resultado.append({
+            'id': cliente.id,
+            'nome': cliente.nome,
+            'codigo_unidade': cliente.codigo_unidade or ''
+        })
+
+    return jsonify(resultado)
+
+@app.route(
+    '/cadastrar_usuario',
+    methods=['GET', 'POST']
+)
 @login_required
 def cadastrar_usuario():
 
     if not current_user.is_admin:
+
         flash(
             'Você não possui permissão para acessar esta página.',
             'danger'
         )
-        return redirect(url_for('index'))
+
+        return redirect(
+            url_for('index')
+        )
+
+    usinas = (
+        Usina.query
+        .order_by(
+            Usina.nome
+        )
+        .all()
+    )
 
     if request.method == 'POST':
-        nome = request.form['nome']
-        email = request.form['email']
-        senha = request.form['senha']
-        perfil = request.form.get('perfil', 'usuario')
 
-        pode_geracao = 'pode_cadastrar_geracao' in request.form
-        pode_cliente = 'pode_cadastrar_cliente' in request.form
-        pode_fatura = 'pode_cadastrar_fatura' in request.form
-        pode_financeiro = 'pode_acessar_financeiro' in request.form
-        pode_aprovar_financeiro = 'pode_aprovar_financeiro' in request.form
-        pode_comercial = 'pode_acessar_comercial' in request.form
+        nome = request.form.get(
+            'nome',
+            ''
+        ).strip()
+
+        email = request.form.get(
+            'email',
+            ''
+        ).strip().lower()
+
+        senha = request.form.get(
+            'senha',
+            ''
+        )
+
+        perfil = request.form.get(
+            'perfil',
+            'usuario'
+        )
+
+        # getlist recebe vários clientes selecionados
+        clientes_ids = request.form.getlist(
+            'clientes_ids'
+        )
+
+        clientes_ids = [
+            int(cliente_id)
+            for cliente_id in clientes_ids
+            if cliente_id.isdigit()
+        ]
+
+        if not nome:
+
+            flash(
+                'Informe o nome do usuário.',
+                'warning'
+            )
+
+            return render_template(
+                'cadastrar_usuario.html',
+                usinas=usinas
+            )
+
+        if not email:
+
+            flash(
+                'Informe o e-mail do usuário.',
+                'warning'
+            )
+
+            return render_template(
+                'cadastrar_usuario.html',
+                usinas=usinas
+            )
+
+        if not senha:
+
+            flash(
+                'Informe a senha do usuário.',
+                'warning'
+            )
+
+            return render_template(
+                'cadastrar_usuario.html',
+                usinas=usinas
+            )
+
+        usuario_existente = Usuario.query.filter(
+            db.func.lower(
+                Usuario.email
+            ) == email
+        ).first()
+
+        if usuario_existente:
+
+            flash(
+                'Já existe um usuário cadastrado com este e-mail.',
+                'warning'
+            )
+
+            return render_template(
+                'cadastrar_usuario.html',
+                usinas=usinas
+            )
+
+        if perfil == 'cliente':
+
+            if not clientes_ids:
+
+                flash(
+                    'Selecione pelo menos um cliente para esse usuário.',
+                    'warning'
+                )
+
+                return render_template(
+                    'cadastrar_usuario.html',
+                    usinas=usinas
+                )
+
+            clientes_selecionados = (
+                Cliente.query
+                .filter(
+                    Cliente.id.in_(
+                        clientes_ids
+                    ),
+                    Cliente.ativo.is_(True)
+                )
+                .all()
+            )
+
+            ids_encontrados = {
+                cliente.id
+                for cliente in clientes_selecionados
+            }
+
+            ids_solicitados = set(
+                clientes_ids
+            )
+
+            if ids_encontrados != ids_solicitados:
+
+                flash(
+                    'Um ou mais clientes selecionados são inválidos ou estão inativos.',
+                    'danger'
+                )
+
+                return render_template(
+                    'cadastrar_usuario.html',
+                    usinas=usinas
+                )
+
+            # Confere se os clientes possuem pelo menos um rateio
+            clientes_com_rateio = (
+                db.session.query(
+                    Rateio.cliente_id
+                )
+                .filter(
+                    Rateio.cliente_id.in_(
+                        clientes_ids
+                    ),
+                    Rateio.ativo.is_(True),
+                    Rateio.percentual > 0
+                )
+                .distinct()
+                .all()
+            )
+
+            ids_com_rateio = {
+                resultado.cliente_id
+                for resultado in clientes_com_rateio
+            }
+
+            if ids_com_rateio != ids_solicitados:
+
+                flash(
+                    'Um ou mais clientes selecionados não possuem rateio ativo.',
+                    'danger'
+                )
+
+                return render_template(
+                    'cadastrar_usuario.html',
+                    usinas=usinas
+                )
+
+            pode_geracao = False
+            pode_cliente = False
+            pode_fatura = False
+            pode_financeiro = False
+            pode_aprovar_financeiro = False
+            pode_comercial = False
+
+        else:
+
+            clientes_selecionados = []
+
+            pode_geracao = (
+                'pode_cadastrar_geracao'
+                in request.form
+            )
+
+            pode_cliente = (
+                'pode_cadastrar_cliente'
+                in request.form
+            )
+
+            pode_fatura = (
+                'pode_cadastrar_fatura'
+                in request.form
+            )
+
+            pode_financeiro = (
+                'pode_acessar_financeiro'
+                in request.form
+            )
+
+            pode_aprovar_financeiro = (
+                'pode_aprovar_financeiro'
+                in request.form
+            )
+
+            pode_comercial = (
+                'pode_acessar_comercial'
+                in request.form
+            )
 
         novo_usuario = Usuario(
             nome=nome,
@@ -4728,96 +5049,385 @@ def cadastrar_usuario():
             pode_acessar_comercial=pode_comercial
         )
 
-        novo_usuario.set_senha(senha)
+        novo_usuario.set_senha(
+            senha
+        )
 
-        db.session.add(novo_usuario)
-        db.session.commit()
+        try:
 
-        flash('Usuário cadastrado com sucesso!', 'success')
-        return redirect(url_for('cadastrar_usuario'))
+            db.session.add(
+                novo_usuario
+            )
 
-    return render_template('cadastrar_usuario.html')
+            db.session.flush()
+
+            for cliente in clientes_selecionados:
+
+                vinculo = UsuarioCliente(
+                    usuario_id=novo_usuario.id,
+                    cliente_id=cliente.id
+                )
+
+                db.session.add(
+                    vinculo
+                )
+
+            db.session.commit()
+
+            flash(
+                'Usuário cadastrado e clientes vinculados com sucesso!',
+                'success'
+            )
+
+            return redirect(
+                url_for('cadastrar_usuario')
+            )
+
+        except Exception as erro:
+
+            db.session.rollback()
+
+            print(
+                f'Erro ao cadastrar usuário: {erro}'
+            )
+
+            flash(
+                'Não foi possível cadastrar o usuário.',
+                'danger'
+            )
+
+    return render_template(
+        'cadastrar_usuario.html',
+        usinas=usinas
+    )
 
 @app.route('/usuarios')
 @login_required
 def listar_usuarios():
 
-    if current_user.perfil != 'admin':
-        return "Acesso negado", 403
+    if not current_user.is_admin:
 
-    usuarios = Usuario.query.order_by(Usuario.nome).all()
+        flash(
+            'Você não possui permissão para acessar esta página.',
+            'danger'
+        )
+
+        return redirect(
+            url_for('index')
+        )
+
+    usuarios = (
+        Usuario.query
+        .order_by(
+            Usuario.nome
+        )
+        .all()
+    )
 
     return render_template(
         'usuarios_admin.html',
         usuarios=usuarios
     )
 
-@app.route('/editar_usuario/<int:id>', methods=['GET', 'POST'])
+@app.route(
+    '/editar_usuario/<int:id>',
+    methods=['GET', 'POST']
+)
 @login_required
 def editar_usuario(id):
 
-    if current_user.perfil != 'admin':
-        return "Acesso negado", 403
+    if not current_user.is_admin:
+        flash(
+            'Você não possui permissão para acessar esta página.',
+            'danger'
+        )
+        return redirect(
+            url_for('index')
+        )
 
-    usuario = Usuario.query.get_or_404(id)
+    usuario = db.session.get(
+        Usuario,
+        id
+    )
+
+    if not usuario:
+        flash(
+            'Usuário não encontrado.',
+            'warning'
+        )
+        return redirect(
+            url_for('listar_usuarios')
+        )
+
+    usinas = (
+        Usina.query
+        .order_by(
+            Usina.nome
+        )
+        .all()
+    )
 
     if request.method == 'POST':
-        usuario.nome = request.form['nome']
-        usuario.email = request.form['email']
 
-        # Perfil
-        usuario.perfil = request.form.get(
+        nome = request.form.get(
+            'nome',
+            ''
+        ).strip()
+
+        email = request.form.get(
+            'email',
+            ''
+        ).strip().lower()
+
+        perfil = request.form.get(
             'perfil',
             'usuario'
         )
 
-        # Permissões
-        usuario.pode_cadastrar_geracao = (
-            'pode_cadastrar_geracao' in request.form
+        clientes_ids = request.form.getlist(
+            'clientes_ids'
         )
 
-        usuario.pode_cadastrar_cliente = (
-            'pode_cadastrar_cliente' in request.form
+        clientes_ids = list({
+            int(cliente_id)
+            for cliente_id in clientes_ids
+            if cliente_id.isdigit()
+        })
+
+        if not nome:
+            flash(
+                'Informe o nome do usuário.',
+                'warning'
+            )
+
+            return render_template(
+                'editar_usuario.html',
+                usuario=usuario,
+                usinas=usinas,
+                clientes_vinculados=[]
+            )
+
+        if not email:
+            flash(
+                'Informe o e-mail do usuário.',
+                'warning'
+            )
+
+            return render_template(
+                'editar_usuario.html',
+                usuario=usuario,
+                usinas=usinas,
+                clientes_vinculados=[]
+            )
+
+        usuario_email_existente = (
+            Usuario.query
+            .filter(
+                db.func.lower(
+                    Usuario.email
+                ) == email,
+                Usuario.id != usuario.id
+            )
+            .first()
         )
 
-        usuario.pode_cadastrar_fatura = (
-            'pode_cadastrar_fatura' in request.form
-        )
+        if usuario_email_existente:
+            flash(
+                'Já existe outro usuário cadastrado com esse e-mail.',
+                'warning'
+            )
 
-        usuario.pode_acessar_financeiro = (
-            'pode_acessar_financeiro' in request.form
-        )
+            clientes_vinculados = carregar_clientes_vinculados_usuario(
+                usuario.id
+            )
 
-        usuario.pode_acessar_comercial = (
-            'pode_acessar_comercial' in request.form
-        )
+            return render_template(
+                'editar_usuario.html',
+                usuario=usuario,
+                usinas=usinas,
+                clientes_vinculados=clientes_vinculados
+            )
 
-        quer_aprovador = (
-            'pode_aprovar_financeiro' in request.form
-        )
+        usuario.nome = nome
+        usuario.email = email
+        usuario.perfil = perfil
 
-        try:
+        if perfil == 'cliente':
+
+            if not clientes_ids:
+                flash(
+                    'Selecione pelo menos um cliente para esse usuário.',
+                    'warning'
+                )
+
+                clientes_vinculados = carregar_clientes_vinculados_usuario(
+                    usuario.id
+                )
+
+                return render_template(
+                    'editar_usuario.html',
+                    usuario=usuario,
+                    usinas=usinas,
+                    clientes_vinculados=clientes_vinculados
+                )
+
+            clientes_selecionados = (
+                Cliente.query
+                .filter(
+                    Cliente.id.in_(
+                        clientes_ids
+                    ),
+                    Cliente.ativo.is_(True)
+                )
+                .all()
+            )
+
+            ids_encontrados = {
+                cliente.id
+                for cliente in clientes_selecionados
+            }
+
+            if ids_encontrados != set(clientes_ids):
+                flash(
+                    'Um ou mais clientes selecionados são inválidos ou estão inativos.',
+                    'danger'
+                )
+
+                clientes_vinculados = carregar_clientes_vinculados_usuario(
+                    usuario.id
+                )
+
+                return render_template(
+                    'editar_usuario.html',
+                    usuario=usuario,
+                    usinas=usinas,
+                    clientes_vinculados=clientes_vinculados
+                )
+
+            clientes_com_rateio = (
+                db.session.query(
+                    Rateio.cliente_id
+                )
+                .filter(
+                    Rateio.cliente_id.in_(
+                        clientes_ids
+                    ),
+                    Rateio.ativo.is_(True),
+                    Rateio.percentual > 0
+                )
+                .distinct()
+                .all()
+            )
+
+            ids_com_rateio = {
+                resultado.cliente_id
+                for resultado in clientes_com_rateio
+            }
+
+            if ids_com_rateio != set(clientes_ids):
+                flash(
+                    'Um ou mais clientes não possuem rateio ativo.',
+                    'danger'
+                )
+
+                clientes_vinculados = carregar_clientes_vinculados_usuario(
+                    usuario.id
+                )
+
+                return render_template(
+                    'editar_usuario.html',
+                    usuario=usuario,
+                    usinas=usinas,
+                    clientes_vinculados=clientes_vinculados
+                )
+
+            usuario.pode_cadastrar_geracao = False
+            usuario.pode_cadastrar_cliente = False
+            usuario.pode_cadastrar_fatura = False
+            usuario.pode_acessar_financeiro = False
+            usuario.pode_acessar_comercial = False
+            usuario.pode_aprovar_financeiro = False
+
+        else:
+
+            clientes_selecionados = []
+
+            usuario.pode_cadastrar_geracao = (
+                'pode_cadastrar_geracao'
+                in request.form
+            )
+
+            usuario.pode_cadastrar_cliente = (
+                'pode_cadastrar_cliente'
+                in request.form
+            )
+
+            usuario.pode_cadastrar_fatura = (
+                'pode_cadastrar_fatura'
+                in request.form
+            )
+
+            usuario.pode_acessar_financeiro = (
+                'pode_acessar_financeiro'
+                in request.form
+            )
+
+            usuario.pode_acessar_comercial = (
+                'pode_acessar_comercial'
+                in request.form
+            )
+
+            quer_aprovador = (
+                'pode_aprovar_financeiro'
+                in request.form
+            )
 
             if quer_aprovador:
-
                 Usuario.query.filter(
                     Usuario.id != usuario.id
                 ).update(
                     {
                         Usuario.pode_aprovar_financeiro: False
-                    }
+                    },
+                    synchronize_session=False
                 )
 
                 usuario.pode_aprovar_financeiro = True
-
             else:
                 usuario.pode_aprovar_financeiro = False
 
-            # Atualiza senha apenas se preenchida
-            if request.form.get('senha'):
-                usuario.set_senha(
-                    request.form['senha']
-                )
+        senha = request.form.get(
+            'senha',
+            ''
+        )
+
+        if senha:
+            usuario.set_senha(
+                senha
+            )
+
+        try:
+
+            # Remove todos os vínculos antigos
+            UsuarioCliente.query.filter_by(
+                usuario_id=usuario.id
+            ).delete(
+                synchronize_session=False
+            )
+
+            # Recria somente os vínculos enviados
+            if perfil == 'cliente':
+
+                for cliente in clientes_selecionados:
+
+                    vinculo = UsuarioCliente(
+                        usuario_id=usuario.id,
+                        cliente_id=cliente.id
+                    )
+
+                    db.session.add(
+                        vinculo
+                    )
 
             db.session.commit()
 
@@ -4826,13 +5436,15 @@ def editar_usuario(id):
                 'success'
             )
 
-        except Exception as e:
+            return redirect(
+                url_for('listar_usuarios')
+            )
+
+        except Exception as erro:
 
             db.session.rollback()
-
             print(
-                'Erro ao editar usuário:',
-                e
+                f'Erro ao editar usuário: {erro}'
             )
 
             flash(
@@ -4840,13 +5452,71 @@ def editar_usuario(id):
                 'danger'
             )
 
-        return redirect(
-            url_for('listar_usuarios')
-        )
+    clientes_vinculados = carregar_clientes_vinculados_usuario(
+        usuario.id
+    )
 
     return render_template(
         'editar_usuario.html',
-        usuario=usuario
+        usuario=usuario,
+        usinas=usinas,
+        clientes_vinculados=clientes_vinculados
+    )
+    
+def carregar_clientes_vinculados_usuario(usuario_id):
+
+    registros = (
+        db.session.query(
+            Cliente.id.label('cliente_id'),
+            Cliente.nome.label('cliente_nome'),
+            Cliente.codigo_unidade,
+            Usina.id.label('usina_id'),
+            Usina.nome.label('usina_nome')
+        )
+        .join(
+            UsuarioCliente,
+            UsuarioCliente.cliente_id == Cliente.id
+        )
+        .join(
+            Rateio,
+            Rateio.cliente_id == Cliente.id
+        )
+        .join(
+            Usina,
+            Usina.id == Rateio.usina_id
+        )
+        .filter(
+            UsuarioCliente.usuario_id == usuario_id,
+            Rateio.ativo.is_(True),
+            Rateio.percentual > 0
+        )
+        .order_by(
+            Usina.nome,
+            Cliente.nome
+        )
+        .all()
+    )
+
+    clientes = {}
+
+    for registro in registros:
+
+        cliente_id = registro.cliente_id
+
+        # Um cliente pode ter rateios em mais de uma usina.
+        # Para a tela, utiliza uma das usinas vinculadas.
+        if cliente_id not in clientes:
+
+            clientes[cliente_id] = {
+                'id': cliente_id,
+                'nome': registro.cliente_nome,
+                'codigo_unidade': registro.codigo_unidade or '',
+                'usina_id': registro.usina_id,
+                'usina_nome': registro.usina_nome
+            }
+
+    return list(
+        clientes.values()
     )
 
 @app.route('/excluir_usuario/<int:id>', methods=['POST'])
@@ -20663,6 +21333,993 @@ def enviar_termo_concessionaria(conta_id):
         url_for(
             'listar_contas_concessionaria'
         )
+    )
+    
+@app.route('/portal-cliente')
+@login_required
+def portal_cliente_dashboard():
+
+    if current_user.perfil not in ['cliente', 'admin']:
+        abort(403)
+
+    return render_template(
+        'portal_cliente/dashboard.html'
+    )
+    
+@app.route('/portal-cliente/desempenho-energia')
+@login_required
+def portal_cliente_desempenho_energia():
+    
+    # CONTROLE DE ACESSO
+    if current_user.perfil not in [
+        'cliente',
+        'admin'
+    ]:
+        abort(403)
+
+    # HELPERS
+    def para_decimal(
+        valor,
+        padrao='0.00'
+    ):
+
+        try:
+            if valor is None:
+                return Decimal(padrao)
+            return Decimal(str(valor))
+        except Exception:
+            return Decimal(padrao)
+
+    def percentual_decimal(valor):
+        return (
+            para_decimal(valor) /
+            Decimal('100')
+        )
+
+    def calcular_tarifa_neoenergia(fatura):
+        usa_regra_nova = bool(
+            getattr(
+                fatura,
+                'tarifa_base',
+                None
+            )
+            and
+            para_decimal(
+                fatura.tarifa_base
+            ) > 0
+        )
+
+        # Nova regra
+        if usa_regra_nova:
+            tarifa_base = para_decimal(
+                getattr(
+                    fatura,
+                    'tarifa_base',
+                    0
+                )
+            )
+
+            pis = percentual_decimal(
+                getattr(
+                    fatura,
+                    'pis',
+                    0
+                )
+            )
+
+            cofins = percentual_decimal(
+                getattr(
+                    fatura,
+                    'cofins',
+                    0
+                )
+            )
+
+            divisor = (
+                Decimal('1.00') -
+                pis -
+                cofins -
+                Decimal('0.20')
+            )
+
+            if divisor <= 0:
+                divisor = Decimal('1.00')
+            return (
+                tarifa_base / divisor
+            ).quantize(
+                Decimal('0.0000001'),
+                rounding=ROUND_HALF_UP
+            )
+
+        # Regra antiga
+        tarifa_base_antiga = para_decimal(
+            getattr(
+                fatura,
+                'tarifa_neoenergia',
+                0
+            )
+        )
+
+        icms = para_decimal(
+            getattr(
+                fatura,
+                'icms',
+                0
+            )
+        )
+
+        if icms == 0:
+            tarifa_final = (
+                tarifa_base_antiga *
+                Decimal('1.2625')
+            )
+
+        elif icms == 20:
+            tarifa_final = tarifa_base_antiga
+        else:
+            tarifa_final = (
+                tarifa_base_antiga *
+                Decimal('1.1023232323')
+            )
+
+        return tarifa_final.quantize(
+            Decimal('0.0000001'),
+            rounding=ROUND_HALF_UP
+        )
+
+    def buscar_rateio_vigente(
+        rateios_lista,
+        data_referencia
+    ):
+
+        rateio_encontrado = None
+        for item in rateios_lista:
+            if item.data_inicio <= data_referencia:
+                rateio_encontrado = item
+            else:
+                break
+        return rateio_encontrado
+
+    def calcular_tarifa_cliente(
+        rateio,
+        tarifa_neoenergia,
+        usa_regra_nova
+    ):
+
+        if not rateio:
+            return Decimal('0.00')
+        desconto = percentual_decimal(
+            getattr(
+                rateio,
+                'desconto_percentual',
+                0
+            ) or 0
+        )
+
+        if usa_regra_nova:
+            return (
+                tarifa_neoenergia *
+                (
+                    Decimal('1.00') -
+                    desconto
+                )
+            ).quantize(
+                Decimal('0.0000001'),
+                rounding=ROUND_HALF_UP
+            )
+
+        if getattr(
+            rateio,
+            'usar_tarifa_neoenergia',
+            False
+        ):
+
+            return (
+                tarifa_neoenergia *
+                (
+                    Decimal('1.00') -
+                    desconto
+                )
+            ).quantize(
+                Decimal('0.0000001'),
+                rounding=ROUND_HALF_UP
+            )
+
+        return para_decimal(
+            getattr(
+                rateio,
+                'tarifa_kwh',
+                0
+            )
+        ).quantize(
+            Decimal('0.0000001'),
+            rounding=ROUND_HALF_UP
+        )
+
+    def calcular_economia_fatura(
+        fatura,
+        rateio,
+        usina
+    ):
+
+        tarifa_neoenergia = (
+            calcular_tarifa_neoenergia(
+                fatura
+            )
+        )
+
+        usa_regra_nova = bool(
+            getattr(
+                fatura,
+                'tarifa_base',
+                None
+            )
+            and
+            para_decimal(
+                fatura.tarifa_base
+            ) > 0
+        )
+
+        tarifa_cliente = (
+            calcular_tarifa_cliente(
+                rateio,
+                tarifa_neoenergia,
+                usa_regra_nova
+            )
+        )
+
+        consumo_usina = para_decimal(
+            getattr(
+                fatura,
+                'consumo_usina',
+                0
+            )
+        )
+
+        valor_conta = para_decimal(
+            getattr(
+                fatura,
+                'valor_conta_neoenergia',
+                0
+            )
+        )
+
+        custo_tusd = para_decimal(
+            getattr(
+                fatura,
+                'custo_tusd_fio_b',
+                0
+            ) or 0
+        )
+
+        valor_usina_bruto = (
+            consumo_usina *
+            tarifa_cliente
+        )
+
+        valor_usina_liquido = (
+            valor_usina_bruto
+        )
+
+        if getattr(
+            usina,
+            'tusd_fio_b',
+            False
+        ):
+
+            valor_usina_liquido = (
+                valor_usina_bruto -
+                custo_tusd
+            )
+
+            if valor_usina_liquido < 0:
+                valor_usina_liquido = Decimal('0')
+
+        if usa_regra_nova:
+            cip = para_decimal(
+                getattr(
+                    fatura,
+                    'cip_atual',
+                    0
+                ) or 0
+            )
+
+            com_consorcio = (
+                valor_usina_bruto +
+                cip
+            )
+
+            sem_consorcio = (
+                consumo_usina *
+                tarifa_neoenergia
+            ) + cip
+
+        else:
+            com_consorcio = (
+                valor_conta +
+                valor_usina_liquido
+            )
+
+            sem_consorcio = (
+                consumo_usina *
+                tarifa_neoenergia
+            ) + valor_conta - custo_tusd
+
+        economia_fatura = (
+            sem_consorcio -
+            com_consorcio
+        )
+
+        return economia_fatura.quantize(
+            Decimal('0.01'),
+            rounding=ROUND_HALF_UP
+        )
+
+    def calcular_tempo_adesao(data_inicio):
+
+        if not data_inicio:
+            return 'Não informado'
+        diferenca = relativedelta(
+            date.today(),
+            data_inicio
+        )
+
+        partes = []
+        if diferenca.years:
+            texto_ano = (
+                'ano'
+                if diferenca.years == 1
+                else 'anos'
+            )
+
+            partes.append(
+                f'{diferenca.years} {texto_ano}'
+            )
+
+        if diferenca.months:
+            texto_mes = (
+                'mês'
+                if diferenca.months == 1
+                else 'meses'
+            )
+
+            partes.append(
+                f'{diferenca.months} {texto_mes}'
+            )
+
+        if not partes:
+            if diferenca.days == 1:
+                return '1 dia'
+            return f'{diferenca.days} dias'
+        return ' e '.join(partes)
+
+    # SELEÇÃO DO CLIENTE
+    clientes_disponiveis = []
+    if current_user.perfil == 'admin':
+        clientes_disponiveis = (
+            Cliente.query
+            .filter(
+                Cliente.ativo.is_(True)
+            )
+            .order_by(
+                Cliente.nome
+            )
+            .all()
+        )
+
+        cliente_id = request.args.get(
+            'cliente_id',
+            type=int
+        )
+
+        if cliente_id:
+            cliente = db.session.get(
+                Cliente,
+                cliente_id
+            )
+
+        else:
+            cliente = (
+                clientes_disponiveis[0]
+                if clientes_disponiveis
+                else None
+            )
+
+    else:
+        clientes_disponiveis = (
+            current_user.clientes
+            .filter(
+                Cliente.ativo.is_(True)
+            )
+            .order_by(
+                Cliente.nome
+            )
+            .all()
+        )
+
+        cliente_id = request.args.get(
+            'cliente_id',
+            type=int
+        )
+
+        if cliente_id:
+            cliente = (
+                current_user.clientes
+                .filter(
+                    Cliente.id == cliente_id,
+                    Cliente.ativo.is_(True)
+                )
+                .first()
+            )
+
+        else:
+            cliente = (
+                clientes_disponiveis[0]
+                if clientes_disponiveis
+                else None
+            )
+
+    if not cliente:
+        return render_template(
+            'portal_cliente/dashboard.html',
+            cliente=None,
+            clientes_disponiveis=[],
+            dados_mensais=[],
+            labels_grafico=[],
+            geracao_grafico=[],
+            destinada_grafico=[],
+            compensada_grafico=[]
+        )
+
+    if not cliente.usina_id:
+        return render_template(
+            'portal_cliente/dashboard.html',
+            cliente=cliente,
+            usina=None,
+            clientes_disponiveis=clientes_disponiveis,
+            dados_mensais=[],
+            labels_grafico=[],
+            geracao_grafico=[],
+            destinada_grafico=[],
+            compensada_grafico=[],
+            erro='O cliente ainda não possui uma usina vinculada.'
+        )
+
+    usina = db.session.get(
+        Usina,
+        cliente.usina_id
+    )
+
+    if not usina:
+        abort(404)
+
+    # RATEIOS DO CLIENTE
+    rateios = (
+        Rateio.query
+        .filter(
+            Rateio.cliente_id == cliente.id,
+            Rateio.usina_id == usina.id
+        )
+        .order_by(
+            Rateio.data_inicio.asc(),
+            Rateio.id.asc()
+        )
+        .all()
+    )
+
+    primeiro_rateio = (
+        rateios[0]
+        if rateios
+        else None
+    )
+
+    data_adesao = (
+        primeiro_rateio.data_inicio
+        if primeiro_rateio
+        else None
+    )
+
+    tempo_adesao = calcular_tempo_adesao(
+        data_adesao
+    )
+
+    # FATURAS DO CLIENTE
+    faturas = (
+        FaturaMensal.query
+        .filter(
+            FaturaMensal.cliente_id == cliente.id
+        )
+        .order_by(
+            FaturaMensal.ano_referencia.asc(),
+            FaturaMensal.mes_referencia.asc(),
+            FaturaMensal.id.asc()
+        )
+        .all()
+    )
+
+    faturas_por_mes = {}
+    for fatura in faturas:
+        chave = (
+            fatura.ano_referencia,
+            fatura.mes_referencia
+        )
+
+        faturas_por_mes[chave] = fatura
+
+    # GERAÇÃO MENSAL DA USINA
+    geracoes_query = (
+        Geracao.query
+        .filter(
+            Geracao.usina_id == usina.id
+        )
+    )
+
+    if data_adesao:
+        primeiro_dia_adesao = date(
+            data_adesao.year,
+            data_adesao.month,
+            1
+        )
+
+        geracoes_query = geracoes_query.filter(
+            Geracao.data >= primeiro_dia_adesao
+        )
+
+    geracoes = (
+        geracoes_query
+        .order_by(
+            Geracao.data.asc()
+        )
+        .all()
+    )
+
+    # A energia destinada é calculada por dia.
+    # Assim, se o percentual mudar no meio do mês,
+    # cada geração diária usa o rateio correto.
+
+    geracao_mensal = defaultdict(
+        lambda: Decimal('0')
+    )
+
+    energia_destinada_mensal = defaultdict(
+        lambda: Decimal('0')
+    )
+
+    percentual_final_mes = {}
+    for geracao in geracoes:
+        chave = (
+            geracao.data.year,
+            geracao.data.month
+        )
+
+        energia_dia = para_decimal(
+            geracao.energia_kwh
+        )
+
+        geracao_mensal[chave] += energia_dia
+        rateio_dia = buscar_rateio_vigente(
+            rateios,
+            geracao.data
+        )
+
+        percentual_dia = para_decimal(
+            getattr(
+                rateio_dia,
+                'percentual',
+                0
+            ) if rateio_dia else 0
+        )
+
+        energia_cliente_dia = (
+            energia_dia *
+            percentual_dia /
+            Decimal('100')
+        )
+
+        energia_destinada_mensal[chave] += (
+            energia_cliente_dia
+        )
+
+        percentual_final_mes[chave] = (
+            percentual_dia
+        )
+
+    # PAGAMENTOS DO CLIENTE
+    pagamentos = (
+        FinanceiroUsina.query
+        .filter(
+            FinanceiroUsina.usina_id == usina.id,
+            FinanceiroUsina.cliente_id == cliente.id,
+            FinanceiroUsina.tipo == 'receita',
+            FinanceiroUsina.data_pagamento.isnot(None)
+        )
+        .order_by(
+            FinanceiroUsina.data_pagamento.asc()
+        )
+        .all()
+    )
+
+    pagamentos_por_mes = defaultdict(
+        lambda: Decimal('0')
+    )
+
+    for pagamento in pagamentos:
+        data_pagamento = (
+            pagamento.data_pagamento or
+            pagamento.data
+        )
+
+        if not data_pagamento:
+            continue
+
+        chave = (
+            data_pagamento.year,
+            data_pagamento.month
+        )
+
+        pagamentos_por_mes[chave] += (
+            para_decimal(
+                pagamento.valor
+            ) +
+            para_decimal(
+                pagamento.juros
+            )
+        )
+
+    # MONTA TODOS OS MESES
+    chaves_meses = set(
+        geracao_mensal.keys()
+    )
+
+    chaves_meses.update(
+        faturas_por_mes.keys()
+    )
+
+    chaves_meses.update(
+        pagamentos_por_mes.keys()
+    )
+
+    if data_adesao:
+
+        cursor = date(
+            data_adesao.year,
+            data_adesao.month,
+            1
+        )
+
+        mes_atual = date(
+            date.today().year,
+            date.today().month,
+            1
+        )
+
+        while cursor <= mes_atual:
+            chaves_meses.add(
+                (
+                    cursor.year,
+                    cursor.month
+                )
+            )
+
+            cursor += relativedelta(
+                months=1
+            )
+
+    chaves_ordenadas = sorted(
+        chaves_meses
+    )
+
+    meses_nomes = {
+        1: 'Jan',
+        2: 'Fev',
+        3: 'Mar',
+        4: 'Abr',
+        5: 'Mai',
+        6: 'Jun',
+        7: 'Jul',
+        8: 'Ago',
+        9: 'Set',
+        10: 'Out',
+        11: 'Nov',
+        12: 'Dez'
+    }
+
+    dados_mensais = []
+    energia_compensada_total = Decimal('0')
+    energia_destinada_total = Decimal('0')
+    geracao_usina_total = Decimal('0')
+    economia_total = Decimal('0')
+    total_pago = Decimal('0')
+    saldo_atual = Decimal('0')
+    labels_grafico = []
+    geracao_grafico = []
+    destinada_grafico = []
+    compensada_grafico = []
+
+    for ano, mes in chaves_ordenadas:
+        chave = (
+            ano,
+            mes
+        )
+
+        fatura = faturas_por_mes.get(
+            chave
+        )
+
+        geracao_usina_mes = (
+            geracao_mensal.get(
+                chave,
+                Decimal('0')
+            )
+        )
+
+        energia_destinada_mes = (
+            energia_destinada_mensal.get(
+                chave,
+                Decimal('0')
+            )
+        )
+
+        percentual_mes = (
+            percentual_final_mes.get(
+                chave,
+                Decimal('0')
+            )
+        )
+
+        energia_compensada_mes = (
+            para_decimal(
+                fatura.consumo_usina
+            )
+            if fatura
+            else Decimal('0')
+        )
+
+        saldo_unidade_mes = (
+            para_decimal(
+                fatura.saldo_unidade
+            )
+            if fatura
+            else Decimal('0')
+        )
+
+        valor_pago_mes = (
+            pagamentos_por_mes.get(
+                chave,
+                Decimal('0')
+            )
+        )
+
+        economia_mes = Decimal('0')
+        if fatura:
+            if fatura.data_cadastro:
+                data_base_fatura = (
+                    fatura.data_cadastro.date()
+                )
+
+            else:
+                data_base_fatura = date(
+                    ano,
+                    mes,
+                    1
+                )
+
+            rateio_fatura = (
+                buscar_rateio_vigente(
+                    rateios,
+                    data_base_fatura
+                )
+            )
+
+            economia_mes = (
+                calcular_economia_fatura(
+                    fatura,
+                    rateio_fatura,
+                    usina
+                )
+            )
+
+            saldo_atual = saldo_unidade_mes
+
+        geracao_usina_total += (
+            geracao_usina_mes
+        )
+
+        energia_destinada_total += (
+            energia_destinada_mes
+        )
+
+        energia_compensada_total += (
+            energia_compensada_mes
+        )
+
+        economia_total += economia_mes
+        total_pago += valor_pago_mes
+
+        label_mes = (
+            f'{meses_nomes[mes]}/{str(ano)[-2:]}'
+        )
+
+        dados_mensais.append({
+            'ano': ano,
+            'mes': mes,
+            'mes_nome': label_mes,
+            'geracao_usina': float(
+                geracao_usina_mes.quantize(
+                    Decimal('0.01'),
+                    rounding=ROUND_HALF_UP
+                )
+            ),
+            'percentual': float(
+                percentual_mes.quantize(
+                    Decimal('0.0001'),
+                    rounding=ROUND_HALF_UP
+                )
+            ),
+            'energia_destinada': float(
+                energia_destinada_mes.quantize(
+                    Decimal('0.01'),
+                    rounding=ROUND_HALF_UP
+                )
+            ),
+            'energia_compensada': float(
+                energia_compensada_mes.quantize(
+                    Decimal('0.01'),
+                    rounding=ROUND_HALF_UP
+                )
+            ),
+            'saldo_unidade': float(
+                saldo_unidade_mes.quantize(
+                    Decimal('0.01'),
+                    rounding=ROUND_HALF_UP
+                )
+            ),
+            'economia': float(
+                economia_mes.quantize(
+                    Decimal('0.01'),
+                    rounding=ROUND_HALF_UP
+                )
+            ),
+            'valor_pago': float(
+                valor_pago_mes.quantize(
+                    Decimal('0.01'),
+                    rounding=ROUND_HALF_UP
+                )
+            )
+        })
+
+        labels_grafico.append(
+            label_mes
+        )
+
+        geracao_grafico.append(
+            float(
+                geracao_usina_mes.quantize(
+                    Decimal('0.01'),
+                    rounding=ROUND_HALF_UP
+                )
+            )
+        )
+
+        destinada_grafico.append(
+            float(
+                energia_destinada_mes.quantize(
+                    Decimal('0.01'),
+                    rounding=ROUND_HALF_UP
+                )
+            )
+        )
+
+        compensada_grafico.append(
+            float(
+                energia_compensada_mes.quantize(
+                    Decimal('0.01'),
+                    rounding=ROUND_HALF_UP
+                )
+            )
+        )
+
+    # Do mais recente para o mais antigo na tabela
+    dados_mensais.reverse()
+
+    economia_extra_total = (
+        db.session.query(
+            func.sum(
+                EconomiaExtra.valor_extra
+            )
+        )
+        .filter(
+            EconomiaExtra.cliente_id ==
+            cliente.id
+        )
+        .scalar()
+        or Decimal('0')
+    )
+
+    economia_total += para_decimal(
+        economia_extra_total
+    )
+
+    percentual_atual = Decimal('0')
+    rateio_atual = buscar_rateio_vigente(
+        rateios,
+        date.today()
+    )
+
+    if rateio_atual:
+
+        percentual_atual = para_decimal(
+            rateio_atual.percentual
+        )
+
+    return render_template(
+        'portal_cliente/dashboard_cliente.html',
+        cliente=cliente,
+        usina=usina,
+        clientes_disponiveis=clientes_disponiveis,
+        dados_mensais=dados_mensais,
+        data_adesao=data_adesao,
+        tempo_adesao=tempo_adesao,
+        percentual_atual=float(percentual_atual),
+        geracao_usina_total=float(geracao_usina_total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+        energia_destinada_total=float(energia_destinada_total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+        energia_compensada_total=float(energia_compensada_total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+        saldo_atual=float(saldo_atual.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)), economia_total=float(economia_total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+        total_pago=float(total_pago.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+        labels_grafico=labels_grafico,
+        geracao_grafico=geracao_grafico,
+        destinada_grafico=destinada_grafico,
+        compensada_grafico=compensada_grafico
+    )
+    
+@app.route('/portal-cliente/relatorios')
+@login_required
+def portal_cliente_relatorios():
+
+    if current_user.perfil not in ['cliente', 'admin']:
+        abort(403)
+
+    if current_user.perfil == 'admin':
+
+        faturas = (
+            FaturaMensal.query
+            .join(
+                Cliente,
+                Cliente.id == FaturaMensal.cliente_id
+            )
+            .order_by(
+                FaturaMensal.ano_referencia.desc(),
+                FaturaMensal.mes_referencia.desc()
+            )
+            .all()
+        )
+
+    else:
+
+        clientes_ids = [
+            cliente.id
+            for cliente in current_user.clientes.all()
+        ]
+
+        faturas = (
+            FaturaMensal.query
+            .join(
+                Cliente,
+                Cliente.id == FaturaMensal.cliente_id
+            )
+            .filter(
+                FaturaMensal.cliente_id.in_(clientes_ids)
+            )
+            .order_by(
+                FaturaMensal.ano_referencia.desc(),
+                FaturaMensal.mes_referencia.desc()
+            )
+            .all()
+        )
+
+    return render_template(
+        'portal_cliente/relatorios.html',
+        faturas=faturas
     )
 
 
