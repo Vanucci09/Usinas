@@ -20412,42 +20412,83 @@ def alocar_conta_concessionaria(conta_id):
 )
 @login_required
 def documentos_adesao_concessionaria(conta_id):
-
-    conta = ContaConcessionaria.query.get_or_404(conta_id)
+    conta = ContaConcessionaria.query.get_or_404(
+        conta_id
+    )
 
     if request.method == 'POST':
-
         arquivos = request.files
         centro = conta.centro_custo
 
+        if not centro:
+
+            flash(
+                'A conta não possui um centro de custo vinculado.',
+                'danger'
+            )
+
+            return redirect(
+                request.url
+            )
+
         cpf_cnpj_limpo = ''.join(
-            filter(str.isdigit, centro.cpf_cnpj or '')
+            filter(
+                str.isdigit,
+                centro.cpf_cnpj or ''
+            )
         )
 
         eh_pj = len(cpf_cnpj_limpo) > 11
-
         if eh_pj:
-            tipos = ['conta', 'contrato_social', 'cnh']
+            tipos = [
+                'conta',
+                'contrato_social',
+                'cnh'
+            ]
 
-            if not all(arquivos.get(tipo) and arquivos.get(tipo).filename for tipo in tipos):
+            documentos_faltantes = [
+                tipo
+                for tipo in tipos
+                if not arquivos.get(tipo)
+                or not arquivos.get(tipo).filename
+            ]
+
+            if documentos_faltantes:
                 flash(
-                    'Para Pessoa Jurídica é obrigatório enviar Conta, Contrato Social e CNH do Administrador.',
+                    'Para Pessoa Jurídica é obrigatório enviar '
+                    'Conta, Contrato Social e CNH do Administrador.',
                     'warning'
                 )
-                return redirect(request.url)
+                return redirect(
+                    request.url
+                )
 
         else:
-            tipos = ['conta', 'cnh']
+            tipos = [
+                'conta',
+                'cnh'
+            ]
 
-            if not all(arquivos.get(tipo) and arquivos.get(tipo).filename for tipo in tipos):
+            documentos_faltantes = [
+                tipo
+                for tipo in tipos
+                if not arquivos.get(tipo)
+                or not arquivos.get(tipo).filename
+            ]
+
+            if documentos_faltantes:
+
                 flash(
-                    'Para Pessoa Física é obrigatório enviar Conta e CNH.',
+                    'Para Pessoa Física é obrigatório enviar '
+                    'Conta e CNH.',
                     'warning'
                 )
-                return redirect(request.url)
+
+                return redirect(
+                    request.url
+                )
 
         try:
-
             caminho_base = os.getenv(
                 'DOCUMENTOS_PATH',
                 os.path.join(
@@ -20457,258 +20498,419 @@ def documentos_adesao_concessionaria(conta_id):
                 )
             )
 
-            os.makedirs(caminho_base, exist_ok=True)
+            os.makedirs(
+                caminho_base,
+                exist_ok=True
+            )
 
             for tipo in tipos:
+                arquivo = arquivos.get(
+                    tipo
+                )
 
-                arquivo = arquivos.get(tipo)
-
-                if not arquivo or not arquivo.filename:
+                if (
+                    not arquivo
+                    or not arquivo.filename
+                ):
                     continue
+                nome_original = secure_filename(
+                    arquivo.filename
+                )
 
-                nome_original = secure_filename(arquivo.filename)
-                ext = os.path.splitext(nome_original)[1]
-                nome_unico = f"{uuid.uuid4().hex}{ext}"
+                extensao = os.path.splitext(
+                    nome_original
+                )[1].lower()
 
-                caminho = os.path.join(caminho_base, nome_unico)
+                extensoes_permitidas = [
+                    '.pdf',
+                    '.png',
+                    '.jpg',
+                    '.jpeg'
+                ]
 
-                arquivo.save(caminho)
-                print('ARQUIVO SALVO EM:', caminho)
+                if extensao not in extensoes_permitidas:
+                    flash(
+                        f'O arquivo "{nome_original}" possui '
+                        'um formato não permitido. Use PDF, PNG, JPG ou JPEG.',
+                        'warning'
+                    )
 
-                db.session.add(
-                    DocumentoAdesao(
+                    return redirect(
+                        request.url
+                    )
+
+                nome_unico = (
+                    f'{uuid.uuid4().hex}{extensao}'
+                )
+
+                caminho_completo = os.path.join(
+                    caminho_base,
+                    nome_unico
+                )
+
+                arquivo.save(
+                    caminho_completo
+                )
+
+                documento_existente = (
+                    DocumentoAdesao.query
+                    .filter_by(
+                        conta_concessionaria_id=conta.id,
+                        tipo_documento=tipo
+                    )
+                    .first()
+                )
+
+                if documento_existente:
+                    caminho_antigo = os.path.join(
+                        caminho_base,
+                        documento_existente.caminho
+                    )
+
+                    if os.path.exists(
+                        caminho_antigo
+                    ):
+
+                        try:
+                            os.remove(
+                                caminho_antigo
+                            )
+                        except OSError:
+                            pass
+
+                    documento_existente.nome_arquivo = (
+                        nome_original
+                    )
+
+                    documento_existente.caminho = (
+                        nome_unico
+                    )
+
+                else:
+
+                    documento = DocumentoAdesao(
                         conta_concessionaria_id=conta.id,
                         tipo_documento=tipo,
                         nome_arquivo=nome_original,
                         caminho=nome_unico
                     )
-                )
+
+                    db.session.add(
+                        documento
+                    )
 
             conta.documentacao_enviada = True
 
-            cliente_existente = Cliente.query.filter_by(
-                codigo_unidade=conta.n_uc
-            ).first()
+            # A conta ainda não é alocada neste momento.
+            # Cliente e rateio serão criados somente
+            # após a assinatura do termo.
+            conta.alocado = False
 
-            if cliente_existente:
-                conta.alocado = True
-                db.session.commit()
-
-                flash(
-                    'Documentação enviada. Cliente já existia no sistema.',
-                    'warning'
-                )
-
-                return redirect(
-                    url_for('listar_contas_concessionaria')
-                )
-
-            fase = (conta.fase or '').strip().lower()
-
-            if fase in ['trifásico', 'trifasico']:
-                consumo_disponibilidade = 100
-            elif fase in ['bifásico', 'bifasico']:
-                consumo_disponibilidade = 50
-            else:
-                consumo_disponibilidade = 30
-
-            energia_injetada = (
-                float(conta.consumo_medio or 0)
-                - consumo_disponibilidade
+            db.session.commit()
+            flash(
+                'Documentação enviada com sucesso. '
+                'O cliente será alocado após a assinatura do termo.',
+                'success'
             )
-
-            if energia_injetada < 0:
-                energia_injetada = 0
-
-            hoje = date.today()
-
-            if hoje.month == 12:
-                ano_prev = hoje.year + 1
-                mes_prev = 1
-            else:
-                ano_prev = hoje.year
-                mes_prev = hoje.month + 1
-
-            melhor_usina = None
-            melhor_percentual = None
-            melhor_ocupacao_final = None
-
-            usinas = Usina.query.order_by(Usina.nome).all()
-
-            for usina in usinas:
-
-                previsao = PrevisaoMensal.query.filter_by(
-                    usina_id=usina.id,
-                    ano=ano_prev,
-                    mes=mes_prev
-                ).first()
-
-                if not previsao:
-                    print('SEM PREVISÃO')
-                    continue
-
-                if not previsao.previsao_kwh or previsao.previsao_kwh <= 0:
-                    print('PREVISÃO ZERADA')
-                    continue
-
-                percentual_necessario = (
-                    energia_injetada /
-                    float(previsao.previsao_kwh)
-                ) * 100
-
-                percentual_necessario = (
-                    math.ceil(percentual_necessario * 10) / 10
-                )
-
-                print('ENERGIA INJETADA:', energia_injetada)
-                print('PERCENTUAL NECESSÁRIO:', percentual_necessario)
-
-                if usina.tusd_fio_b and percentual_necessario > 25:
-                    print('BLOQUEOU: TUSD FIO B MAIOR QUE 25%')
-                    continue
-
-                percentual_ocupado = (
-                    db.session.query(
-                        db.func.coalesce(
-                            db.func.sum(Rateio.percentual),
-                            0
-                        )
-                    )
-                    .join(
-                        Cliente,
-                        Cliente.id == Rateio.cliente_id
-                    )
-                    .filter(
-                        Rateio.usina_id == usina.id,
-                        Rateio.ativo == True,
-                        Cliente.ativo == True
-                    )
-                    .scalar()
-                )
-
-                print('PERCENTUAL OCUPADO:', percentual_ocupado)
-
-                ocupacao_final = float(percentual_ocupado or 0) + percentual_necessario
-
-                print('OCUPAÇÃO FINAL:', ocupacao_final)
-
-                if ocupacao_final > 100:
-                    print('BLOQUEOU: PASSOU DE 100%')
-                    continue
-
-                print('USINA ELEGÍVEL')
-
-                if (
-                    melhor_ocupacao_final is None
-                    or ocupacao_final < melhor_ocupacao_final
-                ):
-                    melhor_usina = usina
-                    melhor_percentual = percentual_necessario
-                    melhor_ocupacao_final = ocupacao_final
-
-            if melhor_usina:
-
-                cliente = Cliente(
-                    nome=centro.nome,
-                    cpf_cnpj=centro.cpf_cnpj,
-                    endereco=centro.endereco or '',
-                    codigo_unidade=conta.n_uc,
-                    usina_id=melhor_usina.id,
-                    email=centro.email,
-                    telefone=centro.telefone,
-                    email_cc=None,
-                    mostrar_saldo=True,
-                    consumo_instantaneo=False,
-                    login_concessionaria=None,
-                    senha_concessionaria=None,
-                    dia_relatorio=None,
-                    relatorio_automatico=False,
-                    ativo=True
-                )
-
-                db.session.add(cliente)
-                db.session.flush()
-                
-                ultimo_codigo = (
-                    db.session.query(
-                        db.func.max(
-                            Rateio.codigo_rateio
-                        )
-                    )
-                    .filter(
-                        Rateio.usina_id == melhor_usina.id
-                    )
-                    .scalar()
-                )
-
-                proximo_codigo = (
-                    1
-                    if ultimo_codigo is None
-                    else ultimo_codigo + 1
-                )
-
-                rateio = Rateio(
-                    usina_id=melhor_usina.id,
-                    cliente_id=cliente.id,
-                    percentual=round(
-                        melhor_percentual,
-                        1
-                    ),
-                    tarifa_kwh=float(conta.tarifa_energia or 0),
-                    desconto_percentual=float(conta.desconto or 0),
-                    cip=float(conta.cip or 0),
-                    codigo_rateio=proximo_codigo,
-                    data_inicio=date.today(),
-                    ativo=True
-                )
-
-                db.session.add(rateio)
-
-                conta.alocado = True
-
-                db.session.commit()
-
-                flash(
-                    f'Documentação enviada e cliente alocado automaticamente na usina {melhor_usina.nome}. '
-                    f'Percentual do rateio: {melhor_percentual:.1f}%.',
-                    'success'
-                )
-
-            else:
-
-                conta.alocado = False
-
-                db.session.commit()
-
-                flash(
-                    'Documentação enviada, mas nenhuma usina possui disponibilidade. Cliente ficou na fila de espera.',
-                    'warning'
-                )
 
             return redirect(
-                url_for('listar_contas_concessionaria')
+                url_for(
+                    'listar_contas_concessionaria'
+                )
             )
 
-        except Exception as e:
-
+        except Exception as erro:
             db.session.rollback()
-
-            print(
-                'Erro ao enviar documentação/alocar cliente:',
-                e
+            current_app.logger.exception(
+                'Erro ao enviar documentos da conta %s',
+                conta.id
             )
 
             flash(
-                f'Erro ao enviar documentação: {e}',
+                f'Erro ao enviar documentação: {erro}',
                 'danger'
             )
 
-            return redirect(request.url)
+            return redirect(
+                request.url
+            )
 
     return render_template(
         'documentos_adesao.html',
         conta=conta
     )
+    
+def alocar_conta_apos_assinatura(conta):
+    if not conta:
+        raise ValueError(
+            'Conta concessionária não informada.'
+        )
+
+    if not conta.termo_assinado:
+        raise ValueError(
+            'O termo ainda não foi assinado.'
+        )
+
+    if not conta.documentacao_enviada:
+        raise ValueError(
+            'A documentação ainda não foi enviada.'
+        )
+
+    centro = conta.centro_custo
+
+    if not centro:
+        raise ValueError(
+            'A conta não possui centro de custo vinculado.'
+        )
+
+    cliente_existente = (
+        Cliente.query
+        .filter_by(
+            codigo_unidade=conta.n_uc
+        )
+        .first()
+    )
+
+    if cliente_existente:
+
+        conta.alocado = True
+
+        return {
+            'sucesso': True,
+            'cliente': cliente_existente,
+            'usina': (
+                cliente_existente.usina
+                if cliente_existente.usina_id
+                else None
+            ),
+            'percentual': None,
+            'mensagem': (
+                'Cliente já cadastrado no sistema.'
+            )
+        }
+
+    fase = (
+        conta.fase or ''
+    ).strip().lower()
+
+    if fase in [
+        'trifásico',
+        'trifasico'
+    ]:
+
+        consumo_disponibilidade = 100
+    elif fase in [
+        'bifásico',
+        'bifasico'
+    ]:
+
+        consumo_disponibilidade = 50
+    else:
+        consumo_disponibilidade = 30
+    energia_injetada = (
+        float(
+            conta.consumo_medio or 0
+        )
+        - consumo_disponibilidade
+    )
+
+    if energia_injetada < 0:
+        energia_injetada = 0
+
+    hoje = date.today()
+
+    if hoje.month == 12:
+
+        ano_previsao = hoje.year + 1
+        mes_previsao = 1
+
+    else:
+
+        ano_previsao = hoje.year
+        mes_previsao = hoje.month + 1
+
+    melhor_usina = None
+    melhor_percentual = None
+    melhor_ocupacao_final = None
+
+    usinas = (
+        Usina.query
+        .order_by(
+            Usina.nome
+        )
+        .all()
+    )
+
+    for usina in usinas:
+
+        previsao = (
+            PrevisaoMensal.query
+            .filter_by(
+                usina_id=usina.id,
+                ano=ano_previsao,
+                mes=mes_previsao
+            )
+            .first()
+        )
+
+        if (
+            not previsao
+            or not previsao.previsao_kwh
+            or float(previsao.previsao_kwh) <= 0
+        ):
+            continue
+
+        percentual_necessario = (
+            energia_injetada
+            / float(previsao.previsao_kwh)
+        ) * 100
+
+        percentual_necessario = (
+            math.ceil(
+                percentual_necessario * 10
+            ) / 10
+        )
+
+        if (
+            usina.tusd_fio_b
+            and percentual_necessario > 25
+        ):
+            continue
+
+        percentual_ocupado = (
+            db.session.query(
+                db.func.coalesce(
+                    db.func.sum(
+                        Rateio.percentual
+                    ),
+                    0
+                )
+            )
+            .join(
+                Cliente,
+                Cliente.id == Rateio.cliente_id
+            )
+            .filter(
+                Rateio.usina_id == usina.id,
+                Rateio.ativo.is_(True),
+                Cliente.ativo.is_(True)
+            )
+            .scalar()
+        )
+
+        ocupacao_final = (
+            float(
+                percentual_ocupado or 0
+            )
+            + percentual_necessario
+        )
+
+        if ocupacao_final > 100:
+            continue
+
+        if (
+            melhor_ocupacao_final is None
+            or ocupacao_final < melhor_ocupacao_final
+        ):
+
+            melhor_usina = usina
+            melhor_percentual = percentual_necessario
+            melhor_ocupacao_final = ocupacao_final
+
+    if not melhor_usina:
+
+        conta.alocado = False
+
+        return {
+            'sucesso': False,
+            'cliente': None,
+            'usina': None,
+            'percentual': None,
+            'mensagem': (
+                'Nenhuma usina possui disponibilidade. '
+                'O cliente permaneceu na fila de espera.'
+            )
+        }
+
+    cliente = Cliente(
+        nome=centro.nome,
+        cpf_cnpj=centro.cpf_cnpj,
+        endereco=centro.endereco or '',
+        codigo_unidade=conta.n_uc,
+        usina_id=melhor_usina.id,
+        email=centro.email,
+        telefone=centro.telefone,
+        email_cc=None,
+        mostrar_saldo=True,
+        consumo_instantaneo=False,
+        login_concessionaria=None,
+        senha_concessionaria=None,
+        dia_relatorio=None,
+        relatorio_automatico=False,
+        ativo=True
+    )
+
+    db.session.add(
+        cliente
+    )
+
+    db.session.flush()
+    ultimo_codigo = (
+        db.session.query(
+            db.func.max(
+                Rateio.codigo_rateio
+            )
+        )
+        .filter(
+            Rateio.usina_id == melhor_usina.id
+        )
+        .scalar()
+    )
+
+    proximo_codigo = (
+        1
+        if ultimo_codigo is None
+        else ultimo_codigo + 1
+    )
+
+    rateio = Rateio(
+        usina_id=melhor_usina.id,
+        cliente_id=cliente.id,
+        percentual=round(
+            melhor_percentual,
+            1
+        ),
+        tarifa_kwh=float(
+            conta.tarifa_energia or 0
+        ),
+        desconto_percentual=float(
+            conta.desconto or 0
+        ),
+        cip=float(
+            conta.cip or 0
+        ),
+        codigo_rateio=proximo_codigo,
+        data_inicio=date.today(),
+        ativo=True
+    )
+
+    db.session.add(
+        rateio
+    )
+
+    conta.alocado = True
+
+    return {
+        'sucesso': True,
+        'cliente': cliente,
+        'usina': melhor_usina,
+        'percentual': melhor_percentual,
+        'mensagem': (
+            f'Cliente alocado na usina '
+            f'{melhor_usina.nome} com rateio de '
+            f'{melhor_percentual:.1f}%.'
+        )
+    }
     
 @app.route(
     '/contas-concessionaria/<int:conta_id>/documentos/visualizar'
@@ -20909,16 +21111,13 @@ def excluir_documento_adesao(documento_id):
             )
 
             db.session.commit()
-
             flash(
                 'Documento excluído com sucesso.',
                 'success'
             )
 
     except Exception as e:
-
         db.session.rollback()
-
         print(
             'ERRO AO EXCLUIR DOCUMENTO:',
             e
@@ -21056,6 +21255,17 @@ def assinar_termo_adesao(conta_id):
             'assinatura'
         )
 
+        if conta.termo_assinado:
+
+            flash(
+                'Este termo já foi assinado.',
+                'warning'
+            )
+
+            return redirect(
+                request.url
+            )
+
         if not aceite:
 
             flash(
@@ -21078,6 +21288,19 @@ def assinar_termo_adesao(conta_id):
                 request.url
             )
 
+        if not conta.documentacao_enviada:
+
+            flash(
+                'A documentação ainda não foi enviada.',
+                'warning'
+            )
+
+            return redirect(
+                request.url
+            )
+
+        caminho_assinatura = None
+
         try:
 
             caminho_base = os.getenv(
@@ -21094,7 +21317,18 @@ def assinar_termo_adesao(conta_id):
                 exist_ok=True
             )
 
-            assinatura_base64 = assinatura_base64.split(',')[1]
+            partes_assinatura = assinatura_base64.split(
+                ',',
+                1
+            )
+
+            if len(partes_assinatura) != 2:
+
+                raise ValueError(
+                    'Formato da assinatura inválido.'
+                )
+
+            assinatura_base64 = partes_assinatura[1]
 
             assinatura_bytes = base64.b64decode(
                 assinatura_base64
@@ -21112,24 +21346,24 @@ def assinar_termo_adesao(conta_id):
             with open(
                 caminho_assinatura,
                 'wb'
-            ) as f:
+            ) as arquivo_assinatura:
 
-                f.write(
+                arquivo_assinatura.write(
                     assinatura_bytes
                 )
 
             conta.termo_assinado = True
 
             conta.termo_assinado_em = datetime.now(
-                ZoneInfo("America/Sao_Paulo")
+                ZoneInfo(
+                    'America/Sao_Paulo'
+                )
             )
 
             ip = request.headers.get(
                 'X-Forwarded-For',
                 request.remote_addr
             )
-
-            print('IP BRUTO:', ip)
 
             if ip:
                 ip = ip.split(',')[0].strip()
@@ -21146,44 +21380,81 @@ def assinar_termo_adesao(conta_id):
                 nome_assinatura
             )
 
-            # Remove termo antigo se existir
+            # Exclui somente o registro antigo.
+            # O arquivo antigo pode ser removido separadamente.
             DocumentoAdesao.query.filter_by(
                 conta_concessionaria_id=conta.id,
                 tipo_documento='termo_assinado'
-            ).delete()
+            ).delete(
+                synchronize_session=False
+            )
 
             db.session.add(
                 DocumentoAdesao(
                     conta_concessionaria_id=conta.id,
                     tipo_documento='termo_assinado',
-                    nome_arquivo='Termo Assinado Eletronicamente',
+                    nome_arquivo=(
+                        'Termo Assinado Eletronicamente'
+                    ),
                     caminho=nome_assinatura
+                )
+            )
+
+            resultado_alocacao = (
+                alocar_conta_apos_assinatura(
+                    conta
                 )
             )
 
             db.session.commit()
 
-            flash(
-                'Termo assinado com sucesso.',
-                'success'
-            )
+            if resultado_alocacao['sucesso']:
 
-            return render_template(
-                    'termo_assinado_sucesso.html',
-                    conta=conta
+                flash(
+                    'Termo assinado com sucesso. '
+                    + resultado_alocacao['mensagem'],
+                    'success'
                 )
 
-        except Exception as e:
+            else:
+
+                flash(
+                    'Termo assinado com sucesso. '
+                    + resultado_alocacao['mensagem'],
+                    'warning'
+                )
+
+            return render_template(
+                'termo_assinado_sucesso.html',
+                conta=conta
+            )
+
+        except Exception as erro:
 
             db.session.rollback()
 
-            print(
-                'ERRO AO ASSINAR TERMO:',
-                e
+            # O arquivo foi salvo no disco antes da transação.
+            # Se o banco falhar, remove a assinatura órfã.
+            if (
+                caminho_assinatura
+                and os.path.exists(caminho_assinatura)
+            ):
+
+                try:
+                    os.remove(
+                        caminho_assinatura
+                    )
+
+                except OSError:
+                    pass
+
+            current_app.logger.exception(
+                'Erro ao assinar termo da conta %s',
+                conta.id
             )
 
             flash(
-                f'Erro ao assinar termo: {e}',
+                f'Erro ao assinar termo: {erro}',
                 'danger'
             )
 
@@ -21217,7 +21488,6 @@ def visualizar_termo_assinado(conta_id):
     )
 
     usina = None
-
     if conta.alocado:
 
         cliente = Cliente.query.filter_by(
@@ -22280,7 +22550,6 @@ def portal_cliente_relatorios():
         abort(403)
 
     if current_user.perfil == 'admin':
-
         faturas = (
             FaturaMensal.query
             .join(
@@ -22295,7 +22564,6 @@ def portal_cliente_relatorios():
         )
 
     else:
-
         clientes_ids = [
             cliente.id
             for cliente in current_user.clientes.all()
