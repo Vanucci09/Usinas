@@ -79,6 +79,7 @@ Dashboard do Cliente
                                 name="cliente_id"
                                 id="cliente_id"
                                 class="form-select"
+                                onchange="this.form.submit()"
                             >
 
                                 {% for item in clientes_disponiveis %}
@@ -95,18 +96,6 @@ Dashboard do Cliente
                                 {% endfor %}
 
                             </select>
-
-                        </div>
-
-                        <div class="col-auto">
-
-                            <button
-                                type="submit"
-                                class="btn btn-success"
-                            >
-                                <i class="bi bi-search me-1"></i>
-                                Visualizar
-                            </button>
 
                         </div>
 
@@ -186,35 +175,7 @@ Dashboard do Cliente
         <!-- CARDS -->
         <div class="row g-3 mb-4">
 
-            <div class="col-sm-6 col-xl-4">
-
-                <div class="card dashboard-card shadow-sm border-0 h-100">
-
-                    <div class="card-body">
-
-                        <div class="dashboard-icon bg-primary-subtle text-primary">
-                            <i class="bi bi-sun"></i>
-                        </div>
-
-                        <small class="text-muted">
-                            Geração Total da Usina
-                        </small>
-
-                        <h4 class="fw-bold mt-2 mb-0">
-                            {{ "{:,.2f}".format(geracao_usina_total or 0)
-                                .replace(",", "X")
-                                .replace(".", ",")
-                                .replace("X", ".") }}
-                            kWh
-                        </h4>
-
-                    </div>
-
-                </div>
-
-            </div>
-
-            <div class="col-sm-6 col-xl-4">
+            <div class="col-sm-6 col-xl-3">
 
                 <div class="card dashboard-card shadow-sm border-0 h-100">
 
@@ -225,15 +186,18 @@ Dashboard do Cliente
                         </div>
 
                         <small class="text-muted">
-                            Energia Destinada ao Cliente
+                            Energia Destinada
                         </small>
 
                         <h4 class="fw-bold mt-2 mb-0">
+
                             {{ "{:,.2f}".format(energia_destinada_total or 0)
                                 .replace(",", "X")
                                 .replace(".", ",")
                                 .replace("X", ".") }}
+
                             kWh
+
                         </h4>
 
                     </div>
@@ -242,7 +206,7 @@ Dashboard do Cliente
 
             </div>
 
-            <div class="col-sm-6 col-xl-4">
+            <div class="col-sm-6 col-xl-3">
 
                 <div class="card dashboard-card shadow-sm border-0 h-100">
 
@@ -257,11 +221,14 @@ Dashboard do Cliente
                         </small>
 
                         <h4 class="fw-bold mt-2 mb-0 text-success">
+
                             {{ "{:,.2f}".format(energia_compensada_total or 0)
                                 .replace(",", "X")
                                 .replace(".", ",")
                                 .replace("X", ".") }}
+
                             kWh
+
                         </h4>
 
                     </div>
@@ -270,7 +237,7 @@ Dashboard do Cliente
 
             </div>
 
-            <div class="col-sm-6 col-xl-4">
+            <div class="col-sm-6 col-xl-3">
 
                 <div class="card dashboard-card shadow-sm border-0 h-100">
 
@@ -285,11 +252,14 @@ Dashboard do Cliente
                         </small>
 
                         <h4 class="fw-bold mt-2 mb-0">
+
                             {{ "{:,.2f}".format(saldo_atual or 0)
                                 .replace(",", "X")
                                 .replace(".", ",")
                                 .replace("X", ".") }}
+
                             kWh
+
                         </h4>
 
                     </div>
@@ -298,7 +268,7 @@ Dashboard do Cliente
 
             </div>
 
-            <div class="col-sm-6 col-xl-4">
+            <div class="col-sm-6 col-xl-3">
 
                 <div class="card dashboard-card shadow-sm border-0 h-100">
 
@@ -322,22 +292,109 @@ Dashboard do Cliente
 
             </div>
 
-            <div class="col-sm-6 col-xl-4">
+            <div class="col-sm-6 col-xl-3">
 
                 <div class="card dashboard-card shadow-sm border-0 h-100">
 
                     <div class="card-body">
 
-                        <div class="dashboard-icon bg-secondary-subtle text-secondary">
-                            <i class="bi bi-cash-coin"></i>
+                        <div class="dashboard-icon bg-primary-subtle text-primary">
+                            <i class="bi bi-percent"></i>
                         </div>
 
                         <small class="text-muted">
-                            Total Pago
+                            Desconto do Último Mês
                         </small>
 
-                        <h4 class="fw-bold mt-2 mb-0">
-                            {{ total_pago|formato_brasileiro }}
+                        <h4 class="fw-bold mt-2 mb-0 text-primary">
+
+                            {{ "%.2f"|format(percentual_desconto_mensal or 0)
+                                |replace('.', ',') }}%
+
+                        </h4>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="col-sm-6 col-xl-3">
+
+                <div class="card dashboard-card shadow-sm border-0 h-100">
+
+                    <div class="card-body">
+
+                        <div class="dashboard-icon bg-primary-subtle text-primary">
+                            <i class="bi bi-calendar-check"></i>
+                        </div>
+
+                        <small class="text-muted">
+                            Desconto Acumulado no Ano
+                        </small>
+
+                        <h4 class="fw-bold mt-2 mb-0 text-primary">
+
+                            {{ "%.2f"|format(percentual_desconto_anual or 0)
+                                |replace('.', ',') }}%
+
+                        </h4>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="col-sm-6 col-xl-3">
+
+                <div class="card dashboard-card shadow-sm border-0 h-100">
+
+                    <div class="card-body">
+
+                        <div class="dashboard-icon bg-success-subtle text-success">
+                            <i class="bi bi-tree"></i>
+                        </div>
+
+                        <small class="text-muted">
+                            Árvores Equivalentes
+                        </small>
+
+                        <h4 class="fw-bold mt-2 mb-0 text-success">
+                            {{ arvores_equivalentes or 0 }}
+                        </h4>
+
+                        <small class="text-muted">
+                            Equivalência de CO₂ evitado
+                        </small>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="col-sm-6 col-xl-3">
+
+                <div class="card dashboard-card shadow-sm border-0 h-100">
+
+                    <div class="card-body">
+
+                        <div class="dashboard-icon bg-success-subtle text-success">
+                            <i class="bi bi-cloud-check"></i>
+                        </div>
+
+                        <small class="text-muted">
+                            Crédito de Carbono Estimado
+                        </small>
+
+                        <h4 class="fw-bold mt-2 mb-0 text-success">
+
+                            {{ "%.3f"|format(credito_carbono_toneladas or 0)
+                                |replace('.', ',') }}
+
+                            tCO₂
+
                         </h4>
 
                     </div>
@@ -402,13 +459,12 @@ Dashboard do Cliente
 
                             <tr>
                                 <th class="ps-4">Mês</th>
-                                <th class="text-end">Geração da Usina</th>
                                 <th class="text-end">Rateio</th>
                                 <th class="text-end">Energia Destinada</th>
                                 <th class="text-end">Compensada</th>
                                 <th class="text-end">Saldo</th>
                                 <th class="text-end">Economia</th>
-                                <th class="text-end pe-4">Valor Pago</th>
+                                <th class="text-end pe-4">Desconto</th>
                             </tr>
 
                         </thead>
@@ -421,14 +477,6 @@ Dashboard do Cliente
 
                                     <td class="ps-4 fw-semibold">
                                         {{ item.mes_nome }}
-                                    </td>
-
-                                    <td class="text-end">
-                                        {{ "{:,.2f}".format(item.geracao_usina)
-                                            .replace(",", "X")
-                                            .replace(".", ",")
-                                            .replace("X", ".") }}
-                                        kWh
                                     </td>
 
                                     <td class="text-end">
@@ -464,8 +512,11 @@ Dashboard do Cliente
                                         {{ item.economia|formato_brasileiro }}
                                     </td>
 
-                                    <td class="text-end pe-4">
-                                        {{ item.valor_pago|formato_brasileiro }}
+                                    <td class="text-end pe-4 text-primary fw-semibold">
+
+                                        {{ "%.2f"|format(item.percentual_desconto or 0)
+                                            |replace('.', ',') }}%
+
                                     </td>
 
                                 </tr>
@@ -475,7 +526,7 @@ Dashboard do Cliente
                                 <tr>
 
                                     <td
-                                        colspan="8"
+                                        colspan="7"
                                         class="text-center text-muted py-5"
                                     >
                                         Nenhum dado mensal encontrado.
@@ -558,7 +609,6 @@ Dashboard do Cliente
             }
 
             const labels = {{ labels_grafico|tojson }};
-            const geracao = {{ geracao_grafico|tojson }};
             const destinada = {{ destinada_grafico|tojson }};
             const compensada = {{ compensada_grafico|tojson }};
 
@@ -571,15 +621,6 @@ Dashboard do Cliente
                         labels: labels,
 
                         datasets: [
-                            {
-                                label: 'Geração da Usina',
-                                data: geracao,
-                                borderColor: '#0d6efd',
-                                backgroundColor: 'rgba(13, 110, 253, 0.10)',
-                                borderWidth: 2,
-                                tension: 0.3,
-                                pointRadius: 3
-                            },
                             {
                                 label: 'Energia Destinada',
                                 data: destinada,

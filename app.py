@@ -4700,6 +4700,11 @@ def login():
                     url_for('alterar_senha_primeiro_login')
                 )
 
+            if usuario.perfil == 'cliente':
+                return redirect(
+                    url_for('portal_cliente_desempenho_energia')
+                )
+
             return redirect(
                 url_for('index')
             )
@@ -21645,6 +21650,11 @@ def portal_cliente_desempenho_energia():
             para_decimal(valor) /
             Decimal('100')
         )
+        
+    # Fatores ambientais estimados.
+    # Podem ser ajustados conforme a metodologia usada pela empresa.
+    FATOR_CO2_KG_POR_KWH = Decimal('0.084')
+    KG_CO2_ABSORVIDO_POR_ARVORE_ANO = Decimal('22')
 
     def calcular_tarifa_neoenergia(fatura):
         usa_regra_nova = bool(
@@ -21920,10 +21930,25 @@ def portal_cliente_desempenho_energia():
             com_consorcio
         )
 
-        return economia_fatura.quantize(
-            Decimal('0.01'),
-            rounding=ROUND_HALF_UP
-        )
+        if economia_fatura < 0:
+            economia_fatura = Decimal('0')
+
+        return {
+            'economia': economia_fatura.quantize(
+                Decimal('0.01'),
+                rounding=ROUND_HALF_UP
+            ),
+
+            'sem_consorcio': sem_consorcio.quantize(
+                Decimal('0.01'),
+                rounding=ROUND_HALF_UP
+            ),
+
+            'com_consorcio': com_consorcio.quantize(
+                Decimal('0.01'),
+                rounding=ROUND_HALF_UP
+            )
+        }
 
     def calcular_tempo_adesao(data_inicio):
 
@@ -22036,7 +22061,6 @@ def portal_cliente_desempenho_energia():
             clientes_disponiveis=[],
             dados_mensais=[],
             labels_grafico=[],
-            geracao_grafico=[],
             destinada_grafico=[],
             compensada_grafico=[]
         )
@@ -22049,7 +22073,6 @@ def portal_cliente_desempenho_energia():
             clientes_disponiveis=clientes_disponiveis,
             dados_mensais=[],
             labels_grafico=[],
-            geracao_grafico=[],
             destinada_grafico=[],
             compensada_grafico=[],
             erro='O cliente ainda não possui uma usina vinculada.'
@@ -22120,7 +22143,8 @@ def portal_cliente_desempenho_energia():
     geracoes_query = (
         Geracao.query
         .filter(
-            Geracao.usina_id == usina.id
+            Geracao.usina_id == usina.id,
+            Geracao.data <= date.today()
         )
     )
 
@@ -22194,48 +22218,6 @@ def portal_cliente_desempenho_energia():
             percentual_dia
         )
 
-    # PAGAMENTOS DO CLIENTE
-    pagamentos = (
-        FinanceiroUsina.query
-        .filter(
-            FinanceiroUsina.usina_id == usina.id,
-            FinanceiroUsina.cliente_id == cliente.id,
-            FinanceiroUsina.tipo == 'receita',
-            FinanceiroUsina.data_pagamento.isnot(None)
-        )
-        .order_by(
-            FinanceiroUsina.data_pagamento.asc()
-        )
-        .all()
-    )
-
-    pagamentos_por_mes = defaultdict(
-        lambda: Decimal('0')
-    )
-
-    for pagamento in pagamentos:
-        data_pagamento = (
-            pagamento.data_pagamento or
-            pagamento.data
-        )
-
-        if not data_pagamento:
-            continue
-
-        chave = (
-            data_pagamento.year,
-            data_pagamento.month
-        )
-
-        pagamentos_por_mes[chave] += (
-            para_decimal(
-                pagamento.valor
-            ) +
-            para_decimal(
-                pagamento.juros
-            )
-        )
-
     # MONTA TODOS OS MESES
     chaves_meses = set(
         geracao_mensal.keys()
@@ -22243,10 +22225,6 @@ def portal_cliente_desempenho_energia():
 
     chaves_meses.update(
         faturas_por_mes.keys()
-    )
-
-    chaves_meses.update(
-        pagamentos_por_mes.keys()
     )
 
     if data_adesao:
@@ -22295,14 +22273,17 @@ def portal_cliente_desempenho_energia():
     }
 
     dados_mensais = []
+
     energia_compensada_total = Decimal('0')
     energia_destinada_total = Decimal('0')
-    geracao_usina_total = Decimal('0')
     economia_total = Decimal('0')
-    total_pago = Decimal('0')
     saldo_atual = Decimal('0')
+    # Percentual mensal mais recente
+    percentual_desconto_mensal_atual = Decimal('0')
+    # Percentual acumulado do ano atual
+    economia_ano_atual = Decimal('0')
+    valor_sem_consorcio_ano_atual = Decimal('0')
     labels_grafico = []
-    geracao_grafico = []
     destinada_grafico = []
     compensada_grafico = []
 
@@ -22314,13 +22295,6 @@ def portal_cliente_desempenho_energia():
 
         fatura = faturas_por_mes.get(
             chave
-        )
-
-        geracao_usina_mes = (
-            geracao_mensal.get(
-                chave,
-                Decimal('0')
-            )
         )
 
         energia_destinada_mes = (
@@ -22337,13 +22311,20 @@ def portal_cliente_desempenho_energia():
             )
         )
 
-        energia_compensada_mes = (
-            para_decimal(
+        # Só existe energia compensada quando houve energia
+        # destinada ao cliente naquele mês.
+        if (
+            fatura
+            and energia_destinada_mes > 0
+        ):
+
+            energia_compensada_mes = para_decimal(
                 fatura.consumo_usina
             )
-            if fatura
-            else Decimal('0')
-        )
+
+        else:
+
+            energia_compensada_mes = Decimal('0')
 
         saldo_unidade_mes = (
             para_decimal(
@@ -22352,15 +22333,11 @@ def portal_cliente_desempenho_energia():
             if fatura
             else Decimal('0')
         )
-
-        valor_pago_mes = (
-            pagamentos_por_mes.get(
-                chave,
-                Decimal('0')
-            )
-        )
-
+        
         economia_mes = Decimal('0')
+        valor_sem_consorcio_mes = Decimal('0')
+        percentual_desconto_mes = Decimal('0')
+        
         if fatura:
             if fatura.data_cadastro:
                 data_base_fatura = (
@@ -22381,19 +22358,52 @@ def portal_cliente_desempenho_energia():
                 )
             )
 
-            economia_mes = (
-                calcular_economia_fatura(
-                    fatura,
-                    rateio_fatura,
-                    usina
-                )
+            resultado_economia = calcular_economia_fatura(
+                fatura,
+                rateio_fatura,
+                usina
             )
 
-            saldo_atual = saldo_unidade_mes
+            economia_mes = resultado_economia[
+                'economia'
+            ]
 
-        geracao_usina_total += (
-            geracao_usina_mes
-        )
+            valor_sem_consorcio_mes = resultado_economia[
+                'sem_consorcio'
+            ]
+
+            if valor_sem_consorcio_mes > 0:
+
+                percentual_desconto_mes = (
+                    economia_mes /
+                    valor_sem_consorcio_mes *
+                    Decimal('100')
+                ).quantize(
+                    Decimal('0.01'),
+                    rounding=ROUND_HALF_UP
+                )
+
+                # Como os meses estão em ordem crescente,
+                # ficará armazenado o percentual do mês mais recente.
+                percentual_desconto_mensal_atual = (
+                    percentual_desconto_mes
+                )
+
+            # Acumulado somente do ano atual
+            if ano == date.today().year:
+
+                economia_ano_atual += economia_mes
+
+                valor_sem_consorcio_ano_atual += (
+                    valor_sem_consorcio_mes
+                )
+
+            if date(ano, mes, 1) <= date(
+                date.today().year,
+                date.today().month,
+                1
+            ):
+                saldo_atual = saldo_unidade_mes
 
         energia_destinada_total += (
             energia_destinada_mes
@@ -22404,7 +22414,6 @@ def portal_cliente_desempenho_energia():
         )
 
         economia_total += economia_mes
-        total_pago += valor_pago_mes
 
         label_mes = (
             f'{meses_nomes[mes]}/{str(ano)[-2:]}'
@@ -22414,8 +22423,8 @@ def portal_cliente_desempenho_energia():
             'ano': ano,
             'mes': mes,
             'mes_nome': label_mes,
-            'geracao_usina': float(
-                geracao_usina_mes.quantize(
+            'percentual_desconto': float(
+                percentual_desconto_mes.quantize(
                     Decimal('0.01'),
                     rounding=ROUND_HALF_UP
                 )
@@ -22450,25 +22459,10 @@ def portal_cliente_desempenho_energia():
                     rounding=ROUND_HALF_UP
                 )
             ),
-            'valor_pago': float(
-                valor_pago_mes.quantize(
-                    Decimal('0.01'),
-                    rounding=ROUND_HALF_UP
-                )
-            )
         })
 
         labels_grafico.append(
             label_mes
-        )
-
-        geracao_grafico.append(
-            float(
-                geracao_usina_mes.quantize(
-                    Decimal('0.01'),
-                    rounding=ROUND_HALF_UP
-                )
-            )
         )
 
         destinada_grafico.append(
@@ -22487,6 +22481,50 @@ def portal_cliente_desempenho_energia():
                     rounding=ROUND_HALF_UP
                 )
             )
+        )
+        
+    percentual_desconto_anual = Decimal('0')
+
+    if valor_sem_consorcio_ano_atual > 0:
+
+        percentual_desconto_anual = (
+            economia_ano_atual /
+            valor_sem_consorcio_ano_atual *
+            Decimal('100')
+        ).quantize(
+            Decimal('0.01'),
+            rounding=ROUND_HALF_UP
+        )
+
+
+    # Impacto ambiental baseado apenas na energia
+    # efetivamente compensada.
+    co2_evitado_kg = (
+        energia_compensada_total *
+        FATOR_CO2_KG_POR_KWH
+    ).quantize(
+        Decimal('0.01'),
+        rounding=ROUND_HALF_UP
+    )
+
+    credito_carbono_toneladas = (
+        co2_evitado_kg /
+        Decimal('1000')
+    ).quantize(
+        Decimal('0.001'),
+        rounding=ROUND_HALF_UP
+    )
+
+    arvores_equivalentes = Decimal('0')
+
+    if KG_CO2_ABSORVIDO_POR_ARVORE_ANO > 0:
+
+        arvores_equivalentes = (
+            co2_evitado_kg /
+            KG_CO2_ABSORVIDO_POR_ARVORE_ANO
+        ).quantize(
+            Decimal('1'),
+            rounding=ROUND_HALF_UP
         )
 
     # Do mais recente para o mais antigo na tabela
@@ -22524,20 +22562,64 @@ def portal_cliente_desempenho_energia():
 
     return render_template(
         'portal_cliente/dashboard_cliente.html',
+
         cliente=cliente,
         usina=usina,
         clientes_disponiveis=clientes_disponiveis,
         dados_mensais=dados_mensais,
+
         data_adesao=data_adesao,
         tempo_adesao=tempo_adesao,
-        percentual_atual=float(percentual_atual),
-        geracao_usina_total=float(geracao_usina_total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
-        energia_destinada_total=float(energia_destinada_total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
-        energia_compensada_total=float(energia_compensada_total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
-        saldo_atual=float(saldo_atual.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)), economia_total=float(economia_total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
-        total_pago=float(total_pago.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
+
+        percentual_atual=float(
+            percentual_atual
+        ),
+
+        energia_destinada_total=float(
+            energia_destinada_total.quantize(
+                Decimal('0.01'),
+                rounding=ROUND_HALF_UP
+            )
+        ),
+
+        energia_compensada_total=float(
+            energia_compensada_total.quantize(
+                Decimal('0.01'),
+                rounding=ROUND_HALF_UP
+            )
+        ),
+
+        saldo_atual=float(
+            saldo_atual.quantize(
+                Decimal('0.01'),
+                rounding=ROUND_HALF_UP
+            )
+        ),
+
+        economia_total=float(
+            economia_total.quantize(
+                Decimal('0.01'),
+                rounding=ROUND_HALF_UP
+            )
+        ),
+
+        percentual_desconto_mensal=float(
+            percentual_desconto_mensal_atual
+        ),
+
+        percentual_desconto_anual=float(
+            percentual_desconto_anual
+        ),
+
+        arvores_equivalentes=int(
+            arvores_equivalentes
+        ),
+
+        credito_carbono_toneladas=float(
+            credito_carbono_toneladas
+        ),
+
         labels_grafico=labels_grafico,
-        geracao_grafico=geracao_grafico,
         destinada_grafico=destinada_grafico,
         compensada_grafico=compensada_grafico
     )
