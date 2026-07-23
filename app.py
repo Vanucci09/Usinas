@@ -22242,6 +22242,7 @@ def portal_cliente_desempenho_energia():
         )
 
         while cursor <= mes_atual:
+
             chaves_meses.add(
                 (
                     cursor.year,
@@ -22252,6 +22253,18 @@ def portal_cliente_desempenho_energia():
             cursor += relativedelta(
                 months=1
             )
+
+        # Remove qualquer mês anterior à adesão
+        chave_adesao = (
+            data_adesao.year,
+            data_adesao.month
+        )
+
+        chaves_meses = {
+            chave
+            for chave in chaves_meses
+            if chave >= chave_adesao
+        }
 
     chaves_ordenadas = sorted(
         chaves_meses
