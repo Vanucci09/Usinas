@@ -22641,48 +22641,229 @@ def portal_cliente_desempenho_energia():
 @login_required
 def portal_cliente_relatorios():
 
-    if current_user.perfil not in ['cliente', 'admin']:
+    if current_user.perfil not in [
+        'cliente',
+        'admin'
+    ]:
         abort(403)
 
+    # =====================================================
+    # CLIENTES DISPONÍVEIS PARA O FILTRO
+    # =====================================================
+
     if current_user.perfil == 'admin':
-        faturas = (
-            FaturaMensal.query
-            .join(
-                Cliente,
-                Cliente.id == FaturaMensal.cliente_id
+
+        clientes_disponiveis = (
+            Cliente.query
+            .filter(
+                Cliente.ativo.is_(True)
             )
             .order_by(
-                FaturaMensal.ano_referencia.desc(),
-                FaturaMensal.mes_referencia.desc()
+                Cliente.nome.asc()
             )
             .all()
         )
 
     else:
-        clientes_ids = [
-            cliente.id
-            for cliente in current_user.clientes.all()
-        ]
 
-        faturas = (
-            FaturaMensal.query
-            .join(
-                Cliente,
-                Cliente.id == FaturaMensal.cliente_id
-            )
+        clientes_disponiveis = (
+            current_user.clientes
             .filter(
-                FaturaMensal.cliente_id.in_(clientes_ids)
+                Cliente.ativo.is_(True)
             )
             .order_by(
-                FaturaMensal.ano_referencia.desc(),
-                FaturaMensal.mes_referencia.desc()
+                Cliente.nome.asc()
             )
             .all()
         )
 
+    clientes_ids = [
+        cliente.id
+        for cliente in clientes_disponiveis
+    ]
+
+    # =====================================================
+    # FATURAS
+    # =====================================================
+
+    query_faturas = (
+        FaturaMensal.query
+        .join(
+            Cliente,
+            Cliente.id == FaturaMensal.cliente_id
+        )
+        .options(
+            joinedload(
+                FaturaMensal.cliente
+            )
+        )
+    )
+
+    if current_user.perfil == 'cliente':
+
+        if not clientes_ids:
+
+            return render_template(
+                'portal_cliente/relatorios.html',
+                relatorios=[],
+                clientes_disponiveis=[],
+                total_relatorios=0,
+                quantidade_pagas=0,
+                quantidade_abertas=0,
+                total_pago=Decimal('0.00'),
+                total_aberto=Decimal('0.00')
+            )
+
+        query_faturas = query_faturas.filter(
+            FaturaMensal.cliente_id.in_(
+                clientes_ids
+            )
+        )
+
+    faturas = (
+        query_faturas
+        .order_by(
+            FaturaMensal.ano_referencia.desc(),
+            FaturaMensal.mes_referencia.desc(),
+            FaturaMensal.id.desc()
+        )
+        .all()
+    )
+
+    # =====================================================
+    # LANÇAMENTOS FINANCEIROS
+    # =====================================================
+
+    clientes_faturas_ids = list({
+        fatura.cliente_id
+        for fatura in faturas
+    })
+
+    lancamentos = []
+
+    if clientes_faturas_ids:
+
+        lancamentos = (
+            FinanceiroUsina.query
+            .filter(
+                FinanceiroUsina.cliente_id.in_(
+                    clientes_faturas_ids
+                ),
+                FinanceiroUsina.tipo == 'receita'
+            )
+            .order_by(
+                FinanceiroUsina.id.desc()
+            )
+            .all()
+        )
+
+    # =====================================================
+    # AGRUPA FINANCEIRO POR REFERÊNCIA
+    # =====================================================
+
+    financeiro_por_referencia = {}
+
+    for lancamento in lancamentos:
+
+        if (
+            lancamento.cliente_id is None
+            or lancamento.referencia_mes is None
+            or lancamento.referencia_ano is None
+        ):
+            continue
+
+        chave = (
+            lancamento.cliente_id,
+            lancamento.referencia_mes,
+            lancamento.referencia_ano
+        )
+
+        if chave not in financeiro_por_referencia:
+
+            financeiro_por_referencia[chave] = (
+                lancamento
+            )
+
+    # =====================================================
+    # MONTA RELATÓRIOS
+    # =====================================================
+
+    relatorios = []
+
+    quantidade_pagas = 0
+    quantidade_abertas = 0
+
+    total_pago = Decimal('0.00')
+    total_aberto = Decimal('0.00')
+
+    for fatura in faturas:
+
+        chave = (
+            fatura.cliente_id,
+            fatura.mes_referencia,
+            fatura.ano_referencia
+        )
+
+        lancamento = financeiro_por_referencia.get(
+            chave
+        )
+
+        # O VALOR VEM EXCLUSIVAMENTE DO FINANCEIRO
+        valor = Decimal('0.00')
+
+        if lancamento:
+
+            valor = Decimal(
+                str(
+                    lancamento.valor or 0
+                )
+            )
+
+        pago = bool(
+            lancamento
+            and lancamento.data_pagamento
+        )
+
+        if pago:
+
+            status = 'pago'
+            status_texto = 'Pago'
+
+            quantidade_pagas += 1
+            total_pago += valor
+
+        else:
+
+            status = 'aberto'
+            status_texto = 'Em aberto'
+
+            quantidade_abertas += 1
+            total_aberto += valor
+
+        relatorios.append({
+            'fatura': fatura,
+            'cliente': fatura.cliente,
+            'lancamento': lancamento,
+            'valor': valor,
+            'pago': pago,
+            'status': status,
+            'status_texto': status_texto,
+            'data_pagamento': (
+                lancamento.data_pagamento
+                if pago
+                else None
+            )
+        })
+
     return render_template(
         'portal_cliente/relatorios.html',
-        faturas=faturas
+        relatorios=relatorios,
+        clientes_disponiveis=clientes_disponiveis,
+        total_relatorios=len(relatorios),
+        quantidade_pagas=quantidade_pagas,
+        quantidade_abertas=quantidade_abertas,
+        total_pago=total_pago,
+        total_aberto=total_aberto
     )
 
 
