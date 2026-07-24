@@ -3143,9 +3143,7 @@ def faturamento():
                     'Usina não encontrada.'
                 )
 
-            # =================================================
             # RATEIO
-            # =================================================
 
             rateio = obter_rateio_vigente(
                 cliente_id=cliente.id,
@@ -3158,9 +3156,7 @@ def faturamento():
                 else 'SEM'
             )
 
-            # =================================================
             # DATAS
-            # =================================================
 
             inicio_leitura = datetime.strptime(
                 request.form[
@@ -3183,9 +3179,7 @@ def faturamento():
                     'anterior à data inicial.'
                 )
 
-            # =================================================
             # VALORES DO FORMULÁRIO
-            # =================================================
 
             tarifa_neoenergia = limpar_valor(
                 request.form.get(
@@ -3266,9 +3260,7 @@ def faturamento():
                 )
             )
 
-            # =================================================
             # TUSD FIO B
-            # =================================================
 
             custo_tusd_fio_b = Decimal(
                 str(
@@ -3289,9 +3281,7 @@ def faturamento():
                     Decimal('0.00')
                 )
 
-            # =================================================
             # CONSUMO INSTANTÂNEO
-            # =================================================
 
             consumo_instantaneo = 0.0
 
@@ -3328,9 +3318,7 @@ def faturamento():
                 else consumo_usina
             )
 
-            # =================================================
             # IDENTIFICADOR
-            # =================================================
 
             identificador = (
                 f'U{usina.id}: '
@@ -3361,9 +3349,7 @@ def faturamento():
                     mensagem=mensagem
                 )
 
-            # =================================================
             # CRIAÇÃO DA FATURA
-            # =================================================
 
             fatura = FaturaMensal(
                 cliente_id=cliente.id,
@@ -3403,9 +3389,7 @@ def faturamento():
             # sem confirmar ainda.
             db.session.flush()
 
-            # =================================================
             # RECEITA ASSOCIADA
-            # =================================================
 
             if rateio:
 
@@ -3489,9 +3473,7 @@ def faturamento():
                     receita
                 )
 
-            # =================================================
             # COMMIT ÚNICO
-            # =================================================
 
             db.session.commit()
 
@@ -3502,7 +3484,6 @@ def faturamento():
         except Exception as e:
 
             db.session.rollback()
-
             app.logger.exception(
                 'Erro ao cadastrar fatura.'
             )

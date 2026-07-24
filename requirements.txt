@@ -62,3 +62,4 @@ fortlev_solar_sdk==0.2.4
 pytesseract
 Pillow
 opencv-python-headless
+weasyprint

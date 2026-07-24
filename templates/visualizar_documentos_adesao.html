@@ -124,17 +124,35 @@
                                     {% endif %}
 
                                     <!-- Baixar -->
-                                    <a href="{{ url_for(
-                                        'baixar_documento_adesao',
-                                        arquivo=doc.caminho
-                                    ) }}"
-                                    download="{{ doc.nome_arquivo }}"
-                                    class="btn btn-sm btn-outline-primary"
-                                    title="Baixar">
+                                    {% if doc.tipo_documento == 'termo_assinado' %}
 
-                                        <i class="bi bi-download"></i>
+                                        <a href="{{ url_for(
+                                            'visualizar_termo_assinado',
+                                            conta_id=conta.id
+                                        ) }}"
+                                        target="_blank"
+                                        class="btn btn-sm btn-outline-primary"
+                                        title="Salvar em PDF">
 
-                                    </a>
+                                            <i class="bi bi-download"></i>
+
+                                        </a>
+
+                                    {% else %}
+
+                                        <a href="{{ url_for(
+                                            'baixar_documento_adesao',
+                                            arquivo=doc.caminho
+                                        ) }}"
+                                        download="{{ doc.nome_arquivo }}"
+                                        class="btn btn-sm btn-outline-primary"
+                                        title="Baixar">
+
+                                            <i class="bi bi-download"></i>
+
+                                        </a>
+
+                                    {% endif %}
 
                                     {% if current_user.perfil == 'admin' %}
 
