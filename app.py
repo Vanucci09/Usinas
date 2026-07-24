@@ -2461,266 +2461,1062 @@ def excluir_cliente(id):
     db.session.commit()
     return redirect(url_for('cadastrar_cliente'))
 
-@app.route('/faturamento', methods=['GET', 'POST'])
-@login_required
-def faturamento():
-    if not current_user.pode_cadastrar_fatura:
-        return "Acesso negado", 403
+def calcular_valores_fatura(
+    fatura,
+    cliente=None,
+    usina=None,
+    rateio=None
+):
+    """
+    Centraliza os cálculos utilizados no relatório da fatura.
 
-    usinas = Usina.query.all()
-    clientes = Cliente.query.all()
-    mensagem = ''
+    Retorna:
+        {
+            'usa_regra_nova': bool,
+            'rateio': Rateio | None,
+            'tarifa_neoenergia': Decimal,
+            'tarifa_cliente': Decimal,
+            'consumo_usina': Decimal,
+            'valor_conta_neoenergia': Decimal,
+            'cip': Decimal,
+            'custo_tusd': Decimal,
+            'valor_usina_bruto': Decimal,
+            'valor_usina_liquido': Decimal,
+            'com_desconto': Decimal,
+            'sem_desconto': Decimal,
+            'economia': Decimal
+        }
+    """
 
-    def limpar_valor(valor):
-        if not valor:
-            return 0.0
-        return float(
-            valor.replace('R$', '')
-                 .replace('%', '')
-                 .replace('.', '')
-                 .replace(',', '.')
-                 .strip()
+    # =====================================================
+    # HELPERS
+    # =====================================================
+
+    def para_decimal(
+        valor,
+        padrao='0.00'
+    ):
+        try:
+
+            if valor is None:
+                return Decimal(padrao)
+
+            return Decimal(
+                str(valor)
+            )
+
+        except (
+            TypeError,
+            ValueError,
+            ArithmeticError
+        ):
+            return Decimal(padrao)
+
+    def percentual_decimal(valor):
+
+        return (
+            para_decimal(
+                valor
+            ) /
+            Decimal('100')
         )
 
-    def obter_rateio_vigente(cliente_id, usina_id):
-        return Rateio.query.filter(
-            Rateio.cliente_id == cliente_id,
-            Rateio.usina_id == usina_id
-        ).order_by(
-            Rateio.ativo.desc(),          # ativos primeiro
-            Rateio.data_inicio.desc(),    # data mais recente
-            Rateio.id.desc()              # maior id como desempate
-        ).first()
+    def arredondar_centavos(valor):
+
+        return para_decimal(
+            valor
+        ).quantize(
+            Decimal('0.01'),
+            rounding=ROUND_HALF_UP
+        )
+
+    # =====================================================
+    # CLIENTE E USINA
+    # =====================================================
+
+    if cliente is None:
+
+        cliente = getattr(
+            fatura,
+            'cliente',
+            None
+        )
+
+    if cliente is None:
+
+        cliente = db.session.get(
+            Cliente,
+            fatura.cliente_id
+        )
+
+    if cliente is None:
+
+        raise ValueError(
+            'Cliente da fatura não encontrado.'
+        )
+
+    if usina is None:
+
+        usina_id = (
+            getattr(
+                fatura,
+                'usina_id',
+                None
+            )
+            or cliente.usina_id
+        )
+
+        usina = db.session.get(
+            Usina,
+            usina_id
+        )
+
+    if usina is None:
+
+        raise ValueError(
+            'Usina da fatura não encontrada.'
+        )
+
+    # =====================================================
+    # REGRA ANTIGA OU NOVA
+    # =====================================================
+
+    tarifa_base = para_decimal(
+        getattr(
+            fatura,
+            'tarifa_base',
+            0
+        )
+    )
+
+    usa_regra_nova = (
+        tarifa_base >
+        Decimal('0')
+    )
+
+    # =====================================================
+    # TARIFA NEOENERGIA
+    # =====================================================
+
+    if usa_regra_nova:
+
+        pis_decimal = percentual_decimal(
+            getattr(
+                fatura,
+                'pis',
+                0
+            )
+        )
+
+        cofins_decimal = percentual_decimal(
+            getattr(
+                fatura,
+                'cofins',
+                0
+            )
+        )
+
+        divisor = (
+            Decimal('1.00')
+            - pis_decimal
+            - cofins_decimal
+            - Decimal('0.20')
+        )
+
+        if divisor <= Decimal('0'):
+
+            raise ValueError(
+                'Não foi possível calcular a tarifa '
+                'Neoenergia: divisor de impostos inválido.'
+            )
+
+        tarifa_neoenergia = (
+            tarifa_base /
+            divisor
+        ).quantize(
+            Decimal('0.0000001'),
+            rounding=ROUND_HALF_UP
+        )
+
+    else:
+
+        tarifa_neoenergia_base = para_decimal(
+            getattr(
+                fatura,
+                'tarifa_neoenergia',
+                0
+            )
+        )
+
+        icms = para_decimal(
+            getattr(
+                fatura,
+                'icms',
+                0
+            )
+        )
+
+        if icms == Decimal('0'):
+
+            tarifa_neoenergia = (
+                tarifa_neoenergia_base *
+                Decimal('1.2625')
+            )
+
+        elif icms == Decimal('20'):
+
+            tarifa_neoenergia = (
+                tarifa_neoenergia_base
+            )
+
+        else:
+
+            tarifa_neoenergia = (
+                tarifa_neoenergia_base *
+                Decimal('1.1023232323')
+            )
+
+        tarifa_neoenergia = (
+            tarifa_neoenergia.quantize(
+                Decimal('0.0000001'),
+                rounding=ROUND_HALF_UP
+            )
+        )
+
+    # =====================================================
+    # DATA BASE PARA LOCALIZAR O RATEIO
+    # =====================================================
+
+    data_cadastro = getattr(
+        fatura,
+        'data_cadastro',
+        None
+    )
+
+    if data_cadastro:
+
+        if hasattr(
+            data_cadastro,
+            'date'
+        ):
+            data_base = (
+                data_cadastro.date()
+            )
+        else:
+            data_base = data_cadastro
+
+    else:
+
+        data_base = date(
+            fatura.ano_referencia,
+            fatura.mes_referencia,
+            1
+        )
+
+    # =====================================================
+    # RATEIO VIGENTE
+    # =====================================================
+
+    if rateio is None:
+
+        rateio = (
+            Rateio.query
+            .filter(
+                Rateio.cliente_id == cliente.id,
+                Rateio.usina_id == usina.id,
+                Rateio.data_inicio <= data_base
+            )
+            .order_by(
+                Rateio.data_inicio.desc(),
+                Rateio.ativo.desc(),
+                Rateio.id.desc()
+            )
+            .first()
+        )
+
+    # =====================================================
+    # TARIFA DO CLIENTE
+    # =====================================================
+
+    tarifa_cliente = Decimal('0.00')
+
+    if rateio:
+
+        desconto_percentual = (
+            percentual_decimal(
+                getattr(
+                    rateio,
+                    'desconto_percentual',
+                    0
+                ) or 0
+            )
+        )
+
+        if usa_regra_nova:
+
+            tarifa_cliente = (
+                tarifa_neoenergia *
+                (
+                    Decimal('1.00') -
+                    desconto_percentual
+                )
+            )
+
+        else:
+
+            usar_tarifa_neoenergia = bool(
+                getattr(
+                    rateio,
+                    'usar_tarifa_neoenergia',
+                    False
+                )
+            )
+
+            if usar_tarifa_neoenergia:
+
+                tarifa_cliente = (
+                    tarifa_neoenergia *
+                    (
+                        Decimal('1.00') -
+                        desconto_percentual
+                    )
+                )
+
+            else:
+
+                tarifa_cliente = para_decimal(
+                    getattr(
+                        rateio,
+                        'tarifa_kwh',
+                        None
+                    ),
+                    padrao='1.00'
+                )
+
+        tarifa_cliente = (
+            tarifa_cliente.quantize(
+                Decimal('0.0000001'),
+                rounding=ROUND_HALF_UP
+            )
+        )
+
+    # =====================================================
+    # DADOS PRINCIPAIS
+    # =====================================================
+
+    consumo_usina = para_decimal(
+        getattr(
+            fatura,
+            'consumo_usina',
+            0
+        )
+    )
+
+    valor_conta_neoenergia = (
+        para_decimal(
+            getattr(
+                fatura,
+                'valor_conta_neoenergia',
+                0
+            )
+        )
+    )
+
+    cip = para_decimal(
+        getattr(
+            fatura,
+            'cip_atual',
+            0
+        )
+    )
+
+    custo_tusd = arredondar_centavos(
+        getattr(
+            fatura,
+            'custo_tusd_fio_b',
+            0
+        ) or 0
+    )
+
+    tusd_ativo = bool(
+        getattr(
+            usina,
+            'tusd_fio_b',
+            False
+        )
+    )
+
+    # Quando a usina não utiliza TUSD,
+    # não deve afetar nenhum cálculo.
+    if not tusd_ativo:
+
+        custo_tusd = Decimal('0.00')
+
+    # =====================================================
+    # VALOR DA USINA
+    # =====================================================
+
+    valor_usina_bruto = (
+        consumo_usina *
+        tarifa_cliente
+    ).quantize(
+        Decimal('0.01'),
+        rounding=ROUND_HALF_UP
+    )
+
+    valor_usina_liquido = (
+        valor_usina_bruto -
+        custo_tusd
+    )
+
+    if valor_usina_liquido < Decimal('0'):
+
+        valor_usina_liquido = (
+            Decimal('0.00')
+        )
+
+    valor_usina_liquido = (
+        valor_usina_liquido.quantize(
+            Decimal('0.01'),
+            rounding=ROUND_HALF_UP
+        )
+    )
+
+    # =====================================================
+    # REGRA ANTIGA
+    # =====================================================
+
+    if not usa_regra_nova:
+
+        com_desconto = (
+            valor_conta_neoenergia +
+            valor_usina_liquido
+        )
+
+        sem_desconto = (
+            (
+                consumo_usina *
+                tarifa_neoenergia
+            )
+            +
+            valor_conta_neoenergia
+            -
+            custo_tusd
+        )
+
+    # =====================================================
+    # REGRA NOVA
+    # =====================================================
+
+    else:
+
+        # Mantém a mesma lógica atualmente aplicada
+        # pelo relatório.
+        com_desconto = (
+            valor_usina_bruto +
+            cip
+        )
+
+        sem_desconto = (
+            (
+                consumo_usina *
+                tarifa_neoenergia
+            )
+            +
+            cip
+        )
+
+    com_desconto = (
+        com_desconto.quantize(
+            Decimal('0.01'),
+            rounding=ROUND_HALF_UP
+        )
+    )
+
+    sem_desconto = (
+        sem_desconto.quantize(
+            Decimal('0.01'),
+            rounding=ROUND_HALF_UP
+        )
+    )
+
+    economia = (
+        sem_desconto -
+        com_desconto
+    ).quantize(
+        Decimal('0.01'),
+        rounding=ROUND_HALF_UP
+    )
+
+    return {
+        'usa_regra_nova': usa_regra_nova,
+        'rateio': rateio,
+        'tarifa_neoenergia': tarifa_neoenergia,
+        'tarifa_cliente': tarifa_cliente,
+        'consumo_usina': consumo_usina,
+        'valor_conta_neoenergia': (
+            valor_conta_neoenergia
+        ),
+        'cip': cip,
+        'custo_tusd': custo_tusd,
+        'valor_usina_bruto': (
+            valor_usina_bruto
+        ),
+        'valor_usina_liquido': (
+            valor_usina_liquido
+        ),
+        'com_desconto': com_desconto,
+        'sem_desconto': sem_desconto,
+        'economia': economia
+    }
+
+@app.route(
+    '/faturamento',
+    methods=['GET', 'POST']
+)
+@login_required
+def faturamento():
+
+    if not current_user.pode_cadastrar_fatura:
+        return 'Acesso negado', 403
+
+    usinas = (
+        Usina.query
+        .order_by(
+            Usina.nome.asc()
+        )
+        .all()
+    )
+
+    clientes = (
+        Cliente.query
+        .order_by(
+            Cliente.nome.asc()
+        )
+        .all()
+    )
+
+    mensagem = ''
+
+    # =====================================================
+    # HELPERS DA ROTA
+    # =====================================================
+
+    def limpar_valor(valor):
+
+        if valor is None:
+            return 0.0
+
+        texto = str(
+            valor
+        ).strip()
+
+        if not texto:
+            return 0.0
+
+        texto = (
+            texto
+            .replace('R$', '')
+            .replace('%', '')
+            .strip()
+        )
+
+        if '.' in texto and ',' in texto:
+
+            texto = (
+                texto
+                .replace('.', '')
+                .replace(',', '.')
+            )
+
+        elif ',' in texto:
+
+            texto = texto.replace(
+                ',',
+                '.'
+            )
+
+        return float(texto)
+
+    def obter_rateio_vigente(
+        cliente_id,
+        usina_id
+    ):
+
+        return (
+            Rateio.query
+            .filter(
+                Rateio.cliente_id == cliente_id,
+                Rateio.usina_id == usina_id
+            )
+            .order_by(
+                Rateio.ativo.desc(),
+                Rateio.data_inicio.desc(),
+                Rateio.id.desc()
+            )
+            .first()
+        )
+
+    # =====================================================
+    # POST
+    # =====================================================
 
     if request.method == 'POST':
+
         try:
-            cliente_id = int(request.form.get('cliente_id', 0))
-            usina_id = int(request.form.get('usina_id', 0))
-            mes = int(request.form.get('mes', 0))
-            ano = int(request.form.get('ano', 0))
 
-            if not cliente_id or not usina_id:
-                raise ValueError("Cliente e Usina são obrigatórios")
+            # =================================================
+            # DADOS PRINCIPAIS
+            # =================================================
 
-            cliente = db.session.get(Cliente, cliente_id)
-            usina = db.session.get(Usina, usina_id)
-
-            # usa rateio vigente, não mais cliente.rateios[0]
-            rateio = obter_rateio_vigente(cliente.id, usina.id) if (cliente and usina) else None
-            codigo_rateio = rateio.codigo_rateio if rateio else "SEM"
-
-            inicio_leitura = datetime.strptime(request.form['inicio_leitura'], '%Y-%m-%d').date()
-            fim_leitura = datetime.strptime(request.form['fim_leitura'], '%Y-%m-%d').date()
-
-            tarifa_neoenergia = limpar_valor(request.form['tarifa_neoenergia'])
-            tarifa_base = limpar_valor(request.form.get('tarifa_base'))
-            icms = limpar_valor(request.form['icms'])
-            pis = limpar_valor(request.form.get('pis'))
-            cofins = limpar_valor(request.form.get('cofins'))
-            cip_atual = limpar_valor(request.form.get('cip_atual'))
-            consumo_total = limpar_valor(request.form['consumo_total'])
-            consumo_neoenergia = limpar_valor(request.form['consumo_neoenergia'])
-            consumo_usina = limpar_valor(request.form['consumo_usina'])
-            saldo_unidade = limpar_valor(request.form['saldo_unidade'])
-            injetado = limpar_valor(request.form['injetado'])
-            energia_injetada_real = limpar_valor(request.form.get('energia_injetada_real', '0'))
-            consumo_instantaneo = 0.0
-            
-            # TUSD Fio B
-            custo_tusd_fio_b_form = request.form.get(
-                'custo_tusd_fio_b'
+            cliente_id = int(
+                request.form.get(
+                    'cliente_id',
+                    0
+                )
             )
+
+            usina_id = int(
+                request.form.get(
+                    'usina_id',
+                    0
+                )
+            )
+
+            mes = int(
+                request.form.get(
+                    'mes',
+                    0
+                )
+            )
+
+            ano = int(
+                request.form.get(
+                    'ano',
+                    0
+                )
+            )
+
+            if not cliente_id:
+
+                raise ValueError(
+                    'Cliente é obrigatório.'
+                )
+
+            if not usina_id:
+
+                raise ValueError(
+                    'Usina é obrigatória.'
+                )
+
+            if mes < 1 or mes > 12:
+
+                raise ValueError(
+                    'Mês de referência inválido.'
+                )
+
+            if ano <= 0:
+
+                raise ValueError(
+                    'Ano de referência inválido.'
+                )
+
+            cliente = db.session.get(
+                Cliente,
+                cliente_id
+            )
+
+            usina = db.session.get(
+                Usina,
+                usina_id
+            )
+
+            if not cliente:
+
+                raise ValueError(
+                    'Cliente não encontrado.'
+                )
+
+            if not usina:
+
+                raise ValueError(
+                    'Usina não encontrada.'
+                )
+
+            # =================================================
+            # RATEIO
+            # =================================================
+
+            rateio = obter_rateio_vigente(
+                cliente_id=cliente.id,
+                usina_id=usina.id
+            )
+
+            codigo_rateio = (
+                rateio.codigo_rateio
+                if rateio
+                else 'SEM'
+            )
+
+            # =================================================
+            # DATAS
+            # =================================================
+
+            inicio_leitura = datetime.strptime(
+                request.form[
+                    'inicio_leitura'
+                ],
+                '%Y-%m-%d'
+            ).date()
+
+            fim_leitura = datetime.strptime(
+                request.form[
+                    'fim_leitura'
+                ],
+                '%Y-%m-%d'
+            ).date()
+
+            if fim_leitura < inicio_leitura:
+
+                raise ValueError(
+                    'A data final da leitura não pode ser '
+                    'anterior à data inicial.'
+                )
+
+            # =================================================
+            # VALORES DO FORMULÁRIO
+            # =================================================
+
+            tarifa_neoenergia = limpar_valor(
+                request.form.get(
+                    'tarifa_neoenergia'
+                )
+            )
+
+            tarifa_base = limpar_valor(
+                request.form.get(
+                    'tarifa_base'
+                )
+            )
+
+            icms = limpar_valor(
+                request.form.get(
+                    'icms'
+                )
+            )
+
+            pis = limpar_valor(
+                request.form.get(
+                    'pis'
+                )
+            )
+
+            cofins = limpar_valor(
+                request.form.get(
+                    'cofins'
+                )
+            )
+
+            cip_atual = limpar_valor(
+                request.form.get(
+                    'cip_atual'
+                )
+            )
+
+            consumo_total = limpar_valor(
+                request.form.get(
+                    'consumo_total'
+                )
+            )
+
+            consumo_neoenergia = limpar_valor(
+                request.form.get(
+                    'consumo_neoenergia'
+                )
+            )
+
+            consumo_usina = limpar_valor(
+                request.form.get(
+                    'consumo_usina'
+                )
+            )
+
+            saldo_unidade = limpar_valor(
+                request.form.get(
+                    'saldo_unidade'
+                )
+            )
+
+            injetado = limpar_valor(
+                request.form.get(
+                    'injetado'
+                )
+            )
+
+            energia_injetada_real = limpar_valor(
+                request.form.get(
+                    'energia_injetada_real',
+                    '0'
+                )
+            )
+
+            valor_conta_neoenergia = limpar_valor(
+                request.form.get(
+                    'valor_conta_neoenergia'
+                )
+            )
+
+            # =================================================
+            # TUSD FIO B
+            # =================================================
 
             custo_tusd_fio_b = Decimal(
                 str(
-                    limpar_valor(custo_tusd_fio_b_form)
+                    limpar_valor(
+                        request.form.get(
+                            'custo_tusd_fio_b'
+                        )
+                    )
                 )
             ).quantize(
-                Decimal("0.01"),
+                Decimal('0.01'),
                 rounding=ROUND_HALF_UP
             )
 
-            if cliente and cliente.consumo_instantaneo:
-                consumo_instantaneo = db.session.query(func.sum(Geracao.energia_kwh)).filter(
-                    Geracao.usina_id == usina_id,
-                    Geracao.data >= inicio_leitura,
-                    Geracao.data <= fim_leitura
-                ).scalar() or 0.0
+            if not usina.tusd_fio_b:
 
-            injetado_total = consumo_usina + consumo_instantaneo - energia_injetada_real
+                custo_tusd_fio_b = (
+                    Decimal('0.00')
+                )
 
-            valor_conta_neoenergia = limpar_valor(request.form['valor_conta_neoenergia'])
+            # =================================================
+            # CONSUMO INSTANTÂNEO
+            # =================================================
 
-            identificador = f"U{usina_id}: {codigo_rateio}-{mes:02d}-{ano}"
-            existente = FaturaMensal.query.filter_by(identificador=identificador).first()
+            consumo_instantaneo = 0.0
+
+            if cliente.consumo_instantaneo:
+
+                consumo_instantaneo = (
+                    db.session.query(
+                        func.sum(
+                            Geracao.energia_kwh
+                        )
+                    )
+                    .filter(
+                        Geracao.usina_id == usina.id,
+                        Geracao.data >= inicio_leitura,
+                        Geracao.data <= fim_leitura
+                    )
+                    .scalar()
+                    or 0.0
+                )
+
+            injetado_total = (
+                consumo_usina
+                + float(consumo_instantaneo)
+                - energia_injetada_real
+            )
+
+            if injetado_total < 0:
+
+                injetado_total = 0.0
+
+            consumo_usina_final = (
+                injetado_total
+                if cliente.consumo_instantaneo
+                else consumo_usina
+            )
+
+            # =================================================
+            # IDENTIFICADOR
+            # =================================================
+
+            identificador = (
+                f'U{usina.id}: '
+                f'{codigo_rateio}-'
+                f'{mes:02d}-'
+                f'{ano}'
+            )
+
+            existente = (
+                FaturaMensal.query
+                .filter_by(
+                    identificador=identificador
+                )
+                .first()
+            )
 
             if existente:
-                mensagem = 'Já existe uma fatura para esse cliente neste mês.'
-            else:
-                fatura = FaturaMensal(
-                    cliente_id=cliente_id,
-                    usina_id=usina_id,
-                    mes_referencia=mes,
-                    ano_referencia=ano,
-                    inicio_leitura=inicio_leitura,
-                    fim_leitura=fim_leitura,
-                    tarifa_neoenergia=tarifa_neoenergia,
-                    icms=icms,
-                    consumo_total=consumo_total,
-                    consumo_neoenergia=consumo_neoenergia,
-                    consumo_usina=injetado_total if cliente and cliente.consumo_instantaneo else consumo_usina,
-                    saldo_unidade=saldo_unidade,
-                    injetado=injetado,
-                    valor_conta_neoenergia=valor_conta_neoenergia,
-                    identificador=identificador,
-                    energia_injetada_real=energia_injetada_real,
-                    custo_tusd_fio_b=custo_tusd_fio_b,
-                    tarifa_base=tarifa_base,
-                    pis=pis,
-                    cofins=cofins,
-                    cip_atual=cip_atual,
+
+                mensagem = (
+                    'Já existe uma fatura para esse '
+                    'cliente nesta competência.'
                 )
-                db.session.add(fatura)
-                db.session.commit()
 
-                # Receita associada
-                if rateio:
+                return render_template(
+                    'faturamento.html',
+                    usinas=usinas,
+                    clientes=clientes,
+                    mensagem=mensagem
+                )
 
-                    # Calcula o mês subsequente
-                    data_base = date(ano, mes, 1)
-                    proximo_mes = (data_base + timedelta(days=32)).replace(day=1)
+            # =================================================
+            # CRIAÇÃO DA FATURA
+            # =================================================
 
-                    referencia_mes_receita = proximo_mes.month
-                    referencia_ano_receita = proximo_mes.year
+            fatura = FaturaMensal(
+                cliente_id=cliente.id,
+                usina_id=usina.id,
+                mes_referencia=mes,
+                ano_referencia=ano,
+                inicio_leitura=inicio_leitura,
+                fim_leitura=fim_leitura,
+                tarifa_neoenergia=tarifa_neoenergia,
+                tarifa_base=tarifa_base,
+                icms=icms,
+                pis=pis,
+                cofins=cofins,
+                cip_atual=cip_atual,
+                consumo_total=consumo_total,
+                consumo_neoenergia=consumo_neoenergia,
+                consumo_usina=consumo_usina_final,
+                saldo_unidade=saldo_unidade,
+                injetado=injetado,
+                valor_conta_neoenergia=(
+                    valor_conta_neoenergia
+                ),
+                identificador=identificador,
+                energia_injetada_real=(
+                    energia_injetada_real
+                ),
+                custo_tusd_fio_b=(
+                    custo_tusd_fio_b
+                )
+            )
 
-                    consumo_base_receita = (
-                        injetado_total
-                        if (cliente and cliente.consumo_instantaneo)
-                        else consumo_usina
+            db.session.add(
+                fatura
+            )
+
+            # Disponibiliza o objeto dentro da transação,
+            # sem confirmar ainda.
+            db.session.flush()
+
+            # =================================================
+            # RECEITA ASSOCIADA
+            # =================================================
+
+            if rateio:
+
+                calculo = calcular_valores_fatura(
+                    fatura=fatura,
+                    cliente=cliente,
+                    usina=usina,
+                    rateio=rateio
+                )
+
+                receita_valor = float(
+                    calculo[
+                        'valor_usina_liquido'
+                    ]
+                )
+
+                # A receita continua sendo lançada
+                # no mês subsequente.
+                data_base = date(
+                    ano,
+                    mes,
+                    1
+                )
+
+                proximo_mes = (
+                    data_base
+                    + timedelta(days=32)
+                ).replace(
+                    day=1
+                )
+
+                referencia_mes_receita = (
+                    proximo_mes.month
+                )
+
+                referencia_ano_receita = (
+                    proximo_mes.year
+                )
+
+                descricao_calculo = (
+                    f"Tarifa Neo="
+                    f"{calculo['tarifa_neoenergia']} | "
+                    f"Tarifa Cliente="
+                    f"{calculo['tarifa_cliente']} | "
+                    f"Consumo="
+                    f"{calculo['consumo_usina']} | "
+                    f"TUSD="
+                    f"{calculo['custo_tusd']} | "
+                    f"Valor Bruto="
+                    f"{calculo['valor_usina_bruto']} | "
+                    f"Valor Líquido="
+                    f"{calculo['valor_usina_liquido']}"
+                )
+
+                receita = FinanceiroUsina(
+                    usina_id=usina.id,
+                    cliente_id=cliente.id,
+                    categoria_id=None,
+                    data=date(
+                        referencia_ano_receita,
+                        referencia_mes_receita,
+                        1
+                    ),
+                    tipo='receita',
+                    descricao=(
+                        f'Fatura '
+                        f'{fatura.identificador} - '
+                        f'{cliente.nome} | '
+                        f'{descricao_calculo}'
+                    ),
+                    valor=receita_valor,
+                    referencia_mes=(
+                        referencia_mes_receita
+                    ),
+                    referencia_ano=(
+                        referencia_ano_receita
                     )
+                )
 
-                    print(f"[DEBUG] consumo_base_receita = {consumo_base_receita}")
+                db.session.add(
+                    receita
+                )
 
-                    def _dec(v, default="0.00"):
-                        try:
-                            if v is None:
-                                return Decimal(default)
-                            return Decimal(str(v))
-                        except Exception:
-                            return Decimal(default)
+            # =================================================
+            # COMMIT ÚNICO
+            # =================================================
 
-                    def _percentual_para_decimal(v):
+            db.session.commit()
 
-                        valor = _dec(v, "0.00")
-                        return valor / Decimal("100")
-
-                    # DADOS DA FATURA
-                    tarifa_base_dec = _dec(fatura.tarifa_base, "0.00")
-
-                    pis_dec = _percentual_para_decimal(fatura.pis)
-                    cofins_dec = _percentual_para_decimal(fatura.cofins)
-                    icms_dec = _percentual_para_decimal(fatura.icms)
-
-                    tusd_dec = _dec(custo_tusd_fio_b, "0.00").quantize(
-                        Decimal("0.01"),
-                        rounding=ROUND_HALF_UP
-                    )
-
-                    if not (usina and usina.tusd_fio_b):
-                        tusd_dec = Decimal("0.00")
-
-                    desconto_dec = _percentual_para_decimal(
-                        rateio.desconto_percentual or 0
-                    )
-
-                    consumo_dec = _dec(consumo_base_receita, "0.00")
-                    
-                    # divisor impostos
-                    divisor = Decimal("1.00") - (
-                        pis_dec + cofins_dec + Decimal("0.20")
-                    )
-
-                    if divisor <= 0:
-                        raise ValueError(
-                            "Não foi possível calcular a tarifa Neoenergia."
-                        )
-
-                    # tarifa neo calculada
-                    tarifa_neo_calculada = (
-                        tarifa_base_dec / divisor
-                    ).quantize(
-                        Decimal("0.0000001"),
-                        rounding=ROUND_HALF_UP
-                    )
-
-                    # tarifa com desconto
-                    fator_desconto = (
-                        Decimal("1.00") - desconto_dec
-                    )
-
-                    tarifa_cliente_aplicada = (
-                        tarifa_neo_calculada * fator_desconto
-                    ).quantize(
-                        Decimal("0.0000001"),
-                        rounding=ROUND_HALF_UP
-                    )
-
-                    # receita bruta
-                    receita_bruta = (
-                        consumo_dec * tarifa_cliente_aplicada
-                    ).quantize(
-                        Decimal("0.01"),
-                        rounding=ROUND_HALF_UP
-                    )
-
-                    # receita líquida
-                    receita_liquida = receita_bruta - tusd_dec
-
-                    if receita_liquida < Decimal("0.00"):
-                        receita_liquida = Decimal("0.00")
-
-                    receita_valor = float(receita_liquida)
-
-                    desc_tarifa = (
-                        f"Tarifa Base={tarifa_base_dec} | "
-                        f"PIS={pis_dec} | "
-                        f"COFINS={cofins_dec} | "
-                        f"ICMS={icms_dec} | "
-                        f"Tarifa Neo Calc={tarifa_neo_calculada} | "
-                        f"Desc={float(desconto_dec * 100):.2f}% | "
-                        f"Tarifa Aplicada={tarifa_cliente_aplicada} | "
-                        f"TUSD={tusd_dec}"
-                    )
-
-                    receita = FinanceiroUsina(
-                        usina_id=rateio.usina_id,
-                        cliente_id=cliente.id,
-                        categoria_id=None,
-                        data=date(
-                            referencia_ano_receita,
-                            referencia_mes_receita,
-                            1
-                        ),
-                        tipo='receita',
-                        descricao=(
-                            f"Fatura {fatura.identificador} - "
-                            f"{cliente.nome} | {desc_tarifa}"
-                        ),
-                        valor=receita_valor,
-                        referencia_mes=referencia_mes_receita,
-                        referencia_ano=referencia_ano_receita
-                    )
-
-                    db.session.add(receita)
-                    db.session.commit()
-
-                mensagem = 'Fatura cadastrada com sucesso.'
+            mensagem = (
+                'Fatura cadastrada com sucesso.'
+            )
 
         except Exception as e:
-            db.session.rollback()
-            mensagem = f"Erro ao salvar fatura: {str(e)}"
 
-    return render_template('faturamento.html', usinas=usinas, clientes=clientes, mensagem=mensagem)
+            db.session.rollback()
+
+            app.logger.exception(
+                'Erro ao cadastrar fatura.'
+            )
+
+            mensagem = (
+                f'Erro ao salvar fatura: {str(e)}'
+            )
+
+    return render_template(
+        'faturamento.html',
+        usinas=usinas,
+        clientes=clientes,
+        mensagem=mensagem
+    )
 
 @app.route('/clientes_por_usina/<int:usina_id>')
 @login_required
@@ -2910,557 +3706,758 @@ def listar_faturas():
         total_faturas=total_faturas
     )
 
-@app.route('/editar_fatura/<int:id>', methods=['GET', 'POST'])
+@app.route(
+    '/editar_fatura/<int:id>',
+    methods=['GET', 'POST']
+)
 @login_required
 def editar_fatura(id):
-    app.logger.debug(f"[EDITAR_FATURA] Início handler para fatura_id={id}")
-    fatura = FaturaMensal.query.get_or_404(id)
-    clientes = Cliente.query.all()
-    usinas = Usina.query.all()
+
+    app.logger.debug(
+        '[EDITAR_FATURA] Início handler para fatura_id=%s',
+        id
+    )
+
+    fatura = FaturaMensal.query.get_or_404(
+        id
+    )
+
+    clientes = (
+        Cliente.query
+        .order_by(
+            Cliente.nome.asc()
+        )
+        .all()
+    )
+
+    usinas = (
+        Usina.query
+        .order_by(
+            Usina.nome.asc()
+        )
+        .all()
+    )
+
+    # =====================================================
+    # HELPERS DA ROTA
+    # =====================================================
 
     def limpar_valor(valor):
+
         if valor is None:
             return 0.0
-        s = str(valor).strip()
-        s = s.replace('R$', '').replace('%', '').strip()
-        if not s:
-            return 0.0
-        if '.' in s and ',' in s:
-            s = s.replace('.', '').replace(',', '.')
-        elif ',' in s:
-            s = s.replace(',', '.')
-        return float(s)
 
-    def obter_rateio_vigente(cliente_id, usina_id):
-        """
-        Escolhe o rateio 'vigente':
-          1) ativo = True primeiro
-          2) data_inicio mais recente
-          3) maior id como desempate
-        (sem usar data_base pra evitar ficar sem rateio)
-        """
-        r = Rateio.query.filter(
-            Rateio.cliente_id == cliente_id,
-            Rateio.usina_id == usina_id
-        ).order_by(
-            Rateio.ativo.desc(),          # ativos primeiro
-            Rateio.data_inicio.desc(),    # mais recente
-            Rateio.id.desc()              # desempate final
-        ).first()
-        app.logger.debug(
-            "[EDITAR_FATURA] obter_rateio_vigente -> %s",
-            f"id={r.id}, tarifa={r.tarifa_kwh}, ativo={r.ativo}"
-            if r else "NENHUM RATEIO ENCONTRADO"
+        texto = str(
+            valor
+        ).strip()
+
+        texto = (
+            texto
+            .replace('R$', '')
+            .replace('%', '')
+            .strip()
         )
-        return r
+
+        if not texto:
+            return 0.0
+
+        if '.' in texto and ',' in texto:
+
+            texto = (
+                texto
+                .replace('.', '')
+                .replace(',', '.')
+            )
+
+        elif ',' in texto:
+
+            texto = texto.replace(
+                ',',
+                '.'
+            )
+
+        return float(texto)
+
+    def obter_rateio_vigente(
+        cliente_id,
+        usina_id
+    ):
+
+        rateio_encontrado = (
+            Rateio.query
+            .filter(
+                Rateio.cliente_id == cliente_id,
+                Rateio.usina_id == usina_id
+            )
+            .order_by(
+                Rateio.ativo.desc(),
+                Rateio.data_inicio.desc(),
+                Rateio.id.desc()
+            )
+            .first()
+        )
+
+        app.logger.debug(
+            '[EDITAR_FATURA] Rateio vigente: %s',
+            (
+                f'id={rateio_encontrado.id}, '
+                f'ativo={rateio_encontrado.ativo}'
+            )
+            if rateio_encontrado
+            else 'nenhum'
+        )
+
+        return rateio_encontrado
+
+    # =====================================================
+    # POST
+    # =====================================================
 
     if request.method == 'POST':
-        try:
-            app.logger.debug("[EDITAR_FATURA] POST recebido, form=%s", dict(request.form))
 
-            # ---------- (1) Encontrar receita antiga ----------
-            old_mes = fatura.mes_referencia
-            old_ano = fatura.ano_referencia
-            old_identificador = fatura.identificador
-            old_cliente = fatura.cliente
+        try:
+
+            app.logger.debug(
+                '[EDITAR_FATURA] POST recebido, form=%s',
+                dict(request.form)
+            )
+
+            # =================================================
+            # DADOS ANTIGOS
+            # =================================================
+
+            identificador_antigo = (
+                fatura.identificador or ''
+            ).strip()
 
             receita_antiga = None
-            if old_mes and old_ano and old_identificador and old_cliente:
-                data_base_ant = date(old_ano, old_mes, 1)
-                prox_ant = (data_base_ant + timedelta(days=32)).replace(day=1)
-                ref_mes_ant = prox_ant.month
-                ref_ano_ant = prox_ant.year
-                desc_antiga = f"Fatura {old_identificador} - {old_cliente.nome}"
 
-                receita_antiga = FinanceiroUsina.query.filter(
-                    FinanceiroUsina.tipo == 'receita',
-                    FinanceiroUsina.referencia_mes == ref_mes_ant,
-                    FinanceiroUsina.referencia_ano == ref_ano_ant,
-                    FinanceiroUsina.descricao == desc_antiga
-                ).order_by(FinanceiroUsina.id.desc()).first()
+            if identificador_antigo:
 
-            app.logger.debug(
-                "[EDITAR_FATURA] receita_antiga encontrada? %s",
-                f"id={receita_antiga.id}, valor={receita_antiga.valor}"
-                if receita_antiga else "NÃO"
-            )
+                texto_descricao_antiga = (
+                    f'Fatura {identificador_antigo} -'
+                )
 
-            # ---------- (2) Ler novos dados do formulário ----------
-            cliente_id = int(request.form.get('cliente_id', 0))
-            usina_id = int(request.form.get('usina_id', 0))
-            mes = int(request.form.get('mes', 0))
-            ano = int(request.form.get('ano', 0))
-
-            if not cliente_id or not usina_id:
-                raise ValueError("Cliente e Usina são obrigatórios")
-
-            cliente = Cliente.query.get(cliente_id)
-            usina = Usina.query.get(usina_id)
+                receita_antiga = (
+                    FinanceiroUsina.query
+                    .filter(
+                        FinanceiroUsina.tipo == 'receita',
+                        FinanceiroUsina.descricao.contains(
+                            texto_descricao_antiga
+                        )
+                    )
+                    .order_by(
+                        FinanceiroUsina.id.desc()
+                    )
+                    .first()
+                )
 
             app.logger.debug(
-                "[EDITAR_FATURA] Cliente=%s, Usina=%s",
-                cliente.nome if cliente else None,
-                usina.nome if usina else None
+                '[EDITAR_FATURA] Receita antiga: %s',
+                (
+                    f'id={receita_antiga.id}, '
+                    f'valor={receita_antiga.valor}'
+                )
+                if receita_antiga
+                else 'não encontrada'
             )
 
-            # usa SEMPRE o rateio vigente (com ativo=True se houver)
-            rateio = obter_rateio_vigente(cliente.id, usina.id)
-            codigo_rateio = rateio.codigo_rateio if rateio else "SEM"
+            # =================================================
+            # DADOS PRINCIPAIS DO FORMULÁRIO
+            # =================================================
 
-            inicio_leitura = datetime.strptime(request.form['inicio_leitura'], '%Y-%m-%d').date()
-            fim_leitura = datetime.strptime(request.form['fim_leitura'], '%Y-%m-%d').date()
+            cliente_id = int(
+                request.form.get(
+                    'cliente_id',
+                    0
+                )
+            )
 
-            tarifa_neoenergia = limpar_valor(request.form['tarifa_neoenergia'])
-            tarifa_base = limpar_valor(request.form.get('tarifa_base'))
-            icms = limpar_valor(request.form['icms'])
-            pis = limpar_valor(request.form.get('pis'))
-            cofins = limpar_valor(request.form.get('cofins'))
-            cip_atual = limpar_valor(request.form.get('cip_atual'))
-            consumo_total = limpar_valor(request.form['consumo_total'])
-            consumo_neoenergia = limpar_valor(request.form['consumo_neoenergia'])
-            consumo_usina_raw = limpar_valor(request.form['consumo_usina'])
-            saldo_unidade = limpar_valor(request.form['saldo_unidade'])
-            injetado = limpar_valor(request.form['injetado'])
-            energia_injetada_real = limpar_valor(request.form.get('energia_injetada_real', '0'))
-            valor_conta_neoenergia = limpar_valor(request.form['valor_conta_neoenergia'])
+            usina_id = int(
+                request.form.get(
+                    'usina_id',
+                    0
+                )
+            )
 
-            custo_tusd_fio_b_form = request.form.get('custo_tusd_fio_b')
-            custo_tusd_fio_b = limpar_valor(custo_tusd_fio_b_form) if (usina and usina.tusd_fio_b) else 0.0
+            mes = int(
+                request.form.get(
+                    'mes',
+                    0
+                )
+            )
 
-            # consumo instantâneo
+            ano = int(
+                request.form.get(
+                    'ano',
+                    0
+                )
+            )
+
+            if not cliente_id:
+
+                raise ValueError(
+                    'Cliente é obrigatório.'
+                )
+
+            if not usina_id:
+
+                raise ValueError(
+                    'Usina é obrigatória.'
+                )
+
+            if mes < 1 or mes > 12:
+
+                raise ValueError(
+                    'Mês de referência inválido.'
+                )
+
+            if ano <= 0:
+
+                raise ValueError(
+                    'Ano de referência inválido.'
+                )
+
+            cliente = db.session.get(
+                Cliente,
+                cliente_id
+            )
+
+            usina = db.session.get(
+                Usina,
+                usina_id
+            )
+
+            if not cliente:
+
+                raise ValueError(
+                    'Cliente não encontrado.'
+                )
+
+            if not usina:
+
+                raise ValueError(
+                    'Usina não encontrada.'
+                )
+
+            # =================================================
+            # RATEIO
+            # =================================================
+
+            rateio = obter_rateio_vigente(
+                cliente_id=cliente.id,
+                usina_id=usina.id
+            )
+
+            codigo_rateio = (
+                rateio.codigo_rateio
+                if rateio
+                else 'SEM'
+            )
+
+            # =================================================
+            # DATAS
+            # =================================================
+
+            inicio_leitura = datetime.strptime(
+                request.form[
+                    'inicio_leitura'
+                ],
+                '%Y-%m-%d'
+            ).date()
+
+            fim_leitura = datetime.strptime(
+                request.form[
+                    'fim_leitura'
+                ],
+                '%Y-%m-%d'
+            ).date()
+
+            if fim_leitura < inicio_leitura:
+
+                raise ValueError(
+                    'A data final da leitura não pode ser '
+                    'anterior à data inicial.'
+                )
+
+            # =================================================
+            # VALORES DO FORMULÁRIO
+            # =================================================
+
+            tarifa_neoenergia = limpar_valor(
+                request.form.get(
+                    'tarifa_neoenergia'
+                )
+            )
+
+            tarifa_base = limpar_valor(
+                request.form.get(
+                    'tarifa_base'
+                )
+            )
+
+            icms = limpar_valor(
+                request.form.get(
+                    'icms'
+                )
+            )
+
+            pis = limpar_valor(
+                request.form.get(
+                    'pis'
+                )
+            )
+
+            cofins = limpar_valor(
+                request.form.get(
+                    'cofins'
+                )
+            )
+
+            cip_atual = limpar_valor(
+                request.form.get(
+                    'cip_atual'
+                )
+            )
+
+            consumo_total = limpar_valor(
+                request.form.get(
+                    'consumo_total'
+                )
+            )
+
+            consumo_neoenergia = limpar_valor(
+                request.form.get(
+                    'consumo_neoenergia'
+                )
+            )
+
+            consumo_usina_raw = limpar_valor(
+                request.form.get(
+                    'consumo_usina'
+                )
+            )
+
+            saldo_unidade = limpar_valor(
+                request.form.get(
+                    'saldo_unidade'
+                )
+            )
+
+            injetado = limpar_valor(
+                request.form.get(
+                    'injetado'
+                )
+            )
+
+            energia_injetada_real = limpar_valor(
+                request.form.get(
+                    'energia_injetada_real',
+                    '0'
+                )
+            )
+
+            valor_conta_neoenergia = limpar_valor(
+                request.form.get(
+                    'valor_conta_neoenergia'
+                )
+            )
+
+            custo_tusd_fio_b = Decimal(
+                str(
+                    limpar_valor(
+                        request.form.get(
+                            'custo_tusd_fio_b'
+                        )
+                    )
+                )
+            ).quantize(
+                Decimal('0.01'),
+                rounding=ROUND_HALF_UP
+            )
+
+            if not usina.tusd_fio_b:
+
+                custo_tusd_fio_b = (
+                    Decimal('0.00')
+                )
+
+            # =================================================
+            # CONSUMO INSTANTÂNEO
+            # =================================================
+
             consumo_instantaneo = 0.0
-            if cliente and getattr(cliente, 'consumo_instantaneo', False):
-                consumo_instantaneo = db.session.query(
-                    func.sum(Geracao.energia_kwh)
-                ).filter(
-                    Geracao.usina_id == usina_id,
-                    Geracao.data >= inicio_leitura,
-                    Geracao.data <= fim_leitura
-                ).scalar() or 0.0
 
-            injetado_total = consumo_usina_raw + consumo_instantaneo - energia_injetada_real
-            consumo_usina_final = injetado_total if getattr(cliente, 'consumo_instantaneo', False) else consumo_usina_raw
+            if cliente.consumo_instantaneo:
 
-            app.logger.debug(
-                "[EDITAR_FATURA] consumo_usina_raw=%s, consumo_instantaneo=%s, energia_injetada_real=%s, consumo_usina_final=%s",
-                consumo_usina_raw, consumo_instantaneo, energia_injetada_real, consumo_usina_final
+                consumo_instantaneo = (
+                    db.session.query(
+                        func.sum(
+                            Geracao.energia_kwh
+                        )
+                    )
+                    .filter(
+                        Geracao.usina_id == usina.id,
+                        Geracao.data >= inicio_leitura,
+                        Geracao.data <= fim_leitura
+                    )
+                    .scalar()
+                    or 0.0
+                )
+
+            injetado_total = (
+                consumo_usina_raw
+                + float(consumo_instantaneo)
+                - energia_injetada_real
             )
 
-            # (3) Atualizar Fatura
-            fatura.cliente_id = cliente_id
-            fatura.usina_id = usina_id
+            if injetado_total < 0:
+
+                injetado_total = 0.0
+
+            consumo_usina_final = (
+                injetado_total
+                if cliente.consumo_instantaneo
+                else consumo_usina_raw
+            )
+
+            # =================================================
+            # IDENTIFICADOR NOVO
+            # =================================================
+
+            identificador_novo = (
+                f'U{usina.id}: '
+                f'{codigo_rateio}-'
+                f'{mes:02d}-'
+                f'{ano}'
+            )
+
+            fatura_duplicada = (
+                FaturaMensal.query
+                .filter(
+                    FaturaMensal.identificador
+                    == identificador_novo,
+                    FaturaMensal.id != fatura.id
+                )
+                .first()
+            )
+
+            if fatura_duplicada:
+
+                raise ValueError(
+                    'Já existe outra fatura para esse '
+                    'cliente nesta competência.'
+                )
+
+            # =================================================
+            # ATUALIZA A FATURA
+            # =================================================
+
+            fatura.cliente_id = cliente.id
+            fatura.usina_id = usina.id
             fatura.mes_referencia = mes
             fatura.ano_referencia = ano
             fatura.inicio_leitura = inicio_leitura
             fatura.fim_leitura = fim_leitura
             fatura.tarifa_neoenergia = tarifa_neoenergia
+            fatura.tarifa_base = tarifa_base
             fatura.icms = icms
+            fatura.pis = pis
+            fatura.cofins = cofins
+            fatura.cip_atual = cip_atual
             fatura.consumo_total = consumo_total
             fatura.consumo_neoenergia = consumo_neoenergia
             fatura.consumo_usina = consumo_usina_final
             fatura.saldo_unidade = saldo_unidade
             fatura.injetado = injetado
-            fatura.valor_conta_neoenergia = valor_conta_neoenergia
-            fatura.energia_injetada_real = energia_injetada_real
-            fatura.custo_tusd_fio_b = custo_tusd_fio_b
-            fatura.tarifa_base = tarifa_base
-            fatura.pis = pis
-            fatura.cofins = cofins
-            fatura.cip_atual = cip_atual
+            fatura.valor_conta_neoenergia = (
+                valor_conta_neoenergia
+            )
+            fatura.energia_injetada_real = (
+                energia_injetada_real
+            )
+            fatura.custo_tusd_fio_b = (
+                custo_tusd_fio_b
+            )
+            fatura.identificador = (
+                identificador_novo
+            )
 
-            fatura.identificador = f"U{usina_id}: {codigo_rateio}-{mes:02d}-{ano}"
-            app.logger.debug("[EDITAR_FATURA] Novo identificador=%s", fatura.identificador)
+            # Atualiza o objeto na sessão antes do cálculo.
+            db.session.flush()
 
-            # (4) Atualizar RECEITA EM financeiro_usina
+            # =================================================
+            # ATUALIZA A RECEITA
+            # =================================================
+
             if rateio:
-                tarifa_cliente = Decimal(str(rateio.tarifa_kwh))
-                consumo_dec = Decimal(str(consumo_usina_final))
 
-                valor_bruto = consumo_dec * tarifa_cliente
-                tusd_dec = Decimal(str(custo_tusd_fio_b))
-
-                if usina.tusd_fio_b:
-                    valor_liq = valor_bruto - tusd_dec
-                    if valor_liq < 0:
-                        valor_liq = Decimal("0")
-                else:
-                    valor_liq = valor_bruto
-
-                valor_liq = valor_liq.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                receita_valor = float(valor_liq)
-
-                app.logger.debug(
-                    "[EDITAR_FATURA] Cálculo receita: consumo=%s, tarifa=%s, bruto=%s, TUSD=%s, liquido=%s",
-                    consumo_dec, tarifa_cliente, valor_bruto, tusd_dec, valor_liq
+                calculo = calcular_valores_fatura(
+                    fatura=fatura,
+                    cliente=cliente,
+                    usina=usina,
+                    rateio=rateio
                 )
 
-                # mês subsequente
-                data_base_fat = date(ano, mes, 1)
-                prox = (data_base_fat + timedelta(days=32)).replace(day=1)
-                ref_mes = prox.month
-                ref_ano = prox.year
+                receita_valor = float(
+                    calculo[
+                        'valor_usina_liquido'
+                    ]
+                )
 
-                descricao_nova = f"Fatura {fatura.identificador} - {cliente.nome}"
+                data_base_fatura = date(
+                    ano,
+                    mes,
+                    1
+                )
+
+                proximo_mes = (
+                    data_base_fatura
+                    + timedelta(days=32)
+                ).replace(
+                    day=1
+                )
+
+                referencia_mes = (
+                    proximo_mes.month
+                )
+
+                referencia_ano = (
+                    proximo_mes.year
+                )
+
+                descricao_calculo = (
+                    f"Tarifa Neo="
+                    f"{calculo['tarifa_neoenergia']} | "
+                    f"Tarifa Cliente="
+                    f"{calculo['tarifa_cliente']} | "
+                    f"Consumo="
+                    f"{calculo['consumo_usina']} | "
+                    f"TUSD="
+                    f"{calculo['custo_tusd']} | "
+                    f"Valor Bruto="
+                    f"{calculo['valor_usina_bruto']} | "
+                    f"Valor Líquido="
+                    f"{calculo['valor_usina_liquido']}"
+                )
+
+                descricao_nova = (
+                    f'Fatura '
+                    f'{fatura.identificador} - '
+                    f'{cliente.nome} | '
+                    f'{descricao_calculo}'
+                )
 
                 if receita_antiga:
-                    app.logger.debug(
-                        "[EDITAR_FATURA] Atualizando receita_antiga id=%s de valor=%s para valor=%s",
-                        receita_antiga.id, receita_antiga.valor, receita_valor
+
+                    receita_antiga.usina_id = usina.id
+                    receita_antiga.cliente_id = cliente.id
+                    receita_antiga.categoria_id = None
+                    receita_antiga.data = date(
+                        referencia_ano,
+                        referencia_mes,
+                        1
                     )
-                    receita_antiga.usina_id = rateio.usina_id
-                    receita_antiga.data = date(ref_ano, ref_mes, 1)
-                    receita_antiga.descricao = descricao_nova
-                    receita_antiga.valor = receita_valor
-                    receita_antiga.referencia_mes = ref_mes
-                    receita_antiga.referencia_ano = ref_ano
-                else:
-                    app.logger.debug(
-                        "[EDITAR_FATURA] Criando nova receita em financeiro_usina com valor=%s",
+                    receita_antiga.tipo = 'receita'
+                    receita_antiga.descricao = (
+                        descricao_nova
+                    )
+                    receita_antiga.valor = (
                         receita_valor
                     )
-                    nova = FinanceiroUsina(
-                        usina_id=rateio.usina_id,
+                    receita_antiga.referencia_mes = (
+                        referencia_mes
+                    )
+                    receita_antiga.referencia_ano = (
+                        referencia_ano
+                    )
+
+                    app.logger.debug(
+                        '[EDITAR_FATURA] Receita %s '
+                        'atualizada para %s.',
+                        receita_antiga.id,
+                        receita_valor
+                    )
+
+                else:
+
+                    nova_receita = FinanceiroUsina(
+                        usina_id=usina.id,
+                        cliente_id=cliente.id,
                         categoria_id=None,
-                        data=date(ref_ano, ref_mes, 1),
-                        tipo="receita",
+                        data=date(
+                            referencia_ano,
+                            referencia_mes,
+                            1
+                        ),
+                        tipo='receita',
                         descricao=descricao_nova,
                         valor=receita_valor,
-                        referencia_mes=ref_mes,
-                        referencia_ano=ref_ano
+                        referencia_mes=(
+                            referencia_mes
+                        ),
+                        referencia_ano=(
+                            referencia_ano
+                        )
                     )
-                    db.session.add(nova)
+
+                    db.session.add(
+                        nova_receita
+                    )
+
+                    app.logger.debug(
+                        '[EDITAR_FATURA] Nova receita criada '
+                        'com valor=%s.',
+                        receita_valor
+                    )
 
             else:
-                app.logger.debug("[EDITAR_FATURA] Nenhum rateio encontrado; se houver receita_antiga, será removida")
+
                 if receita_antiga:
-                    app.logger.debug("[EDITAR_FATURA] Deletando receita_antiga id=%s", receita_antiga.id)
-                    db.session.delete(receita_antiga)
+
+                    db.session.delete(
+                        receita_antiga
+                    )
+
+                    app.logger.debug(
+                        '[EDITAR_FATURA] Receita antiga removida '
+                        'porque não há rateio.'
+                    )
+
+            # =================================================
+            # COMMIT
+            # =================================================
 
             db.session.commit()
-            app.logger.debug("[EDITAR_FATURA] Commit concluído com sucesso")
-            flash('Fatura e receita associada atualizadas com sucesso.', 'success')
-            return redirect(url_for('listar_faturas'))
+
+            flash(
+                'Fatura e receita associada atualizadas '
+                'com sucesso.',
+                'success'
+            )
+
+            return redirect(
+                url_for(
+                    'listar_faturas'
+                )
+            )
 
         except Exception as e:
-            db.session.rollback()
-            app.logger.error(
-                "[EDITAR_FATURA] EXCEPTION: %s\n%s",
-                e, traceback.format_exc()
-            )
-            flash(f'Erro ao salvar alterações: {str(e)}', 'danger')
 
-    return render_template('editar_fatura.html', fatura=fatura, clientes=clientes, usinas=usinas)
+            db.session.rollback()
+
+            app.logger.exception(
+                '[EDITAR_FATURA] Erro ao atualizar fatura.'
+            )
+
+            flash(
+                f'Erro ao salvar alterações: {str(e)}',
+                'danger'
+            )
+
+    return render_template(
+        'editar_fatura.html',
+        fatura=fatura,
+        clientes=clientes,
+        usinas=usinas
+    )
 
 @app.route('/relatorio/<int:fatura_id>')
 def relatorio_fatura(fatura_id):
 
-    fatura = FaturaMensal.query.get_or_404(fatura_id)
-    cliente = Cliente.query.get(fatura.cliente_id)
-    usina = Usina.query.get(cliente.usina_id)
+    # =====================================================
+    # FATURA, CLIENTE E USINA
+    # =====================================================
 
-    # HELPERS
-
-    def _dec(v, default="0.00"):
-        try:
-            if v is None:
-                return Decimal(default)
-            return Decimal(str(v))
-        except Exception:
-            return Decimal(default)
-
-    def _percentual_para_decimal(v):
-        valor = _dec(v, "0.00")
-        return valor / Decimal("100")
-
-    # IDENTIFICA SE É FATURA NOVA
-
-    usa_regra_nova = bool(
-        getattr(fatura, 'tarifa_base', None)
-        and _dec(fatura.tarifa_base) > 0
-    )
-    # TARIFA NEOENERGIA
-
-    def calcular_tarifa_neoenergia(f):
-
-        usa_nova = bool(
-            getattr(f, 'tarifa_base', None)
-            and _dec(f.tarifa_base) > 0
+    fatura = (
+        FaturaMensal.query
+        .get_or_404(
+            fatura_id
         )
-
-        # NOVA REGRA
-
-        if usa_nova:
-
-            tarifa_base = _dec(
-                getattr(f, 'tarifa_base', 0),
-                "0.00"
-            )
-
-            pis_dec = _percentual_para_decimal(
-                getattr(f, 'pis', 0)
-            )
-
-            cofins_dec = _percentual_para_decimal(
-                getattr(f, 'cofins', 0)
-            )
-
-            divisor = Decimal("1.00") - (
-                pis_dec +
-                cofins_dec +
-                Decimal("0.20")
-            )
-
-            if divisor <= 0:
-                divisor = Decimal("1.00")
-
-            return (
-                tarifa_base / divisor
-            ).quantize(
-                Decimal("0.0000001"),
-                rounding=ROUND_HALF_UP
-            )
-
-        # REGRA ANTIGA
-
-        tarifa_base_ant = _dec(
-            getattr(f, 'tarifa_neoenergia', 0),
-            "0.00"
-        )
-
-        icms = _dec(
-            getattr(f, 'icms', 0),
-            "0.00"
-        )
-
-        if icms == 0:
-
-            tarifa_final = (
-                tarifa_base_ant *
-                Decimal('1.2625')
-            )
-
-        elif icms == 20:
-
-            tarifa_final = tarifa_base_ant
-
-        else:
-
-            tarifa_final = (
-                tarifa_base_ant *
-                Decimal('1.1023232323')
-            )
-
-        return tarifa_final.quantize(
-            Decimal("0.0000001"),
-            rounding=ROUND_HALF_UP
-        )
-
-    tarifa_neoenergia_aplicada = (
-        calcular_tarifa_neoenergia(fatura)
     )
 
-    # DADOS BASE
-
-    consumo_usina = _dec(
-        fatura.consumo_usina,
-        "0.00"
+    cliente = db.session.get(
+        Cliente,
+        fatura.cliente_id
     )
 
-    valor_conta = _dec(
-        fatura.valor_conta_neoenergia,
-        "0.00"
-    )
+    if not cliente:
 
-    if fatura.data_cadastro:
-        data_base = fatura.data_cadastro.date()
-    else:
-        data_base = date(
-            fatura.ano_referencia,
-            fatura.mes_referencia,
-            1
+        abort(
+            404,
+            description='Cliente da fatura não encontrado.'
         )
 
-    # RATEIO VIGENTE
-
-    rateio = (
-        Rateio.query
-        .filter(
-            Rateio.cliente_id == cliente.id,
-            Rateio.usina_id == usina.id,
-            Rateio.data_inicio <= data_base
-        )
-        .order_by(
-            Rateio.data_inicio.desc(),
-            Rateio.ativo.desc(),
-            Rateio.id.desc()
-        )
-        .first()
-    )
-
-    # TARIFA CLIENTE
-
-    def calcular_tarifa_cliente(
-        rateio_obj,
-        tarifa_neo,
-        usa_nova_regra
-    ):
-
-        if not rateio_obj:
-            return Decimal("0.00")
-
-        desconto_pct = _percentual_para_decimal(
-            getattr(
-                rateio_obj,
-                "desconto_percentual",
-                0
-            ) or 0
-        )
-
-        # REGRA NOVA
-
-        if usa_nova_regra:
-
-            tarifa_final = (
-                tarifa_neo *
-                (
-                    Decimal("1.00") -
-                    desconto_pct
-                )
-            )
-
-            return tarifa_final.quantize(
-                Decimal("0.0000001"),
-                rounding=ROUND_HALF_UP
-            )
-
-        # REGRA ANTIGA
-
-        usar_neo = bool(
-            getattr(
-                rateio_obj,
-                "usar_tarifa_neoenergia",
-                False
-            )
-        )
-
-        if usar_neo:
-
-            fator = (
-                Decimal("1.00") -
-                desconto_pct
-            )
-
-            return (
-                tarifa_neo * fator
-            ).quantize(
-                Decimal("0.0000001"),
-                rounding=ROUND_HALF_UP
-            )
-
-        return _dec(
-            getattr(
-                rateio_obj,
-                "tarifa_kwh",
-                None
-            ),
-            default="1.00"
-        ).quantize(
-            Decimal("0.0000001"),
-            rounding=ROUND_HALF_UP
-        )
-
-    tarifa_cliente = calcular_tarifa_cliente(
-        rateio,
-        tarifa_neoenergia_aplicada,
-        usa_regra_nova
-    )
-
-    # CÁLCULOS PRINCIPAIS
-
-    valor_usina_bruto = (
-        consumo_usina *
-        tarifa_cliente
-    )
-
-    tusd_ativo_atual = bool(
-        getattr(usina, 'tusd_fio_b', False)
-    )
-
-    custo_tusd_atual = _dec(
+    usina_id = (
         getattr(
             fatura,
-            'custo_tusd_fio_b',
-            0
-        ) or 0,
-        default="0.00"
-    ).quantize(
-        Decimal('0.01'),
-        rounding=ROUND_HALF_UP
+            'usina_id',
+            None
+        )
+        or cliente.usina_id
     )
 
-    if tusd_ativo_atual:
+    usina = db.session.get(
+        Usina,
+        usina_id
+    )
 
-        valor_usina_liquido = (
-            valor_usina_bruto -
-            custo_tusd_atual
+    if not usina:
+
+        abort(
+            404,
+            description='Usina da fatura não encontrada.'
         )
 
-        if valor_usina_liquido < Decimal('0'):
-            valor_usina_liquido = Decimal('0')
+    # =====================================================
+    # CÁLCULO DA FATURA ATUAL
+    # =====================================================
 
-    else:
-        valor_usina_liquido = valor_usina_bruto
+    calculo = calcular_valores_fatura(
+        fatura=fatura,
+        cliente=cliente,
+        usina=usina
+    )
 
-    # CÁLCULO ANTIGO
+    tarifa_neoenergia_aplicada = (
+        calculo[
+            'tarifa_neoenergia'
+        ]
+    )
 
-    if not usa_regra_nova:
+    tarifa_cliente = (
+        calculo[
+            'tarifa_cliente'
+        ]
+    )
 
-        com_desconto = (
-            valor_conta +
-            valor_usina_liquido
-        )
+    valor_usina_liquido = (
+        calculo[
+            'valor_usina_liquido'
+        ]
+    )
 
-        sem_desconto = (
-            (
-                consumo_usina *
-                tarifa_neoenergia_aplicada
-            ) +
-            valor_conta -
-            custo_tusd_atual
-        )
+    com_desconto = (
+        calculo[
+            'com_desconto'
+        ]
+    )
 
-    # CÁLCULO NOVO
-
-    else:
-
-        cip_atual_dec = _dec(
-            getattr(
-                fatura,
-                'cip_atual',
-                0
-            ) or 0,
-            default="0.00"
-        )
-
-        com_desconto = (
-            valor_usina_bruto +
-            cip_atual_dec
-        )
-
-        sem_desconto = (
-            (
-                consumo_usina *
-                tarifa_neoenergia_aplicada
-            ) +
-            cip_atual_dec
-        )
+    sem_desconto = (
+        calculo[
+            'sem_desconto'
+        ]
+    )
 
     economia = (
-        sem_desconto -
-        com_desconto
+        calculo[
+            'economia'
+        ]
     )
 
-    # ECONOMIA ACUMULADA
+    # =====================================================
+    # ECONOMIA DAS FATURAS ANTERIORES
+    # =====================================================
 
     faturas_anteriores = (
         FaturaMensal.query
@@ -3468,174 +4465,100 @@ def relatorio_fatura(fatura_id):
             FaturaMensal.cliente_id == cliente.id,
             FaturaMensal.id != fatura.id,
             (
-                FaturaMensal.ano_referencia <
+                FaturaMensal.ano_referencia
+                <
                 fatura.ano_referencia
-            ) |
+            )
+            |
             (
                 (
-                    FaturaMensal.ano_referencia ==
+                    FaturaMensal.ano_referencia
+                    ==
                     fatura.ano_referencia
-                ) &
+                )
+                &
                 (
-                    FaturaMensal.mes_referencia <
+                    FaturaMensal.mes_referencia
+                    <
                     fatura.mes_referencia
                 )
             )
         )
+        .order_by(
+            FaturaMensal.ano_referencia.asc(),
+            FaturaMensal.mes_referencia.asc(),
+            FaturaMensal.id.asc()
+        )
         .all()
     )
 
-    economia_total = Decimal('0')
+    economia_total = Decimal(
+        '0.00'
+    )
 
-    for f in faturas_anteriores:
+    for fatura_anterior in faturas_anteriores:
 
         try:
 
-            usa_nova_ant = bool(
-                getattr(f, 'tarifa_base', None)
-                and _dec(f.tarifa_base) > 0
-            )
-
-            tarifa_aplicada_ant = (
-                calcular_tarifa_neoenergia(f)
-            )
-
-            consumo_usina_ant = _dec(
+            usina_anterior_id = (
                 getattr(
-                    f,
-                    "consumo_usina",
-                    0
-                ) or 0,
-                default="0.00"
+                    fatura_anterior,
+                    'usina_id',
+                    None
+                )
+                or cliente.usina_id
             )
 
-            valor_conta_ant = _dec(
-                getattr(
-                    f,
-                    "valor_conta_neoenergia",
-                    0
-                ) or 0,
-                default="0.00"
-            )
+            # Na maioria dos casos será a mesma usina,
+            # então reutiliza o objeto já carregado.
+            if usina_anterior_id == usina.id:
 
-            if f.data_cadastro:
-                data_base_ant = (
-                    f.data_cadastro.date()
-                )
-            else:
-                data_base_ant = date(
-                    f.ano_referencia,
-                    f.mes_referencia,
-                    1
-                )
-
-            rateio_ant = (
-                Rateio.query
-                .filter(
-                    Rateio.cliente_id == cliente.id,
-                    Rateio.usina_id == usina.id,
-                    Rateio.data_inicio <= data_base_ant
-                )
-                .order_by(
-                    Rateio.data_inicio.desc(),
-                    Rateio.ativo.desc(),
-                    Rateio.id.desc()
-                )
-                .first()
-            )
-
-            tarifa_cliente_ant = (
-                calcular_tarifa_cliente(
-                    rateio_ant,
-                    tarifa_aplicada_ant,
-                    usa_nova_ant
-                )
-            )
-
-            valor_usina_ant_bruto = (
-                consumo_usina_ant *
-                tarifa_cliente_ant
-            )
-
-            custo_tusd_ant = _dec(
-                getattr(
-                    f,
-                    'custo_tusd_fio_b',
-                    0
-                ) or 0,
-                default="0.00"
-            ).quantize(
-                Decimal('0.01'),
-                rounding=ROUND_HALF_UP
-            )
-
-            valor_usina_ant_liq = (
-                valor_usina_ant_bruto -
-                custo_tusd_ant
-            )
-
-            if valor_usina_ant_liq < Decimal('0'):
-                valor_usina_ant_liq = Decimal('0')
-
-            # REGRA ANTIGA
-
-            if not usa_nova_ant:
-
-                com_desconto_ant = (
-                    valor_conta_ant +
-                    valor_usina_ant_liq
-                )
-
-                sem_desconto_ant = (
-                    (
-                        consumo_usina_ant *
-                        tarifa_aplicada_ant
-                    ) +
-                    valor_conta_ant -
-                    custo_tusd_ant
-                )
-
-            # REGRA NOVA
+                usina_anterior = usina
 
             else:
 
-                cip_ant = _dec(
-                    getattr(
-                        f,
-                        'cip_atual',
-                        0
-                    ) or 0,
-                    default="0.00"
+                usina_anterior = db.session.get(
+                    Usina,
+                    usina_anterior_id
                 )
 
-                com_desconto_ant = (
-                    valor_usina_ant_bruto +
-                    cip_ant
+            if not usina_anterior:
+
+                app.logger.warning(
+                    '[RELATORIO] Usina não encontrada para '
+                    'a fatura anterior id=%s.',
+                    fatura_anterior.id
                 )
 
-                sem_desconto_ant = (
-                    (
-                        consumo_usina_ant *
-                        tarifa_aplicada_ant
-                    ) +
-                    cip_ant
+                continue
+
+            calculo_anterior = (
+                calcular_valores_fatura(
+                    fatura=fatura_anterior,
+                    cliente=cliente,
+                    usina=usina_anterior
                 )
+            )
 
             economia_total += (
-                sem_desconto_ant -
-                com_desconto_ant
+                calculo_anterior[
+                    'economia'
+                ]
             )
 
-        except Exception as e:
+        except Exception:
 
-            print(
-                '[ERRO ECONOMIA ACUMULADA]',
-                e
+            app.logger.exception(
+                '[RELATORIO] Erro ao calcular economia da '
+                'fatura anterior id=%s.',
+                fatura_anterior.id
             )
 
             continue
 
+    # =====================================================
     # ECONOMIA EXTRA
+    # =====================================================
 
     economia_extra_total = (
         db.session.query(
@@ -3644,19 +4567,34 @@ def relatorio_fatura(fatura_id):
             )
         )
         .filter(
-            EconomiaExtra.cliente_id == cliente.id
+            EconomiaExtra.cliente_id
+            ==
+            cliente.id
         )
         .scalar()
-        or Decimal('0')
+        or Decimal('0.00')
+    )
+
+    economia_extra_total = Decimal(
+        str(
+            economia_extra_total
+        )
     )
 
     economia_acumulada = (
-        economia +
-        economia_total +
+        economia
+        +
+        economia_total
+        +
         economia_extra_total
+    ).quantize(
+        Decimal('0.01'),
+        rounding=ROUND_HALF_UP
     )
 
-    # GERAÇÃO
+    # =====================================================
+    # GERAÇÃO DO PERÍODO
+    # =====================================================
 
     geracao_periodo = None
 
@@ -3674,25 +4612,33 @@ def relatorio_fatura(fatura_id):
                 Geracao.data <= fatura.fim_leitura
             )
             .scalar()
-            or Decimal('0')
+            or Decimal('0.00')
         )
 
-        geracao_periodo = round(
-            geracao_periodo,
-            2
+        geracao_periodo = Decimal(
+            str(
+                geracao_periodo
+            )
+        ).quantize(
+            Decimal('0.01'),
+            rounding=ROUND_HALF_UP
         )
 
+    # =====================================================
     # FICHA DE COMPENSAÇÃO
+    # =====================================================
 
-    pasta_boletos = '/data/boletos'
+    pasta_boletos = (
+        '/data/boletos'
+    )
 
     pdf_path = os.path.join(
         pasta_boletos,
-        f"boleto_{fatura.id}.pdf"
+        f'boleto_{fatura.id}.pdf'
     )
 
     ficha_filename = (
-        f"ficha_compensacao_{fatura.id}.png"
+        f'ficha_compensacao_{fatura.id}.png'
     )
 
     ficha_path = os.path.join(
@@ -3702,47 +4648,93 @@ def relatorio_fatura(fatura_id):
 
     ficha_compensacao_data_uri = None
 
-    if os.path.exists(pdf_path):
+    if os.path.exists(
+        pdf_path
+    ):
 
-        extrair_ficha_compensacao(
-            usina_id=usina.id,
-            pdf_path=pdf_path,
-            output_path=ficha_path,
-            boleto_proprio=None
+        try:
+
+            extrair_ficha_compensacao(
+                usina_id=usina.id,
+                pdf_path=pdf_path,
+                output_path=ficha_path,
+                boleto_proprio=None
+            )
+
+            if os.path.exists(
+                ficha_path
+            ):
+
+                ficha_base64 = (
+                    imagem_para_base64(
+                        ficha_path
+                    )
+                )
+
+                ficha_compensacao_data_uri = (
+                    f'data:image/png;base64,'
+                    f'{ficha_base64}'
+                )
+
+        except Exception:
+
+            app.logger.exception(
+                '[RELATORIO] Erro ao extrair ficha de '
+                'compensação da fatura id=%s.',
+                fatura.id
+            )
+
+    # =====================================================
+    # LOGO CGR
+    # =====================================================
+
+    logo_cgr_data_uri = None
+
+    logo_cgr_path = os.path.abspath(
+        'static/img/logo_cgr.png'
+    )
+
+    if os.path.exists(
+        logo_cgr_path
+    ):
+
+        try:
+
+            logo_cgr_data_uri = (
+                'data:image/png;base64,'
+                f'{imagem_para_base64(logo_cgr_path)}'
+            )
+
+        except Exception:
+
+            app.logger.exception(
+                '[RELATORIO] Erro ao carregar a logo CGR.'
+            )
+
+    else:
+
+        app.logger.warning(
+            '[RELATORIO] Logo CGR não encontrada em %s.',
+            logo_cgr_path
         )
 
-        if os.path.exists(ficha_path):
-
-            ficha_base64 = imagem_para_base64(
-                ficha_path
-            )
-
-            ficha_compensacao_data_uri = (
-                f"data:image/png;base64,{ficha_base64}"
-            )
-
-    # LOGO CGR
-
-    logo_cgr_path = (
-        os.path.abspath(
-            "static/img/logo_cgr.png"
-        ).replace('\\', '/')
-    )
-
-    logo_cgr_data_uri = (
-        f"data:image/png;base64,"
-        f"{imagem_para_base64(logo_cgr_path)}"
-    )
-
-    # LOGO USINA
+    # =====================================================
+    # LOGO DA USINA
+    # =====================================================
 
     logo_usina_data_uri = None
 
     if usina.logo_url:
 
         nome_arquivo = (
-            usina.logo_url or ""
+            usina.logo_url or ''
         ).strip()
+
+        # Evita que seja usado um caminho completo
+        # salvo indevidamente no banco.
+        nome_arquivo = os.path.basename(
+            nome_arquivo
+        )
 
         logos_base = os.path.abspath(
             os.getenv(
@@ -3759,7 +4751,7 @@ def relatorio_fatura(fatura_id):
             nome_arquivo
         )
 
-        path_stat = os.path.abspath(
+        path_static = os.path.abspath(
             os.path.join(
                 'static',
                 'logos',
@@ -3767,64 +4759,90 @@ def relatorio_fatura(fatura_id):
             )
         )
 
-        chosen = None
+        caminho_logo = None
 
-        if os.path.exists(path_env):
+        if os.path.exists(
+            path_env
+        ):
 
-            chosen = path_env
+            caminho_logo = path_env
 
-            print(
-                f"[LOGO] usando LOGOS_PATH: {chosen}"
-            )
+        elif os.path.exists(
+            path_static
+        ):
 
-        elif os.path.exists(path_stat):
-
-            chosen = path_stat
-
-            print(
-                f"[LOGO] usando static/logos: {chosen}"
-            )
+            caminho_logo = path_static
 
         else:
 
-            print(
-                f"[LOGO] arquivo NÃO encontrado "
-                f"em: {path_env} nem {path_stat}"
+            app.logger.warning(
+                '[RELATORIO] Logo da usina não encontrada. '
+                'Caminhos verificados: %s e %s.',
+                path_env,
+                path_static
             )
 
-        if chosen:
+        if caminho_logo:
 
-            ext = os.path.splitext(
-                chosen
-            )[1].lower()
+            try:
 
-            mime = (
-                "png"
-                if ext == ".png"
-                else "jpeg"
-            )
+                extensao = (
+                    os.path.splitext(
+                        caminho_logo
+                    )[1]
+                    .lower()
+                )
 
-            logo_usina_data_uri = (
-                f"data:image/{mime};base64,"
-                f"{imagem_para_base64(chosen)}"
-            )
+                if extensao == '.png':
 
+                    mime = 'png'
+
+                elif extensao == '.webp':
+
+                    mime = 'webp'
+
+                else:
+
+                    mime = 'jpeg'
+
+                logo_usina_data_uri = (
+                    f'data:image/{mime};base64,'
+                    f'{imagem_para_base64(caminho_logo)}'
+                )
+
+            except Exception:
+
+                app.logger.exception(
+                    '[RELATORIO] Erro ao carregar logo '
+                    'da usina id=%s.',
+                    usina.id
+                )
+
+    # =====================================================
     # BOOTSTRAP
+    # =====================================================
 
-    bootstrap_path = os.path.abspath(
-        "static/css/bootstrap.min.css"
-    ).replace('\\', '/')
+    bootstrap_arquivo = os.path.abspath(
+        'static/css/bootstrap.min.css'
+    ).replace(
+        '\\',
+        '/'
+    )
 
-    bootstrap_path = f"file:///{bootstrap_path}"
+    bootstrap_path = (
+        f'file:///{bootstrap_arquivo}'
+    )
 
-    # RENDER
+    # RENDERIZAÇÃO
 
     return render_template(
         'relatorio_fatura.html',
         fatura=fatura,
         cliente=cliente,
         usina=usina,
-        tarifa_neoenergia_aplicada=tarifa_neoenergia_aplicada,
+        tarifa_neoenergia_aplicada=(
+            tarifa_neoenergia_aplicada
+        ),
         tarifa_cliente=tarifa_cliente,
         valor_usina=valor_usina_liquido,
         com_desconto=com_desconto,
@@ -3832,7 +4850,9 @@ def relatorio_fatura(fatura_id):
         economia=economia,
         economia_acumulada=economia_acumulada,
         geracao_periodo=geracao_periodo,
-        ficha_compensacao_path=ficha_compensacao_data_uri,
+        ficha_compensacao_path=(
+            ficha_compensacao_data_uri
+        ),
         logo_cgr_path=logo_cgr_data_uri,
         logo_usina_path=logo_usina_data_uri,
         bootstrap_path=bootstrap_path
@@ -22647,9 +23667,7 @@ def portal_cliente_relatorios():
     ]:
         abort(403)
 
-    # =====================================================
     # CLIENTES DISPONÍVEIS PARA O FILTRO
-    # =====================================================
 
     if current_user.perfil == 'admin':
 
@@ -22682,9 +23700,7 @@ def portal_cliente_relatorios():
         for cliente in clientes_disponiveis
     ]
 
-    # =====================================================
     # FATURAS
-    # =====================================================
 
     query_faturas = (
         FaturaMensal.query
@@ -22730,9 +23746,7 @@ def portal_cliente_relatorios():
         .all()
     )
 
-    # =====================================================
     # LANÇAMENTOS FINANCEIROS
-    # =====================================================
 
     clientes_faturas_ids = list({
         fatura.cliente_id
@@ -22757,9 +23771,7 @@ def portal_cliente_relatorios():
             .all()
         )
 
-    # =====================================================
     # ORGANIZA FINANCEIRO PELO IDENTIFICADOR DA FATURA
-    # =====================================================
 
     financeiro_por_identificador = {}
 
@@ -22795,15 +23807,12 @@ def portal_cliente_relatorios():
 
                 break
 
-    # =====================================================
     # MONTA RELATÓRIOS
-    # =====================================================
 
     relatorios = []
 
     quantidade_pagas = 0
     quantidade_abertas = 0
-
     total_pago = Decimal('0.00')
     total_aberto = Decimal('0.00')
 
@@ -22847,7 +23856,6 @@ def portal_cliente_relatorios():
 
             status = 'pago'
             status_texto = 'Pago'
-
             quantidade_pagas += 1
             total_pago += valor
 
@@ -22855,7 +23863,6 @@ def portal_cliente_relatorios():
 
             status = 'aberto'
             status_texto = 'Em aberto'
-
             quantidade_abertas += 1
             total_aberto += valor
 
