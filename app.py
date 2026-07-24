@@ -22758,31 +22758,42 @@ def portal_cliente_relatorios():
         )
 
     # =====================================================
-    # AGRUPA FINANCEIRO POR REFERÊNCIA
+    # ORGANIZA FINANCEIRO PELO IDENTIFICADOR DA FATURA
     # =====================================================
 
-    financeiro_por_referencia = {}
+    financeiro_por_identificador = {}
 
     for lancamento in lancamentos:
 
-        if (
-            lancamento.cliente_id is None
-            or lancamento.referencia_mes is None
-            or lancamento.referencia_ano is None
-        ):
+        descricao = (
+            lancamento.descricao or ''
+        ).strip()
+
+        if not descricao:
             continue
 
-        chave = (
-            lancamento.cliente_id,
-            lancamento.referencia_mes,
-            lancamento.referencia_ano
-        )
+        for fatura in faturas:
 
-        if chave not in financeiro_por_referencia:
+            identificador = (
+                fatura.identificador or ''
+            ).strip()
 
-            financeiro_por_referencia[chave] = (
-                lancamento
+            if not identificador:
+                continue
+
+            texto_procurado = (
+                f'Fatura {identificador}'
             )
+
+            if texto_procurado in descricao:
+
+                if identificador not in financeiro_por_identificador:
+
+                    financeiro_por_identificador[
+                        identificador
+                    ] = lancamento
+
+                break
 
     # =====================================================
     # MONTA RELATÓRIOS
@@ -22798,24 +22809,32 @@ def portal_cliente_relatorios():
 
     for fatura in faturas:
 
-        chave = (
-            fatura.cliente_id,
-            fatura.mes_referencia,
-            fatura.ano_referencia
+        identificador = (
+            fatura.identificador or ''
+        ).strip()
+
+        lancamento = (
+            financeiro_por_identificador.get(
+                identificador
+            )
+            if identificador
+            else None
         )
 
-        lancamento = financeiro_por_referencia.get(
-            chave
-        )
-
-        # O VALOR VEM EXCLUSIVAMENTE DO FINANCEIRO
         valor = Decimal('0.00')
+        juros = Decimal('0.00')
 
         if lancamento:
 
             valor = Decimal(
                 str(
                     lancamento.valor or 0
+                )
+            )
+
+            juros = Decimal(
+                str(
+                    lancamento.juros or 0
                 )
             )
 
@@ -22845,6 +22864,7 @@ def portal_cliente_relatorios():
             'cliente': fatura.cliente,
             'lancamento': lancamento,
             'valor': valor,
+            'juros': juros,
             'pago': pago,
             'status': status,
             'status_texto': status_texto,
