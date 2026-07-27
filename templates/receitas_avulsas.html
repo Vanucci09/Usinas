@@ -1,153 +1,172 @@
 {% extends 'base.html' %}
 
-{% block title %}Receitas{% endblock %}
+{% block title %}Receitas Avulsas{% endblock %}
 
 {% block content %}
-<div class="container mt-5 mb-5 p-4 bg-white shadow rounded">
-
-    <!-- Cabeçalho -->
-    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-        <h2 class="text-primary mb-0">Receitas Avulsas</h2>
-        <div class="d-flex gap-2">
-            <a href="{{ url_for('index') }}?aba=financeiro" class="btn btn-secondary">
-                <i class="bi bi-arrow-left"></i> Voltar
-            </a>
-            <a href="{{ url_for('receita_avulsa') }}" class="btn btn-success">
-                <i class="bi bi-plus-circle"></i> Nova Receita
-            </a>
-        </div>
-    </div>
-
-    <!-- Filtros -->
-    <form method="GET" class="row g-3 mb-4">
-
-        <div class="col-md-3">
-            <label class="form-label">Usina</label>
-            <select name="usina_id" class="form-select">
-                <option value="">Todas</option>
-                {% for usina in usinas %}
-                    <option value="{{ usina.id }}" {% if usina_id == usina.id %}selected{% endif %}>
-                        {{ usina.nome }}
-                    </option>
-                {% endfor %}
-            </select>
+<div class="container mt-4 mb-5">
+    <div class="card shadow-sm border-0">
+        <!-- Cabeçalho -->
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
+            <h5 class="mb-0 fw-bold">
+                <i class="bi bi-cash-stack me-2"></i> Receitas Avulsas
+            </h5>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('index') }}?aba=financeiro" class="btn btn-sm btn-light fw-semibold">
+                    <i class="bi bi-arrow-left me-1"></i> Voltar
+                </a>
+                <a href="{{ url_for('receita_avulsa') }}" class="btn btn-sm btn-success fw-semibold">
+                    <i class="bi bi-plus-circle me-1"></i> Nova Receita
+                </a>
+            </div>
         </div>
 
-        <div class="col-md-3">
-            <label class="form-label">Data Início</label>
-            <input type="date" name="data_inicio" class="form-control" value="{{ data_inicio }}">
-        </div>
+        <div class="card-body p-4">
+            <!-- Form de Filtros -->
+            <div class="card bg-light border-0 mb-4">
+                <div class="card-body">
+                    <form method="GET" class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold small">Usina</label>
+                            <select name="usina_id" class="form-select form-select-sm">
+                                <option value="">Todas</option>
+                                {% for usina in usinas %}
+                                    <option value="{{ usina.id }}" {% if usina_id == usina.id %}selected{% endif %}>
+                                        {{ usina.nome }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
 
-        <div class="col-md-3">
-            <label class="form-label">Data Fim</label>
-            <input type="date" name="data_fim" class="form-control" value="{{ data_fim }}">
-        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold small">Data Início</label>
+                            <input type="date" name="data_inicio" class="form-control form-control-sm" value="{{ data_inicio }}">
+                        </div>
 
-        <div class="col-md-3">
-            <label class="form-label">Nome (descrição / credor)</label>
-            <input type="text" name="nome" class="form-control" value="{{ nome or '' }}" placeholder="Ex: manutenção, João">
-        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold small">Data Fim</label>
+                            <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ data_fim }}">
+                        </div>
 
-        <div class="col-md-3">
-            <label class="form-label">Valor (R$)</label>
-            <input type="text" name="valor" class="form-control" value="{{ valor or '' }}" placeholder="Ex: 1.234,56">
-        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold small">Descrição ou Credor</label>
+                            <input type="text" name="nome" class="form-control form-control-sm" value="{{ nome or '' }}" placeholder="Ex: Manutenção, João">
+                        </div>
 
-        <div class="col-md-3 d-flex align-items-end">
-            <button type="submit" class="btn btn-primary w-100">
-                <i class="bi bi-search"></i> Filtrar
-            </button>
-        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold small">Valor (R$)</label>
+                            <input type="text" name="valor" class="form-control form-control-sm" value="{{ valor or '' }}" placeholder="Ex: 1.234,56">
+                        </div>
 
-    </form>
+                        <div class="col-12 d-flex justify-content-end gap-2 mt-3">
+                            <a href="{{ url_for('receitas_avulsas') }}" class="btn btn-sm btn-outline-secondary">
+                                <i class="bi bi-x-circle me-1"></i> Limpar Filtros
+                            </a>
+                            <button type="submit" class="btn btn-sm btn-primary px-3">
+                                <i class="bi bi-search me-1"></i> Filtrar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
 
-    <!-- Tabela -->
-    {% if receitas %}
-    <div class="table-responsive">
-        <table class="table table-bordered table-striped align-middle">
-            <thead class="table-light">
-                <tr>
-                    <th>Data</th>
-                    <th>Usina</th>
-                    <th>Descrição</th>
-                    <th class="text-end">Valor (R$)</th>
-                    <th>Credor</th>
-                    <th>Referência</th>
-                    <th style="width: 140px;">Ações</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for receita in receitas %}
-                <tr>
-                    <td>{{ receita.data.strftime('%d/%m/%Y') }}</td>
-                    <td>{{ receita.usina.nome }}</td>
-                    <td>{{ receita.descricao }}</td>
-                    <td class="text-end fw-semibold">
-                        {{ receita.valor | formato_brasileiro }}
-                    </td>
-                    <td>{{ receita.credor.nome if receita.credor else '' }}</td>
-                    <td>
-                        {% if receita.referencia_mes and receita.referencia_ano %}
-                            {{ '%02d/%d'|format(receita.referencia_mes, receita.referencia_ano) }}
-                        {% else %}
-                            -
-                        {% endif %}
-                    </td>
-                    <td class="d-flex gap-2">
-                        <a href="{{ url_for('editar_receita_avulsa', id=receita.id) }}"
-                           class="btn btn-sm btn-outline-primary"
-                           title="Editar">
-                            <i class="bi bi-pencil-square"></i>
-                        </a>
+            <!-- Resumo e Tabela -->
+            {% if receitas %}
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <span class="text-muted small">
+                    Exibindo <strong>{{ receitas|length }}</strong> registro(s)
+                </span>
+            </div>
 
-                        <button type="button"
-                                class="btn btn-sm btn-outline-danger"
-                                data-bs-toggle="modal"
-                                data-bs-target="#modalExcluir{{ receita.id }}"
-                                title="Excluir">
-                            <i class="bi bi-trash"></i>
-                        </button>
+            <div class="table-responsive">
+                <table class="table table-hover table-bordered align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th scope="col" style="width: 105px;">Data</th>
+                            <th scope="col">Usina</th>
+                            <th scope="col">Descrição</th>
+                            <th scope="col" class="text-end" style="width: 140px;">Valor (R$)</th>
+                            <th scope="col">Credor</th>
+                            <th scope="col" class="text-center" style="width: 110px;">Ref.</th>
+                            <th scope="col" class="text-center" style="width: 100px;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for receita in receitas %}
+                        <tr>
+                            <td>{{ receita.data.strftime('%d/%m/%Y') }}</td>
+                            <td class="fw-medium">{{ receita.usina.nome }}</td>
+                            <td>{{ (receita.descricao or '').split('|')[0].strip() }}</td>
+                            <td class="text-end fw-bold text-success">
+                                R$ {{ receita.valor | formato_brasileiro }}
+                            </td>
+                            <td>{{ receita.credor.nome if receita.credor else '-' }}</td>
+                            <td class="text-center">
+                                {% if receita.referencia_mes and receita.referencia_ano %}
+                                    <span class="badge bg-light text-dark border">
+                                        {{ '%02d/%d'|format(receita.referencia_mes, receita.referencia_ano) }}
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <a href="{{ url_for('editar_receita_avulsa', id=receita.id) }}"
+                                       class="btn btn-outline-primary"
+                                       title="Editar">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </a>
 
-                        <!-- Modal Excluir -->
-                        <div class="modal fade"
-                             id="modalExcluir{{ receita.id }}"
-                             tabindex="-1"
-                             aria-hidden="true">
-                            <div class="modal-dialog modal-dialog-centered">
-                                <div class="modal-content">
-                                    <div class="modal-header">
-                                        <h5 class="modal-title">Confirmar Exclusão</h5>
-                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                    </div>
-                                    <div class="modal-body">
-                                        Tem certeza que deseja excluir a receita
-                                        <strong>{{ receita.descricao }}</strong>
-                                        do dia {{ receita.data.strftime('%d/%m/%Y') }}?
-                                    </div>
-                                    <div class="modal-footer">
-                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                                            Cancelar
-                                        </button>
-                                        <form method="POST"
-                                              action="{{ url_for('excluir_receita_avulsa', id=receita.id) }}">
-                                            <button type="submit" class="btn btn-danger">
-                                                Excluir
-                                            </button>
-                                        </form>
+                                    <button type="button"
+                                            class="btn btn-outline-danger"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#modalExcluir{{ receita.id }}"
+                                            title="Excluir">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+
+                                <!-- Modal Excluir -->
+                                <div class="modal fade" id="modalExcluir{{ receita.id }}" tabindex="-1" aria-hidden="true">
+                                    <div class="modal-dialog modal-dialog-centered">
+                                        <div class="modal-content text-start">
+                                            <div class="modal-header bg-danger text-white">
+                                                <h5 class="modal-title fs-6 fw-bold">
+                                                    <i class="bi bi-exclamation-triangle-fill me-2"></i>Confirmar Exclusão
+                                                </h5>
+                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                Tem certeza de que deseja excluir a receita 
+                                                <strong>{{ receita.descricao }}</strong> no valor de 
+                                                <strong>R$ {{ receita.valor | formato_brasileiro }}</strong> 
+                                                ({{ receita.data.strftime('%d/%m/%Y') }})?
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                                <form method="POST" action="{{ url_for('excluir_receita_avulsa', id=receita.id) }}" class="d-inline">
+                                                    <button type="submit" class="btn btn-sm btn-danger">Sim, Excluir</button>
+                                                </form>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                        <!-- /Modal -->
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-        <p class="text-muted text-center mb-0">Nenhuma receita encontrada para o período.</p>
-    {% endif %}
+                                <!-- /Modal -->
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <!-- Estado Vazio -->
+            <div class="text-center py-5">
+                <i class="bi bi-inbox text-muted display-4"></i>
+                <p class="text-muted mt-3 mb-0">Nenhuma receita encontrada para os parâmetros informados.</p>
+            </div>
+            {% endif %}
 
+        </div>
+    </div>
 </div>
 {% endblock %}

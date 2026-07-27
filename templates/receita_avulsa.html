@@ -5,89 +5,151 @@
 {% endblock %}
 
 {% block content %}
-<div class="container mt-5 mb-5 p-4 bg-white shadow rounded">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="text-primary">
-            {% if receita %}Editar Receita Avulsa{% else %}Cadastrar Receita Avulsa{% endif %}
-        </h2>
-        <a href="{{ url_for('receitas_avulsas') }}" class="btn btn-secondary">
-            <i class="bi bi-arrow-left"></i> Voltar
-        </a>
+<div class="container mt-4 mb-5">
+    <div class="card shadow-sm border-0">
+        <!-- Cabeçalho do Card -->
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-3">
+            <h5 class="mb-0 fw-bold">
+                <i class="bi bi-journal-plus me-2"></i>
+                {% if receita %}Editar Receita{% else %}Cadastrar Receita Avulsa{% endif %}
+            </h5>
+            <a href="{{ url_for('receitas_avulsas') }}" class="btn btn-sm btn-light fw-semibold">
+                <i class="bi bi-arrow-left me-1"></i> Voltar
+            </a>
+        </div>
+
+        <!-- Corpo do Formulário -->
+        <div class="card-body p-4">
+            <!-- Mensagens Flash -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+              {% if messages %}
+                {% for category, message in messages %}
+                  <div class="alert alert-{{ category }} alert-dismissible fade show mb-4" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+                  </div>
+                {% endfor %}
+              {% endif %}
+            {% endwith %}
+
+            <form method="POST" class="row g-3">
+                <!-- Seção 1: Origem e Destino -->
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">Usina <span class="text-danger">*</span></label>
+                    <select name="usina_id" class="form-select" required>
+                        <option value="">Selecione a usina...</option>
+                        {% for usina in usinas %}
+                            <option value="{{ usina.id }}" {% if receita and receita.usina_id == usina.id %}selected{% endif %}>
+                                {{ usina.nome }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Credor <span class="text-muted">(opcional)</span></label>
+                    <select name="credor_id" class="form-select" id="credor_id_select">
+                        <option value="">Nenhum</option>
+                        {% for credor in credores %}
+                            <option value="{{ credor.id }}" {% if receita and receita.credor_id == credor.id %}selected{% endif %}>
+                                {{ credor.nome }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Seção 2: Detalhes da Receita -->
+                <div class="col-md-12">
+                    <label class="form-label fw-bold">Descrição <span class="text-danger">*</span></label>
+                    <input type="text" name="descricao" class="form-control" placeholder="Ex: Venda de excedente de energia" required
+                           value="{{ receita.descricao if receita else '' }}">
+                </div>
+
+                <!-- Seção 3: Datas -->
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">Data de Lançamento <span class="text-danger">*</span></label>
+                    <input type="date" name="data" class="form-control" required
+                           value="{{ receita.data.strftime('%Y-%m-%d') if receita and receita.data else '' }}">
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Data do Pagamento <span class="text-muted">(opcional)</span></label>
+                    <input type="date" name="data_pagamento" class="form-control"
+                           value="{{ receita.data_pagamento.strftime('%Y-%m-%d') if receita and receita.data_pagamento else '' }}">
+                </div>
+
+                <!-- Seção 4: Valores e Banco -->
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">Valor (R$) <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <span class="input-group-text">R$</span>
+                        <input type="text" name="valor" class="form-control mask-money" required inputmode="decimal" placeholder="0,00"
+                               value="{% if receita %}{{ '%.2f'|format(receita.valor or 0)|replace('.', ',') }}{% endif %}">
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Juros / Acréscimos (R$)</label>
+                    <div class="input-group">
+                        <span class="input-group-text">R$</span>
+                        <input type="text" name="juros" class="form-control mask-money" inputmode="decimal" placeholder="0,00"
+                               value="{% if receita %}{{ '%.2f'|format(receita.juros or 0)|replace('.', ',') }}{% else %}0,00{% endif %}">
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Banco / Conta</label>
+                    <select name="caixa_banco_id" class="form-select">
+                        <option value="">Não informado</option>
+                        {% for banco in bancos %}
+                            <option value="{{ banco.id }}" {% if receita and receita.caixa_banco_id == banco.id %}selected{% endif %}>
+                                {{ banco.nome }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Seção 5: Período de Referência -->
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Mês Referência</label>
+                    <input type="number" name="referencia_mes" min="1" max="12" class="form-control" placeholder="MM"
+                           value="{{ receita.referencia_mes if receita and receita.referencia_mes else '' }}">
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Ano Referência</label>
+                    <input type="number" name="referencia_ano" min="2000" max="2100" class="form-control" placeholder="AAAA"
+                           value="{{ receita.referencia_ano if receita and receita.referencia_ano else '' }}">
+                </div>
+
+                <!-- Botões de Ação -->
+                <div class="col-12 text-end mt-4 pt-3 border-top">
+                    <a href="{{ url_for('receitas_avulsas') }}" class="btn btn-outline-secondary me-2">Cancelar</a>
+                    <button type="submit" class="btn btn-success px-4">
+                        <i class="bi bi-check-circle me-1"></i> {% if receita %}Atualizar Receita{% else %}Salvar Receita{% endif %}
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
-
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, message in messages %}
-          <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-            {{ message }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-          </div>
-        {% endfor %}
-      {% endif %}
-    {% endwith %}
-
-    <form method="POST" class="row g-3">
-        <div class="col-md-6">
-            <label class="form-label">Usina</label>
-            <select name="usina_id" class="form-select" required>
-                <option value="">Selecione</option>
-                {% for usina in usinas %}
-                    <option value="{{ usina.id }}" {% if receita and receita.usina_id == usina.id %}selected{% endif %}>{{ usina.nome }}</option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <div class="col-md-6">
-            <label class="form-label">Credor (opcional)</label>
-            <select name="credor_id" class="form-select" id="credor_id_select">
-                <option value="">Nenhum</option>
-                {% for credor in credores %}
-                    <option value="{{ credor.id }}" {% if receita and receita.credor_id == credor.id %}selected{% endif %}>{{ credor.nome }}</option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <div class="col-md-6">
-            <label class="form-label">Data</label>
-            <input type="date" name="data" class="form-control" required
-                   value="{{ receita.data if receita else '' }}">
-        </div>
-
-        <div class="col-md-6">
-            <label class="form-label">Data Pagamento (opcional)</label>
-            <input type="date" name="data_pagamento" class="form-control"
-                   value="{{ receita.data_pagamento if receita and receita.data_pagamento else '' }}">
-        </div>
-
-        <div class="col-md-8">
-            <label class="form-label">Descrição</label>
-            <input type="text" name="descricao" class="form-control" required
-                   value="{{ receita.descricao if receita else '' }}">
-        </div>
-
-        <div class="col-md-4">
-            <label class="form-label">Valor (R$)</label>
-            <input type="number" name="valor" step="0.01" class="form-control" required
-                   value="{{ receita.valor if receita else '' }}">
-        </div>
-
-        <div class="col-md-3">
-            <label class="form-label">Mês Referência</label>
-            <input type="number" name="referencia_mes" min="1" max="12" class="form-control"
-                   value="{{ receita.referencia_mes if receita else '' }}">
-        </div>
-
-        <div class="col-md-3">
-            <label class="form-label">Ano Referência</label>
-            <input type="number" name="referencia_ano" class="form-control"
-                   value="{{ receita.referencia_ano if receita else '' }}">
-        </div>
-
-        <div class="col-12 d-flex justify-content-end mt-3">
-            <button type="submit" class="btn btn-success">
-                <i class="bi bi-check-circle"></i> {% if receita %}Atualizar{% else %}Salvar Receita{% endif %}
-            </button>
-        </div>
-    </form>
 </div>
+
+<!-- Scripts JS para Máscara de Moeda -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const moneyInputs = document.querySelectorAll('.mask-money');
+    
+    moneyInputs.forEach(input => {
+        input.addEventListener('input', function(e) {
+            let value = e.target.value.replace(/\D/g, '');
+            if (!value) {
+                e.target.value = '';
+                return;
+            }
+            value = (parseInt(value, 10) / 100).toFixed(2);
+            e.target.value = value.replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+        });
+    });
+});
+</script>
 {% endblock %}

@@ -11446,37 +11446,155 @@ def receita_avulsa():
 
     return render_template('receita_avulsa.html', usinas=usinas, credores=credores)
 
-@app.route('/editar_receita_avulsa/<int:id>', methods=['GET', 'POST'])
+@app.route(
+    '/editar_receita_avulsa/<int:id>',
+    methods=['GET', 'POST']
+)
 @login_required
 def editar_receita_avulsa(id):
+
+    if not current_user.pode_acessar_financeiro:
+        abort(403)
+
     receita = FinanceiroUsina.query.get_or_404(id)
 
     if receita.tipo != 'receita':
-        flash("❌ Registro não é do tipo 'receita'.", "danger")
-        return redirect(url_for('relatorio_financeiro'))
+        flash(
+            "Registro não é do tipo receita.",
+            "danger"
+        )
+        return redirect(
+            url_for('receitas_avulsas')
+        )
 
-    usinas = Usina.query.order_by(Usina.nome).all()
-    credores = Credor.query.order_by(Credor.nome).all()
+    usinas = (
+        Usina.query
+        .order_by(Usina.nome)
+        .all()
+    )
+
+    credores = (
+        Credor.query
+        .order_by(Credor.nome)
+        .all()
+    )
+
+    bancos = (
+        CaixaBanco.query
+        .order_by(CaixaBanco.nome)
+        .all()
+    )
+
+    def converter_decimal(valor):
+        valor = str(valor or '').strip()
+
+        if not valor:
+            return Decimal('0.00')
+
+        valor = (
+            valor
+            .replace('R$', '')
+            .replace(' ', '')
+        )
+
+        # Formato brasileiro: 1.234,56
+        if ',' in valor:
+            valor = (
+                valor
+                .replace('.', '')
+                .replace(',', '.')
+            )
+
+        return Decimal(valor)
 
     if request.method == 'POST':
+
         try:
-            receita.usina_id = int(request.form['usina_id'])
+            receita.usina_id = int(
+                request.form['usina_id']
+            )
+
             receita.data = request.form['data']
-            receita.descricao = request.form['descricao']
-            receita.valor = float(request.form['valor'])
-            receita.referencia_mes = int(request.form['referencia_mes']) if request.form['referencia_mes'] else None
-            receita.referencia_ano = int(request.form['referencia_ano']) if request.form['referencia_ano'] else None
-            receita.data_pagamento = request.form['data_pagamento'] or None
-            receita.credor_id = int(request.form['credor_id']) if request.form['credor_id'] else None
+
+            receita.descricao = (
+                request.form['descricao']
+                .strip()
+            )
+
+            receita.valor = converter_decimal(
+                request.form['valor']
+            )
+
+            receita.juros = converter_decimal(
+                request.form.get('juros')
+            )
+
+            receita.referencia_mes = (
+                int(request.form['referencia_mes'])
+                if request.form.get('referencia_mes')
+                else None
+            )
+
+            receita.referencia_ano = (
+                int(request.form['referencia_ano'])
+                if request.form.get('referencia_ano')
+                else None
+            )
+
+            receita.data_pagamento = (
+                request.form.get('data_pagamento')
+                or None
+            )
+
+            receita.credor_id = (
+                int(request.form['credor_id'])
+                if request.form.get('credor_id')
+                else None
+            )
+
+            receita.caixa_banco_id = (
+                int(request.form['caixa_banco_id'])
+                if request.form.get('caixa_banco_id')
+                else None
+            )
 
             db.session.commit()
-            flash("✅ Receita atualizada com sucesso!", "success")
-            return redirect(url_for('editar_receita_avulsa', id=receita.id))
+
+            flash(
+                "Receita atualizada com sucesso!",
+                "success"
+            )
+
+            return redirect(
+                url_for(
+                    'editar_receita_avulsa',
+                    id=receita.id
+                )
+            )
+
+        except (ValueError, InvalidOperation):
+            db.session.rollback()
+
+            flash(
+                "Informe valores numéricos válidos.",
+                "danger"
+            )
+
         except Exception as e:
             db.session.rollback()
-            flash(f"❌ Erro ao atualizar receita: {e}", "danger")
 
-    return render_template('receita_avulsa.html', receita=receita, usinas=usinas, credores=credores)
+            flash(
+                f"Erro ao atualizar receita: {e}",
+                "danger"
+            )
+
+    return render_template(
+        'receita_avulsa.html',
+        receita=receita,
+        usinas=usinas,
+        credores=credores,
+        bancos=bancos
+    )
 
 @app.route('/receitas_avulsas')
 @login_required
