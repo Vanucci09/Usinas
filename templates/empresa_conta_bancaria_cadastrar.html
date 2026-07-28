@@ -2,85 +2,202 @@
 {% block title %}Cadastrar Conta Bancária – Empresa{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-  <h2 class="text-primary mb-4">Cadastrar Conta Bancária – Empresa</h2>
+<div class="container mt-4 mb-5">
 
+  <!-- Cabeçalho -->
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+    <div>
+      <h2 class="text-primary fw-bold mb-1">Nova Conta Bancária</h2>
+      <p class="text-muted small mb-0">Cadastre uma nova conta financeira ou caixa para a empresa</p>
+    </div>
+    <a href="{{ url_for('empresa_contas_listar') }}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i> Voltar para a Lista
+    </a>
+  </div>
+
+  <!-- Mensagens de Alerta (Flash) -->
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
-      <div class="mb-3">
+      <div class="mb-4">
         {% for category, message in messages %}
-          <div class="alert alert-{{ category }}">{{ message }}</div>
+          <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm" role="alert">
+            {{ message|safe }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
         {% endfor %}
       </div>
     {% endif %}
   {% endwith %}
 
+  <!-- Formulário Principal -->
   <form method="POST" action="{{ url_for('empresa_conta_bancaria_cadastrar') }}">
-    <div class="row g-3">
+    
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-body p-4">
+        
+        <!-- Seção 1: Vínculo e Identificação -->
+        <h5 class="fw-bold text-dark mb-3 border-bottom pb-2">
+          <i class="bi bi-building me-2 text-primary"></i>Informações Principais
+        </h5>
+        
+        <div class="row g-3 mb-4">
+          <!-- Empresa Principal -->
+          <div class="col-md-6">
+            <label for="empresa_id" class="form-label fw-medium text-secondary small">Empresa <span class="text-danger">*</span></label>
+            <select name="empresa_id" id="empresa_id" class="form-select" required>
+              <option value="">Selecione uma empresa...</option>
+              {% for emp in empresas %}
+                <option value="{{ emp.id }}" {% if request.form.get('empresa_id')|string == emp.id|string %}selected{% endif %}>
+                  {{ emp.nome }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
 
-      <!-- Empresa -->
-      <div class="col-md-4">
-        <label for="empresa_id" class="form-label">Empresa *</label>
-        <select name="empresa_id" id="empresa_id" class="form-select" required>
-          <option value="">Selecione...</option>
-          {% for emp in empresas %}
-          <option value="{{ emp.id }}">{{ emp.nome }}</option>
-          {% endfor %}
-        </select>
+          <!-- Empresa Investidora -->
+          <div class="col-md-6">
+            <label for="empresa_investidora_id" class="form-label fw-medium text-secondary small">Empresa Investidora (Opcional)</label>
+            <select name="empresa_investidora_id" id="empresa_investidora_id" class="form-select">
+              <option value="">Nenhuma empresa investidora</option>
+              {% for investidora in empresas_investidoras %}
+                <option value="{{ investidora.id }}" {% if request.form.get('empresa_investidora_id')|string == investidora.id|string %}selected{% endif %}>
+                  {{ investidora.razao_social }} {% if investidora.cnpj %}— (CNPJ: {{ investidora.cnpj }}){% endif %}
+                </option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Vincule apenas se a conta for administrada por uma investidora.</div>
+          </div>
+
+          <!-- Nome da Conta -->
+          <div class="col-md-6">
+            <label for="nome" class="form-label fw-medium text-secondary small">Nome / Apelido da Conta <span class="text-danger">*</span></label>
+            <input type="text" 
+                   name="nome" 
+                   id="nome" 
+                   class="form-control" 
+                   value="{{ request.form.get('nome', '') }}" 
+                   placeholder="Ex.: Caixa Geral, BB Conta Corrente, Mercado Pago" 
+                   required>
+          </div>
+
+          <!-- Tipo de Conta -->
+          <div class="col-md-6">
+            <label for="tipo" class="form-label fw-medium text-secondary small">Tipo <span class="text-danger">*</span></label>
+            <select name="tipo" id="tipo" class="form-select" required onchange="toggleDadosBancarios()">
+              <option value="">Selecione...</option>
+              <option value="Caixa" {% if request.form.get('tipo') == 'Caixa' %}selected{% endif %}>Caixa Físico</option>
+              <option value="Banco" {% if request.form.get('tipo') == 'Banco' %}selected{% endif %}>Banco Tradicional</option>
+              <option value="Conta Digital" {% if request.form.get('tipo') == 'Conta Digital' %}selected{% endif %}>Conta Digital / Fintech</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Seção 2: Dados Bancários e Saldo -->
+        <h5 class="fw-bold text-dark mb-3 border-bottom pb-2">
+          <i class="bi bi-bank me-2 text-primary"></i>Dados Bancários e Saldo
+        </h5>
+
+        <div class="row g-3">
+          <!-- Banco -->
+          <div class="col-md-4 campo-bancario">
+            <label for="banco" class="form-label fw-medium text-secondary small">Instituição / Banco</label>
+            <input type="text" 
+                   name="banco" 
+                   id="banco" 
+                   class="form-control" 
+                   value="{{ request.form.get('banco', '') }}" 
+                   placeholder="Ex.: Banco do Brasil, Itaú, Nubank">
+          </div>
+
+          <!-- Agência -->
+          <div class="col-md-4 campo-bancario">
+            <label for="agencia" class="form-label fw-medium text-secondary small">Agência</label>
+            <input type="text" 
+                   name="agencia" 
+                   id="agencia" 
+                   class="form-control" 
+                   value="{{ request.form.get('agencia', '') }}" 
+                   placeholder="Ex.: 0001-9">
+          </div>
+
+          <!-- Conta -->
+          <div class="col-md-4 campo-bancario">
+            <label for="conta" class="form-label fw-medium text-secondary small">Número da Conta</label>
+            <input type="text" 
+                   name="conta" 
+                   id="conta" 
+                   class="form-control" 
+                   value="{{ request.form.get('conta', '') }}" 
+                   placeholder="Ex.: 12345-6">
+          </div>
+
+          <!-- Saldo Inicial -->
+          <div class="col-md-6">
+            <label for="saldo_inicial" class="form-label fw-medium text-secondary small">Saldo Inicial</label>
+            <div class="input-group">
+              <span class="input-group-text bg-light text-muted">R$</span>
+              <input type="text" 
+                     name="saldo_inicial" 
+                     id="saldo_inicial" 
+                     class="form-control" 
+                     value="{{ request.form.get('saldo_inicial', '0,00') }}" 
+                     placeholder="0,00"
+                     onkeyup="formatarMoeda(this)">
+            </div>
+            <div class="form-text">Este valor definirá o ponto de partida do saldo atual.</div>
+          </div>
+        </div>
+
       </div>
 
-      <!-- Nome -->
-      <div class="col-md-4">
-        <label for="nome" class="form-label">Nome da Conta *</label>
-        <input type="text" name="nome" id="nome" class="form-control" placeholder="Ex.: Caixa Geral, Banco do Brasil" required>
-      </div>
-
-      <!-- Tipo -->
-      <div class="col-md-4">
-        <label for="tipo" class="form-label">Tipo *</label>
-        <select name="tipo" id="tipo" class="form-select" required>
-          <option value="">Selecione...</option>
-          <option value="Caixa">Caixa</option>
-          <option value="Banco">Banco</option>
-          <option value="Conta Digital">Conta Digital</option>
-        </select>
-      </div>
-
-      <!-- Banco -->
-      <div class="col-md-4">
-        <label for="banco" class="form-label">Banco</label>
-        <input type="text" name="banco" id="banco" class="form-control" placeholder="Ex.: Banco do Brasil, Nubank, C6 Bank">
-      </div>
-
-      <!-- Agência -->
-      <div class="col-md-4">
-        <label for="agencia" class="form-label">Agência</label>
-        <input type="text" name="agencia" id="agencia" class="form-control" placeholder="Ex.: 1234-5">
-      </div>
-
-      <!-- Conta -->
-      <div class="col-md-4">
-        <label for="conta" class="form-label">Conta</label>
-        <input type="text" name="conta" id="conta" class="form-control" placeholder="Ex.: 000123-4">
-      </div>
-
-      <!-- Saldo Inicial -->
-      <div class="col-md-4">
-        <label for="saldo_inicial" class="form-label">Saldo Inicial (R$)</label>
-        <input type="text" name="saldo_inicial" id="saldo_inicial" class="form-control" placeholder="Ex.: 5.000,00">
-        <small class="text-muted">Será também o saldo atual inicial.</small>
+      <!-- Rodapé do Card com Ações -->
+      <div class="card-footer bg-light p-3 d-flex justify-content-end gap-2">
+        <a href="{{ url_for('empresa_contas_listar') }}" class="btn btn-outline-secondary px-4">
+          Cancelar
+        </a>
+        <button type="submit" class="btn btn-success px-4">
+          <i class="bi bi-check-lg me-1"></i> Salvar Conta
+        </button>
       </div>
 
     </div>
 
-    <div class="d-flex flex-column flex-md-row justify-content-end align-items-stretch gap-2 mt-4">
-      <a href="{{ url_for('empresa_contas_listar') }}" class="btn btn-outline-secondary w-100 w-md-auto">
-        <i class="bi bi-arrow-left me-2"></i> Voltar
-      </a>
-      <button type="submit" class="btn btn-success w-100 w-md-auto">
-        <i class="bi bi-check2-circle me-2"></i> Salvar
-      </button>
-    </div>
   </form>
+
 </div>
+
+<!-- Scripts de Interatividade em Tela -->
+<script>
+  // Oculta/Exibe dados bancários caso seja um Caixa físico
+  function toggleDadosBancarios() {
+    const tipo = document.getElementById('tipo').value;
+    const camposBancarios = document.querySelectorAll('.campo-bancario');
+    
+    camposBancarios.forEach(el => {
+      const input = el.querySelector('input');
+      if (tipo === 'Caixa') {
+        el.style.opacity = '0.5';
+        if (input) input.value = '';
+      } else {
+        el.style.opacity = '1';
+      }
+    });
+  }
+
+  // Formatação simples de moeda BRL durante digitação
+  function formatarMoeda(input) {
+    let valor = input.value.replace(/\D/g, '');
+    if (!valor) {
+      input.value = '';
+      return;
+    }
+    valor = (parseInt(valor) / 100).toFixed(2) + '';
+    valor = valor.replace('.', ',');
+    valor = valor.replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1.');
+    input.value = valor;
+  }
+
+  // Executa na inicialização da página
+  document.addEventListener('DOMContentLoaded', toggleDadosBancarios);
+</script>
 {% endblock %}

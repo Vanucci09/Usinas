@@ -188,7 +188,7 @@
                                                 required>
                                             <option value="">Banco</option>
 
-                                            {% for conta in contas_bancos %}
+                                            {% for conta in item.contas_bancos %}
                                                 <option value="{{ conta.id }}">
                                                     {{ conta.nome }}
                                                 </option>

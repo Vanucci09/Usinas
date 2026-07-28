@@ -2,85 +2,221 @@
 {% block title %}Editar Conta Bancária – {{ conta.nome }}{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-  <h2 class="text-primary mb-4">Editar Conta – {{ conta.nome }}</h2>
+<div class="container mt-4 mb-5">
 
+  <!-- Cabeçalho -->
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+    <div>
+      <h2 class="text-primary fw-bold mb-1">Editar Conta Bancária</h2>
+      <p class="text-muted small mb-0">Atualize as informações cadastrais e saldos da conta <strong>{{ conta.nome }}</strong></p>
+    </div>
+    <a href="{{ url_for('empresa_contas_listar', empresa_investidora_id=conta.empresa_investidora_id) }}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i> Voltar para a Lista
+    </a>
+  </div>
+
+  <!-- Mensagens de Alerta (Flash) -->
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
-      <div class="mb-3">
+      <div class="mb-4">
         {% for category, message in messages %}
-          <div class="alert alert-{{ category }}">{{ message }}</div>
+          <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm" role="alert">
+            {{ message|safe }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
         {% endfor %}
       </div>
     {% endif %}
   {% endwith %}
 
+  <!-- Formulário Principal -->
   <form method="POST" action="{{ url_for('empresa_conta_bancaria_editar', conta_id=conta.id) }}">
-    <div class="row g-3">
 
-      <div class="col-md-4">
-        <label class="form-label">Empresa *</label>
-        <select name="empresa_id" class="form-select" required>
-          {% for emp in empresas %}
-            <option value="{{ emp.id }}" {% if emp.id == conta.empresa_id %}selected{% endif %}>{{ emp.nome }}</option>
-          {% endfor %}
-        </select>
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-body p-4">
+
+        <!-- Seção 1: Vínculo e Identificação -->
+        <h5 class="fw-bold text-dark mb-3 border-bottom pb-2">
+          <i class="bi bi-building me-2 text-primary"></i>Informações Principais
+        </h5>
+
+        <div class="row g-3 mb-4">
+          <!-- Empresa Principal -->
+          <div class="col-md-6">
+            <label for="empresa_id" class="form-label fw-medium text-secondary small">Empresa <span class="text-danger">*</span></label>
+            <select name="empresa_id" id="empresa_id" class="form-select" required>
+              <option value="">Selecione...</option>
+              {% for emp in empresas %}
+                {% set sel_emp = request.form.get('empresa_id')|int if request.form else conta.empresa_id %}
+                <option value="{{ emp.id }}" {% if sel_emp == emp.id %}selected{% endif %}>
+                  {{ emp.nome }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <!-- Empresa Investidora -->
+          <div class="col-md-6">
+            <label for="empresa_investidora_id" class="form-label fw-medium text-secondary small">Empresa Investidora (Opcional)</label>
+            <select name="empresa_investidora_id" id="empresa_investidora_id" class="form-select">
+              <option value="">Nenhuma empresa investidora</option>
+              {% for investidora in empresas_investidoras %}
+                {% set sel_inv = request.form.get('empresa_investidora_id')|int if request.form else conta.empresa_investidora_id %}
+                <option value="{{ investidora.id }}" {% if sel_inv == investidora.id %}selected{% endif %}>
+                  {{ investidora.razao_social }} {% if investidora.cnpj %}— (CNPJ: {{ investidora.cnpj }}){% endif %}
+                </option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Empresa investidora vinculada a esta conta.</div>
+          </div>
+
+          <!-- Nome da Conta -->
+          <div class="col-md-6">
+            <label for="nome" class="form-label fw-medium text-secondary small">Nome / Apelido da Conta <span class="text-danger">*</span></label>
+            <input type="text" 
+                   name="nome" 
+                   id="nome" 
+                   class="form-control" 
+                   value="{{ request.form.get('nome', conta.nome) }}" 
+                   required>
+          </div>
+
+          <!-- Tipo de Conta -->
+          <div class="col-md-6">
+            <label for="tipo" class="form-label fw-medium text-secondary small">Tipo <span class="text-danger">*</span></label>
+            {% set tipo_selecionado = request.form.get('tipo', conta.tipo) %}
+            <select name="tipo" id="tipo" class="form-select" required onchange="toggleDadosBancarios()">
+              <option value="">Selecione...</option>
+              {% for t in ['Caixa', 'Banco', 'Conta Digital'] %}
+                <option value="{{ t }}" {% if tipo_selecionado == t %}selected{% endif %}>
+                  {% if t == 'Caixa' %}Caixa Físico{% elif t == 'Conta Digital' %}Conta Digital / Fintech{% else %}Banco Tradicional{% endif %}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <!-- Seção 2: Dados Bancários e Saldos -->
+        <h5 class="fw-bold text-dark mb-3 border-bottom pb-2">
+          <i class="bi bi-bank me-2 text-primary"></i>Dados Bancários e Saldos
+        </h5>
+
+        <div class="row g-3">
+          <!-- Banco -->
+          <div class="col-md-4 campo-bancario">
+            <label for="banco" class="form-label fw-medium text-secondary small">Instituição / Banco</label>
+            <input type="text" 
+                   name="banco" 
+                   id="banco" 
+                   class="form-control" 
+                   value="{{ request.form.get('banco', conta.banco or '') }}" 
+                   placeholder="Ex.: Banco do Brasil, Itaú">
+          </div>
+
+          <!-- Agência -->
+          <div class="col-md-4 campo-bancario">
+            <label for="agencia" class="form-label fw-medium text-secondary small">Agência</label>
+            <input type="text" 
+                   name="agencia" 
+                   id="agencia" 
+                   class="form-control" 
+                   value="{{ request.form.get('agencia', conta.agencia or '') }}" 
+                   placeholder="Ex.: 1234-5">
+          </div>
+
+          <!-- Conta -->
+          <div class="col-md-4 campo-bancario">
+            <label for="conta" class="form-label fw-medium text-secondary small">Número da Conta</label>
+            <input type="text" 
+                   name="conta" 
+                   id="conta" 
+                   class="form-control" 
+                   value="{{ request.form.get('conta', conta.conta or '') }}" 
+                   placeholder="Ex.: 000123-4">
+          </div>
+
+          <!-- Saldo Inicial -->
+          <div class="col-md-6">
+            <label for="saldo_inicial" class="form-label fw-medium text-secondary small">Saldo Inicial</label>
+            <div class="input-group">
+              <span class="input-group-text bg-light text-muted">R$</span>
+              {% set val_inicial = request.form.get('saldo_inicial') if request.form.get('saldo_inicial') is not none else '{:,.2f}'.format(conta.saldo_inicial or 0).replace(',', 'X').replace('.', ',').replace('X', '.') %}
+              <input type="text" 
+                     name="saldo_inicial" 
+                     id="saldo_inicial" 
+                     class="form-control" 
+                     value="{{ val_inicial }}" 
+                     onkeyup="formatarMoeda(this)">
+            </div>
+            <div class="form-text">Altera apenas o valor inicial cadastral.</div>
+          </div>
+
+          <!-- Saldo Atual -->
+          <div class="col-md-6">
+            <label for="saldo_atual" class="form-label fw-medium text-secondary small">Saldo Atual</label>
+            <div class="input-group">
+              <span class="input-group-text bg-light text-muted">R$</span>
+              {% set val_atual = request.form.get('saldo_atual') if request.form.get('saldo_atual') is not none else '{:,.2f}'.format(conta.saldo_atual or 0).replace(',', 'X').replace('.', ',').replace('X', '.') %}
+              <input type="text" 
+                     name="saldo_atual" 
+                     id="saldo_atual" 
+                     class="form-control" 
+                     value="{{ val_atual }}" 
+                     onkeyup="formatarMoeda(this)">
+            </div>
+            <div class="form-text">Ajuste manual direto do saldo atual da conta.</div>
+          </div>
+        </div>
+
       </div>
 
-      <div class="col-md-4">
-        <label class="form-label">Nome da Conta *</label>
-        <input type="text" name="nome" class="form-control" value="{{ conta.nome }}" required>
-      </div>
-
-      <div class="col-md-4">
-        <label class="form-label">Tipo *</label>
-        <select name="tipo" class="form-select" required>
-          {% set tipos = ['Caixa','Banco','Conta Digital'] %}
-          {% for t in tipos %}
-            <option value="{{ t }}" {% if conta.tipo == t %}selected{% endif %}>{{ t }}</option>
-          {% endfor %}
-        </select>
-      </div>
-
-      <div class="col-md-4">
-        <label class="form-label">Banco</label>
-        <input type="text" name="banco" class="form-control" value="{{ conta.banco or '' }}" placeholder="Ex.: Banco do Brasil, Nubank">
-      </div>
-
-      <div class="col-md-4">
-        <label class="form-label">Agência</label>
-        <input type="text" name="agencia" class="form-control" value="{{ conta.agencia or '' }}" placeholder="Ex.: 1234-5">
-      </div>
-
-      <div class="col-md-4">
-        <label class="form-label">Conta</label>
-        <input type="text" name="conta" class="form-control" value="{{ conta.conta or '' }}" placeholder="Ex.: 000123-4">
-      </div>
-
-      <div class="col-md-4">
-        <label class="form-label">Saldo Inicial (R$)</label>
-        <input type="text" name="saldo_inicial" class="form-control"
-               value="{{ '{:,.2f}'.format(conta.saldo_inicial or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}">
-        <small class="text-muted">Altera o valor cadastral; não ajusta movimentos históricos.</small>
-      </div>
-
-      <div class="col-md-4">
-        <label class="form-label">Saldo Atual (R$)</label>
-        <input type="text" name="saldo_atual" class="form-control"
-               value="{{ '{:,.2f}'.format(conta.saldo_atual or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}">
-        <small class="text-muted">Ajuste manual se necessário.</small>
+      <!-- Rodapé do Card com Ações -->
+      <div class="card-footer bg-light p-3 d-flex justify-content-end gap-2">
+        <a href="{{ url_for('empresa_contas_listar', empresa_investidora_id=conta.empresa_investidora_id) }}" class="btn btn-outline-secondary px-4">
+          Cancelar
+        </a>
+        <button type="submit" class="btn btn-primary px-4">
+          <i class="bi bi-check-lg me-1"></i> Salvar Alterações
+        </button>
       </div>
 
     </div>
 
-    <div class="d-flex flex-column flex-md-row justify-content-end align-items-stretch gap-2 mt-4">
-      <a href="{{ url_for('empresa_contas_listar', empresa_id=conta.empresa_id) }}" class="btn btn-outline-secondary w-100 w-md-auto">
-        <i class="bi bi-arrow-left me-2"></i> Voltar
-      </a>
-      <button type="submit" class="btn btn-success w-100 w-md-auto">
-        <i class="bi bi-check2-circle me-2"></i> Salvar
-      </button>
-    </div>
   </form>
+
 </div>
+
+<!-- Scripts de Interatividade em Tela -->
+<script>
+  // Oculta/Exibe e trata opacidade de campos bancários se for Caixa Físico
+  function toggleDadosBancarios() {
+    const tipo = document.getElementById('tipo').value;
+    const camposBancarios = document.querySelectorAll('.campo-bancario');
+    
+    camposBancarios.forEach(el => {
+      const input = el.querySelector('input');
+      if (tipo === 'Caixa') {
+        el.style.opacity = '0.5';
+      } else {
+        el.style.opacity = '1';
+      }
+    });
+  }
+
+  // Formatação em tempo real de Moeda BRL
+  function formatarMoeda(input) {
+    let valor = input.value.replace(/\D/g, '');
+    if (!valor) {
+      input.value = '0,00';
+      return;
+    }
+    valor = (parseInt(valor) / 100).toFixed(2) + '';
+    valor = valor.replace('.', ',');
+    valor = valor.replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1.');
+    input.value = valor;
+  }
+
+  // Executa o ajuste visual na inicialização da página
+  document.addEventListener('DOMContentLoaded', toggleDadosBancarios);
+</script>
 {% endblock %}

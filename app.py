@@ -573,17 +573,71 @@ class FinanceiroAnexo(db.Model):
 class CaixaBanco(db.Model):
     __tablename__ = 'caixas_bancos'
 
-    id = db.Column(db.Integer, primary_key=True)
-    empresa_id = db.Column(db.Integer, db.ForeignKey('empresas.id'), nullable=False)
-    nome = db.Column(db.String(120), nullable=False)  # Ex: Caixa Geral, Banco do Brasil, Nubank PJ
-    tipo = db.Column(db.String(50), nullable=False)   # Ex: 'Caixa', 'Banco', 'Conta Digital'
-    saldo_inicial = db.Column(db.Numeric(12, 2), default=0)
-    saldo_atual = db.Column(db.Numeric(12, 2), default=0)
-    agencia = db.Column(db.String(20), nullable=True)
-    conta = db.Column(db.String(20), nullable=True)
-    banco = db.Column(db.String(100), nullable=True)
+    id = db.Column(
+        db.Integer,
+        primary_key=True
+    )
 
-    movimentacoes = db.relationship('MovimentoCaixaBanco', backref='conta', cascade="all, delete-orphan")
+    empresa_id = db.Column(
+        db.Integer,
+        db.ForeignKey('empresas.id'),
+        nullable=False
+    )
+
+    empresa_investidora_id = db.Column(
+        db.Integer,
+        db.ForeignKey('empresas_investidoras.id'),
+        nullable=True
+    )
+
+    nome = db.Column(
+        db.String(120),
+        nullable=False
+    )
+
+    tipo = db.Column(
+        db.String(50),
+        nullable=False
+    )
+
+    saldo_inicial = db.Column(
+        db.Numeric(12, 2),
+        default=0
+    )
+
+    saldo_atual = db.Column(
+        db.Numeric(12, 2),
+        default=0
+    )
+
+    agencia = db.Column(
+        db.String(20),
+        nullable=True
+    )
+
+    conta = db.Column(
+        db.String(20),
+        nullable=True
+    )
+
+    banco = db.Column(
+        db.String(100),
+        nullable=True
+    )
+
+    empresa_investidora = db.relationship(
+        'EmpresaInvestidora',
+        backref=db.backref(
+            'contas_bancarias',
+            lazy=True
+        )
+    )
+
+    movimentacoes = db.relationship(
+        'MovimentoCaixaBanco',
+        backref='conta',
+        cascade='all, delete-orphan'
+    )
 
 class MovimentoCaixaBanco(db.Model):
     __tablename__ = 'movimentos_caixa_banco'
@@ -7980,25 +8034,62 @@ def registrar_despesa():
 @app.route('/financeiro')
 @login_required
 def financeiro():
+
     if not current_user.pode_acessar_financeiro:
         return "Acesso negado", 403
 
-    # Dados para os selects
-    usinas = Usina.query.order_by(Usina.nome).all()
-    categorias = CategoriaDespesa.query.order_by(CategoriaDespesa.nome).all()
+    usinas = (
+        Usina.query
+        .order_by(
+            Usina.nome
+        )
+        .all()
+    )
 
-    # Filtros de período e entidades
-    mes = request.args.get('mes', default=date.today().month, type=int)
-    ano = request.args.get('ano', default=date.today().year, type=int)
-    usina_id = request.args.get('usina_id', type=int)
-    tipo = request.args.get('tipo')                   # 'receita' ou 'despesa'
-    categoria_id = request.args.get('categoria_id', type=int)
+    categorias = (
+        CategoriaDespesa.query
+        .order_by(
+            CategoriaDespesa.nome
+        )
+        .all()
+    )
 
-    # Parâmetros de ordenação
-    sort = request.args.get('sort', default='data_pagamento')
-    direction = request.args.get('direction', default='desc')  # 'asc' ou 'desc'
+    mes = request.args.get(
+        'mes',
+        default=date.today().month,
+        type=int
+    )
 
-    # Mapeamento seguro das colunas ordenáveis
+    ano = request.args.get(
+        'ano',
+        default=date.today().year,
+        type=int
+    )
+
+    usina_id = request.args.get(
+        'usina_id',
+        type=int
+    )
+
+    tipo = request.args.get(
+        'tipo'
+    )
+
+    categoria_id = request.args.get(
+        'categoria_id',
+        type=int
+    )
+
+    sort = request.args.get(
+        'sort',
+        default='data_pagamento'
+    )
+
+    direction = request.args.get(
+        'direction',
+        default='desc'
+    )
+
     allowed_sorts = {
         'tipo': FinanceiroUsina.tipo,
         'usina': Usina.nome,
@@ -8009,69 +8100,219 @@ def financeiro():
         'referencia': FinanceiroUsina.referencia_ano,
         'data_pagamento': FinanceiroUsina.data_pagamento,
     }
-    sort_col = allowed_sorts.get(sort, FinanceiroUsina.data_pagamento)
 
-    # Query base com LEFT OUTER JOIN para incluir receitas sem usina/categoria vinculadas
+    sort_col = allowed_sorts.get(
+        sort,
+        FinanceiroUsina.data_pagamento
+    )
+
     query = (
         FinanceiroUsina.query
         .options(
-            joinedload(FinanceiroUsina.credor),
-            joinedload(FinanceiroUsina.usina),
-            joinedload(FinanceiroUsina.categoria)
+            joinedload(
+                FinanceiroUsina.credor
+            ),
+            joinedload(
+                FinanceiroUsina.usina
+            ),
+            joinedload(
+                FinanceiroUsina.categoria
+            )
         )
-        .outerjoin(Usina, FinanceiroUsina.usina_id == Usina.id)
-        .outerjoin(CategoriaDespesa, FinanceiroUsina.categoria_id == CategoriaDespesa.id)
+        .outerjoin(
+            Usina,
+            FinanceiroUsina.usina_id == Usina.id
+        )
+        .outerjoin(
+            CategoriaDespesa,
+            FinanceiroUsina.categoria_id
+            == CategoriaDespesa.id
+        )
         .filter(
             FinanceiroUsina.referencia_mes == mes,
             FinanceiroUsina.referencia_ano == ano
         )
     )
 
-    # Aplica demais filtros
     if usina_id:
-        query = query.filter(FinanceiroUsina.usina_id == usina_id)
-    if tipo in ['receita', 'despesa']:
-        query = query.filter(FinanceiroUsina.tipo == tipo)
-    if categoria_id:
-        query = query.filter(FinanceiroUsina.categoria_id == categoria_id)
 
-    # Ordenação dinâmica
+        query = query.filter(
+            FinanceiroUsina.usina_id == usina_id
+        )
+
+    if tipo in ['receita', 'despesa']:
+
+        query = query.filter(
+            FinanceiroUsina.tipo == tipo
+        )
+
+    if categoria_id:
+
+        query = query.filter(
+            FinanceiroUsina.categoria_id
+            == categoria_id
+        )
+
     if direction == 'asc':
-        query = query.order_by(sort_col.asc())
+
+        query = query.order_by(
+            sort_col.asc()
+        )
+
     else:
-        query = query.order_by(sort_col.desc())
+
+        query = query.order_by(
+            sort_col.desc()
+        )
 
     registros = query.all()
 
-    # Monta lista para o template e calcula totais
+    # ==========================================================
+    # EMPRESAS INVESTIDORAS VINCULADAS A CADA USINA
+    # ==========================================================
+
+    empresas_por_usina = {}
+
+    vinculos = (
+        UsinaInvestidora.query
+        .all()
+    )
+
+    for vinculo in vinculos:
+
+        empresas_por_usina.setdefault(
+            vinculo.usina_id,
+            []
+        ).append(
+            vinculo.empresa_id
+        )
+
+    # ==========================================================
+    # CONTAS BANCÁRIAS AGRUPADAS POR EMPRESA INVESTIDORA
+    # ==========================================================
+
+    contas_por_empresa = {}
+
+    contas = (
+        CaixaBanco.query
+        .filter(
+            CaixaBanco.empresa_investidora_id.isnot(
+                None
+            )
+        )
+        .order_by(
+            CaixaBanco.nome.asc()
+        )
+        .all()
+    )
+
+    for conta in contas:
+
+        contas_por_empresa.setdefault(
+            conta.empresa_investidora_id,
+            []
+        ).append(
+            conta
+        )
+
     financeiro = []
+
     total_receitas = Decimal('0')
     total_despesas = Decimal('0')
-    
-    contas_bancos = CaixaBanco.query.order_by(
-        CaixaBanco.nome
-    ).all()
 
     for r in registros:
-        valor = Decimal(str(r.valor or 0))
-        juros = Decimal(str(r.juros or 0))
+
+        valor = Decimal(
+            str(
+                r.valor or 0
+            )
+        )
+
+        juros = Decimal(
+            str(
+                r.juros or 0
+            )
+        )
+
+        contas_bancos = []
+
+        # Evita que a mesma conta apareça duplicada
+        contas_adicionadas = set()
+
+        if r.usina_id:
+
+            empresas_ids = empresas_por_usina.get(
+                r.usina_id,
+                []
+            )
+
+            for empresa_investidora_id in empresas_ids:
+
+                contas_da_empresa = contas_por_empresa.get(
+                    empresa_investidora_id,
+                    []
+                )
+
+                for conta_banco in contas_da_empresa:
+
+                    if conta_banco.id not in contas_adicionadas:
+
+                        contas_bancos.append(
+                            conta_banco
+                        )
+
+                        contas_adicionadas.add(
+                            conta_banco.id
+                        )
 
         financeiro.append({
             'id': r.id,
             'tipo': r.tipo,
-            'usina': r.usina.nome if r.usina else 'N/A',
-            'categoria': r.categoria.nome if r.categoria else '-',
-            'credor': r.credor.nome if r.credor else '-',
+
+            'usina': (
+                r.usina.nome
+                if r.usina
+                else 'N/A'
+            ),
+
+            'categoria': (
+                r.categoria.nome
+                if r.categoria
+                else '-'
+            ),
+
+            'credor': (
+                r.credor.nome
+                if r.credor
+                else '-'
+            ),
+
             'descricao': r.descricao,
+
             'valor': valor,
-            'juros': float(juros),
-            'referencia': f"{r.referencia_mes:02d}/{r.referencia_ano}",
-            'data_pagamento': r.data_pagamento
+
+            'juros': float(
+                juros
+            ),
+
+            'referencia': (
+                f'{r.referencia_mes:02d}/'
+                f'{r.referencia_ano}'
+            ),
+
+            'data_pagamento': r.data_pagamento,
+
+            'contas_bancos': contas_bancos
         })
 
         if r.tipo == 'receita':
-            total_receitas += valor + juros
+
+            total_receitas += (
+                valor + juros
+            )
+
         else:
+
             total_despesas += valor
 
     return render_template(
@@ -8079,7 +8320,6 @@ def financeiro():
         financeiro=financeiro,
         usinas=usinas,
         categorias=categorias,
-        contas_bancos=contas_bancos,
         mes=mes,
         ano=ano,
         usina_id=usina_id,
@@ -15882,35 +16122,140 @@ def excluir_plano_financeiro(plano_id):
         flash(f'Erro ao excluir: {e}', 'danger')
     return redirect(url_for('listar_planos_financeiros'))
 
-@app.route('/empresa/conta_bancaria/cadastrar', methods=['GET', 'POST'], endpoint='empresa_conta_bancaria_cadastrar')
+@app.route(
+    '/empresa/conta_bancaria/cadastrar',
+    methods=['GET', 'POST'],
+    endpoint='empresa_conta_bancaria_cadastrar'
+)
 @login_required
 def empresa_conta_bancaria_cadastrar():
-    empresas = Empresa.query.order_by(Empresa.nome.asc()).all()
+    empresas = (
+        Empresa.query
+        .order_by(
+            Empresa.nome.asc()
+        )
+        .all()
+    )
+
+    empresas_investidoras = (
+        EmpresaInvestidora.query
+        .order_by(
+            EmpresaInvestidora.razao_social.asc()
+        )
+        .all()
+    )
 
     if request.method == 'POST':
-        empresa_id = request.form.get('empresa_id', type=int)
-        nome = (request.form.get('nome') or '').strip()
-        tipo = (request.form.get('tipo') or '').strip()
-        saldo_inicial = _parse_decimal_br(request.form.get('saldo_inicial'))
-        agencia = (request.form.get('agencia') or '').strip() or None
-        conta = (request.form.get('conta') or '').strip() or None
-        banco = (request.form.get('banco') or '').strip() or None
+        empresa_id = request.form.get(
+            'empresa_id',
+            type=int
+        )
 
-        # Validações básicas
-        emp = db.session.get(Empresa, empresa_id) if empresa_id else None
-        if not emp:
-            flash('Selecione uma empresa válida.', 'danger')
-            return redirect(url_for('empresa_conta_bancaria_cadastrar'))
+        empresa_investidora_id = request.form.get(
+            'empresa_investidora_id',
+            type=int
+        )
+
+        nome = (
+            request.form.get('nome') or ''
+        ).strip()
+
+        tipo = (
+            request.form.get('tipo') or ''
+        ).strip()
+
+        saldo_inicial = _parse_decimal_br(
+            request.form.get('saldo_inicial')
+        )
+
+        agencia = (
+            request.form.get('agencia') or ''
+        ).strip() or None
+
+        conta = (
+            request.form.get('conta') or ''
+        ).strip() or None
+
+        banco = (
+            request.form.get('banco') or ''
+        ).strip() or None
+
+        # Validação da empresa principal
+        empresa = (
+            db.session.get(
+                Empresa,
+                empresa_id
+            )
+            if empresa_id
+            else None
+        )
+
+        if not empresa:
+            flash(
+                'Selecione uma empresa válida.',
+                'danger'
+            )
+
+            return redirect(
+                url_for(
+                    'empresa_conta_bancaria_cadastrar'
+                )
+            )
+
+        # Validação da empresa investidora
+        empresa_investidora = None
+
+        if empresa_investidora_id:
+            empresa_investidora = db.session.get(
+                EmpresaInvestidora,
+                empresa_investidora_id
+            )
+
+            if not empresa_investidora:
+                flash(
+                    'Selecione uma empresa investidora válida.',
+                    'danger'
+                )
+
+                return redirect(
+                    url_for(
+                        'empresa_conta_bancaria_cadastrar'
+                    )
+                )
+
         if not nome:
-            flash('O nome da conta é obrigatório.', 'danger')
-            return redirect(url_for('empresa_conta_bancaria_cadastrar'))
+            flash(
+                'O nome da conta é obrigatório.',
+                'danger'
+            )
+
+            return redirect(
+                url_for(
+                    'empresa_conta_bancaria_cadastrar'
+                )
+            )
+
         if not tipo:
-            flash('Informe o tipo da conta.', 'danger')
-            return redirect(url_for('empresa_conta_bancaria_cadastrar'))
+            flash(
+                'Informe o tipo da conta.',
+                'danger'
+            )
+
+            return redirect(
+                url_for(
+                    'empresa_conta_bancaria_cadastrar'
+                )
+            )
 
         try:
+
             conta_banco = CaixaBanco(
-                empresa_id=empresa_id,
+                empresa_id=empresa.id,
+                empresa_investidora_id=(
+                    empresa_investidora.id
+                    if empresa_investidora
+                    else None
+                ),
                 nome=nome,
                 tipo=tipo,
                 saldo_inicial=saldo_inicial or 0,
@@ -15919,105 +16264,344 @@ def empresa_conta_bancaria_cadastrar():
                 conta=conta,
                 banco=banco
             )
-            db.session.add(conta_banco)
+
+            db.session.add(
+                conta_banco
+            )
+
             db.session.commit()
-            flash('Conta bancária cadastrada com sucesso!', 'success')
-            return redirect(url_for('empresa_contas_listar'))
+            flash(
+                'Conta bancária cadastrada com sucesso!',
+                'success'
+            )
+
+            return redirect(
+                url_for(
+                    'empresa_contas_listar'
+                )
+            )
+
         except Exception as e:
+
             db.session.rollback()
-            print('Erro ao cadastrar conta bancária:', e)
-            flash('Erro ao salvar os dados bancários.', 'danger')
-            return redirect(url_for('empresa_conta_bancaria_cadastrar'))
 
-    return render_template('empresa_conta_bancaria_cadastrar.html', empresas=empresas)
+            print(
+                'Erro ao cadastrar conta bancária:',
+                e
+            )
 
-# LISTAR CONTAS BANCÁRIAS (com filtros)
-@app.route('/empresa/contas', methods=['GET'], endpoint='empresa_contas_listar')
+            flash(
+                'Erro ao salvar os dados bancários.',
+                'danger'
+            )
+
+            return redirect(
+                url_for(
+                    'empresa_conta_bancaria_cadastrar'
+                )
+            )
+
+    return render_template(
+        'empresa_conta_bancaria_cadastrar.html',
+        empresas=empresas,
+        empresas_investidoras=empresas_investidoras
+    )
+
+# LISTAR CONTAS BANCÁRIAS
+@app.route(
+    '/empresa/contas',
+    methods=['GET'],
+    endpoint='empresa_contas_listar'
+)
 @login_required
 def empresa_contas_listar():
-    empresa_id = request.args.get('empresa_id', type=int)
-    q = (request.args.get('q') or '').strip()
 
-    empresas = Empresa.query.order_by(Empresa.nome.asc()).all()
+    empresa_investidora_id = request.args.get(
+        'empresa_investidora_id',
+        type=int
+    )
+
+    q = (
+        request.args.get('q') or ''
+    ).strip()
+
+    empresas_investidoras = (
+        EmpresaInvestidora.query
+        .order_by(
+            EmpresaInvestidora.razao_social.asc()
+        )
+        .all()
+    )
 
     qry = CaixaBanco.query
-    if empresa_id:
-        qry = qry.filter(CaixaBanco.empresa_id == empresa_id)
+
+    if empresa_investidora_id:
+
+        qry = qry.filter(
+            CaixaBanco.empresa_investidora_id
+            == empresa_investidora_id
+        )
+
     if q:
+
         ilike = f'%{q}%'
+
+        qry = qry.outerjoin(
+            EmpresaInvestidora,
+            CaixaBanco.empresa_investidora_id
+            == EmpresaInvestidora.id
+        )
+
         qry = qry.filter(
             db.or_(
                 CaixaBanco.nome.ilike(ilike),
                 CaixaBanco.banco.ilike(ilike),
                 CaixaBanco.agencia.ilike(ilike),
                 CaixaBanco.conta.ilike(ilike),
+                EmpresaInvestidora.razao_social.ilike(ilike),
+                EmpresaInvestidora.cnpj.ilike(ilike)
             )
         )
 
-    contas = qry.order_by(CaixaBanco.empresa_id.asc(), CaixaBanco.nome.asc()).all()
+    contas = (
+        qry
+        .order_by(
+            CaixaBanco.empresa_investidora_id.asc(),
+            CaixaBanco.nome.asc()
+        )
+        .all()
+    )
 
     return render_template(
         'empresa_contas_listar.html',
-        empresas=empresas,
+        empresas_investidoras=empresas_investidoras,
         contas=contas,
-        empresa_id=empresa_id,
+        empresa_investidora_id=empresa_investidora_id,
         q=q
     )
 
 # EDITAR CONTA BANCÁRIA
-@app.route('/empresa/conta_bancaria/<int:conta_id>/editar', methods=['GET', 'POST'], endpoint='empresa_conta_bancaria_editar')
+@app.route(
+    '/empresa/conta_bancaria/<int:conta_id>/editar',
+    methods=['GET', 'POST'],
+    endpoint='empresa_conta_bancaria_editar'
+)
 @login_required
 def empresa_conta_bancaria_editar(conta_id):
-    conta = db.session.get(CaixaBanco, conta_id)
-    if not conta:
-        flash('Conta não encontrada.', 'warning')
-        return redirect(url_for('empresa_contas_listar'))
 
-    empresas = Empresa.query.order_by(Empresa.nome.asc()).all()
+    conta = db.session.get(
+        CaixaBanco,
+        conta_id
+    )
+
+    if not conta:
+
+        flash(
+            'Conta não encontrada.',
+            'warning'
+        )
+
+        return redirect(
+            url_for(
+                'empresa_contas_listar'
+            )
+        )
+
+    empresas = (
+        Empresa.query
+        .order_by(
+            Empresa.nome.asc()
+        )
+        .all()
+    )
+
+    empresas_investidoras = (
+        EmpresaInvestidora.query
+        .order_by(
+            EmpresaInvestidora.razao_social.asc()
+        )
+        .all()
+    )
 
     if request.method == 'POST':
-        empresa_id = request.form.get('empresa_id', type=int)
-        nome = (request.form.get('nome') or '').strip()
-        tipo = (request.form.get('tipo') or '').strip()
-        banco = (request.form.get('banco') or '').strip() or None
-        agencia = (request.form.get('agencia') or '').strip() or None
-        conta_num = (request.form.get('conta') or '').strip() or None
-        saldo_inicial = _parse_decimal_br(request.form.get('saldo_inicial'))
-        saldo_atual = _parse_decimal_br(request.form.get('saldo_atual'))
 
-        emp = db.session.get(Empresa, empresa_id) if empresa_id else None
-        if not emp:
-            flash('Selecione uma empresa válida.', 'danger')
-            return redirect(url_for('empresa_conta_bancaria_editar', conta_id=conta.id))
+        empresa_id = request.form.get(
+            'empresa_id',
+            type=int
+        )
+
+        empresa_investidora_id = request.form.get(
+            'empresa_investidora_id',
+            type=int
+        )
+
+        nome = (
+            request.form.get('nome') or ''
+        ).strip()
+
+        tipo = (
+            request.form.get('tipo') or ''
+        ).strip()
+
+        banco = (
+            request.form.get('banco') or ''
+        ).strip() or None
+
+        agencia = (
+            request.form.get('agencia') or ''
+        ).strip() or None
+
+        conta_num = (
+            request.form.get('conta') or ''
+        ).strip() or None
+
+        saldo_inicial = _parse_decimal_br(
+            request.form.get('saldo_inicial')
+        )
+
+        saldo_atual = _parse_decimal_br(
+            request.form.get('saldo_atual')
+        )
+
+        # Empresa principal
+        empresa = (
+            db.session.get(
+                Empresa,
+                empresa_id
+            )
+            if empresa_id
+            else None
+        )
+
+        if not empresa:
+
+            flash(
+                'Selecione uma empresa válida.',
+                'danger'
+            )
+
+            return redirect(
+                url_for(
+                    'empresa_conta_bancaria_editar',
+                    conta_id=conta.id
+                )
+            )
+
+        # Empresa investidora opcional
+        empresa_investidora = None
+
+        if empresa_investidora_id:
+
+            empresa_investidora = db.session.get(
+                EmpresaInvestidora,
+                empresa_investidora_id
+            )
+
+            if not empresa_investidora:
+
+                flash(
+                    'Selecione uma empresa investidora válida.',
+                    'danger'
+                )
+
+                return redirect(
+                    url_for(
+                        'empresa_conta_bancaria_editar',
+                        conta_id=conta.id
+                    )
+                )
+
         if not nome:
-            flash('O nome da conta é obrigatório.', 'danger')
-            return redirect(url_for('empresa_conta_bancaria_editar', conta_id=conta.id))
+
+            flash(
+                'O nome da conta é obrigatório.',
+                'danger'
+            )
+
+            return redirect(
+                url_for(
+                    'empresa_conta_bancaria_editar',
+                    conta_id=conta.id
+                )
+            )
+
         if not tipo:
-            flash('Informe o tipo da conta.', 'danger')
-            return redirect(url_for('empresa_conta_bancaria_editar', conta_id=conta.id))
+
+            flash(
+                'Informe o tipo da conta.',
+                'danger'
+            )
+
+            return redirect(
+                url_for(
+                    'empresa_conta_bancaria_editar',
+                    conta_id=conta.id
+                )
+            )
 
         try:
-            conta.empresa_id = empresa_id
+
+            conta.empresa_id = empresa.id
+
+            conta.empresa_investidora_id = (
+                empresa_investidora.id
+                if empresa_investidora
+                else None
+            )
+
             conta.nome = nome
             conta.tipo = tipo
             conta.banco = banco
             conta.agencia = agencia
             conta.conta = conta_num
+
             if saldo_inicial is not None:
                 conta.saldo_inicial = saldo_inicial
+
             if saldo_atual is not None:
                 conta.saldo_atual = saldo_atual
 
             db.session.commit()
-            flash('Conta atualizada com sucesso!', 'success')
-            return redirect(url_for('empresa_contas_listar', empresa_id=empresa_id))
-        except Exception as e:
-            db.session.rollback()
-            print('Erro ao editar conta bancária:', e)
-            flash('Erro ao salvar alterações.', 'danger')
-            return redirect(url_for('empresa_conta_bancaria_editar', conta_id=conta.id))
 
-    return render_template('empresa_conta_bancaria_editar.html', conta=conta, empresas=empresas)
+            flash(
+                'Conta atualizada com sucesso!',
+                'success'
+            )
+
+            return redirect(
+                url_for(
+                    'empresa_contas_listar',
+                    empresa_investidora_id=conta.empresa_investidora_id
+                )
+            )
+
+        except Exception as e:
+
+            db.session.rollback()
+
+            print(
+                'Erro ao editar conta bancária:',
+                e
+            )
+
+            flash(
+                'Erro ao salvar alterações.',
+                'danger'
+            )
+
+            return redirect(
+                url_for(
+                    'empresa_conta_bancaria_editar',
+                    conta_id=conta.id
+                )
+            )
+
+    return render_template(
+        'empresa_conta_bancaria_editar.html',
+        conta=conta,
+        empresas=empresas,
+        empresas_investidoras=empresas_investidoras
+    )
 
 # EXCLUIR CONTA BANCÁRIA (impede exclusão se houver movimentos)
 @app.route('/empresa/conta_bancaria/<int:conta_id>/excluir', methods=['POST'], endpoint='empresa_conta_bancaria_excluir')
