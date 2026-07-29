@@ -8,64 +8,46 @@ Editar Usuário
 
 <div class="container py-5">
 
-    <div class="card p-4 p-md-5 shadow-sm mx-auto card-auth bg-white">
+    <div class="card p-4 p-md-5 shadow-sm mx-auto card-auth bg-white border-0">
 
+        <!-- Cabeçalho -->
         <div class="d-flex align-items-center gap-3 mb-4 border-bottom pb-3">
-
             <div class="bg-primary-subtle text-primary rounded-circle p-3 d-inline-flex">
                 <i class="bi bi-pencil-square fs-3"></i>
             </div>
 
             <div>
-
-                <h3
-                    class="mb-1 text-dark fw-bold"
-                    style="letter-spacing: -0.5px;"
-                >
+                <h3 class="mb-1 text-dark fw-bold" style="letter-spacing: -0.5px;">
                     Editar Usuário
                 </h3>
-
                 <p class="text-muted small mb-0">
-                    Modifique as informações cadastrais, vínculos e níveis de acesso.
+                    Modifique as informações cadastrais, vínculos e níveis de acesso do sistema.
                 </p>
-
             </div>
-
         </div>
 
-        <form
-            method="POST"
-            id="formUsuario"
-        >
+        <form method="POST" id="formUsuario">
 
             {% if csrf_token %}
-                {{ csrf_token() }}
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             {% endif %}
 
-            <h5
-                class="text-secondary fw-semibold mb-3 small text-uppercase"
-                style="letter-spacing: 0.5px;"
-            >
-                Informações cadastrais
+            <!-- Informações Cadastrais -->
+            <h5 class="text-secondary fw-semibold mb-3 small text-uppercase" style="letter-spacing: 0.5px;">
+                Informações Cadastrais
             </h5>
 
             <div class="row g-3 mb-4">
 
+                <!-- Nome -->
                 <div class="col-md-6">
-
-                    <label
-                        for="nome"
-                        class="form-label fw-medium text-secondary"
-                    >
+                    <label for="nome" class="form-label fw-medium text-secondary">
                         Nome completo
                     </label>
-
                     <div class="input-group">
-
                         <span class="input-group-text bg-white border-end-0 text-muted">
                             <i class="bi bi-person"></i>
                         </span>
-
                         <input
                             type="text"
                             class="form-control border-start-0 ps-0"
@@ -74,26 +56,18 @@ Editar Usuário
                             value="{{ request.form.get('nome', usuario.nome) }}"
                             required
                         >
-
                     </div>
-
                 </div>
 
+                <!-- E-mail -->
                 <div class="col-md-6">
-
-                    <label
-                        for="email"
-                        class="form-label fw-medium text-secondary"
-                    >
-                        E-mail
+                    <label for="email" class="form-label fw-medium text-secondary">
+                        E-mail de Acesso
                     </label>
-
                     <div class="input-group">
-
                         <span class="input-group-text bg-white border-end-0 text-muted">
                             <i class="bi bi-envelope"></i>
                         </span>
-
                         <input
                             type="email"
                             class="form-control border-start-0 ps-0"
@@ -102,207 +76,197 @@ Editar Usuário
                             value="{{ request.form.get('email', usuario.email) }}"
                             required
                         >
-
                     </div>
-
                 </div>
 
+                <!-- Senha -->
                 <div class="col-md-6">
-
-                    <label
-                        for="senhaInput"
-                        class="form-label fw-medium text-secondary"
-                    >
-                        Nova senha
+                    <label for="senhaInput" class="form-label fw-medium text-secondary">
+                        Nova Senha
                     </label>
-
                     <div class="input-group">
-
                         <span class="input-group-text bg-white border-end-0 text-muted">
                             <i class="bi bi-lock"></i>
                         </span>
-
                         <input
                             type="password"
                             class="form-control border-start-0 border-end-0 ps-0"
                             id="senhaInput"
                             name="senha"
-                            placeholder="Deixe em branco para manter a atual"
+                            placeholder="Deixe em branco para manter a senha atual"
                         >
-
                         <button
                             class="btn btn-outline-secondary bg-white text-muted border-start-0"
                             type="button"
                             id="btnToggleSenha"
+                            title="Mostrar ou ocultar senha"
                         >
-                            <i
-                                class="bi bi-eye"
-                                id="iconeOlho"
-                            ></i>
+                            <i class="bi bi-eye" id="iconeOlho"></i>
                         </button>
-
                     </div>
-
                 </div>
 
+                <!-- Perfil -->
                 <div class="col-md-6">
-
-                    <label
-                        for="perfilUsuario"
-                        class="form-label fw-medium text-secondary"
-                    >
-                        Perfil do usuário
+                    <label for="perfilUsuario" class="form-label fw-medium text-secondary">
+                        Perfil do Usuário
                     </label>
-
                     <div class="input-group">
-
                         <span class="input-group-text bg-white border-end-0 text-muted">
                             <i class="bi bi-shield-lock"></i>
                         </span>
-
                         <select
                             name="perfil"
                             id="perfilUsuario"
                             class="form-select border-start-0 ps-0"
                             required
                         >
-
-                            {% set perfil_atual = request.form.get(
-                                'perfil',
-                                usuario.perfil
-                            ) %}
-
-                            <option
-                                value="usuario"
-                                {% if perfil_atual == 'usuario' %}selected{% endif %}
-                            >
-                                Usuário comum
-                            </option>
-
-                            <option
-                                value="comercial"
-                                {% if perfil_atual == 'comercial' %}selected{% endif %}
-                            >
-                                Comercial
-                            </option>
-
-                            <option
-                                value="gerente_comercial"
-                                {% if perfil_atual == 'gerente_comercial' %}selected{% endif %}
-                            >
-                                Gerente Comercial
-                            </option>
-
-                            <option
-                                value="monitoramento"
-                                {% if perfil_atual == 'monitoramento' %}selected{% endif %}
-                            >
-                                Monitoramento
-                            </option>
-
-                            <option
-                                value="financeiro"
-                                {% if perfil_atual == 'financeiro' %}selected{% endif %}
-                            >
-                                Financeiro
-                            </option>
-
-                            <option
-                                value="admin"
-                                {% if perfil_atual == 'admin' %}selected{% endif %}
-                            >
-                                Administrador
-                            </option>
-
-                            <option
-                                value="cliente"
-                                {% if perfil_atual == 'cliente' %}selected{% endif %}
-                            >
-                                Cliente
-                            </option>
-
+                            {% set perfil_atual = request.form.get('perfil', usuario.perfil) %}
+                            <option value="usuario" {% if perfil_atual == 'usuario' %}selected{% endif %}>Usuário comum</option>
+                            <option value="comercial" {% if perfil_atual == 'comercial' %}selected{% endif %}>Comercial</option>
+                            <option value="gerente_comercial" {% if perfil_atual == 'gerente_comercial' %}selected{% endif %}>Gerente Comercial</option>
+                            <option value="monitoramento" {% if perfil_atual == 'monitoramento' %}selected{% endif %}>Monitoramento</option>
+                            <option value="financeiro" {% if perfil_atual == 'financeiro' %}selected{% endif %}>Financeiro</option>
+                            <option value="admin" {% if perfil_atual == 'admin' %}selected{% endif %}>Administrador</option>
+                            <option value="cliente" {% if perfil_atual == 'cliente' %}selected{% endif %}>Cliente</option>
                         </select>
-
                     </div>
-
                 </div>
 
             </div>
 
-            <!-- Vinculação de clientes -->
+            <div class="row g-3 mb-4">
+
+            <!-- Ativo -->
+            <div class="col-md-6">
+                <div class="form-check form-switch bg-white p-3 rounded border shadow-sm h-100 ps-5 d-flex align-items-center">
+
+                    <input
+                        class="form-check-input ms-4"
+                        type="checkbox"
+                        id="ativo"
+                        name="ativo"
+                        style="transform:scale(1.1);"
+                        {% if request.form.get('ativo') or usuario.ativo %}
+                            checked
+                        {% endif %}
+                    >
+
+                    <label
+                        class="form-check-label fw-medium text-dark ms-2"
+                        for="ativo"
+                    >
+                        Usuário Ativo
+                    </label>
+
+                </div>
+            </div>
+
             <div
-                id="containerCliente"
-                class="mb-4"
-                style="display: none;"
-            >
+    id="secaoVendas"
+    class="mb-4"
+    style="display:none;"
+>
 
-                <div class="card border-primary-subtle bg-primary-subtle bg-opacity-10">
+    <h6
+        class="fw-bold text-primary text-uppercase mb-3 d-flex align-items-center gap-2"
+        style="font-size:.85rem;letter-spacing:.5px;"
+    >
+        <i class="bi bi-shop"></i>
+        Permissões de Venda
+    </h6>
 
+    <div class="row g-3">
+
+        <div class="col-md-6">
+            <div class="form-check form-switch bg-white p-3 rounded border shadow-sm h-100 ps-5 d-flex align-items-center">
+
+                <input
+                    class="form-check-input ms-4"
+                    type="checkbox"
+                    id="venderUsina"
+                    name="vender_usina"
+                    style="transform:scale(1.1);"
+                    {% if request.form.get('vender_usina') or usuario.vender_usina %}
+                        checked
+                    {% endif %}
+                >
+
+                <label class="form-check-label fw-medium ms-2" for="venderUsina">
+                    Pode vender Usinas
+                </label>
+
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="form-check form-switch bg-white p-3 rounded border shadow-sm h-100 ps-5 d-flex align-items-center">
+
+                <input
+                    class="form-check-input ms-4"
+                    type="checkbox"
+                    id="venderEnergia"
+                    name="vender_energia"
+                    style="transform:scale(1.1);"
+                    {% if request.form.get('vender_energia') or usuario.vender_energia %}
+                        checked
+                    {% endif %}
+                >
+
+                <label class="form-check-label fw-medium ms-2" for="venderEnergia">
+                    Pode vender Energia
+                </label>
+
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+            
+
+</div>
+
+            <!-- Vinculação de Clientes (Perfil Cliente) -->
+            <div id="containerCliente" class="mb-4" style="display: none;">
+                <div class="card border-primary-subtle bg-primary-subtle bg-opacity-10 shadow-none">
                     <div class="card-body">
 
-                        <div class="d-flex align-items-center gap-2 mb-4">
-
+                        <div class="d-flex align-items-center gap-2 mb-3">
                             <i class="bi bi-person-badge text-primary fs-4"></i>
-
                             <div>
-
                                 <h6 class="mb-0 fw-bold text-primary">
-                                    Vinculação de clientes
+                                    Vinculação de Unidades / Clientes
                                 </h6>
-
                                 <small class="text-muted">
-                                    Selecione uma usina e escolha os clientes acessíveis.
+                                    Selecione uma usina e gerencie os clientes cujas informações estarão visíveis para este usuário.
                                 </small>
-
                             </div>
-
                         </div>
 
-                        <div class="row g-3 align-items-end mb-4">
-
+                        <!-- Filtro por Usina -->
+                        <div class="row g-3 align-items-end mb-3">
                             <div class="col-md-8">
-
-                                <label
-                                    for="usinaFiltro"
-                                    class="form-label fw-medium text-secondary"
-                                >
-                                    Usina
+                                <label for="usinaFiltro" class="form-label fw-medium text-secondary">
+                                    Usina Solar
                                 </label>
-
                                 <div class="input-group">
-
                                     <span class="input-group-text bg-white border-end-0 text-muted">
                                         <i class="bi bi-lightning-charge"></i>
                                     </span>
-
-                                    <select
-                                        id="usinaFiltro"
-                                        class="form-select border-start-0 ps-0"
-                                    >
-
-                                        <option value="">
-                                            Selecione uma usina
-                                        </option>
-
+                                    <select id="usinaFiltro" class="form-select border-start-0 ps-0">
+                                        <option value="">Selecione uma usina</option>
                                         {% for usina in usinas %}
-
-                                            <option
-                                                value="{{ usina.id }}"
-                                                data-nome="{{ usina.nome }}"
-                                            >
+                                            <option value="{{ usina.id }}" data-nome="{{ usina.nome }}">
                                                 {{ usina.nome }}
                                             </option>
-
                                         {% endfor %}
-
                                     </select>
-
                                 </div>
-
                             </div>
 
                             <div class="col-md-4">
-
                                 <button
                                     type="button"
                                     id="btnSelecionarTodos"
@@ -312,321 +276,193 @@ Editar Usuário
                                     <i class="bi bi-check2-square me-1"></i>
                                     Selecionar todos
                                 </button>
-
                             </div>
-
                         </div>
 
-                        <div
-                            id="mensagemSelecioneUsina"
-                            class="alert alert-light border text-center text-muted mb-0"
-                        >
+                        <!-- Indicador de Mensagem/Carregamento -->
+                        <div id="mensagemSelecioneUsina" class="alert alert-light border text-center text-muted mb-0">
                             <i class="bi bi-info-circle me-1"></i>
-                            Selecione uma usina para visualizar seus clientes.
+                            Selecione uma usina para visualizar os clientes vinculáveis.
                         </div>
 
-                        <div
-                            id="carregandoClientes"
-                            class="text-center py-4"
-                            style="display: none;"
-                        >
-
-                            <div
-                                class="spinner-border text-primary"
-                                role="status"
-                            ></div>
-
-                            <div class="text-muted small mt-2">
-                                Carregando clientes...
+                        <div id="carregandoClientes" class="text-center py-4" style="display: none;">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                <span class="visually-hidden">Carregando...</span>
                             </div>
-
+                            <span class="text-muted small ms-2">Buscando clientes da usina...</span>
                         </div>
 
-                        <div
-                            id="areaClientesUsina"
-                            style="display: none;"
-                        >
-
+                        <!-- Lista de Clientes Encontrados -->
+                        <div id="areaClientesUsina" style="display: none;">
                             <div class="d-flex justify-content-between align-items-center mb-2">
-
                                 <label class="form-label fw-medium text-secondary mb-0">
-                                    Clientes encontrados
+                                    Clientes da Usina
                                 </label>
-
-                                <span
-                                    id="quantidadeClientesEncontrados"
-                                    class="badge text-bg-secondary"
-                                >
-                                    0
-                                </span>
-
+                                <span id="quantidadeClientesEncontrados" class="badge text-bg-secondary">0</span>
                             </div>
 
-                            <div
-                                id="listaClientesUsina"
-                                class="border rounded bg-white p-3"
-                                style="max-height: 320px; overflow-y: auto;"
-                            ></div>
+                            <div id="listaClientesUsina" class="border rounded bg-white p-3" style="max-height: 280px; overflow-y: auto;">
+                            </div>
 
-                            <div class="text-end mt-3">
-
-                                <button
-                                    type="button"
-                                    id="btnAdicionarClientes"
-                                    class="btn btn-primary"
-                                    disabled
-                                >
+                            <div class="d-flex justify-content-end mt-3">
+                                <button type="button" id="btnAdicionarClientes" class="btn btn-primary btn-sm" disabled>
                                     <i class="bi bi-person-plus-fill me-1"></i>
-                                    Adicionar selecionados
+                                    Adicionar Selecionados
                                 </button>
-
                             </div>
-
                         </div>
 
-                        <div
-                            id="areaClientesVinculados"
-                            class="mt-4"
-                            style="display: none;"
-                        >
-
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-
+                        <!-- Lista de Clientes Já Vinculados -->
+                        <div id="areaClientesVinculados" class="mt-4" style="display: none;">
+                            <div class="d-flex justify-content-between align-items-center mb-2 border-top pt-3">
                                 <div>
-
-                                    <h6 class="fw-bold text-dark mb-0">
-                                        Clientes vinculados
-                                    </h6>
-
-                                    <small class="text-muted">
-                                        Remova ou acrescente clientes antes de salvar.
-                                    </small>
-
+                                    <h6 class="fw-bold text-dark mb-0">Clientes Vinculados</h6>
+                                    <small class="text-muted">Remova ou acrescente novos clientes antes de salvar as alterações.</small>
                                 </div>
-
-                                <span
-                                    id="quantidadeClientesVinculados"
-                                    class="badge text-bg-primary"
-                                >
-                                    0
-                                </span>
-
+                                <span id="quantidadeClientesVinculados" class="badge text-bg-primary">0</span>
                             </div>
 
-                            <div
-                                id="listaClientesVinculados"
-                                class="list-group"
-                            ></div>
-
+                            <div id="listaClientesVinculados" class="list-group">
+                            </div>
                         </div>
 
+                        <!-- Campos ocultos enviados via formulário -->
                         <div id="camposClientesSelecionados"></div>
 
                     </div>
-
                 </div>
-
             </div>
 
-            <!-- Permissões -->
-            <div
-                class="permission-section mb-4"
-                id="secaoPermissoes"
-            >
-
-                <h6
-                    class="fw-bold text-primary text-uppercase mb-3 d-flex align-items-center gap-2"
-                    style="font-size: 0.85rem; letter-spacing: 0.5px;"
-                >
+            <!-- Permissões Modulares (Exibido para Perfis Internos) -->
+            <div class="permission-section mb-4" id="secaoPermissoes">
+                <h6 class="fw-bold text-primary text-uppercase mb-3 d-flex align-items-center gap-2" style="font-size: 0.85rem; letter-spacing: 0.5px;">
                     <i class="bi bi-sliders"></i>
                     Níveis de acesso e módulos disponíveis
                 </h6>
 
                 <div class="alert alert-warning border-0 shadow-sm d-flex align-items-start gap-2 mb-3">
-
                     <i class="bi bi-exclamation-triangle-fill fs-5 text-warning"></i>
-
                     <div class="small text-dark-emphasis">
-
-                        <strong>Aviso:</strong>
-
-                        apenas um usuário pode ser o aprovador geral financeiro.
-
+                        <strong>Aviso:</strong> Apenas um usuário por perfil operacional pode ser configurado como aprovador geral financeiro.
                     </div>
-
                 </div>
 
                 <div class="row g-3">
 
                     <div class="col-md-6 col-lg-4">
-
                         <div class="form-check form-switch bg-white p-3 rounded border shadow-sm h-100 ps-5 d-flex align-items-center">
-
                             <input
                                 class="form-check-input ms-4"
                                 type="checkbox"
                                 name="pode_cadastrar_geracao"
                                 id="geracao"
-                                {% if usuario.pode_cadastrar_geracao %}checked{% endif %}
+                                style="transform: scale(1.1);"
+                                {% if request.form.get('pode_cadastrar_geracao') or usuario.pode_cadastrar_geracao %}checked{% endif %}
                             >
-
-                            <label
-                                class="form-check-label fw-medium text-dark ms-2"
-                                for="geracao"
-                            >
+                            <label class="form-check-label fw-medium text-dark ms-2" for="geracao">
                                 Cadastrar Geração
                             </label>
-
                         </div>
-
                     </div>
 
                     <div class="col-md-6 col-lg-4">
-
                         <div class="form-check form-switch bg-white p-3 rounded border shadow-sm h-100 ps-5 d-flex align-items-center">
-
                             <input
                                 class="form-check-input ms-4"
                                 type="checkbox"
                                 name="pode_acessar_comercial"
                                 id="comercial"
-                                {% if usuario.pode_acessar_comercial %}checked{% endif %}
+                                style="transform: scale(1.1);"
+                                {% if request.form.get('pode_acessar_comercial') or usuario.pode_acessar_comercial %}checked{% endif %}
                             >
-
-                            <label
-                                class="form-check-label fw-medium text-dark ms-2"
-                                for="comercial"
-                            >
+                            <label class="form-check-label fw-medium text-dark ms-2" for="comercial">
                                 Acessar Comercial
                             </label>
-
                         </div>
-
                     </div>
 
                     <div class="col-md-6 col-lg-4">
-
                         <div class="form-check form-switch bg-white p-3 rounded border shadow-sm h-100 ps-5 d-flex align-items-center">
-
                             <input
                                 class="form-check-input ms-4"
                                 type="checkbox"
                                 name="pode_cadastrar_cliente"
                                 id="permissaoCliente"
-                                {% if usuario.pode_cadastrar_cliente %}checked{% endif %}
+                                style="transform: scale(1.1);"
+                                {% if request.form.get('pode_cadastrar_cliente') or usuario.pode_cadastrar_cliente %}checked{% endif %}
                             >
-
-                            <label
-                                class="form-check-label fw-medium text-dark ms-2"
-                                for="permissaoCliente"
-                            >
+                            <label class="form-check-label fw-medium text-dark ms-2" for="permissaoCliente">
                                 Cadastrar Cliente
                             </label>
-
                         </div>
-
                     </div>
 
                     <div class="col-md-6 col-lg-4">
-
                         <div class="form-check form-switch bg-white p-3 rounded border shadow-sm h-100 ps-5 d-flex align-items-center">
-
                             <input
                                 class="form-check-input ms-4"
                                 type="checkbox"
                                 name="pode_cadastrar_fatura"
                                 id="fatura"
-                                {% if usuario.pode_cadastrar_fatura %}checked{% endif %}
+                                style="transform: scale(1.1);"
+                                {% if request.form.get('pode_cadastrar_fatura') or usuario.pode_cadastrar_fatura %}checked{% endif %}
                             >
-
-                            <label
-                                class="form-check-label fw-medium text-dark ms-2"
-                                for="fatura"
-                            >
+                            <label class="form-check-label fw-medium text-dark ms-2" for="fatura">
                                 Cadastrar Fatura
                             </label>
-
                         </div>
-
                     </div>
 
                     <div class="col-md-6 col-lg-4">
-
                         <div class="form-check form-switch bg-white p-3 rounded border shadow-sm h-100 ps-5 d-flex align-items-center">
-
                             <input
                                 class="form-check-input ms-4"
                                 type="checkbox"
                                 name="pode_acessar_financeiro"
                                 id="financeiro"
-                                {% if usuario.pode_acessar_financeiro %}checked{% endif %}
+                                style="transform: scale(1.1);"
+                                {% if request.form.get('pode_acessar_financeiro') or usuario.pode_acessar_financeiro %}checked{% endif %}
                             >
-
-                            <label
-                                class="form-check-label fw-medium text-dark ms-2"
-                                for="financeiro"
-                            >
+                            <label class="form-check-label fw-medium text-dark ms-2" for="financeiro">
                                 Acessar Financeiro
                             </label>
-
                         </div>
-
                     </div>
 
                     <div class="col-md-6 col-lg-4">
-
                         <div class="form-check form-switch bg-white p-3 rounded border border-primary-subtle shadow-sm h-100 ps-5 d-flex align-items-center">
-
                             <input
                                 class="form-check-input ms-4"
                                 type="checkbox"
                                 name="pode_aprovar_financeiro"
                                 id="aprovador"
-                                {% if usuario.pode_aprovar_financeiro %}checked{% endif %}
+                                style="transform: scale(1.1);"
+                                {% if request.form.get('pode_aprovar_financeiro') or usuario.pode_aprovar_financeiro %}checked{% endif %}
                             >
-
-                            <label
-                                class="form-check-label fw-bold text-primary ms-2"
-                                for="aprovador"
-                            >
+                            <label class="form-check-label fw-bold text-primary ms-2" for="aprovador">
                                 <i class="bi bi-shield-check-fill me-1"></i>
                                 Aprovador Geral
                             </label>
-
                         </div>
-
                     </div>
 
                 </div>
 
             </div>
 
-            <div class="row pt-2 align-items-center g-3">
-
+            <!-- Botões de Ação -->
+            <div class="row pt-3 align-items-center g-3 border-top mt-4">
                 <div class="col-sm-6 order-2 order-sm-1">
-
-                    <a
-                        href="{{ url_for('listar_usuarios') }}"
-                        class="btn btn-link text-muted text-decoration-none p-0"
-                    >
-                        <i class="bi bi-arrow-left-short fs-5"></i>
-                        Voltar para a lista
+                    <a href="{{ url_for('listar_usuarios') }}" class="btn btn-link text-muted text-decoration-none p-0">
+                        <i class="bi bi-arrow-left-short fs-5 me-1"></i> Voltar para a lista
                     </a>
-
                 </div>
 
                 <div class="col-sm-6 order-1 order-sm-2 text-end">
-
-                    <button
-                        type="submit"
-                        class="btn btn-primary px-5 py-2 fw-semibold shadow-sm w-100"
-                    >
-                        <i class="bi bi-check2-circle me-1"></i>
-                        Salvar alterações
+                    <button type="submit" class="btn btn-primary px-5 py-2 fw-semibold shadow-sm w-100 w-sm-auto">
+                        <i class="bi bi-check2-circle me-1"></i> Salvar Alterações
                     </button>
-
                 </div>
-
             </div>
 
         </form>
@@ -636,468 +472,320 @@ Editar Usuário
 </div>
 
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
+document.addEventListener('DOMContentLoaded', function () {
+    const perfilUsuario = document.getElementById('perfilUsuario');
+    const containerCliente = document.getElementById('containerCliente');
+    const secaoPermissoes = document.getElementById('secaoPermissoes');
+    const secaoVendas = document.getElementById('secaoVendas');
+    const usinaFiltro = document.getElementById('usinaFiltro');
+    const mensagemSelecioneUsina = document.getElementById('mensagemSelecioneUsina');
+    const carregandoClientes = document.getElementById('carregandoClientes');
+    const areaClientesUsina = document.getElementById('areaClientesUsina');
+    const listaClientesUsina = document.getElementById('listaClientesUsina');
+    const quantidadeClientesEncontrados = document.getElementById('quantidadeClientesEncontrados');
+    const btnSelecionarTodos = document.getElementById('btnSelecionarTodos');
+    const btnAdicionarClientes = document.getElementById('btnAdicionarClientes');
+    const areaClientesVinculados = document.getElementById('areaClientesVinculados');
+    const listaClientesVinculados = document.getElementById('listaClientesVinculados');
+    const quantidadeClientesVinculados = document.getElementById('quantidadeClientesVinculados');
+    const camposClientesSelecionados = document.getElementById('camposClientesSelecionados');
+    const btnToggleSenha = document.getElementById('btnToggleSenha');
+    const senhaInput = document.getElementById('senhaInput');
+    const iconeOlho = document.getElementById('iconeOlho');
+    const camposPermissao = secaoPermissoes.querySelectorAll('input[type="checkbox"]');
 
-        const perfilUsuario =
-            document.getElementById('perfilUsuario');
+    const clientesVinculados = new Map();
 
-        const containerCliente =
-            document.getElementById('containerCliente');
+    // Inicia os clientes com base nos dados do backend
+    const clientesIniciais = {{ clientes_vinculados | tojson | safe }};
+    if (Array.isArray(clientesIniciais)) {
+        clientesIniciais.forEach(cliente => {
+            clientesVinculados.set(String(cliente.id), cliente);
+        });
+    }
 
-        const secaoPermissoes =
-            document.getElementById('secaoPermissoes');
+    function escaparHtml(texto) {
+        if (!texto) return '';
+        return String(texto)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
 
-        const usinaFiltro =
-            document.getElementById('usinaFiltro');
+    function atualizarCamposPorPerfil() {
 
-        const mensagemSelecioneUsina =
-            document.getElementById('mensagemSelecioneUsina');
+        const perfil = perfilUsuario.value;
 
-        const carregandoClientes =
-            document.getElementById('carregandoClientes');
+        const perfilCliente = perfil === 'cliente';
+        const perfilComercial = perfil === 'comercial';
 
-        const areaClientesUsina =
-            document.getElementById('areaClientesUsina');
+        containerCliente.style.display =
+            perfilCliente ? 'block' : 'none';
 
-        const listaClientesUsina =
-            document.getElementById('listaClientesUsina');
+        secaoPermissoes.style.display =
+            perfilCliente ? 'none' : 'block';
 
-        const quantidadeClientesEncontrados =
-            document.getElementById('quantidadeClientesEncontrados');
+        secaoVendas.style.display =
+            perfilComercial ? 'block' : 'none';
 
-        const btnSelecionarTodos =
-            document.getElementById('btnSelecionarTodos');
+        camposPermissao.forEach(campo => {
 
-        const btnAdicionarClientes =
-            document.getElementById('btnAdicionarClientes');
+            campo.disabled = perfilCliente;
 
-        const areaClientesVinculados =
-            document.getElementById('areaClientesVinculados');
-
-        const listaClientesVinculados =
-            document.getElementById('listaClientesVinculados');
-
-        const quantidadeClientesVinculados =
-            document.getElementById('quantidadeClientesVinculados');
-
-        const camposClientesSelecionados =
-            document.getElementById('camposClientesSelecionados');
-
-        const camposPermissao =
-            secaoPermissoes.querySelectorAll(
-                'input[type="checkbox"]'
-            );
-
-        const clientesVinculados = new Map();
-
-        const clientesIniciais = {{ clientes_vinculados | tojson }};
-
-        clientesIniciais.forEach(function (cliente) {
-
-            clientesVinculados.set(
-                String(cliente.id),
-                cliente
-            );
+            if (perfilCliente) {
+                campo.checked = false;
+            }
 
         });
 
-        function escaparHtml(texto) {
+        if (!perfilComercial) {
 
-            const elemento =
-                document.createElement('div');
-
-            elemento.textContent =
-                texto || '';
-
-            return elemento.innerHTML;
+            document.getElementById('venderUsina').checked = false;
+            document.getElementById('venderEnergia').checked = false;
 
         }
 
-        function atualizarCamposPorPerfil() {
+    }
 
-            const perfilCliente =
-                perfilUsuario.value === 'cliente';
+    function atualizarBotaoAdicionar() {
+        const marcados = listaClientesUsina.querySelectorAll('.checkbox-cliente:checked:not(:disabled)');
+        btnAdicionarClientes.disabled = marcados.length === 0;
+    }
 
-            containerCliente.style.display =
-                perfilCliente ? 'block' : 'none';
+    function atualizarBotaoSelecionarTodos() {
+        const checkboxes = listaClientesUsina.querySelectorAll('.checkbox-cliente:not(:disabled)');
+        if (checkboxes.length === 0) {
+            btnSelecionarTodos.disabled = true;
+            return;
+        }
 
-            secaoPermissoes.style.display =
-                perfilCliente ? 'none' : 'block';
+        btnSelecionarTodos.disabled = false;
+        const todosMarcados = Array.from(checkboxes).every(cb => cb.checked);
 
-            camposPermissao.forEach(function (campo) {
+        btnSelecionarTodos.innerHTML = todosMarcados
+            ? `<i class="bi bi-square me-1"></i> Desmarcar todos`
+            : `<i class="bi bi-check2-square me-1"></i> Selecionar todos`;
+    }
 
-                campo.disabled = perfilCliente;
+    function atualizarClientesVinculados() {
+        listaClientesVinculados.innerHTML = '';
+        camposClientesSelecionados.innerHTML = '';
+        quantidadeClientesVinculados.textContent = clientesVinculados.size;
 
-                if (perfilCliente) {
-                    campo.checked = false;
-                }
+        if (clientesVinculados.size === 0) {
+            areaClientesVinculados.style.display = 'none';
+            return;
+        }
 
+        areaClientesVinculados.style.display = 'block';
+
+        const clientesOrdenados = Array.from(clientesVinculados.values())
+            .sort((a, b) => {
+                const compUsina = (a.usina_nome || '').localeCompare(b.usina_nome || '', 'pt-BR');
+                return compUsina !== 0 ? compUsina : (a.nome || '').localeCompare(b.nome || '', 'pt-BR');
             });
 
+        clientesOrdenados.forEach(cliente => {
+            const unidade = cliente.codigo_unidade ? `UC ${escaparHtml(cliente.codigo_unidade)}` : 'UC não informada';
+            const item = document.createElement('div');
+            item.className = 'list-group-item d-flex justify-content-between align-items-center gap-3';
+
+            item.innerHTML = `
+                <div class="d-flex align-items-center gap-3">
+                    <div class="bg-primary-subtle text-primary rounded-circle p-2">
+                        <i class="bi bi-person-check-fill"></i>
+                    </div>
+                    <div>
+                        <div class="fw-semibold text-dark">${escaparHtml(cliente.nome)}</div>
+                        <div class="small text-muted">
+                            <i class="bi bi-lightning-charge me-1"></i>${escaparHtml(cliente.usina_nome)}
+                            <span class="mx-1">•</span>${unidade}
+                        </div>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-danger btn-remover" data-id="${cliente.id}" title="Remover vinculação">
+                    <i class="bi bi-trash"></i>
+                </button>
+            `;
+
+            listaClientesVinculados.appendChild(item);
+
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'clientes_ids';
+            input.value = cliente.id;
+            camposClientesSelecionados.appendChild(input);
+        });
+    }
+
+    // Event Delegation para Botão de Remoção de Clientes
+    listaClientesVinculados.addEventListener('click', function (e) {
+        const btnRemover = e.target.closest('.btn-remover');
+        if (btnRemover) {
+            const idParaRemover = String(btnRemover.dataset.id);
+            clientesVinculados.delete(idParaRemover);
+            atualizarClientesVinculados();
+
+            if (usinaFiltro.value) {
+                carregarClientes();
+            }
+        }
+    });
+
+    async function carregarClientes() {
+        const usinaId = usinaFiltro.value;
+        listaClientesUsina.innerHTML = '';
+        areaClientesUsina.style.display = 'none';
+
+        if (!usinaId) {
+            mensagemSelecioneUsina.style.display = 'block';
+            carregandoClientes.style.display = 'none';
+            return;
         }
 
-        function atualizarClientesVinculados() {
+        mensagemSelecioneUsina.style.display = 'none';
+        carregandoClientes.style.display = 'block';
 
-            listaClientesVinculados.innerHTML = '';
-            camposClientesSelecionados.innerHTML = '';
+        const opcao = usinaFiltro.options[usinaFiltro.selectedIndex];
+        const usinaNome = opcao.dataset.nome || opcao.textContent.trim();
 
-            quantidadeClientesVinculados.textContent =
-                clientesVinculados.size;
+        try {
+            const resposta = await fetch(`/api/usinas/${usinaId}/clientes`, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' }
+            });
 
-            areaClientesVinculados.style.display =
-                clientesVinculados.size
-                    ? 'block'
-                    : 'none';
+            if (!resposta.ok) {
+                throw new Error('Erro na consulta');
+            }
 
-            clientesVinculados.forEach(function (cliente) {
+            const clientes = await resposta.json();
+            quantidadeClientesEncontrados.textContent = clientes.length;
 
-                const item =
-                    document.createElement('div');
+            if (clientes.length === 0) {
+                listaClientesUsina.innerHTML = `
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-person-x fs-3 d-block mb-2"></i>
+                        Nenhum cliente ativo foi encontrado nesta usina.
+                    </div>
+                `;
+                areaClientesUsina.style.display = 'block';
+                btnSelecionarTodos.disabled = true;
+                btnAdicionarClientes.disabled = true;
+                return;
+            }
 
-                item.className =
-                    'list-group-item d-flex justify-content-between align-items-center';
+            clientes.forEach(cliente => {
+                const jaVinculado = clientesVinculados.has(String(cliente.id));
+                const unidade = cliente.codigo_unidade ? `UC ${escaparHtml(cliente.codigo_unidade)}` : 'UC não informada';
+
+                const item = document.createElement('div');
+                item.className = 'form-check border rounded p-3 ps-5 mb-2 bg-light';
 
                 item.innerHTML = `
-                    <div>
-                        <div class="fw-semibold">
-                            ${escaparHtml(cliente.nome)}
-                        </div>
-
-                        <small class="text-muted">
-                            ${escaparHtml(cliente.usina_nome)}
-                            ${
-                                cliente.codigo_unidade
-                                    ? ` • UC ${escaparHtml(cliente.codigo_unidade)}`
-                                    : ''
-                            }
-                        </small>
-                    </div>
-
-                    <button
-                        type="button"
-                        class="btn btn-sm btn-outline-danger btn-remover"
+                    <input
+                        class="form-check-input checkbox-cliente"
+                        type="checkbox"
+                        id="cliente_${cliente.id}"
                         data-id="${cliente.id}"
+                        data-nome="${escaparHtml(cliente.nome)}"
+                        data-codigo-unidade="${escaparHtml(cliente.codigo_unidade || '')}"
+                        data-usina-id="${usinaId}"
+                        data-usina-nome="${escaparHtml(usinaNome)}"
+                        ${jaVinculado ? 'checked disabled' : ''}
                     >
-                        <i class="bi bi-trash"></i>
-                    </button>
+                    <label class="form-check-label w-100" for="cliente_${cliente.id}">
+                        <div class="d-flex justify-content-between align-items-center gap-2">
+                            <div>
+                                <div class="fw-semibold text-dark">${escaparHtml(cliente.nome)}</div>
+                                <small class="text-muted">${unidade}</small>
+                            </div>
+                            ${jaVinculado ? '<span class="badge text-bg-success"><i class="bi bi-check-circle me-1"></i>Já vinculado</span>' : ''}
+                        </div>
+                    </label>
                 `;
 
-                listaClientesVinculados.appendChild(
-                    item
-                );
-
-                const input =
-                    document.createElement('input');
-
-                input.type = 'hidden';
-                input.name = 'clientes_ids';
-                input.value = cliente.id;
-
-                camposClientesSelecionados.appendChild(
-                    input
-                );
-
+                listaClientesUsina.appendChild(item);
             });
 
-            document
-                .querySelectorAll('.btn-remover')
-                .forEach(function (botao) {
+            areaClientesUsina.style.display = 'block';
 
-                    botao.addEventListener(
-                        'click',
-                        function () {
-
-                            clientesVinculados.delete(
-                                String(this.dataset.id)
-                            );
-
-                            atualizarClientesVinculados();
-
-                            if (usinaFiltro.value) {
-                                carregarClientes();
-                            }
-
-                        }
-                    );
-
+            listaClientesUsina.querySelectorAll('.checkbox-cliente').forEach(checkbox => {
+                checkbox.addEventListener('change', () => {
+                    atualizarBotaoAdicionar();
+                    atualizarBotaoSelecionarTodos();
                 });
+            });
 
+            atualizarBotaoAdicionar();
+            atualizarBotaoSelecionarTodos();
+
+        } catch (erro) {
+            areaClientesUsina.style.display = 'block';
+            listaClientesUsina.innerHTML = `
+                <div class="alert alert-danger mb-0">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    Não foi possível carregar os clientes desta usina.
+                </div>
+            `;
+            console.error(erro);
+        } finally {
+            carregandoClientes.style.display = 'none';
         }
+    }
 
-        async function carregarClientes() {
+    usinaFiltro.addEventListener('change', carregarClientes);
 
-            const usinaId =
-                usinaFiltro.value;
+    btnSelecionarTodos.addEventListener('click', function () {
+        const checkboxes = listaClientesUsina.querySelectorAll('.checkbox-cliente:not(:disabled)');
+        const todosMarcados = Array.from(checkboxes).every(cb => cb.checked);
 
-            listaClientesUsina.innerHTML = '';
-            areaClientesUsina.style.display = 'none';
+        checkboxes.forEach(cb => { cb.checked = !todosMarcados; });
 
-            if (!usinaId) {
-
-                mensagemSelecioneUsina.style.display =
-                    'block';
-
-                return;
-
-            }
-
-            mensagemSelecioneUsina.style.display =
-                'none';
-
-            carregandoClientes.style.display =
-                'block';
-
-            const opcao =
-                usinaFiltro.options[
-                    usinaFiltro.selectedIndex
-                ];
-
-            const usinaNome =
-                opcao.dataset.nome;
-
-            try {
-
-                const resposta = await fetch(
-                    `/api/usinas/${usinaId}/clientes`
-                );
-
-                if (!resposta.ok) {
-                    throw new Error('Erro na consulta');
-                }
-
-                const clientes =
-                    await resposta.json();
-
-                quantidadeClientesEncontrados.textContent =
-                    clientes.length;
-
-                clientes.forEach(function (cliente) {
-
-                    const jaVinculado =
-                        clientesVinculados.has(
-                            String(cliente.id)
-                        );
-
-                    const item =
-                        document.createElement('div');
-
-                    item.className =
-                        'form-check border rounded p-3 ps-5 mb-2 bg-light';
-
-                    item.innerHTML = `
-                        <input
-                            class="form-check-input checkbox-cliente"
-                            type="checkbox"
-                            id="cliente_${cliente.id}"
-                            data-id="${cliente.id}"
-                            data-nome="${escaparHtml(cliente.nome)}"
-                            data-codigo-unidade="${escaparHtml(cliente.codigo_unidade || '')}"
-                            data-usina-id="${usinaId}"
-                            data-usina-nome="${escaparHtml(usinaNome)}"
-                            ${jaVinculado ? 'checked disabled' : ''}
-                        >
-
-                        <label
-                            class="form-check-label w-100"
-                            for="cliente_${cliente.id}"
-                        >
-                            <strong>
-                                ${escaparHtml(cliente.nome)}
-                            </strong>
-
-                            <div class="small text-muted">
-                                ${
-                                    cliente.codigo_unidade
-                                        ? `UC ${escaparHtml(cliente.codigo_unidade)}`
-                                        : 'UC não informada'
-                                }
-                            </div>
-                        </label>
-                    `;
-
-                    listaClientesUsina.appendChild(
-                        item
-                    );
-
-                });
-
-                areaClientesUsina.style.display =
-                    'block';
-
-                btnSelecionarTodos.disabled =
-                    clientes.length === 0;
-
-                atualizarBotaoAdicionar();
-
-                listaClientesUsina
-                    .querySelectorAll('.checkbox-cliente')
-                    .forEach(function (checkbox) {
-
-                        checkbox.addEventListener(
-                            'change',
-                            atualizarBotaoAdicionar
-                        );
-
-                    });
-
-            } catch (erro) {
-
-                areaClientesUsina.style.display =
-                    'block';
-
-                listaClientesUsina.innerHTML = `
-                    <div class="alert alert-danger mb-0">
-                        Não foi possível carregar os clientes.
-                    </div>
-                `;
-
-            } finally {
-
-                carregandoClientes.style.display =
-                    'none';
-
-            }
-
-        }
-
-        function atualizarBotaoAdicionar() {
-
-            const marcados =
-                listaClientesUsina.querySelectorAll(
-                    '.checkbox-cliente:checked:not(:disabled)'
-                );
-
-            btnAdicionarClientes.disabled =
-                marcados.length === 0;
-
-        }
-
-        usinaFiltro.addEventListener(
-            'change',
-            carregarClientes
-        );
-
-        btnSelecionarTodos.addEventListener(
-            'click',
-            function () {
-
-                const checkboxes =
-                    listaClientesUsina.querySelectorAll(
-                        '.checkbox-cliente:not(:disabled)'
-                    );
-
-                const todosMarcados =
-                    Array.from(checkboxes).every(
-                        checkbox => checkbox.checked
-                    );
-
-                checkboxes.forEach(function (checkbox) {
-
-                    checkbox.checked =
-                        !todosMarcados;
-
-                });
-
-                atualizarBotaoAdicionar();
-
-            }
-        );
-
-        btnAdicionarClientes.addEventListener(
-            'click',
-            function () {
-
-                const selecionados =
-                    listaClientesUsina.querySelectorAll(
-                        '.checkbox-cliente:checked:not(:disabled)'
-                    );
-
-                selecionados.forEach(function (checkbox) {
-
-                    clientesVinculados.set(
-                        String(checkbox.dataset.id),
-                        {
-                            id: Number(checkbox.dataset.id),
-                            nome: checkbox.dataset.nome,
-                            codigo_unidade:
-                                checkbox.dataset.codigoUnidade,
-                            usina_id:
-                                Number(checkbox.dataset.usinaId),
-                            usina_nome:
-                                checkbox.dataset.usinaNome
-                        }
-                    );
-
-                });
-
-                atualizarClientesVinculados();
-                carregarClientes();
-
-            }
-        );
-
-        perfilUsuario.addEventListener(
-            'change',
-            atualizarCamposPorPerfil
-        );
-
-        document
-            .getElementById('btnToggleSenha')
-            .addEventListener(
-                'click',
-                function () {
-
-                    const senhaInput =
-                        document.getElementById('senhaInput');
-
-                    const icone =
-                        document.getElementById('iconeOlho');
-
-                    const mostrar =
-                        senhaInput.type === 'password';
-
-                    senhaInput.type =
-                        mostrar ? 'text' : 'password';
-
-                    icone.classList.toggle(
-                        'bi-eye',
-                        !mostrar
-                    );
-
-                    icone.classList.toggle(
-                        'bi-eye-slash',
-                        mostrar
-                    );
-
-                }
-            );
-
-        document
-            .getElementById('formUsuario')
-            .addEventListener(
-                'submit',
-                function (event) {
-
-                    if (
-                        perfilUsuario.value === 'cliente' &&
-                        clientesVinculados.size === 0
-                    ) {
-
-                        event.preventDefault();
-
-                        alert(
-                            'Selecione pelo menos um cliente.'
-                        );
-
-                    }
-
-                }
-            );
-
-        atualizarCamposPorPerfil();
-        atualizarClientesVinculados();
-
+        atualizarBotaoAdicionar();
+        atualizarBotaoSelecionarTodos();
     });
+
+    btnAdicionarClientes.addEventListener('click', function () {
+        const selecionados = listaClientesUsina.querySelectorAll('.checkbox-cliente:checked:not(:disabled)');
+
+        selecionados.forEach(cb => {
+            clientesVinculados.set(String(cb.dataset.id), {
+                id: Number(cb.dataset.id),
+                nome: cb.dataset.nome,
+                codigo_unidade: cb.dataset.codigoUnidade,
+                usina_id: Number(cb.dataset.usinaId),
+                usina_nome: cb.dataset.usinaNome
+            });
+        });
+
+        atualizarClientesVinculados();
+        carregarClientes();
+    });
+
+    perfilUsuario.addEventListener('change', atualizarCamposPorPerfil);
+
+    btnToggleSenha.addEventListener('click', function () {
+        const mostrar = senhaInput.type === 'password';
+        senhaInput.type = mostrar ? 'text' : 'password';
+        iconeOlho.classList.toggle('bi-eye', !mostrar);
+        iconeOlho.classList.toggle('bi-eye-slash', mostrar);
+    });
+
+    document.getElementById('formUsuario').addEventListener('submit', function (event) {
+        if (perfilUsuario.value === 'cliente' && clientesVinculados.size === 0) {
+            event.preventDefault();
+            alert('Selecione pelo menos um cliente para salvar as alterações.');
+            containerCliente.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    });
+
+    // Inicialização da tela
+    atualizarCamposPorPerfil();
+    atualizarClientesVinculados();
+});
 </script>
 
 {% endblock %}

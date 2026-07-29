@@ -263,25 +263,56 @@
 
     {% endif %}
 
-    <div class="col-md-4 col-lg-3">
-        <a href="{{ url_for('listar_propostas') }}" class="card-menu">
+    {# Venda de Usina #}
+    {% if current_user.perfil != 'comercial'
+        or current_user.vender_usina %}
+
+        <div class="col-md-4 col-lg-3">
+            <a
+                href="{{ url_for('listar_propostas') }}"
+                class="card-menu"
+            >
                 <div class="icon-box">
-                    <i class="bi bi-file-text"></i>
+                    <i class="bi bi-house-gear"></i>
                 </div>
-                <h5>Venda de Usina</h5>
-                <p>Orçamentos</p>
+
+                <h5>
+                    Venda de Usina
+                </h5>
+
+                <p>
+                    Orçamentos
+                </p>
             </a>
         </div>
 
+    {% endif %}
+
+
+    {# Energia por Assinatura #}
+    {% if current_user.perfil != 'comercial'
+        or current_user.vender_energia %}
+
         <div class="col-md-4 col-lg-3">
-            <a href="{{ url_for('listar_contas_concessionaria') }}" class="card-menu">
+            <a
+                href="{{ url_for('listar_contas_concessionaria') }}"
+                class="card-menu"
+            >
                 <div class="icon-box">
-                    <i class="bi bi-file-text"></i>
+                    <i class="bi bi-lightning-charge"></i>
                 </div>
-                <h5>Energia Por Assinatura</h5>
-                <p>Orçamentos</p>
+
+                <h5>
+                    Energia por Assinatura
+                </h5>
+
+                <p>
+                    Orçamentos
+                </p>
             </a>
         </div>
+
+    {% endif %}
 
         {% if current_user.perfil != 'comercial' %}
 

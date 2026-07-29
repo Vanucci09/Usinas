@@ -736,7 +736,6 @@ class ContaConcessionaria(db.Model):
     __tablename__ = 'contas_concessionaria'
 
     id = db.Column(db.Integer, primary_key=True)
-
     empresa_id = db.Column(
         db.Integer,
         db.ForeignKey('empresas.id'),
@@ -849,7 +848,6 @@ class ContaConcessionaria(db.Model):
     )
 
     # CONSUMO MÉDIO
-
     consumo_medio = db.Column(
         db.Numeric(12, 2),
         nullable=True,
@@ -857,7 +855,6 @@ class ContaConcessionaria(db.Model):
     )
 
     # ÚLTIMOS 12 MESES
-
     consumo_mes_1 = db.Column(db.Numeric(12, 2), default=0)
     consumo_mes_2 = db.Column(db.Numeric(12, 2), default=0)
     consumo_mes_3 = db.Column(db.Numeric(12, 2), default=0)
@@ -933,6 +930,17 @@ class ContaConcessionaria(db.Model):
             lazy=True
         )
     )
+    
+    observacoes = db.relationship(
+        'ObservacaoContaConcessionaria',
+        back_populates='conta',
+        cascade='all, delete-orphan',
+        passive_deletes=True,
+        lazy='selectin',
+        order_by=lambda: (
+            ObservacaoContaConcessionaria.criado_em.desc()
+        )
+    )
 
     vendedor = db.relationship(
         'Vendedor',
@@ -957,6 +965,61 @@ class ContaConcessionaria(db.Model):
             'n_uc'
         ),
     )
+    
+class ObservacaoContaConcessionaria(db.Model):
+    __tablename__ = 'observacoes_conta_concessionaria'
+
+    id = db.Column(
+        db.Integer,
+        primary_key=True
+    )
+
+    conta_id = db.Column(
+        db.Integer,
+        db.ForeignKey(
+            'contas_concessionaria.id',
+            ondelete='CASCADE'
+        ),
+        nullable=False,
+        index=True
+    )
+
+    usuario_id = db.Column(
+        db.Integer,
+        db.ForeignKey(
+            'usuarios.id',
+            ondelete='SET NULL'
+        ),
+        nullable=True,
+        index=True
+    )
+
+    texto = db.Column(
+        db.Text,
+        nullable=False
+    )
+
+    criado_em = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now()
+    )
+
+    conta = db.relationship(
+        'ContaConcessionaria',
+        back_populates='observacoes'
+    )
+
+    usuario = db.relationship(
+        'Usuario',
+        foreign_keys=[usuario_id]
+    )
+
+    def __repr__(self):
+        return (
+            f'<ObservacaoContaConcessionaria '
+            f'id={self.id} conta_id={self.conta_id}>'
+        )
     
 class DocumentoAdesao(db.Model):
     __tablename__ = 'documentos_adesao'
@@ -1342,10 +1405,28 @@ class Usuario(db.Model, UserMixin):
         nullable=False,
         default='usuario'
     )
-    
+
     primeiro_login = db.Column(
         db.Boolean,
         default=True,
+        nullable=False
+    )
+
+    ativo = db.Column(
+        db.Boolean,
+        default=True,
+        nullable=False
+    )
+
+    vender_usina = db.Column(
+        db.Boolean,
+        default=False,
+        nullable=False
+    )
+
+    vender_energia = db.Column(
+        db.Boolean,
+        default=False,
         nullable=False
     )
 
@@ -1355,7 +1436,7 @@ class Usuario(db.Model, UserMixin):
     pode_acessar_financeiro = db.Column(db.Boolean, default=False)
     pode_aprovar_financeiro = db.Column(db.Boolean, default=False)
     pode_acessar_comercial = db.Column(db.Boolean, default=False)
-    
+
     clientes = db.relationship(
         'Cliente',
         secondary='usuarios_clientes',
@@ -5736,40 +5817,70 @@ def listar_usinas():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-
     if request.method == 'POST':
-
-        email = request.form['email']
-        senha = request.form['senha']
-
-        usuario = Usuario.query.filter_by(
-            email=email
-        ).first()
-
-        if usuario and usuario.verificar_senha(senha):
-
-            login_user(usuario)
-
-            if usuario.primeiro_login:
-                return redirect(
-                    url_for('alterar_senha_primeiro_login')
-                )
-
-            if usuario.perfil == 'cliente':
-                return redirect(
-                    url_for('portal_cliente_desempenho_energia')
-                )
-
-            return redirect(
-                url_for('index')
+        email = (
+            request.form.get(
+                'email',
+                ''
             )
-
-        return render_template(
-            'login.html',
-            erro='Credenciais inválidas.'
+            .strip()
+            .lower()
         )
 
-    return render_template('login.html')
+        senha = request.form.get(
+            'senha',
+            ''
+        )
+
+        usuario = (
+            Usuario.query
+            .filter(
+                db.func.lower(
+                    Usuario.email
+                ) == email
+            )
+            .first()
+        )
+
+        if not usuario or not usuario.verificar_senha(senha):
+            return render_template(
+                'login.html',
+                erro='Credenciais inválidas.'
+            )
+
+        if not usuario.ativo:
+            return render_template(
+                'login.html',
+                erro='Este usuário está inativo. Entre em contato com o administrador.'
+            )
+
+        login_user(
+            usuario
+        )
+
+        if usuario.primeiro_login:
+            return redirect(
+                url_for(
+                    'alterar_senha_primeiro_login'
+                )
+            )
+
+        if usuario.perfil == 'cliente':
+            return redirect(
+                url_for(
+                    'portal_cliente_desempenho_energia'
+                )
+            )
+
+        return redirect(
+            url_for(
+                'index'
+            )
+        )
+
+    return render_template(
+        'login.html'
+    )
 
 @app.route(
     '/primeiro-login',
@@ -5912,7 +6023,22 @@ def cadastrar_usuario():
             'usuario'
         )
 
-        # getlist recebe vários clientes selecionados
+        # Todo novo usuário será cadastrado como ativo.
+        ativo = True
+
+        # Essas permissões somente podem ser aplicadas
+        # quando o perfil selecionado for comercial.
+        vender_usina = (
+            perfil == 'comercial'
+            and 'vender_usina' in request.form
+        )
+
+        vender_energia = (
+            perfil == 'comercial'
+            and 'vender_energia' in request.form
+        )
+
+        # Recebe vários clientes selecionados.
         clientes_ids = request.form.getlist(
             'clientes_ids'
         )
@@ -5959,11 +6085,15 @@ def cadastrar_usuario():
                 usinas=usinas
             )
 
-        usuario_existente = Usuario.query.filter(
-            db.func.lower(
-                Usuario.email
-            ) == email
-        ).first()
+        usuario_existente = (
+            Usuario.query
+            .filter(
+                db.func.lower(
+                    Usuario.email
+                ) == email
+            )
+            .first()
+        )
 
         if usuario_existente:
 
@@ -6023,7 +6153,8 @@ def cadastrar_usuario():
                     usinas=usinas
                 )
 
-            # Confere se os clientes possuem pelo menos um rateio
+            # Confere se os clientes possuem
+            # pelo menos um rateio ativo e maior que zero.
             clientes_com_rateio = (
                 db.session.query(
                     Rateio.cliente_id
@@ -6056,12 +6187,18 @@ def cadastrar_usuario():
                     usinas=usinas
                 )
 
+            # Perfil cliente não possui
+            # permissões administrativas.
             pode_geracao = False
             pode_cliente = False
             pode_fatura = False
             pode_financeiro = False
             pode_aprovar_financeiro = False
             pode_comercial = False
+
+            # Cliente também não pode vender.
+            vender_usina = False
+            vender_energia = False
 
         else:
 
@@ -6101,6 +6238,9 @@ def cadastrar_usuario():
             nome=nome,
             email=email,
             perfil=perfil,
+            ativo=ativo,
+            vender_usina=vender_usina,
+            vender_energia=vender_energia,
             pode_cadastrar_geracao=pode_geracao,
             pode_cadastrar_cliente=pode_cliente,
             pode_cadastrar_fatura=pode_fatura,
@@ -6135,7 +6275,7 @@ def cadastrar_usuario():
             db.session.commit()
 
             flash(
-                'Usuário cadastrado e clientes vinculados com sucesso!',
+                'Usuário cadastrado com sucesso!',
                 'success'
             )
 
@@ -6201,6 +6341,7 @@ def editar_usuario(id):
             'Você não possui permissão para acessar esta página.',
             'danger'
         )
+
         return redirect(
             url_for('index')
         )
@@ -6215,6 +6356,7 @@ def editar_usuario(id):
             'Usuário não encontrado.',
             'warning'
         )
+
         return redirect(
             url_for('listar_usuarios')
         )
@@ -6244,6 +6386,21 @@ def editar_usuario(id):
             'usuario'
         )
 
+        ativo = (
+            'ativo'
+            in request.form
+        )
+
+        vender_usina = (
+            perfil == 'comercial'
+            and 'vender_usina' in request.form
+        )
+
+        vender_energia = (
+            perfil == 'comercial'
+            and 'vender_energia' in request.form
+        )
+
         clientes_ids = request.form.getlist(
             'clientes_ids'
         )
@@ -6260,11 +6417,17 @@ def editar_usuario(id):
                 'warning'
             )
 
+            clientes_vinculados = (
+                carregar_clientes_vinculados_usuario(
+                    usuario.id
+                )
+            )
+
             return render_template(
                 'editar_usuario.html',
                 usuario=usuario,
                 usinas=usinas,
-                clientes_vinculados=[]
+                clientes_vinculados=clientes_vinculados
             )
 
         if not email:
@@ -6273,11 +6436,17 @@ def editar_usuario(id):
                 'warning'
             )
 
+            clientes_vinculados = (
+                carregar_clientes_vinculados_usuario(
+                    usuario.id
+                )
+            )
+
             return render_template(
                 'editar_usuario.html',
                 usuario=usuario,
                 usinas=usinas,
-                clientes_vinculados=[]
+                clientes_vinculados=clientes_vinculados
             )
 
         usuario_email_existente = (
@@ -6297,8 +6466,10 @@ def editar_usuario(id):
                 'warning'
             )
 
-            clientes_vinculados = carregar_clientes_vinculados_usuario(
-                usuario.id
+            clientes_vinculados = (
+                carregar_clientes_vinculados_usuario(
+                    usuario.id
+                )
             )
 
             return render_template(
@@ -6311,6 +6482,10 @@ def editar_usuario(id):
         usuario.nome = nome
         usuario.email = email
         usuario.perfil = perfil
+        usuario.ativo = ativo
+
+        usuario.vender_usina = vender_usina
+        usuario.vender_energia = vender_energia
 
         if perfil == 'cliente':
 
@@ -6320,8 +6495,10 @@ def editar_usuario(id):
                     'warning'
                 )
 
-                clientes_vinculados = carregar_clientes_vinculados_usuario(
-                    usuario.id
+                clientes_vinculados = (
+                    carregar_clientes_vinculados_usuario(
+                        usuario.id
+                    )
                 )
 
                 return render_template(
@@ -6353,8 +6530,10 @@ def editar_usuario(id):
                     'danger'
                 )
 
-                clientes_vinculados = carregar_clientes_vinculados_usuario(
-                    usuario.id
+                clientes_vinculados = (
+                    carregar_clientes_vinculados_usuario(
+                        usuario.id
+                    )
                 )
 
                 return render_template(
@@ -6390,8 +6569,10 @@ def editar_usuario(id):
                     'danger'
                 )
 
-                clientes_vinculados = carregar_clientes_vinculados_usuario(
-                    usuario.id
+                clientes_vinculados = (
+                    carregar_clientes_vinculados_usuario(
+                        usuario.id
+                    )
                 )
 
                 return render_template(
@@ -6407,6 +6588,9 @@ def editar_usuario(id):
             usuario.pode_acessar_financeiro = False
             usuario.pode_acessar_comercial = False
             usuario.pode_aprovar_financeiro = False
+
+            usuario.vender_usina = False
+            usuario.vender_energia = False
 
         else:
 
@@ -6437,6 +6621,10 @@ def editar_usuario(id):
                 in request.form
             )
 
+            if perfil != 'comercial':
+                usuario.vender_usina = False
+                usuario.vender_energia = False
+
             quer_aprovador = (
                 'pode_aprovar_financeiro'
                 in request.form
@@ -6453,6 +6641,7 @@ def editar_usuario(id):
                 )
 
                 usuario.pode_aprovar_financeiro = True
+
             else:
                 usuario.pode_aprovar_financeiro = False
 
@@ -6468,7 +6657,7 @@ def editar_usuario(id):
 
         try:
 
-            # Remove todos os vínculos antigos
+            # Remove todos os vínculos antigos.
             UsuarioCliente.query.filter_by(
                 usuario_id=usuario.id
             ).delete(
@@ -6476,6 +6665,7 @@ def editar_usuario(id):
             )
 
             # Recria somente os vínculos enviados
+            # quando o perfil for cliente.
             if perfil == 'cliente':
 
                 for cliente in clientes_selecionados:
@@ -6503,6 +6693,7 @@ def editar_usuario(id):
         except Exception as erro:
 
             db.session.rollback()
+
             print(
                 f'Erro ao editar usuário: {erro}'
             )
@@ -6512,8 +6703,10 @@ def editar_usuario(id):
                 'danger'
             )
 
-    clientes_vinculados = carregar_clientes_vinculados_usuario(
-        usuario.id
+    clientes_vinculados = (
+        carregar_clientes_vinculados_usuario(
+            usuario.id
+        )
     )
 
     return render_template(
@@ -16315,7 +16508,6 @@ def empresa_conta_bancaria_cadastrar():
 )
 @login_required
 def empresa_contas_listar():
-
     empresa_investidora_id = request.args.get(
         'empresa_investidora_id',
         type=int
@@ -16334,7 +16526,6 @@ def empresa_contas_listar():
     )
 
     qry = CaixaBanco.query
-
     if empresa_investidora_id:
 
         qry = qry.filter(
@@ -16345,7 +16536,6 @@ def empresa_contas_listar():
     if q:
 
         ilike = f'%{q}%'
-
         qry = qry.outerjoin(
             EmpresaInvestidora,
             CaixaBanco.empresa_investidora_id
@@ -20091,38 +20281,66 @@ def existe_usina_disponivel(conta):
 
     return False
 
-@app.route('/contas-concessionaria/nova', methods=['GET', 'POST'])
+@app.route(
+    '/contas-concessionaria/nova',
+    methods=['GET', 'POST']
+)
 @login_required
 def nova_conta_concessionaria():
 
-    empresas = Empresa.query.order_by(
-        Empresa.nome
-    ).all()
+    empresas = (
+        Empresa.query
+        .order_by(
+            Empresa.nome
+        )
+        .all()
+    )
 
-    vendedores = Vendedor.query.filter_by(
-        ativo=True
-    ).order_by(
-        Vendedor.nome
-    ).all()
-
-    if (
-        current_user.pode_acessar_comercial
-        and current_user.perfil not in ['admin', 'gerente_comercial']
-    ):
-
-        vendedor_logado = Vendedor.query.filter_by(
-            usuario_id=current_user.id,
+    vendedores = (
+        Vendedor.query
+        .filter_by(
             ativo=True
-        ).first()
+        )
+        .order_by(
+            Vendedor.nome
+        )
+        .all()
+    )
+
+    vendedor_logado = None
+
+    usuario_comercial_restrito = (
+        current_user.pode_acessar_comercial
+        and current_user.perfil not in [
+            'admin',
+            'gerente_comercial'
+        ]
+    )
+
+    if usuario_comercial_restrito:
+
+        vendedor_logado = (
+            Vendedor.query
+            .filter_by(
+                usuario_id=current_user.id,
+                ativo=True
+            )
+            .first()
+        )
 
         if vendedor_logado:
 
-            centros = CentroCusto.query.filter(
-                CentroCusto.ativo.is_(True),
-                CentroCusto.vendedor_id == vendedor_logado.id
-            ).order_by(
-                CentroCusto.nome
-            ).all()
+            centros = (
+                CentroCusto.query
+                .filter(
+                    CentroCusto.ativo.is_(True),
+                    CentroCusto.vendedor_id == vendedor_logado.id
+                )
+                .order_by(
+                    CentroCusto.nome
+                )
+                .all()
+            )
 
         else:
 
@@ -20130,32 +20348,36 @@ def nova_conta_concessionaria():
 
     else:
 
-        centros = CentroCusto.query.filter_by(
-            ativo=True
-        ).order_by(
-            CentroCusto.nome
-        ).all()
-
-    # NOVO: identifica automaticamente o vendedor do usuário comercial
-    vendedor_logado = None
-
-    if (
-        current_user.pode_acessar_comercial
-        and current_user.perfil not in ['admin', 'gerente_comercial']
-    ):
-        vendedor_logado = Vendedor.query.filter_by(
-            usuario_id=current_user.id,
-            ativo=True
-        ).first()
+        centros = (
+            CentroCusto.query
+            .filter(
+                CentroCusto.ativo.is_(True)
+            )
+            .order_by(
+                CentroCusto.nome
+            )
+            .all()
+        )
 
     if request.method == 'POST':
 
         try:
+
             desconto = float(
-                request.form.get('desconto') or 0
+                request.form.get(
+                    'desconto'
+                ) or 0
             )
 
-            # ADMIN = sem limite
+            observacao_inicial = (
+                request.form.get(
+                    'observacao',
+                    ''
+                )
+                .strip()
+            )
+
+            # Administrador não possui limite.
             if current_user.perfil != 'admin':
 
                 limite_desconto = 15
@@ -20166,7 +20388,10 @@ def nova_conta_concessionaria():
                 if desconto > limite_desconto:
 
                     flash(
-                        f'Desconto máximo permitido para seu perfil é {limite_desconto}%.',
+                        (
+                            'Desconto máximo permitido para seu perfil '
+                            f'é {limite_desconto}%.'
+                        ),
                         'warning'
                     )
 
@@ -20178,6 +20403,15 @@ def nova_conta_concessionaria():
                         vendedor_logado=vendedor_logado
                     )
 
+            vendedor_id = (
+                vendedor_logado.id
+                if vendedor_logado
+                else request.form.get(
+                    'vendedor_id',
+                    type=int
+                )
+            )
+
             conta = ContaConcessionaria(
 
                 # RELACIONAMENTOS
@@ -20186,77 +20420,201 @@ def nova_conta_concessionaria():
                     type=int
                 ),
 
-                vendedor_id=(
-                    vendedor_logado.id
-                    if vendedor_logado
-                    else request.form.get(
-                        'vendedor_id',
-                        type=int
-                    )
-                ),
+                vendedor_id=vendedor_id,
 
                 centro_custo_id=request.form.get(
                     'centro_custo_id',
                     type=int
                 ),
-                
-                observacao=request.form.get(
-                    'observacao'
-                ),
 
                 # DADOS PRINCIPAIS
-                n_uc=request.form.get('n_uc'),
-                fase=request.form.get('fase'),
-                bandeira=request.form.get('bandeira'),
+                n_uc=(
+                    request.form.get(
+                        'n_uc',
+                        ''
+                    )
+                    .strip()
+                ),
+
+                fase=request.form.get(
+                    'fase'
+                ),
+
+                bandeira=request.form.get(
+                    'bandeira'
+                ),
 
                 # TARIFAS
-                tarifa_energia=request.form.get(
-                    'tarifa_energia'
-                ) or 0,
+                tarifa_energia=(
+                    request.form.get(
+                        'tarifa_energia'
+                    )
+                    or 0
+                ),
 
-                tarifa_concessionaria=request.form.get(
-                    'tarifa_concessionaria'
-                ) or 0,
+                tarifa_concessionaria=(
+                    request.form.get(
+                        'tarifa_concessionaria'
+                    )
+                    or 0
+                ),
 
                 desconto=desconto,
 
                 # ENCARGOS
-                cip=request.form.get('cip') or 0,
-                icms=request.form.get('icms') or 0,
-                pis=request.form.get('pis') or 0,
-                cofins=request.form.get('cofins') or 0,
+                cip=(
+                    request.form.get(
+                        'cip'
+                    )
+                    or 0
+                ),
+
+                icms=(
+                    request.form.get(
+                        'icms'
+                    )
+                    or 0
+                ),
+
+                pis=(
+                    request.form.get(
+                        'pis'
+                    )
+                    or 0
+                ),
+
+                cofins=(
+                    request.form.get(
+                        'cofins'
+                    )
+                    or 0
+                ),
 
                 # CLASSIFICAÇÃO
                 me_epp=(
-                    True
-                    if request.form.get('me_epp')
-                    else False
+                    'me_epp'
+                    in request.form
                 ),
 
                 # CONSUMO MÉDIO
-                consumo_medio=request.form.get(
-                    'consumo_medio'
-                ) or 0,
+                consumo_medio=(
+                    request.form.get(
+                        'consumo_medio'
+                    )
+                    or 0
+                ),
 
-                # CONSUMO ÚLTIMOS 12 MESES
-                consumo_mes_1=request.form.get('consumo_mes_1') or 0,
-                consumo_mes_2=request.form.get('consumo_mes_2') or 0,
-                consumo_mes_3=request.form.get('consumo_mes_3') or 0,
-                consumo_mes_4=request.form.get('consumo_mes_4') or 0,
-                consumo_mes_5=request.form.get('consumo_mes_5') or 0,
-                consumo_mes_6=request.form.get('consumo_mes_6') or 0,
-                consumo_mes_7=request.form.get('consumo_mes_7') or 0,
-                consumo_mes_8=request.form.get('consumo_mes_8') or 0,
-                consumo_mes_9=request.form.get('consumo_mes_9') or 0,
-                consumo_mes_10=request.form.get('consumo_mes_10') or 0,
-                consumo_mes_11=request.form.get('consumo_mes_11') or 0,
-                consumo_mes_12=request.form.get('consumo_mes_12') or 0,
+                # CONSUMO DOS ÚLTIMOS 12 MESES
+                consumo_mes_1=(
+                    request.form.get(
+                        'consumo_mes_1'
+                    )
+                    or 0
+                ),
+
+                consumo_mes_2=(
+                    request.form.get(
+                        'consumo_mes_2'
+                    )
+                    or 0
+                ),
+
+                consumo_mes_3=(
+                    request.form.get(
+                        'consumo_mes_3'
+                    )
+                    or 0
+                ),
+
+                consumo_mes_4=(
+                    request.form.get(
+                        'consumo_mes_4'
+                    )
+                    or 0
+                ),
+
+                consumo_mes_5=(
+                    request.form.get(
+                        'consumo_mes_5'
+                    )
+                    or 0
+                ),
+
+                consumo_mes_6=(
+                    request.form.get(
+                        'consumo_mes_6'
+                    )
+                    or 0
+                ),
+
+                consumo_mes_7=(
+                    request.form.get(
+                        'consumo_mes_7'
+                    )
+                    or 0
+                ),
+
+                consumo_mes_8=(
+                    request.form.get(
+                        'consumo_mes_8'
+                    )
+                    or 0
+                ),
+
+                consumo_mes_9=(
+                    request.form.get(
+                        'consumo_mes_9'
+                    )
+                    or 0
+                ),
+
+                consumo_mes_10=(
+                    request.form.get(
+                        'consumo_mes_10'
+                    )
+                    or 0
+                ),
+
+                consumo_mes_11=(
+                    request.form.get(
+                        'consumo_mes_11'
+                    )
+                    or 0
+                ),
+
+                consumo_mes_12=(
+                    request.form.get(
+                        'consumo_mes_12'
+                    )
+                    or 0
+                ),
 
                 # STATUS
-                ativo=True,
+                ativo=True
             )
 
-            db.session.add(conta)
+            db.session.add(
+                conta
+            )
+
+            # Garante que o ID da conta seja criado
+            # antes de salvar a observação.
+            db.session.flush()
+
+            if observacao_inicial:
+
+                nova_observacao = (
+                    ObservacaoContaConcessionaria(
+                        conta_id=conta.id,
+                        usuario_id=current_user.id,
+                        texto=observacao_inicial
+                    )
+                )
+
+                db.session.add(
+                    nova_observacao
+                )
+
             db.session.commit()
 
             flash(
@@ -20265,15 +20623,27 @@ def nova_conta_concessionaria():
             )
 
             return redirect(
-                url_for('listar_contas_concessionaria')
+                url_for(
+                    'listar_contas_concessionaria'
+                )
             )
 
-        except Exception as e:
+        except ValueError:
+
+            db.session.rollback()
+
+            flash(
+                'O valor do desconto é inválido.',
+                'warning'
+            )
+
+        except Exception as erro:
 
             db.session.rollback()
 
             print(
-                f'ERRO AO SALVAR CONTA CONCESSIONÁRIA: {e}'
+                'ERRO AO SALVAR CONTA CONCESSIONÁRIA: '
+                f'{erro}'
             )
 
             flash(
@@ -20292,7 +20662,6 @@ def nova_conta_concessionaria():
 @app.route('/contas-concessionaria')
 @login_required
 def listar_contas_concessionaria():
-
     pagina = request.args.get(
         'page',
         1,
@@ -20339,7 +20708,6 @@ def listar_contas_concessionaria():
             )
 
         else:
-
             query = query.filter(False)
 
     # Filtro por vendedor
@@ -20356,48 +20724,41 @@ def listar_contas_concessionaria():
 
     # Filtro por status
     if status == 'analise':
-
         query = query.filter(
             ContaConcessionaria.email_enviado.is_(False),
             ContaConcessionaria.validacao_cliente.is_(False)
         )
 
     elif status == 'proposta_enviada':
-
         query = query.filter(
             ContaConcessionaria.email_enviado.is_(True),
             ContaConcessionaria.validacao_cliente.is_(False)
         )
 
     elif status == 'aprovado':
-
         query = query.filter(
             ContaConcessionaria.validacao_cliente.is_(True)
         )
 
     elif status == 'documentacao':
-
         query = query.filter(
             ContaConcessionaria.validacao_cliente.is_(True),
             ContaConcessionaria.documentacao_enviada.is_(False)
         )
 
     elif status == 'assinatura':
-
         query = query.filter(
             ContaConcessionaria.termo_enviado.is_(True),
             ContaConcessionaria.termo_assinado.is_(False)
         )
 
     elif status == 'assinado':
-
         query = query.filter(
             ContaConcessionaria.termo_assinado.is_(True)
         )
 
     # KPIs já considerando todos os filtros
     total = query.count()
-
     aceitas = query.filter(
         ContaConcessionaria.validacao_cliente.is_(True)
     ).count()
@@ -24574,6 +24935,159 @@ def portal_cliente_relatorios():
         quantidade_abertas=quantidade_abertas,
         total_pago=total_pago,
         total_aberto=total_aberto
+    )
+    
+@app.route(
+    '/contas-concessionaria/<int:conta_id>/observacoes/adicionar',
+    methods=['POST']
+)
+@login_required
+def adicionar_observacao_conta_concessionaria(conta_id):
+
+    if not (
+        current_user.perfil in [
+            'admin',
+            'gerente_comercial',
+            'comercial'
+        ]
+        or current_user.pode_acessar_comercial
+    ):
+        abort(403)
+
+    conta = db.session.get(
+        ContaConcessionaria,
+        conta_id
+    )
+
+    if not conta:
+        flash(
+            'Conta concessionária não encontrada.',
+            'warning'
+        )
+
+        return redirect(
+            url_for(
+                'listar_contas_concessionaria'
+            )
+        )
+
+    # O comercial só pode adicionar observação
+    # nas próprias propostas.
+    if current_user.perfil == 'comercial':
+
+        vendedor = (
+            Vendedor.query
+            .filter_by(
+                usuario_id=current_user.id,
+                ativo=True
+            )
+            .first()
+        )
+
+        if (
+            not vendedor
+            or conta.vendedor_id != vendedor.id
+        ):
+            abort(403)
+
+    texto = request.form.get(
+        'texto',
+        ''
+    ).strip()
+
+    pagina = request.form.get(
+        'page',
+        1,
+        type=int
+    )
+
+    vendedor_id = request.form.get(
+        'vendedor_id',
+        type=int
+    )
+
+    status = request.form.get(
+        'status',
+        ''
+    ).strip()
+
+    nome = request.form.get(
+        'nome',
+        ''
+    ).strip()
+
+    if not texto:
+        flash(
+            'Digite uma observação antes de salvar.',
+            'warning'
+        )
+
+        return redirect(
+            url_for(
+                'listar_contas_concessionaria',
+                page=pagina,
+                vendedor_id=vendedor_id,
+                status=status,
+                nome=nome
+            )
+        )
+
+    if len(texto) > 5000:
+        flash(
+            'A observação deve possuir no máximo 5.000 caracteres.',
+            'warning'
+        )
+
+        return redirect(
+            url_for(
+                'listar_contas_concessionaria',
+                page=pagina,
+                vendedor_id=vendedor_id,
+                status=status,
+                nome=nome
+            )
+        )
+
+    nova_observacao = ObservacaoContaConcessionaria(
+        conta_id=conta.id,
+        usuario_id=current_user.id,
+        texto=texto
+    )
+
+    try:
+
+        db.session.add(
+            nova_observacao
+        )
+
+        db.session.commit()
+
+        flash(
+            'Observação adicionada com sucesso.',
+            'success'
+        )
+
+    except Exception as erro:
+
+        db.session.rollback()
+
+        print(
+            f'Erro ao adicionar observação: {erro}'
+        )
+
+        flash(
+            'Não foi possível salvar a observação.',
+            'danger'
+        )
+
+    return redirect(
+        url_for(
+            'listar_contas_concessionaria',
+            page=pagina,
+            vendedor_id=vendedor_id,
+            status=status,
+            nome=nome
+        )
     )
 
 
