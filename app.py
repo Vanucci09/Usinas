@@ -2250,16 +2250,12 @@ def reequilibrio_rateios(usina_id):
                     request.url
                 )
 
-        if abs(total - Decimal('100')) > Decimal('0.01'):
-
+        if total > Decimal('100'):
             flash(
-                f'O total informado foi {total:.2f}% e deve ser exatamente 100%.',
+                f'O total informado foi {total:.2f}% e não pode ser maior que 100%.',
                 'danger'
             )
-
-            return redirect(
-                request.url
-            )
+            return redirect(request.url)
 
         try:
 
@@ -23007,27 +23003,31 @@ def visualizar_documentos_adesao(conta_id):
 @login_required
 def realocar_conta_concessionaria(conta_id):
 
-    conta = ContaConcessionaria.query.get_or_404(
-        conta_id
-    )
+    conta = ContaConcessionaria.query.get_or_404(conta_id)
 
-    if conta.alocado:
+    try:
+
+        resultado = alocar_conta_apos_assinatura(conta)
+
+        db.session.commit()
 
         flash(
-            'Cliente já está alocado.',
-            'warning'
+            resultado['mensagem'],
+            'success' if resultado['sucesso'] else 'warning'
         )
 
-        return redirect(
-            url_for(
-                'visualizar_documentos_adesao',
-                conta_id=conta.id
-            )
+    except Exception as e:
+
+        db.session.rollback()
+
+        flash(
+            str(e),
+            'danger'
         )
 
     return redirect(
         url_for(
-            'alocar_conta_concessionaria',
+            'visualizar_documentos_adesao',
             conta_id=conta.id
         )
     )
