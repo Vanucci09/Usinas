@@ -128,12 +128,12 @@ Cadastrar Usuário
                             required
                         >
                             <option
-                                value="usuario"
-                                {% if request.form.get('perfil', 'usuario') == 'usuario' %}
+                                value="acionista"
+                                {% if request.form.get('perfil') == 'acionista' %}
                                     selected
                                 {% endif %}
                             >
-                                Usuário comum
+                                Acionista
                             </option>
 
                             <option
@@ -368,6 +368,60 @@ Cadastrar Usuário
                 </div>
             </div>
 
+            <div id="containerAcionista" class="mb-4" style="display:none;">
+
+                <div class="card border-primary-subtle bg-primary-subtle bg-opacity-10 shadow-none">
+
+                    <div class="card-body">
+
+                        <div class="d-flex align-items-center gap-2 mb-3">
+
+                            <i class="bi bi-building text-primary fs-4"></i>
+
+                            <div>
+
+                                <h6 class="mb-0 fw-bold text-primary">
+                                    Vinculação de Acionistas
+                                </h6>
+
+                                <small class="text-muted">
+                                    Selecione os acionistas que terão acesso ao portal.
+                                </small>
+
+                            </div>
+
+                        </div>
+
+                        <div id="listaAcionistas" class="list-group">
+
+                            {% for acionista in acionistas %}
+
+                            <label class="list-group-item">
+
+                                <input
+                                    type="checkbox"
+                                    class="form-check-input me-2"
+                                    name="acionistas_ids"
+                                    value="{{ acionista.id }}"
+                                >
+
+                                {{ acionista.nome }}
+                                <small class="text-muted">
+                                    - {{ acionista.cpf }}
+                                </small>
+
+                            </label>
+
+                            {% endfor %}
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
             <!-- Permissões Modulares (Exibido para Perfis Internos) -->
             <div class="permission-section mb-4" id="secaoPermissoes">
                 <h6 class="fw-bold text-primary text-uppercase mb-3 d-flex align-items-center gap-2" style="font-size: 0.85rem; letter-spacing: 0.5px;">
@@ -441,6 +495,7 @@ Cadastrar Usuário
 document.addEventListener('DOMContentLoaded', function () {
     const perfilUsuario = document.getElementById('perfilUsuario');
     const containerCliente = document.getElementById('containerCliente');
+    const containerAcionista = document.getElementById('containerAcionista');
     const secaoPermissoes = document.getElementById('secaoPermissoes');
     const secaoVendas = document.getElementById('secaoVendas');
     const usinaFiltro = document.getElementById('usinaFiltro');
@@ -477,7 +532,11 @@ document.addEventListener('DOMContentLoaded', function () {
         const perfil = perfilUsuario.value;
 
         const perfilCliente = perfil === 'cliente';
+        const perfilAcionista = perfil === 'acionista';
         const perfilComercial = perfil === 'comercial';
+
+        containerCliente.style.display = 'none';
+        containerAcionista.style.display = 'none';
 
         if (perfilCliente) {
 
@@ -490,22 +549,38 @@ document.addEventListener('DOMContentLoaded', function () {
                 campo.disabled = true;
             });
 
-        } else {
+        } 
+        else if (perfilAcionista) {
+
+            containerAcionista.style.display = 'block';
+
+            secaoPermissoes.style.display = 'none';
+            secaoVendas.style.display = 'none';
+
+            camposPermissao.forEach(campo => {
+                campo.checked = false;
+                campo.disabled = true;
+            });
+
+        }
+        else {
 
             containerCliente.style.display = 'none';
+            containerAcionista.style.display = 'none';
+
             secaoPermissoes.style.display = 'block';
 
             camposPermissao.forEach(campo => {
                 campo.disabled = false;
             });
 
-            secaoVendas.style.display = perfilComercial ? 'block' : 'none';
+            secaoVendas.style.display =
+                perfilComercial ? 'block' : 'none';
 
             if (!perfilComercial) {
                 document.getElementById('venderUsina').checked = false;
                 document.getElementById('venderEnergia').checked = false;
             }
-
         }
 
     }
@@ -743,15 +818,52 @@ document.addEventListener('DOMContentLoaded', function () {
         iconeOlho.classList.toggle('bi-eye-slash', isPassword);
     });
 
-    document.getElementById('formUsuario').addEventListener('submit', function (event) {
-        const perfilCliente = perfilUsuario.value === 'cliente';
+    document
+        .getElementById('formUsuario')
+        .addEventListener('submit', function (event) {
 
-        if (perfilCliente && clientesVinculados.size === 0) {
-            event.preventDefault();
-            alert('Por favor, adicione ao menos um cliente à lista de vinculação.');
-            containerCliente.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-    });
+            const perfil = perfilUsuario.value;
+
+            if (
+                perfil === 'cliente'
+                && clientesVinculados.size === 0
+            ) {
+                event.preventDefault();
+
+                alert(
+                    'Por favor, adicione ao menos um cliente à lista de vinculação.'
+                );
+
+                containerCliente.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                });
+
+                return;
+            }
+
+            if (perfil === 'acionista') {
+
+                const acionistasSelecionados =
+                    document.querySelectorAll(
+                        'input[name="acionistas_ids"]:checked'
+                    );
+
+                if (acionistasSelecionados.length === 0) {
+
+                    event.preventDefault();
+
+                    alert(
+                        'Por favor, selecione ao menos um acionista.'
+                    );
+
+                    containerAcionista.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center'
+                    });
+                }
+            }
+        });
 
     atualizarCamposPorPerfil();
 });

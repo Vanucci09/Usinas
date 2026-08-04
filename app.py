@@ -350,6 +350,21 @@ class EmpresaInvestidora(db.Model):
     usinas = db.relationship('UsinaInvestidora', backref='empresa', cascade="all, delete-orphan")
     acionistas = db.relationship('ParticipacaoAcionista', backref='empresa', cascade="all, delete-orphan")
     
+class UsuarioAcionista(db.Model):
+    __tablename__ = 'usuarios_acionistas'
+
+    usuario_id = db.Column(
+        db.Integer,
+        db.ForeignKey('usuarios.id'),
+        primary_key=True
+    )
+
+    acionista_id = db.Column(
+        db.Integer,
+        db.ForeignKey('acionistas.id'),
+        primary_key=True
+    )
+    
 class ParticipacaoAcionista(db.Model):
     __tablename__ = 'participacoes_acionistas'
     id = db.Column(db.Integer, primary_key=True)
@@ -1446,6 +1461,12 @@ class Usuario(db.Model, UserMixin):
         ),
         lazy='dynamic'
     )
+    
+    acionistas = db.relationship(
+        'Acionista',
+        secondary='usuarios_acionistas',
+        backref='usuarios_portal'
+    )
 
     def set_senha(self, senha):
         self.senha_hash = generate_password_hash(senha)
@@ -1643,154 +1664,605 @@ def excluir_geracao(id):
 @app.route('/consulta')
 @login_required
 def consulta():
-    usina_id = request.args.get('usina_id', '')
-    data_inicio = request.args.get('data_inicio', date.today().replace(day=1).isoformat())
-    data_fim = request.args.get('data_fim', date.today().isoformat())
 
-    query = db.session.query(Geracao, Usina).join(Usina).filter(Geracao.data.between(data_inicio, data_fim))
+    usina_id = request.args.get(
+        'usina_id',
+        type=int
+    )
+
+    data_inicio = request.args.get(
+        'data_inicio',
+        date.today().replace(day=1).isoformat()
+    )
+
+    data_fim = request.args.get(
+        'data_fim',
+        date.today().isoformat()
+    )
+
+    # ==========================================
+    # USINAS PERMITIDAS
+    # ==========================================
+
+    usinas_permitidas_ids = None
+
+    if current_user.perfil == 'acionista':
+
+        usinas_permitidas_ids = [
+            resultado.usina_id
+            for resultado in (
+                db.session.query(
+                    UsinaInvestidora.usina_id
+                )
+                .join(
+                    ParticipacaoAcionista,
+                    ParticipacaoAcionista.empresa_id
+                    == UsinaInvestidora.empresa_id
+                )
+                .join(
+                    UsuarioAcionista,
+                    UsuarioAcionista.acionista_id
+                    == ParticipacaoAcionista.acionista_id
+                )
+                .filter(
+                    UsuarioAcionista.usuario_id
+                    == current_user.id
+                )
+                .distinct()
+                .all()
+            )
+        ]
+
+        # Se o acionista não possuir nenhuma usina vinculada,
+        # força a consulta a não retornar resultados.
+        if not usinas_permitidas_ids:
+            usinas_permitidas_ids = [-1]
+
+    # ==========================================
+    # LISTA DE USINAS DO FILTRO
+    # ==========================================
+
+    query_usinas = Usina.query
+
+    if current_user.perfil == 'acionista':
+        query_usinas = query_usinas.filter(
+            Usina.id.in_(
+                usinas_permitidas_ids
+            )
+        )
+
+    usinas = (
+        query_usinas
+        .order_by(
+            Usina.nome.asc()
+        )
+        .all()
+    )
+
+    # ==========================================
+    # VALIDAÇÃO DO FILTRO DA USINA
+    # ==========================================
+
+    if (
+        current_user.perfil == 'acionista'
+        and usina_id
+        and usina_id not in usinas_permitidas_ids
+    ):
+        abort(403)
+
+    # ==========================================
+    # CONSULTA DE GERAÇÃO
+    # ==========================================
+
+    query = (
+        db.session.query(
+            Geracao,
+            Usina
+        )
+        .join(
+            Usina,
+            Geracao.usina_id == Usina.id
+        )
+        .filter(
+            Geracao.data.between(
+                data_inicio,
+                data_fim
+            )
+        )
+    )
+
+    # Acionista visualiza somente as usinas
+    # ligadas às empresas das quais participa.
+    if current_user.perfil == 'acionista':
+        query = query.filter(
+            Usina.id.in_(
+                usinas_permitidas_ids
+            )
+        )
+
     if usina_id:
-        query = query.filter(Usina.id == usina_id)
+        query = query.filter(
+            Usina.id == usina_id
+        )
 
-    resultados = query.order_by(Geracao.data.asc()).all()
-    usinas = Usina.query.all()
+    resultados = (
+        query
+        .order_by(
+            Geracao.data.asc()
+        )
+        .all()
+    )
 
     total = 0
-    data = []
+    dados = []
     dias = []
     geracoes = []
     previsoes = []
 
     for geracao, usina in resultados:
-        dias_no_mes = monthrange(geracao.data.year, geracao.data.month)[1]
-        previsao_registro = PrevisaoMensal.query.filter_by(
-            usina_id=usina.id,
-            ano=geracao.data.year,
-            mes=geracao.data.month
-        ).first()
-        previsao_mensal = previsao_registro.previsao_kwh if previsao_registro else 0
-        previsao_diaria = previsao_mensal / dias_no_mes if dias_no_mes else 0
-        producao_negativa = geracao.energia_kwh < previsao_diaria
 
-        data.append({
+        dias_no_mes = monthrange(
+            geracao.data.year,
+            geracao.data.month
+        )[1]
+
+        previsao_registro = (
+            PrevisaoMensal.query
+            .filter_by(
+                usina_id=usina.id,
+                ano=geracao.data.year,
+                mes=geracao.data.month
+            )
+            .first()
+        )
+
+        previsao_mensal = (
+            previsao_registro.previsao_kwh
+            if previsao_registro
+            else 0
+        )
+
+        previsao_diaria = (
+            previsao_mensal / dias_no_mes
+            if dias_no_mes
+            else 0
+        )
+
+        producao_negativa = (
+            geracao.energia_kwh
+            < previsao_diaria
+        )
+
+        dados.append({
             'nome': usina.nome,
             'data': geracao.data,
             'energia_kwh': geracao.energia_kwh,
             'previsao_diaria': previsao_diaria,
-            'producao_negativa': producao_negativa,
+            'producao_negativa': producao_negativa
         })
 
-        dias.append(geracao.data.day)
-        geracoes.append(geracao.energia_kwh)
-        previsoes.append(previsao_diaria)
+        dias.append(
+            geracao.data.day
+        )
+
+        geracoes.append(
+            geracao.energia_kwh
+        )
+
+        previsoes.append(
+            previsao_diaria
+        )
+
         total += geracao.energia_kwh
 
-    return render_template('consulta.html', resultados=data, total=total, usinas=usinas, usina_id=usina_id,
-                           data_inicio=data_inicio, data_fim=data_fim, dias=dias, geracoes=geracoes, previsoes=previsoes)
+    return render_template(
+        'consulta.html',
+        resultados=dados,
+        total=total,
+        usinas=usinas,
+        usina_id=usina_id,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+        dias=dias,
+        geracoes=geracoes,
+        previsoes=previsoes
+    )
 
-@app.route('/producao_mensal/<int:usina_id>/<int:ano>/<int:mes>')
+@app.route(
+    '/producao_mensal/<int:usina_id>/<int:ano>/<int:mes>'
+)
 @login_required
 def producao_mensal(usina_id, ano, mes):
-    usina = Usina.query.get_or_404(usina_id)
+
+    # ==========================================
+    # VALIDAÇÃO DO PERÍODO
+    # ==========================================
+
+    if mes < 1 or mes > 12:
+        abort(404)
+
+    # ==========================================
+    # RESTRIÇÃO PARA ACIONISTA
+    # ==========================================
+
+    usinas_permitidas_ids = None
+
+    if current_user.perfil == 'acionista':
+
+        usinas_permitidas_ids = [
+            resultado.usina_id
+            for resultado in (
+                db.session.query(
+                    UsinaInvestidora.usina_id
+                )
+                .join(
+                    ParticipacaoAcionista,
+                    ParticipacaoAcionista.empresa_id
+                    == UsinaInvestidora.empresa_id
+                )
+                .join(
+                    UsuarioAcionista,
+                    UsuarioAcionista.acionista_id
+                    == ParticipacaoAcionista.acionista_id
+                )
+                .filter(
+                    UsuarioAcionista.usuario_id
+                    == current_user.id
+                )
+                .distinct()
+                .all()
+            )
+        ]
+
+        # Impede acesso direto pela URL a outra usina.
+        if usina_id not in usinas_permitidas_ids:
+            abort(403)
+
+    # ==========================================
+    # USINA ATUAL
+    # ==========================================
+
+    usina = db.session.get(
+        Usina,
+        usina_id
+    )
+
+    if not usina:
+        abort(404)
+
     potencia_kw = usina.potencia_kw
 
-    data_inicio = date(ano, mes, 1)
-    data_fim = date(ano + 1, 1, 1) if mes == 12 else date(ano, mes + 1, 1)
+    data_inicio = date(
+        ano,
+        mes,
+        1
+    )
 
-    resultados = Geracao.query.filter(
-        Geracao.usina_id == usina_id,
-        Geracao.data >= data_inicio,
-        Geracao.data < data_fim
-    ).order_by(Geracao.data).all()
+    data_fim = (
+        date(
+            ano + 1,
+            1,
+            1
+        )
+        if mes == 12
+        else date(
+            ano,
+            mes + 1,
+            1
+        )
+    )
 
-    dias_mes = monthrange(ano, mes)[1]
+    # ==========================================
+    # GERAÇÃO DO MÊS
+    # ==========================================
+
+    resultados = (
+        Geracao.query
+        .filter(
+            Geracao.usina_id == usina_id,
+            Geracao.data >= data_inicio,
+            Geracao.data < data_fim
+        )
+        .order_by(
+            Geracao.data
+        )
+        .all()
+    )
+
+    dias_mes = monthrange(
+        ano,
+        mes
+    )[1]
+
     totais = [0.0] * dias_mes
     detalhes = []
     soma = 0.0
 
-    for r in resultados:
-        dia = r.data.day
-        totais[dia - 1] = r.energia_kwh
-        soma += r.energia_kwh
-        detalhes.append({'data': r.data, 'energia_kwh': r.energia_kwh})
+    for resultado in resultados:
+
+        dia = resultado.data.day
+
+        energia = float(
+            resultado.energia_kwh or 0
+        )
+
+        totais[dia - 1] = energia
+        soma += energia
+
+        detalhes.append({
+            'data': resultado.data,
+            'energia_kwh': energia
+        })
 
     dias_com_dado = len(resultados)
-    media_diaria = soma / dias_com_dado if dias_com_dado > 0 else 0.0
-    previsao_total = round(media_diaria * dias_mes, 2)
 
-    previsao_registro = PrevisaoMensal.query.filter_by(
-        usina_id=usina_id, ano=ano, mes=mes
-    ).first()
-    valor_mensal = previsao_registro.previsao_kwh if previsao_registro else 0.0
-    previsao_diaria_padrao = (valor_mensal / dias_mes) if dias_mes else 0.0
-    previsoes = [round(previsao_diaria_padrao, 2) for _ in range(dias_mes)]
+    media_diaria = (
+        soma / dias_com_dado
+        if dias_com_dado > 0
+        else 0.0
+    )
 
-    inicio_ano = date(ano, 1, 1)
-    fim_periodo = data_fim - timedelta(days=1)
-    ano_sum = db.session.query(func.coalesce(func.sum(Geracao.energia_kwh), 0.0)).filter(
-        Geracao.usina_id == usina_id,
-        Geracao.data >= inicio_ano,
-        Geracao.data <= fim_periodo
-    ).scalar() or 0.0
+    previsao_total = round(
+        media_diaria * dias_mes,
+        2
+    )
 
-    # Receita bruta e líquida acumuladas no ano
-    ano_bruto = round(ano_sum * 0.83, 2)
-    ano_liquido = round(ano_bruto * 0.80, 2)
+    # ==========================================
+    # PREVISÃO MENSAL
+    # ==========================================
 
-    # Média Yield acumulado no ano (exceto mês atual)
-    geracoes_diarias = db.session.query(
-        Geracao.data,
-        func.sum(Geracao.energia_kwh)
-    ).filter(
-        Geracao.usina_id == usina_id,
-        extract('year', Geracao.data) == ano,
-        extract('month', Geracao.data) < mes
-    ).group_by(Geracao.data).all()
+    previsao_registro = (
+        PrevisaoMensal.query
+        .filter_by(
+            usina_id=usina_id,
+            ano=ano,
+            mes=mes
+        )
+        .first()
+    )
 
-    dados_por_mes = defaultdict(list)
-    for data, energia in geracoes_diarias:
-        dados_por_mes[data.month].append(float(energia))
+    valor_mensal = (
+        float(previsao_registro.previsao_kwh or 0)
+        if previsao_registro
+        else 0.0
+    )
+
+    previsao_diaria_padrao = (
+        valor_mensal / dias_mes
+        if dias_mes
+        else 0.0
+    )
+
+    previsoes = [
+        round(
+            previsao_diaria_padrao,
+            2
+        )
+        for _ in range(dias_mes)
+    ]
+
+    # ==========================================
+    # GERAÇÃO ACUMULADA NO ANO
+    # ==========================================
+
+    inicio_ano = date(
+        ano,
+        1,
+        1
+    )
+
+    fim_periodo = (
+        data_fim
+        - timedelta(days=1)
+    )
+
+    ano_sum = (
+        db.session.query(
+            func.coalesce(
+                func.sum(
+                    Geracao.energia_kwh
+                ),
+                0.0
+            )
+        )
+        .filter(
+            Geracao.usina_id == usina_id,
+            Geracao.data >= inicio_ano,
+            Geracao.data <= fim_periodo
+        )
+        .scalar()
+        or 0.0
+    )
+
+    ano_sum = float(
+        ano_sum
+    )
+
+    ano_bruto = round(
+        ano_sum * 0.83,
+        2
+    )
+
+    ano_liquido = round(
+        ano_bruto * 0.80,
+        2
+    )
+
+    # ==========================================
+    # MÉDIA DO YIELD ACUMULADO
+    # ==========================================
+
+    geracoes_diarias = (
+        db.session.query(
+            Geracao.data,
+            func.sum(
+                Geracao.energia_kwh
+            )
+        )
+        .filter(
+            Geracao.usina_id == usina_id,
+            extract(
+                'year',
+                Geracao.data
+            ) == ano,
+            extract(
+                'month',
+                Geracao.data
+            ) < mes
+        )
+        .group_by(
+            Geracao.data
+        )
+        .all()
+    )
+
+    dados_por_mes = defaultdict(
+        list
+    )
+
+    for data_geracao, energia in geracoes_diarias:
+        dados_por_mes[
+            data_geracao.month
+        ].append(
+            float(energia or 0)
+        )
 
     yield_mensal = []
+
     for mes_ref, energias_diarias in dados_por_mes.items():
-        dias_com_dados = len(energias_diarias)
-        dias_no_mes = monthrange(ano, mes_ref)[1]
-        soma_kwh = sum(energias_diarias)
 
-        if potencia_kw and dias_com_dados > 0:
-            y = (soma_kwh / potencia_kw) * (dias_no_mes / dias_com_dados)
-            yield_mensal.append(y)
+        dias_com_dados = len(
+            energias_diarias
+        )
 
-    media_yield_acumulado = round(sum(yield_mensal) / len(yield_mensal), 2) if yield_mensal else None
+        dias_no_mes = monthrange(
+            ano,
+            mes_ref
+        )[1]
 
-    # --------------------------
-    # Yield do mesmo mês do ano anterior
-    # --------------------------
-    data_inicio_anterior = date(ano - 1, mes, 1)
-    data_fim_anterior = date(ano - 1, mes % 12 + 1, 1) if mes < 12 else date(ano, 1, 1)
+        soma_kwh = sum(
+            energias_diarias
+        )
 
-    resultados_ano_anterior = Geracao.query.filter(
-        Geracao.usina_id == usina_id,
-        Geracao.data >= data_inicio_anterior,
-        Geracao.data < data_fim_anterior
-    ).all()
+        if (
+            potencia_kw
+            and potencia_kw > 0
+            and dias_com_dados > 0
+        ):
 
-    dias_com_dados_ant = len(resultados_ano_anterior)
-    dias_mes_ant = monthrange(ano - 1, mes)[1]
-    soma_ant = sum(r.energia_kwh for r in resultados_ano_anterior)
+            valor_yield = (
+                soma_kwh
+                / float(potencia_kw)
+            ) * (
+                dias_no_mes
+                / dias_com_dados
+            )
+
+            yield_mensal.append(
+                valor_yield
+            )
+
+    media_yield_acumulado = (
+        round(
+            sum(yield_mensal)
+            / len(yield_mensal),
+            2
+        )
+        if yield_mensal
+        else None
+    )
+
+    # YIELD DO MESMO MÊS DO ANO ANTERIOR
+    data_inicio_anterior = date(
+        ano - 1,
+        mes,
+        1
+    )
+
+    data_fim_anterior = (
+        date(
+            ano,
+            1,
+            1
+        )
+        if mes == 12
+        else date(
+            ano - 1,
+            mes + 1,
+            1
+        )
+    )
+
+    resultados_ano_anterior = (
+        Geracao.query
+        .filter(
+            Geracao.usina_id == usina_id,
+            Geracao.data >= data_inicio_anterior,
+            Geracao.data < data_fim_anterior
+        )
+        .all()
+    )
+
+    dias_com_dados_ant = len(
+        resultados_ano_anterior
+    )
+
+    dias_mes_ant = monthrange(
+        ano - 1,
+        mes
+    )[1]
+
+    soma_ant = sum(
+        float(resultado.energia_kwh or 0)
+        for resultado in resultados_ano_anterior
+    )
 
     if (
-        potencia_kw and potencia_kw > 0 and
-        dias_com_dados_ant > 0 and
-        soma_ant > 0
+        potencia_kw
+        and potencia_kw > 0
+        and dias_com_dados_ant > 0
+        and soma_ant > 0
     ):
-        valor = (soma_ant / potencia_kw) * (dias_mes_ant / dias_com_dados_ant)
-        yield_ano_anterior = round(valor, 2) if not math.isnan(valor) else None
+
+        valor_yield_anterior = (
+            soma_ant
+            / float(potencia_kw)
+        ) * (
+            dias_mes_ant
+            / dias_com_dados_ant
+        )
+
+        yield_ano_anterior = (
+            round(
+                valor_yield_anterior,
+                2
+            )
+            if not math.isnan(
+                valor_yield_anterior
+            )
+            else None
+        )
+
     else:
         yield_ano_anterior = None
+    
+    # LISTA DE USINAS DO FILTRO
+    query_usinas = Usina.query
 
-    # --------------------------
+    if current_user.perfil == 'acionista':
+        query_usinas = query_usinas.filter(
+            Usina.id.in_(
+                usinas_permitidas_ids
+            )
+        )
 
-    usinas = Usina.query.all()
+    usinas = (
+        query_usinas
+        .order_by(
+            Usina.nome.asc()
+        )
+        .all()
+    )
 
     return render_template(
         'producao_mensal.html',
@@ -1800,15 +2272,27 @@ def producao_mensal(usina_id, ano, mes):
         ano=ano,
         mes=mes,
         usinas=usinas,
-        meses=[str(i + 1) for i in range(dias_mes)],
+        meses=[
+            str(i + 1)
+            for i in range(dias_mes)
+        ],
         totais=totais,
         detalhes=detalhes,
         soma_total=soma,
-        media_diaria=round(media_diaria, 2),
+        media_diaria=round(
+            media_diaria,
+            2
+        ),
         previsao_total=previsao_total,
         previsoes=previsoes,
-        previsao_mensal=round(valor_mensal, 2),
-        ano_geracao_total=round(ano_sum, 2),
+        previsao_mensal=round(
+            valor_mensal,
+            2
+        ),
+        ano_geracao_total=round(
+            ano_sum,
+            2
+        ),
         ano_faturamento_bruto=ano_bruto,
         ano_faturamento_liquido=ano_liquido,
         dias_no_mes=dias_mes,
@@ -5977,9 +6461,7 @@ def api_clientes_da_usina(usina_id):
 )
 @login_required
 def cadastrar_usuario():
-
     if not current_user.is_admin:
-
         flash(
             'Você não possui permissão para acessar esta página.',
             'danger'
@@ -5991,9 +6473,13 @@ def cadastrar_usuario():
 
     usinas = (
         Usina.query
-        .order_by(
-            Usina.nome
-        )
+        .order_by(Usina.nome)
+        .all()
+    )
+
+    acionistas = (
+        Acionista.query
+        .order_by(Acionista.nome)
         .all()
     )
 
@@ -6019,11 +6505,8 @@ def cadastrar_usuario():
             'usuario'
         )
 
-        # Todo novo usuário será cadastrado como ativo.
         ativo = True
 
-        # Essas permissões somente podem ser aplicadas
-        # quando o perfil selecionado for comercial.
         vender_usina = (
             perfil == 'comercial'
             and 'vender_usina' in request.form
@@ -6034,7 +6517,6 @@ def cadastrar_usuario():
             and 'vender_energia' in request.form
         )
 
-        # Recebe vários clientes selecionados.
         clientes_ids = request.form.getlist(
             'clientes_ids'
         )
@@ -6045,8 +6527,21 @@ def cadastrar_usuario():
             if cliente_id.isdigit()
         ]
 
-        if not nome:
+        acionistas_ids = request.form.getlist(
+            'acionistas_ids'
+        )
 
+        acionistas_ids = [
+            int(acionista_id)
+            for acionista_id in acionistas_ids
+            if acionista_id.isdigit()
+        ]
+
+        # Evita variáveis não definidas.
+        clientes_selecionados = []
+        acionistas_selecionados = []
+
+        if not nome:
             flash(
                 'Informe o nome do usuário.',
                 'warning'
@@ -6054,11 +6549,11 @@ def cadastrar_usuario():
 
             return render_template(
                 'cadastrar_usuario.html',
-                usinas=usinas
+                usinas=usinas,
+                acionistas=acionistas
             )
 
         if not email:
-
             flash(
                 'Informe o e-mail do usuário.',
                 'warning'
@@ -6066,11 +6561,11 @@ def cadastrar_usuario():
 
             return render_template(
                 'cadastrar_usuario.html',
-                usinas=usinas
+                usinas=usinas,
+                acionistas=acionistas
             )
 
         if not senha:
-
             flash(
                 'Informe a senha do usuário.',
                 'warning'
@@ -6078,7 +6573,8 @@ def cadastrar_usuario():
 
             return render_template(
                 'cadastrar_usuario.html',
-                usinas=usinas
+                usinas=usinas,
+                acionistas=acionistas
             )
 
         usuario_existente = (
@@ -6092,7 +6588,6 @@ def cadastrar_usuario():
         )
 
         if usuario_existente:
-
             flash(
                 'Já existe um usuário cadastrado com este e-mail.',
                 'warning'
@@ -6100,13 +6595,13 @@ def cadastrar_usuario():
 
             return render_template(
                 'cadastrar_usuario.html',
-                usinas=usinas
+                usinas=usinas,
+                acionistas=acionistas
             )
 
+        # PERFIL CLIENTE
         if perfil == 'cliente':
-
             if not clientes_ids:
-
                 flash(
                     'Selecione pelo menos um cliente para esse usuário.',
                     'warning'
@@ -6114,7 +6609,8 @@ def cadastrar_usuario():
 
                 return render_template(
                     'cadastrar_usuario.html',
-                    usinas=usinas
+                    usinas=usinas,
+                    acionistas=acionistas
                 )
 
             clientes_selecionados = (
@@ -6138,7 +6634,6 @@ def cadastrar_usuario():
             )
 
             if ids_encontrados != ids_solicitados:
-
                 flash(
                     'Um ou mais clientes selecionados são inválidos ou estão inativos.',
                     'danger'
@@ -6146,11 +6641,10 @@ def cadastrar_usuario():
 
                 return render_template(
                     'cadastrar_usuario.html',
-                    usinas=usinas
+                    usinas=usinas,
+                    acionistas=acionistas
                 )
 
-            # Confere se os clientes possuem
-            # pelo menos um rateio ativo e maior que zero.
             clientes_com_rateio = (
                 db.session.query(
                     Rateio.cliente_id
@@ -6172,7 +6666,6 @@ def cadastrar_usuario():
             }
 
             if ids_com_rateio != ids_solicitados:
-
                 flash(
                     'Um ou mais clientes selecionados não possuem rateio ativo.',
                     'danger'
@@ -6180,25 +6673,80 @@ def cadastrar_usuario():
 
                 return render_template(
                     'cadastrar_usuario.html',
-                    usinas=usinas
+                    usinas=usinas,
+                    acionistas=acionistas
                 )
 
-            # Perfil cliente não possui
-            # permissões administrativas.
             pode_geracao = False
             pode_cliente = False
             pode_fatura = False
             pode_financeiro = False
             pode_aprovar_financeiro = False
             pode_comercial = False
-
-            # Cliente também não pode vender.
             vender_usina = False
             vender_energia = False
 
-        else:
+        # PERFIL ACIONISTA
+        elif perfil == 'acionista':
 
-            clientes_selecionados = []
+            if not acionistas_ids:
+                flash(
+                    'Selecione pelo menos um acionista.',
+                    'warning'
+                )
+
+                return render_template(
+                    'cadastrar_usuario.html',
+                    usinas=usinas,
+                    acionistas=acionistas
+                )
+
+            acionistas_selecionados = (
+                Acionista.query
+                .filter(
+                    Acionista.id.in_(
+                        acionistas_ids
+                    )
+                )
+                .all()
+            )
+
+            ids_acionistas_encontrados = {
+                acionista.id
+                for acionista in acionistas_selecionados
+            }
+
+            ids_acionistas_solicitados = set(
+                acionistas_ids
+            )
+
+            if (
+                ids_acionistas_encontrados
+                != ids_acionistas_solicitados
+            ):
+                flash(
+                    'Um ou mais acionistas selecionados são inválidos.',
+                    'danger'
+                )
+
+                return render_template(
+                    'cadastrar_usuario.html',
+                    usinas=usinas,
+                    acionistas=acionistas
+                )
+
+            # Acionista não recebe permissões administrativas.
+            pode_geracao = False
+            pode_cliente = False
+            pode_fatura = False
+            pode_financeiro = False
+            pode_aprovar_financeiro = False
+            pode_comercial = False
+            vender_usina = False
+            vender_energia = False
+
+        # DEMAIS PERFIS
+        else:
 
             pode_geracao = (
                 'pode_cadastrar_geracao'
@@ -6257,19 +6805,29 @@ def cadastrar_usuario():
 
             db.session.flush()
 
+            # Vincula clientes.
             for cliente in clientes_selecionados:
-
-                vinculo = UsuarioCliente(
+                vinculo_cliente = UsuarioCliente(
                     usuario_id=novo_usuario.id,
                     cliente_id=cliente.id
                 )
 
                 db.session.add(
-                    vinculo
+                    vinculo_cliente
+                )
+
+            # Vincula acionistas.
+            for acionista in acionistas_selecionados:
+                vinculo_acionista = UsuarioAcionista(
+                    usuario_id=novo_usuario.id,
+                    acionista_id=acionista.id
+                )
+
+                db.session.add(
+                    vinculo_acionista
                 )
 
             db.session.commit()
-
             flash(
                 'Usuário cadastrado com sucesso!',
                 'success'
@@ -6280,9 +6838,7 @@ def cadastrar_usuario():
             )
 
         except Exception as erro:
-
             db.session.rollback()
-
             print(
                 f'Erro ao cadastrar usuário: {erro}'
             )
@@ -6294,7 +6850,8 @@ def cadastrar_usuario():
 
     return render_template(
         'cadastrar_usuario.html',
-        usinas=usinas
+        usinas=usinas,
+        acionistas=acionistas
     )
 
 @app.route('/usuarios')
@@ -6365,6 +6922,41 @@ def editar_usuario(id):
         .all()
     )
 
+    acionistas = (
+        Acionista.query
+        .order_by(
+            Acionista.nome
+        )
+        .all()
+    )
+
+    def carregar_dados_template():
+
+        clientes_vinculados = (
+            carregar_clientes_vinculados_usuario(
+                usuario.id
+            )
+        )
+
+        acionistas_vinculados_ids = [
+            vinculo.acionista_id
+            for vinculo in (
+                UsuarioAcionista.query
+                .filter_by(
+                    usuario_id=usuario.id
+                )
+                .all()
+            )
+        ]
+
+        return {
+            'usuario': usuario,
+            'usinas': usinas,
+            'acionistas': acionistas,
+            'clientes_vinculados': clientes_vinculados,
+            'acionistas_vinculados_ids': acionistas_vinculados_ids
+        }
+
     if request.method == 'POST':
 
         nome = request.form.get(
@@ -6407,23 +6999,28 @@ def editar_usuario(id):
             if cliente_id.isdigit()
         })
 
+        acionistas_ids = request.form.getlist(
+            'acionistas_ids'
+        )
+
+        acionistas_ids = list({
+            int(acionista_id)
+            for acionista_id in acionistas_ids
+            if acionista_id.isdigit()
+        })
+
+        clientes_selecionados = []
+        acionistas_selecionados = []
+
         if not nome:
             flash(
                 'Informe o nome do usuário.',
                 'warning'
             )
 
-            clientes_vinculados = (
-                carregar_clientes_vinculados_usuario(
-                    usuario.id
-                )
-            )
-
             return render_template(
                 'editar_usuario.html',
-                usuario=usuario,
-                usinas=usinas,
-                clientes_vinculados=clientes_vinculados
+                **carregar_dados_template()
             )
 
         if not email:
@@ -6432,17 +7029,9 @@ def editar_usuario(id):
                 'warning'
             )
 
-            clientes_vinculados = (
-                carregar_clientes_vinculados_usuario(
-                    usuario.id
-                )
-            )
-
             return render_template(
                 'editar_usuario.html',
-                usuario=usuario,
-                usinas=usinas,
-                clientes_vinculados=clientes_vinculados
+                **carregar_dados_template()
             )
 
         usuario_email_existente = (
@@ -6462,19 +7051,12 @@ def editar_usuario(id):
                 'warning'
             )
 
-            clientes_vinculados = (
-                carregar_clientes_vinculados_usuario(
-                    usuario.id
-                )
-            )
-
             return render_template(
                 'editar_usuario.html',
-                usuario=usuario,
-                usinas=usinas,
-                clientes_vinculados=clientes_vinculados
+                **carregar_dados_template()
             )
 
+        # Atualiza os dados básicos.
         usuario.nome = nome
         usuario.email = email
         usuario.perfil = perfil
@@ -6482,6 +7064,10 @@ def editar_usuario(id):
 
         usuario.vender_usina = vender_usina
         usuario.vender_energia = vender_energia
+
+        # ==========================================
+        # PERFIL CLIENTE
+        # ==========================================
 
         if perfil == 'cliente':
 
@@ -6491,17 +7077,9 @@ def editar_usuario(id):
                     'warning'
                 )
 
-                clientes_vinculados = (
-                    carregar_clientes_vinculados_usuario(
-                        usuario.id
-                    )
-                )
-
                 return render_template(
                     'editar_usuario.html',
-                    usuario=usuario,
-                    usinas=usinas,
-                    clientes_vinculados=clientes_vinculados
+                    **carregar_dados_template()
                 )
 
             clientes_selecionados = (
@@ -6520,23 +7098,19 @@ def editar_usuario(id):
                 for cliente in clientes_selecionados
             }
 
-            if ids_encontrados != set(clientes_ids):
+            ids_solicitados = set(
+                clientes_ids
+            )
+
+            if ids_encontrados != ids_solicitados:
                 flash(
                     'Um ou mais clientes selecionados são inválidos ou estão inativos.',
                     'danger'
                 )
 
-                clientes_vinculados = (
-                    carregar_clientes_vinculados_usuario(
-                        usuario.id
-                    )
-                )
-
                 return render_template(
                     'editar_usuario.html',
-                    usuario=usuario,
-                    usinas=usinas,
-                    clientes_vinculados=clientes_vinculados
+                    **carregar_dados_template()
                 )
 
             clientes_com_rateio = (
@@ -6559,23 +7133,15 @@ def editar_usuario(id):
                 for resultado in clientes_com_rateio
             }
 
-            if ids_com_rateio != set(clientes_ids):
+            if ids_com_rateio != ids_solicitados:
                 flash(
                     'Um ou mais clientes não possuem rateio ativo.',
                     'danger'
                 )
 
-                clientes_vinculados = (
-                    carregar_clientes_vinculados_usuario(
-                        usuario.id
-                    )
-                )
-
                 return render_template(
                     'editar_usuario.html',
-                    usuario=usuario,
-                    usinas=usinas,
-                    clientes_vinculados=clientes_vinculados
+                    **carregar_dados_template()
                 )
 
             usuario.pode_cadastrar_geracao = False
@@ -6588,9 +7154,71 @@ def editar_usuario(id):
             usuario.vender_usina = False
             usuario.vender_energia = False
 
-        else:
+        # ==========================================
+        # PERFIL ACIONISTA
+        # ==========================================
 
-            clientes_selecionados = []
+        elif perfil == 'acionista':
+
+            if not acionistas_ids:
+                flash(
+                    'Selecione pelo menos um acionista para esse usuário.',
+                    'warning'
+                )
+
+                return render_template(
+                    'editar_usuario.html',
+                    **carregar_dados_template()
+                )
+
+            acionistas_selecionados = (
+                Acionista.query
+                .filter(
+                    Acionista.id.in_(
+                        acionistas_ids
+                    )
+                )
+                .all()
+            )
+
+            ids_acionistas_encontrados = {
+                acionista.id
+                for acionista in acionistas_selecionados
+            }
+
+            ids_acionistas_solicitados = set(
+                acionistas_ids
+            )
+
+            if (
+                ids_acionistas_encontrados
+                != ids_acionistas_solicitados
+            ):
+                flash(
+                    'Um ou mais acionistas selecionados são inválidos.',
+                    'danger'
+                )
+
+                return render_template(
+                    'editar_usuario.html',
+                    **carregar_dados_template()
+                )
+
+            usuario.pode_cadastrar_geracao = False
+            usuario.pode_cadastrar_cliente = False
+            usuario.pode_cadastrar_fatura = False
+            usuario.pode_acessar_financeiro = False
+            usuario.pode_acessar_comercial = False
+            usuario.pode_aprovar_financeiro = False
+
+            usuario.vender_usina = False
+            usuario.vender_energia = False
+
+        # ==========================================
+        # DEMAIS PERFIS
+        # ==========================================
+
+        else:
 
             usuario.pode_cadastrar_geracao = (
                 'pode_cadastrar_geracao'
@@ -6627,6 +7255,7 @@ def editar_usuario(id):
             )
 
             if quer_aprovador:
+
                 Usuario.query.filter(
                     Usuario.id != usuario.id
                 ).update(
@@ -6653,26 +7282,46 @@ def editar_usuario(id):
 
         try:
 
-            # Remove todos os vínculos antigos.
+            # Remove vínculos antigos de clientes.
             UsuarioCliente.query.filter_by(
                 usuario_id=usuario.id
             ).delete(
                 synchronize_session=False
             )
 
-            # Recria somente os vínculos enviados
-            # quando o perfil for cliente.
+            # Remove vínculos antigos de acionistas.
+            UsuarioAcionista.query.filter_by(
+                usuario_id=usuario.id
+            ).delete(
+                synchronize_session=False
+            )
+
+            # Recria os vínculos de clientes.
             if perfil == 'cliente':
 
                 for cliente in clientes_selecionados:
 
-                    vinculo = UsuarioCliente(
+                    vinculo_cliente = UsuarioCliente(
                         usuario_id=usuario.id,
                         cliente_id=cliente.id
                     )
 
                     db.session.add(
-                        vinculo
+                        vinculo_cliente
+                    )
+
+            # Recria os vínculos de acionistas.
+            elif perfil == 'acionista':
+
+                for acionista in acionistas_selecionados:
+
+                    vinculo_acionista = UsuarioAcionista(
+                        usuario_id=usuario.id,
+                        acionista_id=acionista.id
+                    )
+
+                    db.session.add(
+                        vinculo_acionista
                     )
 
             db.session.commit()
@@ -6699,17 +7348,9 @@ def editar_usuario(id):
                 'danger'
             )
 
-    clientes_vinculados = (
-        carregar_clientes_vinculados_usuario(
-            usuario.id
-        )
-    )
-
     return render_template(
         'editar_usuario.html',
-        usuario=usuario,
-        usinas=usinas,
-        clientes_vinculados=clientes_vinculados
+        **carregar_dados_template()
     )
     
 def carregar_clientes_vinculados_usuario(usuario_id):
@@ -12398,15 +13039,65 @@ def _safe_round(x, nd=2):
 @app.route('/relatorio_financeiro_com_perda', methods=['GET'])
 @login_required
 def relatorio_financeiro_com_perda():
-    if not current_user.pode_acessar_financeiro:
+    if (
+        current_user.perfil not in ['admin', 'financeiro', 'acionista']
+        and not current_user.pode_acessar_financeiro
+    ):
         return "Acesso negado", 403
 
     usina_id = request.args.get('usina_id', type=int)
     ano = request.args.get('ano', type=int, default=datetime.now().year)
     logo_usina_data_uri = None
+    
+    # ==========================================
+    # RESTRIÇÃO PARA ACIONISTA
+    # ==========================================
+
+    usinas_permitidas_ids = None
+
+    if current_user.perfil == 'acionista':
+
+        usinas_permitidas_ids = [
+            r.usina_id
+            for r in (
+                db.session.query(
+                    UsinaInvestidora.usina_id
+                )
+                .join(
+                    ParticipacaoAcionista,
+                    ParticipacaoAcionista.empresa_id ==
+                    UsinaInvestidora.empresa_id
+                )
+                .join(
+                    UsuarioAcionista,
+                    UsuarioAcionista.acionista_id ==
+                    ParticipacaoAcionista.acionista_id
+                )
+                .filter(
+                    UsuarioAcionista.usuario_id ==
+                    current_user.id
+                )
+                .distinct()
+                .all()
+            )
+        ]
+
+        if not usinas_permitidas_ids:
+            usinas_permitidas_ids = [-1]
 
     # carrega usinas e anos
-    usinas = Usina.query.order_by(Usina.nome).all()
+    query_usinas = Usina.query
+
+    if current_user.perfil == 'acionista':
+        query_usinas = query_usinas.filter(
+            Usina.id.in_(usinas_permitidas_ids)
+        )
+
+    usinas = (
+        query_usinas
+        .order_by(Usina.nome)
+        .all()
+    )
     anos_disponiveis = sorted({
         int(r[0]) for r in db.session.query(db.extract('year', Geracao.data)).distinct().all()
         if r and r[0] is not None
@@ -12435,6 +13126,11 @@ def relatorio_financeiro_com_perda():
         usina_id = usinas[0].id
 
     usina_selecionada = next((u for u in usinas if u.id == usina_id), usinas[0])
+    if (
+        current_user.perfil == 'acionista'
+        and usina_selecionada.id not in usinas_permitidas_ids
+    ):
+        abort(403)
     usina_id = usina_selecionada.id
 
     # REGRA: ano vigente -> acumula até mês vigente

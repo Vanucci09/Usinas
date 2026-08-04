@@ -56,7 +56,13 @@
             <div class="col-md-4">
                 <label for="usina_id" class="form-label fw-bold">Usina Solar</label>
                 <select name="usina_id" id="usina_id" class="form-select">
-                    <option value="">Todas as Usinas</option>
+                    <option value="">
+                        {% if current_user.perfil == 'acionista' %}
+                            Todas as Minhas Usinas
+                        {% else %}
+                            Todas as Usinas
+                        {% endif %}
+                    </option>
                     {% for usina in usinas %}
                         <option value="{{ usina.id }}" {% if usina_id|int == usina.id %}selected{% endif %}>{{ usina.nome }}</option>
                     {% endfor %}

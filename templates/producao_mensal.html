@@ -53,8 +53,17 @@
                     <span class="badge bg-soft-primary text-primary fs-6 fw-normal" style="background: #eef5ff;">{{ potencia_kw }} kWp</span>
                 {% endif %}
             </h2>
-            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm">
-                <i class="bi bi-arrow-left"></i> Início
+            <a
+                href="{{ url_for('index') }}"
+                class="btn btn-outline-secondary btn-sm"
+            >
+                <i class="bi bi-arrow-left"></i>
+
+                {% if current_user.perfil == 'acionista' %}
+                    Portal do Acionista
+                {% else %}
+                    Início
+                {% endif %}
             </a>
         </div>
 

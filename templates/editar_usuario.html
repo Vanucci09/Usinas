@@ -122,7 +122,7 @@ Editar Usuário
                             required
                         >
                             {% set perfil_atual = request.form.get('perfil', usuario.perfil) %}
-                            <option value="usuario" {% if perfil_atual == 'usuario' %}selected{% endif %}>Usuário comum</option>
+                            <option value="acionista" {% if perfil_atual == 'acionista' %}selected{% endif %}>Acionista</option>
                             <option value="comercial" {% if perfil_atual == 'comercial' %}selected{% endif %}>Comercial</option>
                             <option value="gerente_comercial" {% if perfil_atual == 'gerente_comercial' %}selected{% endif %}>Gerente Comercial</option>
                             <option value="monitoramento" {% if perfil_atual == 'monitoramento' %}selected{% endif %}>Monitoramento</option>
@@ -333,6 +333,60 @@ Editar Usuário
                 </div>
             </div>
 
+            <div id="containerAcionista" class="mb-4" style="display:none;">
+
+                <div class="card border-primary-subtle bg-primary-subtle bg-opacity-10 shadow-none">
+
+                    <div class="card-body">
+
+                        <div class="d-flex align-items-center gap-2 mb-3">
+
+                            <i class="bi bi-building text-primary fs-4"></i>
+
+                            <div>
+
+                                <h6 class="mb-0 fw-bold text-primary">
+                                    Vinculação de Acionistas
+                                </h6>
+
+                                <small class="text-muted">
+                                    Selecione os acionistas vinculados a este usuário.
+                                </small>
+
+                            </div>
+
+                        </div>
+
+                        <div class="list-group">
+
+                            {% for acionista in acionistas %}
+
+                            <label class="list-group-item">
+
+                                <input
+                                    type="checkbox"
+                                    class="form-check-input me-2"
+                                    name="acionistas_ids"
+                                    value="{{ acionista.id }}"
+                                    {% if acionista.id in acionistas_vinculados_ids %}
+                                        checked
+                                    {% endif %}
+                                >
+
+                                {{ acionista.nome }}
+
+                            </label>
+
+                            {% endfor %}
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
             <!-- Permissões Modulares (Exibido para Perfis Internos) -->
             <div class="permission-section mb-4" id="secaoPermissoes">
                 <h6 class="fw-bold text-primary text-uppercase mb-3 d-flex align-items-center gap-2" style="font-size: 0.85rem; letter-spacing: 0.5px;">
@@ -475,6 +529,7 @@ Editar Usuário
 document.addEventListener('DOMContentLoaded', function () {
     const perfilUsuario = document.getElementById('perfilUsuario');
     const containerCliente = document.getElementById('containerCliente');
+    const containerAcionista = document.getElementById('containerAcionista');
     const secaoPermissoes = document.getElementById('secaoPermissoes');
     const secaoVendas = document.getElementById('secaoVendas');
     const usinaFiltro = document.getElementById('usinaFiltro');
@@ -519,32 +574,53 @@ document.addEventListener('DOMContentLoaded', function () {
         const perfil = perfilUsuario.value;
 
         const perfilCliente = perfil === 'cliente';
+        const perfilAcionista = perfil === 'acionista';
         const perfilComercial = perfil === 'comercial';
 
-        containerCliente.style.display =
-            perfilCliente ? 'block' : 'none';
+        containerCliente.style.display = 'none';
+        containerAcionista.style.display = 'none';
 
-        secaoPermissoes.style.display =
-            perfilCliente ? 'none' : 'block';
+        if (perfilCliente) {
 
-        secaoVendas.style.display =
-            perfilComercial ? 'block' : 'none';
+            containerCliente.style.display = 'block';
 
-        camposPermissao.forEach(campo => {
+            secaoPermissoes.style.display = 'none';
+            secaoVendas.style.display = 'none';
 
-            campo.disabled = perfilCliente;
-
-            if (perfilCliente) {
+            camposPermissao.forEach(campo => {
                 campo.checked = false;
+                campo.disabled = true;
+            });
+
+        }
+        else if (perfilAcionista) {
+
+            containerAcionista.style.display = 'block';
+
+            secaoPermissoes.style.display = 'none';
+            secaoVendas.style.display = 'none';
+
+            camposPermissao.forEach(campo => {
+                campo.checked = false;
+                campo.disabled = true;
+            });
+
+        }
+        else {
+
+            secaoPermissoes.style.display = 'block';
+
+            camposPermissao.forEach(campo => {
+                campo.disabled = false;
+            });
+
+            secaoVendas.style.display =
+                perfilComercial ? 'block' : 'none';
+
+            if (!perfilComercial) {
+                document.getElementById('venderUsina').checked = false;
+                document.getElementById('venderEnergia').checked = false;
             }
-
-        });
-
-        if (!perfilComercial) {
-
-            document.getElementById('venderUsina').checked = false;
-            document.getElementById('venderEnergia').checked = false;
-
         }
 
     }
@@ -774,13 +850,53 @@ document.addEventListener('DOMContentLoaded', function () {
         iconeOlho.classList.toggle('bi-eye-slash', mostrar);
     });
 
-    document.getElementById('formUsuario').addEventListener('submit', function (event) {
-        if (perfilUsuario.value === 'cliente' && clientesVinculados.size === 0) {
-            event.preventDefault();
-            alert('Selecione pelo menos um cliente para salvar as alterações.');
-            containerCliente.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-    });
+    document
+        .getElementById('formUsuario')
+        .addEventListener('submit', function (event) {
+
+            const perfil = perfilUsuario.value;
+
+            if (
+                perfil === 'cliente'
+                && clientesVinculados.size === 0
+            ) {
+
+                event.preventDefault();
+
+                alert(
+                    'Selecione pelo menos um cliente.'
+                );
+
+                containerCliente.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                });
+
+                return;
+            }
+
+            if (perfil === 'acionista') {
+
+                const selecionados =
+                    document.querySelectorAll(
+                        'input[name="acionistas_ids"]:checked'
+                    );
+
+                if (selecionados.length === 0) {
+
+                    event.preventDefault();
+
+                    alert(
+                        'Selecione pelo menos um acionista.'
+                    );
+
+                    containerAcionista.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center'
+                    });
+                }
+            }
+        });
 
     // Inicialização da tela
     atualizarCamposPorPerfil();

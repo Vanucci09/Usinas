@@ -2,16 +2,26 @@
 
 {% block content %}
 <div class="container mt-5">
-    <h2 class="mb-4 text-center text-primary">📊 Menu de Relatórios</h2>
+
+    <h2 class="mb-4 text-center text-primary">
+        📊 Menu de Relatórios
+    </h2>
 
     <div class="row row-cols-1 row-cols-md-2 g-4">
+
+        {% if current_user.perfil != 'acionista' %}
 
         <div class="col">
             <div class="card shadow-sm h-100">
                 <div class="card-body">
                     <h5 class="card-title">Empresas, Usinas e Acionistas</h5>
-                    <p class="card-text">Visualize os acionistas de cada empresa e o percentual de participação.</p>
-                    <a href="{{ url_for('relatorio_empresas_acionistas') }}" class="btn btn-outline-primary">Acessar</a>
+                    <p class="card-text">
+                        Visualize os acionistas de cada empresa e o percentual de participação.
+                    </p>
+                    <a href="{{ url_for('relatorio_empresas_acionistas') }}"
+                       class="btn btn-outline-primary">
+                        Acessar
+                    </a>
                 </div>
             </div>
         </div>
@@ -20,8 +30,13 @@
             <div class="card shadow-sm h-100">
                 <div class="card-body">
                     <h5 class="card-title">Distribuição de Lucro</h5>
-                    <p class="card-text">Selecione uma empresa e um período para consultar a distribuição de lucro.</p>
-                    <a href="{{ url_for('distribuicao_lucro_formulario') }}" class="btn btn-outline-primary">Acessar</a>
+                    <p class="card-text">
+                        Selecione uma empresa e um período para consultar a distribuição de lucro.
+                    </p>
+                    <a href="{{ url_for('distribuicao_lucro_formulario') }}"
+                       class="btn btn-outline-primary">
+                        Acessar
+                    </a>
                 </div>
             </div>
         </div>
@@ -30,8 +45,13 @@
             <div class="card shadow-sm h-100">
                 <div class="card-body">
                     <h5 class="card-title">Prestação de Contas</h5>
-                    <p class="card-text">Selecione um acionista, usina e período para gerar o relatório completo de prestação de contas.</p>
-                    <a href="{{ url_for('relatorio_prestacao') }}" class="btn btn-outline-primary">Acessar</a>
+                    <p class="card-text">
+                        Selecione um acionista, usina e período para gerar o relatório completo de prestação de contas.
+                    </p>
+                    <a href="{{ url_for('relatorio_prestacao') }}"
+                       class="btn btn-outline-primary">
+                        Acessar
+                    </a>
                 </div>
             </div>
         </div>
@@ -40,8 +60,13 @@
             <div class="card shadow-sm h-100">
                 <div class="card-body">
                     <h5 class="card-title">Distribuição de Lucro por Usina</h5>
-                    <p class="card-text">Para usinas sem empresa investidora, distribua o lucro diretamente entre acionistas vinculados.</p>
-                    <a href="{{ url_for('distribuicao_lucro_direta') }}" class="btn btn-outline-primary">Acessar</a>
+                    <p class="card-text">
+                        Para usinas sem empresa investidora, distribua o lucro diretamente entre acionistas vinculados.
+                    </p>
+                    <a href="{{ url_for('distribuicao_lucro_direta') }}"
+                       class="btn btn-outline-primary">
+                        Acessar
+                    </a>
                 </div>
             </div>
         </div>
@@ -50,25 +75,54 @@
             <div class="card shadow-sm h-100">
                 <div class="card-body">
                     <h5 class="card-title">Prestação de Contas por Usina</h5>
-                    <p class="card-text">Relatório de prestação de contas para usinas vinculadas diretamente a acionistas, sem empresa investidora.</p>
-                    <a href="{{ url_for('relatorio_prestacao_direta') }}" class="btn btn-outline-primary">Acessar</a>
+                    <p class="card-text">
+                        Relatório de prestação de contas para usinas vinculadas diretamente a acionistas, sem empresa investidora.
+                    </p>
+                    <a href="{{ url_for('relatorio_prestacao_direta') }}"
+                       class="btn btn-outline-primary">
+                        Acessar
+                    </a>
                 </div>
             </div>
         </div>
+
+        {% endif %}
 
         <div class="col">
-            <div class="card shadow-sm h-100">
+            <div class="card shadow-sm h-100 border-danger">
+
                 <div class="card-body">
-                    <h5 class="card-title">Relatório Financeiro</h5>
-                    <p class="card-text">Visualize geração, injeção e a perda (diferença) mensal de cada usina.</p>
-                    <a href="{{ url_for('relatorio_financeiro_com_perda') }}" class="btn btn-outline-danger">Acessar</a>
+
+                    <h5 class="card-title">
+                        Relatório Financeiro
+                    </h5>
+
+                    <p class="card-text">
+                        Visualize geração, injeção e a perda (diferença) mensal de cada usina.
+                    </p>
+
+                    <a href="{{ url_for('relatorio_financeiro_com_perda') }}"
+                       class="btn btn-outline-danger">
+                        Acessar
+                    </a>
+
                 </div>
+
             </div>
         </div>
 
     </div>
+
     <div class="mt-4 text-center">
-        <a href="{{ url_for('index') }}" class="btn btn-secondary">Voltar ao Início</a>
+
+        <a href="{{ url_for('index') }}"
+           class="btn btn-secondary">
+
+            Voltar ao Início
+
+        </a>
+
     </div>
+
 </div>
 {% endblock %}

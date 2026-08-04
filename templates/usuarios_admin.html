@@ -109,7 +109,7 @@ Usuários Cadastrados
                         </th>
 
                         <th class="text-center">
-                            Clientes vinculados
+                            Vínculos
                         </th>
 
                         <th class="text-center">
@@ -188,6 +188,13 @@ Usuários Cadastrados
                                         Comercial
                                     </span>
 
+                                {% elif usuario.perfil == 'acionista' %}
+
+                                    <span class="badge rounded-pill bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 fw-semibold">
+                                        <i class="bi bi-building me-1"></i>
+                                        Acionista
+                                    </span>
+
                                 {% elif usuario.perfil == 'monitoramento' %}
 
                                     <span class="badge rounded-pill bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 fw-semibold">
@@ -220,7 +227,59 @@ Usuários Cadastrados
                             <!-- Clientes vinculados -->
                             <td class="text-center">
 
-                                {% set clientes_usuario = usuario.clientes.all() %}
+                                {% if usuario.perfil == 'cliente' %}
+
+                                    {% set clientes_usuario = usuario.clientes.all() %}
+
+                                    {% if clientes_usuario %}
+
+                                        <!-- botão atual dos clientes -->
+
+                                    {% else %}
+
+                                        <span class="text-muted small">
+                                            Nenhum
+                                        </span>
+
+                                    {% endif %}
+
+                                {% elif usuario.perfil == 'acionista' %}
+
+                                    {% set acionistas_usuario = usuario.acionistas %}
+
+                                    {% if acionistas_usuario %}
+
+                                        <button
+                                            type="button"
+                                            class="btn btn-sm btn-outline-primary"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#modalAcionistasUsuario{{ usuario.id }}"
+                                        >
+                                            <i class="bi bi-building me-1"></i>
+
+                                            Visualizar
+
+                                            <span class="badge text-bg-primary ms-1">
+                                                {{ acionistas_usuario|length }}
+                                            </span>
+
+                                        </button>
+
+                                    {% else %}
+
+                                        <span class="text-muted small">
+                                            Nenhum
+                                        </span>
+
+                                    {% endif %}
+
+                                {% else %}
+
+                                    <span class="text-muted small">
+                                        —
+                                    </span>
+
+                                {% endif %}
 
                                 {% if clientes_usuario %}
 
@@ -599,6 +658,247 @@ Usuários Cadastrados
             </div>
 
         </div>
+
+    {% endif %}
+
+{% endfor %}
+
+<!-- Modais dos acionistas -->
+{% for usuario in usuarios %}
+
+    {% if usuario.perfil == 'acionista' %}
+
+        {% set acionistas_usuario = usuario.acionistas %}
+
+        {% if acionistas_usuario %}
+
+            <div
+                class="modal fade"
+                id="modalAcionistasUsuario{{ usuario.id }}"
+                tabindex="-1"
+                aria-labelledby="tituloModalAcionistas{{ usuario.id }}"
+                aria-hidden="true"
+            >
+
+                <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+
+                    <div class="modal-content border-0 shadow">
+
+                        <div class="modal-header bg-primary text-white">
+
+                            <div>
+
+                                <h5
+                                    class="modal-title"
+                                    id="tituloModalAcionistas{{ usuario.id }}"
+                                >
+                                    <i class="bi bi-building me-2"></i>
+                                    Acionistas vinculados
+                                </h5>
+
+                                <small class="text-white-50">
+                                    {{ usuario.nome }} — {{ usuario.email }}
+                                </small>
+
+                            </div>
+
+                            <button
+                                type="button"
+                                class="btn-close btn-close-white"
+                                data-bs-dismiss="modal"
+                                aria-label="Fechar"
+                            ></button>
+
+                        </div>
+
+                        <div class="modal-body p-0">
+
+                            <div class="list-group list-group-flush">
+
+                                {% for acionista in acionistas_usuario %}
+
+                                    <div class="list-group-item p-3">
+
+                                        <div class="d-flex align-items-start gap-3">
+
+                                            <div class="bg-primary-subtle text-primary rounded-circle p-3">
+
+                                                <i class="bi bi-person-vcard-fill"></i>
+
+                                            </div>
+
+                                            <div class="flex-grow-1">
+
+                                                <div class="d-flex flex-column flex-md-row justify-content-between gap-2">
+
+                                                    <div>
+
+                                                        <h6 class="fw-bold text-dark mb-1">
+                                                            {{ acionista.nome }}
+                                                        </h6>
+
+                                                        <div class="small text-muted">
+
+                                                            {% if acionista.cpf %}
+
+                                                                <span class="me-3">
+
+                                                                    <i class="bi bi-person-vcard me-1"></i>
+
+                                                                    {{ acionista.cpf }}
+
+                                                                </span>
+
+                                                            {% endif %}
+
+                                                            {% if acionista.telefone %}
+
+                                                                <span class="me-3">
+
+                                                                    <i class="bi bi-telephone me-1"></i>
+
+                                                                    {{ acionista.telefone }}
+
+                                                                </span>
+
+                                                            {% endif %}
+
+                                                            {% if acionista.email %}
+
+                                                                <span>
+
+                                                                    <i class="bi bi-envelope me-1"></i>
+
+                                                                    {{ acionista.email }}
+
+                                                                </span>
+
+                                                            {% endif %}
+
+                                                        </div>
+
+                                                    </div>
+
+                                                    <span class="badge text-bg-primary align-self-start">
+
+                                                        {% if acionista.tipo == 'PJ' %}
+                                                            Pessoa Jurídica
+                                                        {% else %}
+                                                            Pessoa Física
+                                                        {% endif %}
+
+                                                    </span>
+
+                                                </div>
+
+                                                {% if acionista.tipo == 'PJ'
+                                                    and acionista.representante_legal %}
+
+                                                    <div class="mt-3">
+
+                                                        <div class="small fw-semibold text-secondary mb-1">
+                                                            Representante legal
+                                                        </div>
+
+                                                        <span class="small text-muted">
+
+                                                            <i class="bi bi-person-check me-1"></i>
+
+                                                            {{ acionista.representante_legal }}
+
+                                                        </span>
+
+                                                    </div>
+
+                                                {% endif %}
+
+                                                {% if acionista.participacoes %}
+
+                                                    <div class="mt-3">
+
+                                                        <div class="small fw-semibold text-secondary mb-2">
+                                                            Participações
+                                                        </div>
+
+                                                        <div class="d-flex flex-wrap gap-2">
+
+                                                            {% for participacao in acionista.participacoes %}
+
+                                                                <span class="badge rounded-pill bg-light text-dark border px-3 py-2">
+
+                                                                    <i class="bi bi-pie-chart-fill text-primary me-1"></i>
+
+                                                                    {% if participacao.empresa %}
+                                                                        {{ participacao.empresa.nome }}
+                                                                    {% else %}
+                                                                        Empresa {{ participacao.empresa_id }}
+                                                                    {% endif %}
+
+                                                                    <span class="mx-1">•</span>
+
+                                                                    {{ '%.2f'|format(participacao.percentual or 0) }}%
+
+                                                                </span>
+
+                                                            {% endfor %}
+
+                                                        </div>
+
+                                                    </div>
+
+                                                {% endif %}
+
+                                            </div>
+
+                                        </div>
+
+                                    </div>
+
+                                {% endfor %}
+
+                            </div>
+
+                        </div>
+
+                        <div class="modal-footer">
+
+                            <span class="me-auto text-muted small">
+
+                                {{ acionistas_usuario|length }}
+
+                                {% if acionistas_usuario|length == 1 %}
+                                    acionista vinculado
+                                {% else %}
+                                    acionistas vinculados
+                                {% endif %}
+
+                            </span>
+
+                            <a
+                                href="{{ url_for('editar_usuario', id=usuario.id) }}"
+                                class="btn btn-outline-primary"
+                            >
+                                <i class="bi bi-pencil-square me-1"></i>
+                                Editar vínculos
+                            </a>
+
+                            <button
+                                type="button"
+                                class="btn btn-secondary"
+                                data-bs-dismiss="modal"
+                            >
+                                Fechar
+                            </button>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        {% endif %}
 
     {% endif %}
 
