@@ -12799,16 +12799,53 @@ def participacao_direta():
 @app.route('/distribuicao_lucro_direta', methods=['GET', 'POST'])
 @login_required
 def distribuicao_lucro_direta():
-    usinas_sem_empresa = Usina.query.outerjoin(UsinaInvestidora).filter(UsinaInvestidora.id == None).all()
-    anos = list(range(2022, date.today().year + 1))
+
+    usinas = (
+        Usina.query
+        .order_by(
+            Usina.nome.asc()
+        )
+        .all()
+    )
+
+    anos = list(
+        range(
+            2022,
+            date.today().year + 1
+        )
+    )
 
     if request.method == 'POST':
-        usina_id = int(request.form['usina_id'])
-        mes = int(request.form['mes'])
-        ano = int(request.form['ano'])
-        return redirect(url_for('distribuicao_lucro_direta_resultado', usina_id=usina_id, mes=mes, ano=ano))
 
-    return render_template('form_distribuicao_lucro_direta.html', usinas=usinas_sem_empresa, anos=anos)
+        usina_id = request.form.get(
+            'usina_id',
+            type=int
+        )
+
+        mes = request.form.get(
+            'mes',
+            type=int
+        )
+
+        ano = request.form.get(
+            'ano',
+            type=int
+        )
+
+        return redirect(
+            url_for(
+                'distribuicao_lucro_direta_resultado',
+                usina_id=usina_id,
+                mes=mes,
+                ano=ano
+            )
+        )
+
+    return render_template(
+        'form_distribuicao_lucro_direta.html',
+        usinas=usinas,
+        anos=anos
+    )
 
 def calcular_lucro_usina(usina_id, mes, ano):
     receitas = db.session.query(func.sum(FinanceiroUsina.valor)).filter_by(
