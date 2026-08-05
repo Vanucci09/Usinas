@@ -13364,7 +13364,7 @@ def cadastrar_injecao():
             usina_id=usina_id, ano=ano, mes=mes
         ).first()
         if existente:
-            flash('❌ Já existe um registro para esta usina nesse mês/ano.', 'danger')
+            flash('Já existe um registro para esta usina nesse mês/ano.', 'danger')
             return redirect(url_for('cadastrar_injecao'))
 
         nova = InjecaoMensalUsina(
@@ -26150,6 +26150,853 @@ def adicionar_observacao_conta_concessionaria(conta_id):
             status=status,
             nome=nome
         )
+    )
+    
+@app.route('/dashboard-investidor', methods=['GET'])
+@login_required
+def dashboard_investidor():
+
+    # CONTROLE DE ACESSO
+    if (
+        current_user.perfil
+        not in ['admin', 'financeiro', 'acionista']
+        and not current_user.pode_acessar_financeiro
+    ):
+        abort(403)
+
+    # HELPERS
+    def para_decimal(valor, padrao='0'):
+
+        try:
+            if valor is None:
+                return Decimal(padrao)
+
+            return Decimal(str(valor))
+
+        except (
+            InvalidOperation,
+            ValueError,
+            TypeError
+        ):
+            return Decimal(padrao)
+
+    def arredondar(valor, casas=2):
+
+        return para_decimal(valor).quantize(
+            Decimal('1.' + ('0' * casas))
+        )
+
+    def primeiro_dia_mes(data_referencia):
+
+        return date(
+            data_referencia.year,
+            data_referencia.month,
+            1
+        )
+
+    def primeiro_dia_proximo_mes(data_referencia):
+
+        if data_referencia.month == 12:
+            return date(
+                data_referencia.year + 1,
+                1,
+                1
+            )
+
+        return date(
+            data_referencia.year,
+            data_referencia.month + 1,
+            1
+        )
+
+    def adicionar_meses(data_base, quantidade):
+
+        indice_mes = (
+            data_base.year * 12
+            + data_base.month
+            - 1
+            + quantidade
+        )
+
+        novo_ano = indice_mes // 12
+        novo_mes = indice_mes % 12 + 1
+
+        ultimo_dia = calendar.monthrange(
+            novo_ano,
+            novo_mes
+        )[1]
+
+        novo_dia = min(
+            data_base.day,
+            ultimo_dia
+        )
+
+        return date(
+            novo_ano,
+            novo_mes,
+            novo_dia
+        )
+
+    timezone_sp = ZoneInfo(
+        'America/Sao_Paulo'
+    )
+
+    agora = datetime.now(
+        timezone_sp
+    )
+
+    hoje = agora.date()
+
+    inicio_mes = primeiro_dia_mes(
+        hoje
+    )
+
+    fim_mes_exclusivo = primeiro_dia_proximo_mes(
+        hoje
+    )
+
+    dias_no_mes = calendar.monthrange(
+        hoje.year,
+        hoje.month
+    )[1]
+
+    dias_decorridos = max(
+        hoje.day,
+        1
+    )
+
+    # USINAS PERMITIDAS
+    usinas_permitidas_ids = None
+
+    if current_user.perfil == 'acionista':
+
+        usinas_permitidas_ids = [
+            resultado.usina_id
+            for resultado in (
+                db.session.query(
+                    UsinaInvestidora.usina_id
+                )
+                .join(
+                    ParticipacaoAcionista,
+                    ParticipacaoAcionista.empresa_id
+                    == UsinaInvestidora.empresa_id
+                )
+                .join(
+                    UsuarioAcionista,
+                    UsuarioAcionista.acionista_id
+                    == ParticipacaoAcionista.acionista_id
+                )
+                .filter(
+                    UsuarioAcionista.usuario_id
+                    == current_user.id
+                )
+                .distinct()
+                .all()
+            )
+        ]
+
+        if not usinas_permitidas_ids:
+            usinas_permitidas_ids = [-1]
+
+    query_usinas = Usina.query
+
+    if current_user.perfil == 'acionista':
+
+        query_usinas = query_usinas.filter(
+            Usina.id.in_(
+                usinas_permitidas_ids
+            )
+        )
+
+    usinas = (
+        query_usinas
+        .order_by(
+            Usina.nome.asc()
+        )
+        .all()
+    )
+
+    if not usinas:
+
+        return render_template(
+            'dashboard_investidor.html',
+            usinas=[],
+            usina_id=None,
+            dashboard=None,
+            agora=agora
+        )
+
+    # USINA SELECIONADA
+    usina_id = request.args.get(
+        'usina_id',
+        type=int
+    )
+
+    if not usina_id:
+        usina_id = usinas[0].id
+
+    if (
+        current_user.perfil == 'acionista'
+        and usina_id not in usinas_permitidas_ids
+    ):
+        abort(403)
+
+    usina = next(
+        (
+            item
+            for item in usinas
+            if item.id == usina_id
+        ),
+        None
+    )
+
+    if not usina:
+        abort(404)
+
+    # PARTICIPAÇÃO DO ACIONISTA
+    # O percentual do acionista é buscado nas empresas
+    # investidoras vinculadas à usina.
+    #
+    # Como UsinaInvestidora não possui percentual da empresa
+    # na usina, considera-se o percentual cadastrado do
+    # acionista como percentual aplicável à usina.
+
+    participacao_percentual = Decimal('100')
+
+    if current_user.perfil == 'acionista':
+
+        participacoes = (
+            db.session.query(
+                ParticipacaoAcionista.percentual
+            )
+            .join(
+                UsinaInvestidora,
+                UsinaInvestidora.empresa_id
+                == ParticipacaoAcionista.empresa_id
+            )
+            .join(
+                UsuarioAcionista,
+                UsuarioAcionista.acionista_id
+                == ParticipacaoAcionista.acionista_id
+            )
+            .filter(
+                UsinaInvestidora.usina_id == usina.id,
+                UsuarioAcionista.usuario_id
+                == current_user.id
+            )
+            .distinct()
+            .all()
+        )
+
+        participacao_percentual = sum(
+            (
+                para_decimal(item.percentual)
+                for item in participacoes
+            ),
+            Decimal('0')
+        )
+
+        participacao_percentual = min(
+            participacao_percentual,
+            Decimal('100')
+        )
+
+    fator_participacao = (
+        participacao_percentual
+        / Decimal('100')
+    )
+
+    # MONITORAMENTO EM TEMPO REAL
+    registros_monitoramento = (
+        Monitoramento.query
+        .filter(
+            Monitoramento.usina_id == usina.id,
+            Monitoramento.data == hoje
+        )
+        .order_by(
+            Monitoramento.inverter_sn.asc(),
+            Monitoramento.coletado_em.desc()
+        )
+        .all()
+    )
+
+    ultimo_por_inversor = {}
+
+    for registro in registros_monitoramento:
+
+        if registro.inverter_sn not in ultimo_por_inversor:
+            ultimo_por_inversor[
+                registro.inverter_sn
+            ] = registro
+
+    registros_atuais = list(
+        ultimo_por_inversor.values()
+    )
+
+    potencia_agora = sum(
+        (
+            para_decimal(
+                registro.potencia_kw
+            )
+            for registro in registros_atuais
+        ),
+        Decimal('0')
+    )
+
+    geracao_hoje = sum(
+        (
+            para_decimal(
+                registro.etoday
+            )
+            for registro in registros_atuais
+        ),
+        Decimal('0')
+    )
+
+    inversores_total = len(
+        registros_atuais
+    )
+
+    inversores_online = len([
+        registro
+        for registro in registros_atuais
+        if registro.online
+        or registro.comunicando
+    ])
+
+    ultimo_monitoramento = max(
+        (
+            registro.coletado_em
+            for registro in registros_atuais
+            if registro.coletado_em
+        ),
+        default=None
+    )
+
+    # Caso não haja monitoramento do dia,
+    # tenta usar a tabela de geração diária.
+    if geracao_hoje <= 0:
+        geracao_hoje_banco = (
+            db.session.query(
+                func.coalesce(
+                    func.sum(
+                        Geracao.energia_kwh
+                    ),
+                    0
+                )
+            )
+            .filter(
+                Geracao.usina_id == usina.id,
+                Geracao.data == hoje
+            )
+            .scalar()
+        )
+
+        geracao_hoje = para_decimal(
+            geracao_hoje_banco
+        )
+
+    # GERAÇÃO MENSAL E ACUMULADA
+    geracao_mes = para_decimal(
+        db.session.query(
+            func.coalesce(
+                func.sum(
+                    Geracao.energia_kwh
+                ),
+                0
+            )
+        )
+        .filter(
+            Geracao.usina_id == usina.id,
+            Geracao.data >= inicio_mes,
+            Geracao.data < fim_mes_exclusivo
+        )
+        .scalar()
+    )
+
+    geracao_total = para_decimal(
+        db.session.query(
+            func.coalesce(
+                func.sum(
+                    Geracao.energia_kwh
+                ),
+                0
+            )
+        )
+        .filter(
+            Geracao.usina_id == usina.id
+        )
+        .scalar()
+    )
+
+    # Projeção da geração até o fechamento do mês
+    geracao_media_dia = (
+        geracao_mes
+        / Decimal(str(dias_decorridos))
+        if dias_decorridos > 0
+        else Decimal('0')
+    )
+
+    geracao_prevista_mes = (
+        geracao_media_dia
+        * Decimal(str(dias_no_mes))
+    )
+
+    # RECEITAS E DESPESAS DO MÊS
+    receitas_mes = para_decimal(
+        db.session.query(
+            func.coalesce(
+                func.sum(
+                    FinanceiroUsina.valor
+                    + func.coalesce(
+                        FinanceiroUsina.juros,
+                        0
+                    )
+                ),
+                0
+            )
+        )
+        .filter(
+            FinanceiroUsina.usina_id == usina.id,
+            FinanceiroUsina.tipo == 'receita',
+            FinanceiroUsina.data_pagamento.isnot(None),
+            FinanceiroUsina.data_pagamento >= inicio_mes,
+            FinanceiroUsina.data_pagamento
+            < fim_mes_exclusivo
+        )
+        .scalar()
+    )
+
+    despesas_mes = para_decimal(
+        db.session.query(
+            func.coalesce(
+                func.sum(
+                    FinanceiroUsina.valor
+                ),
+                0
+            )
+        )
+        .filter(
+            FinanceiroUsina.usina_id == usina.id,
+            FinanceiroUsina.tipo == 'despesa',
+            FinanceiroUsina.data_pagamento.isnot(None),
+            FinanceiroUsina.data_pagamento >= inicio_mes,
+            FinanceiroUsina.data_pagamento
+            < fim_mes_exclusivo
+        )
+        .scalar()
+    )
+
+    resultado_mes = (
+        receitas_mes
+        - despesas_mes
+    )
+
+    # RECEITAS E DESPESAS ACUMULADAS
+    receitas_total = para_decimal(
+        db.session.query(
+            func.coalesce(
+                func.sum(
+                    FinanceiroUsina.valor
+                    + func.coalesce(
+                        FinanceiroUsina.juros,
+                        0
+                    )
+                ),
+                0
+            )
+        )
+        .filter(
+            FinanceiroUsina.usina_id == usina.id,
+            FinanceiroUsina.tipo == 'receita',
+            FinanceiroUsina.data_pagamento.isnot(None)
+        )
+        .scalar()
+    )
+
+    despesas_total = para_decimal(
+        db.session.query(
+            func.coalesce(
+                func.sum(
+                    FinanceiroUsina.valor
+                ),
+                0
+            )
+        )
+        .filter(
+            FinanceiroUsina.usina_id == usina.id,
+            FinanceiroUsina.tipo == 'despesa',
+            FinanceiroUsina.data_pagamento.isnot(None)
+        )
+        .scalar()
+    )
+
+    retorno_total = (
+        receitas_total
+        - despesas_total
+    )
+
+    # TARIFA MÉDIA E FATURAMENTO PROJETADO
+    # A tarifa média é estimada dividindo o faturamento
+    # histórico pela geração histórica.
+
+    tarifa_media_estimada = (
+        receitas_total
+        / geracao_total
+        if geracao_total > 0
+        else Decimal('0')
+    )
+
+    faturamento_estimado_hoje = (
+        geracao_hoje
+        * tarifa_media_estimada
+    )
+
+    faturamento_previsto_mes = (
+        geracao_prevista_mes
+        * tarifa_media_estimada
+    )
+
+    # Caso ainda não exista geração histórica suficiente,
+    # projeta o mês pela receita já realizada.
+
+    if faturamento_previsto_mes <= 0:
+
+        faturamento_previsto_mes = (
+            receitas_mes
+            / Decimal(str(dias_decorridos))
+            * Decimal(str(dias_no_mes))
+            if dias_decorridos > 0
+            else Decimal('0')
+        )
+
+    # INVESTIMENTO, ROI E PAYBACK
+    investimento_total = para_decimal(
+        usina.valor_investido
+    )
+
+    investimento_acionista = (
+        investimento_total
+        * fator_participacao
+    )
+
+    retorno_acionista_total = (
+        retorno_total
+        * fator_participacao
+    )
+
+    retorno_acionista_mes = (
+        resultado_mes
+        * fator_participacao
+    )
+
+    faturamento_acionista_mes = (
+        receitas_mes
+        * fator_participacao
+    )
+
+    despesas_acionista_mes = (
+        despesas_mes
+        * fator_participacao
+    )
+
+    faturamento_acionista_total = (
+        receitas_total
+        * fator_participacao
+    )
+
+    despesas_acionista_total = (
+        despesas_total
+        * fator_participacao
+    )
+
+    payback_percentual = (
+        retorno_acionista_total
+        / investimento_acionista
+        * Decimal('100')
+        if investimento_acionista > 0
+        else Decimal('0')
+    )
+
+    payback_percentual_visual = max(
+        Decimal('0'),
+        min(
+            payback_percentual,
+            Decimal('100')
+        )
+    )
+
+    valor_restante_payback = max(
+        investimento_acionista
+        - retorno_acionista_total,
+        Decimal('0')
+    )
+
+    roi_mes_percentual = (
+        retorno_acionista_mes
+        / investimento_acionista
+        * Decimal('100')
+        if investimento_acionista > 0
+        else Decimal('0')
+    )
+
+    roi_total_percentual = (
+        retorno_acionista_total
+        / investimento_acionista
+        * Decimal('100')
+        if investimento_acionista > 0
+        else Decimal('0')
+    )
+
+    # MÉDIA DE RETORNO DOS ÚLTIMOS 12 MESES
+    inicio_12_meses = adicionar_meses(
+        inicio_mes,
+        -11
+    )
+
+    movimentos_12_meses = (
+        FinanceiroUsina.query
+        .filter(
+            FinanceiroUsina.usina_id == usina.id,
+            FinanceiroUsina.data_pagamento.isnot(None),
+            FinanceiroUsina.data_pagamento
+            >= inicio_12_meses
+        )
+        .all()
+    )
+
+    resultados_mensais = defaultdict(
+        lambda: {
+            'receitas': Decimal('0'),
+            'despesas': Decimal('0')
+        }
+    )
+
+    for movimento in movimentos_12_meses:
+        chave = (
+            movimento.data_pagamento.year,
+            movimento.data_pagamento.month
+        )
+
+        valor = para_decimal(
+            movimento.valor
+        )
+
+        juros = para_decimal(
+            movimento.juros
+        )
+
+        if movimento.tipo == 'receita':
+            resultados_mensais[chave][
+                'receitas'
+            ] += valor + juros
+
+        elif movimento.tipo == 'despesa':
+
+            resultados_mensais[chave][
+                'despesas'
+            ] += valor
+
+    retornos_mensais = []
+
+    for valores in resultados_mensais.values():
+        retorno_mes_item = (
+            valores['receitas']
+            - valores['despesas']
+        )
+
+        retornos_mensais.append(
+            retorno_mes_item
+            * fator_participacao
+        )
+
+    retornos_positivos = [
+        valor
+        for valor in retornos_mensais
+        if valor > 0
+    ]
+
+    retorno_medio_mensal = (
+        sum(
+            retornos_positivos,
+            Decimal('0')
+        )
+        / Decimal(
+            str(
+                len(
+                    retornos_positivos
+                )
+            )
+        )
+        if retornos_positivos
+        else Decimal('0')
+    )
+
+    meses_restantes_payback = None
+    previsao_payback = None
+
+    if (
+        valor_restante_payback > 0
+        and retorno_medio_mensal > 0
+    ):
+
+        meses_restantes_payback = math.ceil(
+            float(
+                valor_restante_payback
+                / retorno_medio_mensal
+            )
+        )
+
+        previsao_payback = adicionar_meses(
+            hoje,
+            meses_restantes_payback
+        )
+
+    elif valor_restante_payback <= 0:
+        meses_restantes_payback = 0
+        previsao_payback = hoje
+
+    # CAPACIDADE INSTANTÂNEA
+    potencia_instalada = para_decimal(
+        usina.potencia_kw
+    )
+
+    percentual_capacidade = (
+        potencia_agora
+        / potencia_instalada
+        * Decimal('100')
+        if potencia_instalada > 0
+        else Decimal('0')
+    )
+
+    percentual_capacidade_visual = max(
+        Decimal('0'),
+        min(
+            percentual_capacidade,
+            Decimal('100')
+        )
+    )
+
+    # DADOS DO DASHBOARD
+    dashboard = {
+        'usina': usina,
+
+        'participacao_percentual': arredondar(
+            participacao_percentual
+        ),
+
+        'potencia_agora': arredondar(
+            potencia_agora
+        ),
+
+        'potencia_instalada': arredondar(
+            potencia_instalada
+        ),
+
+        'percentual_capacidade': arredondar(
+            percentual_capacidade
+        ),
+
+        'percentual_capacidade_visual': arredondar(
+            percentual_capacidade_visual
+        ),
+
+        'geracao_hoje': arredondar(
+            geracao_hoje
+        ),
+
+        'geracao_mes': arredondar(
+            geracao_mes
+        ),
+
+        'geracao_total': arredondar(
+            geracao_total
+        ),
+
+        'geracao_prevista_mes': arredondar(
+            geracao_prevista_mes
+        ),
+
+        'tarifa_media_estimada': tarifa_media_estimada.quantize(
+            Decimal('0.0001')
+        ),
+
+        'faturamento_estimado_hoje': arredondar(
+            faturamento_estimado_hoje
+            * fator_participacao
+        ),
+
+        'faturamento_previsto_mes': arredondar(
+            faturamento_previsto_mes
+            * fator_participacao
+        ),
+
+        'faturamento_mes': arredondar(
+            faturamento_acionista_mes
+        ),
+
+        'faturamento_total': arredondar(
+            faturamento_acionista_total
+        ),
+
+        'despesas_mes': arredondar(
+            despesas_acionista_mes
+        ),
+
+        'despesas_total': arredondar(
+            despesas_acionista_total
+        ),
+
+        'retorno_mes': arredondar(
+            retorno_acionista_mes
+        ),
+
+        'retorno_total': arredondar(
+            retorno_acionista_total
+        ),
+
+        'investimento': arredondar(
+            investimento_acionista
+        ),
+
+        'payback_percentual': arredondar(
+            payback_percentual
+        ),
+
+        'payback_percentual_visual': arredondar(
+            payback_percentual_visual
+        ),
+
+        'valor_restante_payback': arredondar(
+            valor_restante_payback
+        ),
+
+        'roi_mes_percentual': arredondar(
+            roi_mes_percentual
+        ),
+
+        'roi_total_percentual': arredondar(
+            roi_total_percentual
+        ),
+
+        'retorno_medio_mensal': arredondar(
+            retorno_medio_mensal
+        ),
+
+        'meses_restantes_payback': meses_restantes_payback,
+        'previsao_payback': previsao_payback,
+        'inversores_total': inversores_total,
+        'inversores_online': inversores_online,
+        'ultimo_monitoramento': ultimo_monitoramento,
+        'agora': agora
+    }
+
+    return render_template(
+        'dashboard_investidor.html',
+        usinas=usinas,
+        usina_id=usina.id,
+        dashboard=dashboard,
+        agora=agora
     )
 
 
