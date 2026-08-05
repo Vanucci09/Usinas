@@ -12950,71 +12950,438 @@ def excluir_participacao_direta(id):
 @app.route('/relatorio_prestacao_direta', methods=['GET'])
 @login_required
 def relatorio_prestacao_direta():
-    usinas = Usina.query.order_by(Usina.nome).all()
-    usina_id = request.args.get('usina_id', type=int)
-    mes = request.args.get('mes', type=int)
-    ano = request.args.get('ano', type=int) or datetime.today().year
+
+    # CONTROLE DE ACESSO
+    if (
+        current_user.perfil
+        not in ['admin', 'financeiro', 'acionista']
+        and not current_user.pode_acessar_financeiro
+    ):
+        return 'Acesso negado', 403
+
+    hoje = date.today()
+
+    # FILTROS
+    usina_id = request.args.get(
+        'usina_id',
+        type=int
+    )
+
+    data_inicial_str = request.args.get(
+        'data_inicial'
+    )
+
+    data_final_str = request.args.get(
+        'data_final'
+    )
+
+    try:
+        data_inicial = (
+            datetime.strptime(
+                data_inicial_str,
+                '%Y-%m-%d'
+            ).date()
+            if data_inicial_str
+            else date(
+                hoje.year,
+                hoje.month,
+                1
+            )
+        )
+
+    except (ValueError, TypeError):
+        data_inicial = date(
+            hoje.year,
+            hoje.month,
+            1
+        )
+
+    try:
+        data_final = (
+            datetime.strptime(
+                data_final_str,
+                '%Y-%m-%d'
+            ).date()
+            if data_final_str
+            else hoje
+        )
+
+    except (ValueError, TypeError):
+        data_final = hoje
+
+    if data_inicial > data_final:
+
+        data_inicial, data_final = (
+            data_final,
+            data_inicial
+        )
+
+    inicio_periodo = datetime.combine(
+        data_inicial,
+        datetime.min.time()
+    )
+
+    fim_periodo_exclusivo = (
+        datetime.combine(
+            data_final,
+            datetime.min.time()
+        )
+        + timedelta(days=1)
+    )
+
     relatorio = None
 
+    # RESTRIÇÃO DAS USINAS PARA O ACIONISTA
+    usinas_permitidas_ids = None
+
+    if current_user.perfil == 'acionista':
+        usinas_permitidas_ids = [
+            resultado.usina_id
+            for resultado in (
+                db.session.query(
+                    UsinaInvestidora.usina_id
+                )
+                .join(
+                    ParticipacaoAcionista,
+                    ParticipacaoAcionista.empresa_id
+                    == UsinaInvestidora.empresa_id
+                )
+                .join(
+                    UsuarioAcionista,
+                    UsuarioAcionista.acionista_id
+                    == ParticipacaoAcionista.acionista_id
+                )
+                .filter(
+                    UsuarioAcionista.usuario_id
+                    == current_user.id
+                )
+                .distinct()
+                .all()
+            )
+        ]
+
+        # Evita retornar todas as usinas quando o acionista
+        # não possui nenhuma usina vinculada.
+        if not usinas_permitidas_ids:
+            usinas_permitidas_ids = [-1]
+
+    # CARREGAMENTO DAS USINAS
+    query_usinas = Usina.query
+
+    if current_user.perfil == 'acionista':
+
+        query_usinas = query_usinas.filter(
+            Usina.id.in_(
+                usinas_permitidas_ids
+            )
+        )
+
+    usinas = (
+        query_usinas
+        .order_by(
+            Usina.nome.asc()
+        )
+        .all()
+    )
+
+    # PROTEÇÃO CONTRA ALTERAÇÃO MANUAL DA URL
+    if (
+        current_user.perfil == 'acionista'
+        and usina_id
+        and usina_id not in usinas_permitidas_ids
+    ):
+        abort(403)
+
+    # MONTAGEM DO RELATÓRIO
     if usina_id:
-        usina = Usina.query.get(usina_id)
 
-        previsto = sum(p.previsao_kwh for p in usina.previsoes if (not mes or p.mes == mes) and p.ano == ano)
-        realizado = sum(g.energia_kwh for g in usina.geracoes if (not mes or g.data.month == mes) and g.data.year == ano)
-        eficiencia = round((realizado / previsto * 100), 2) if previsto else 0
+        usina = db.session.get(
+            Usina,
+            usina_id
+        )
 
-        # fluxo financeiro
+        if not usina:
+            abort(404)
+
+        # Segurança adicional para acionista
+        if (
+            current_user.perfil == 'acionista'
+            and usina.id not in usinas_permitidas_ids
+        ):
+            abort(403)
+
+        # PREVISÃO DO PERÍODO
+        # Considera as previsões mensais que tenham
+        # interseção com o período selecionado.
+
+        previsoes = (
+            PrevisaoMensal.query
+            .filter(
+                PrevisaoMensal.usina_id == usina.id
+            )
+            .all()
+        )
+
+        previsto = Decimal('0')
+
+        for previsao in previsoes:
+            primeiro_dia_mes = date(
+                previsao.ano,
+                previsao.mes,
+                1
+            )
+
+            ultimo_dia_mes = date(
+                previsao.ano,
+                previsao.mes,
+                calendar.monthrange(
+                    previsao.ano,
+                    previsao.mes
+                )[1]
+            )
+
+            mes_dentro_periodo = (
+                primeiro_dia_mes <= data_final
+                and
+                ultimo_dia_mes >= data_inicial
+            )
+
+            if mes_dentro_periodo:
+                previsto += Decimal(
+                    str(
+                        previsao.previsao_kwh
+                        or 0
+                    )
+                )
+
+        # GERAÇÃO REALIZADA
+        geracoes_periodo = (
+            Geracao.query
+            .filter(
+                Geracao.usina_id == usina.id,
+                Geracao.data >= inicio_periodo,
+                Geracao.data < fim_periodo_exclusivo
+            )
+            .order_by(
+                Geracao.data.asc()
+            )
+            .all()
+        )
+
+        realizado = sum(
+            (
+                Decimal(
+                    str(
+                        geracao.energia_kwh
+                        or 0
+                    )
+                )
+                for geracao in geracoes_periodo
+            ),
+            Decimal('0')
+        )
+
+        eficiencia = (
+            round(
+                (
+                    realizado
+                    / previsto
+                )
+                * Decimal('100'),
+                2
+            )
+            if previsto > 0
+            else Decimal('0')
+        )
+
+        # SALDO ANTERIOR AO PERÍODO
+        # Considera somente movimentações baixadas,
+        # usando a data de pagamento.
+
+        movimentos_anteriores = (
+            FinanceiroUsina.query
+            .filter(
+                FinanceiroUsina.usina_id == usina.id,
+                FinanceiroUsina.data_pagamento.isnot(None),
+                FinanceiroUsina.data_pagamento
+                < inicio_periodo
+            )
+            .order_by(
+                FinanceiroUsina.data_pagamento.asc(),
+                FinanceiroUsina.id.asc()
+            )
+            .all()
+        )
+
+        saldo_anterior = Decimal('0')
+
+        for movimento in movimentos_anteriores:
+            valor = Decimal(
+                str(
+                    movimento.valor
+                    or 0
+                )
+            )
+
+            juros = Decimal(
+                str(
+                    movimento.juros
+                    or 0
+                )
+            )
+
+            if movimento.tipo == 'receita':
+                saldo_anterior += (
+                    valor
+                    + juros
+                )
+
+            elif movimento.tipo == 'despesa':
+                saldo_anterior -= valor
+
+        # FLUXO FINANCEIRO DO PERÍODO
+        movimentos_periodo = (
+            FinanceiroUsina.query
+            .filter(
+                FinanceiroUsina.usina_id == usina.id,
+                FinanceiroUsina.data_pagamento.isnot(None),
+                FinanceiroUsina.data_pagamento
+                >= inicio_periodo,
+                FinanceiroUsina.data_pagamento
+                < fim_periodo_exclusivo
+            )
+            .order_by(
+                FinanceiroUsina.data_pagamento.asc(),
+                FinanceiroUsina.id.asc()
+            )
+            .all()
+        )
+
         fluxo = []
-        receitas = despesas = 0
-        for f in usina.financeiros:
-            if (not mes or f.referencia_mes == mes) and f.referencia_ano == ano:
-                if f.tipo == 'receita':
-                    receitas += f.valor
-                    fluxo.append({'data': f.data, 'descricao': f.descricao, 'credito': f.valor, 'debito': 0})
-                elif f.tipo == 'despesa':
-                    despesas += f.valor
-                    fluxo.append({'data': f.data, 'descricao': f.descricao, 'credito': 0, 'debito': f.valor})
 
-        liquido = receitas - despesas
+        receitas = Decimal('0')
+        despesas = Decimal('0')
+        saldo_acumulado = saldo_anterior
 
-        distribuicao = []
-        participacoes = ParticipacaoAcionistaDireta.query.filter_by(usina_id=usina_id).all()
-        for p in participacoes:
-            valor = round(liquido * (p.percentual / 100), 2)
-            distribuicao.append({
-                'acionista': p.acionista.nome,
-                'percentual': p.percentual,
-                'valor': valor
+        for movimento in movimentos_periodo:
+
+            valor = Decimal(
+                str(
+                    movimento.valor
+                    or 0
+                )
+            )
+
+            juros = Decimal(
+                str(
+                    movimento.juros
+                    or 0
+                )
+            )
+
+            credito = Decimal('0')
+            debito = Decimal('0')
+
+            if movimento.tipo == 'receita':
+
+                valor_total = (
+                    valor
+                    + juros
+                )
+
+                credito = valor_total
+                receitas += valor_total
+                saldo_acumulado += valor_total
+
+            elif movimento.tipo == 'despesa':
+
+                valor_total = valor
+                debito = valor_total
+                despesas += valor_total
+                saldo_acumulado -= valor_total
+
+            else:
+                continue
+
+            fluxo.append({
+                'data': movimento.data_pagamento,
+                'descricao': movimento.descricao,
+                'credito': credito,
+                'debito': debito,
+                'saldo': saldo_acumulado
             })
 
-        # yield cálculo
-        dias_no_mes = calendar.monthrange(ano, mes or 1)[1]
-        dias_validos = len([
-            g for g in usina.geracoes if g.data.month == mes and g.data.year == ano and g.energia_kwh > 0
-        ])
-        soma_total = sum(
-            g.energia_kwh for g in usina.geracoes if g.data.month == mes and g.data.year == ano
+        liquido_periodo = (
+            receitas
+            - despesas
         )
-        potencia_kw = usina.potencia_kw or 0
-        yield_kwp = round(soma_total / (dias_validos * (potencia_kw / dias_no_mes)), 2) if potencia_kw and dias_validos else None
 
+        # Saldo existente ao final da data selecionada
+        saldo_atual = saldo_acumulado
+
+        # YIELD DO PERÍODO
+        dias_periodo = (
+            data_final
+            - data_inicial
+        ).days + 1
+
+        dias_validos = len([
+            geracao
+            for geracao in geracoes_periodo
+            if Decimal(
+                str(
+                    geracao.energia_kwh
+                    or 0
+                )
+            ) > 0
+        ])
+
+        potencia_kw = Decimal(
+            str(
+                usina.potencia_kw
+                or 0
+            )
+        )
+
+        yield_kwp = None
+
+        if (
+            potencia_kw > 0
+            and dias_validos > 0
+            and realizado > 0
+        ):
+
+            yield_kwp = round(
+                realizado
+                / potencia_kw,
+                2
+            )
+
+        # DADOS ENVIADOS AO TEMPLATE
         relatorio = {
             'usina': usina,
             'previsto': previsto,
             'realizado': realizado,
             'eficiencia': eficiencia,
             'fluxo': fluxo,
-            'distribuicao': distribuicao,
-            'yield_kwp': yield_kwp
+            'receitas': receitas,
+            'despesas': despesas,
+            'liquido_periodo': liquido_periodo,
+            'saldo_anterior': saldo_anterior,
+            'saldo_atual': saldo_atual,
+            'yield_kwp': yield_kwp,
+            'dias_periodo': dias_periodo,
+            'dias_validos': dias_validos
         }
 
-    return render_template('relatorio_prestacao_direta.html',
-                           usinas=usinas,
-                           usina_id=usina_id,
-                           relatorio=relatorio,
-                           mes=mes,
-                           ano=ano,
-                           ano_atual=datetime.today().year)
+    return render_template(
+        'relatorio_prestacao_direta.html',
+        usinas=usinas,
+        usina_id=usina_id,
+        relatorio=relatorio,
+        data_inicial=data_inicial,
+        data_final=data_final
+    )
 
 @app.route('/cadastrar_injecao', methods=['GET', 'POST'])
 @login_required

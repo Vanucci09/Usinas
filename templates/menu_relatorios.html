@@ -69,14 +69,16 @@
                     </a>
                 </div>
             </div>
-        </div>
+        </div>        
+
+        {% endif %}
 
         <div class="col">
             <div class="card shadow-sm h-100">
                 <div class="card-body">
-                    <h5 class="card-title">Prestação de Contas por Usina</h5>
+                    <h5 class="card-title">Relatório de Fluxo de Caixa do Consórcio</h5>
                     <p class="card-text">
-                        Relatório de prestação de contas para usinas vinculadas diretamente a acionistas, sem empresa investidora.
+                        Relatório de prestação de contas para usinas
                     </p>
                     <a href="{{ url_for('relatorio_prestacao_direta') }}"
                        class="btn btn-outline-primary">
@@ -85,8 +87,6 @@
                 </div>
             </div>
         </div>
-
-        {% endif %}
 
         <div class="col">
             <div class="card shadow-sm h-100 border-danger">

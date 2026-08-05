@@ -1,77 +1,625 @@
 {% extends 'base.html' %}
 
-{% block title %}Relatório de Prestação de Contas - Direto pela Usina{% endblock %}
+{% block title %}
+    Relatório de Prestação de Contas - Direto pela Usina
+{% endblock %}
 
 {% block content %}
-<div class="container mt-5 mb-5 p-4 bg-white shadow rounded">
-    <h2 class="text-center text-primary mb-4">📊 Prestação de Contas da Usina</h2>
 
-    <form method="GET" class="row g-3 mb-4">
-        <div class="col-md-4">
-            <label for="usina_id" class="form-label">Usina</label>
-            <select name="usina_id" id="usina_id" class="form-select" required onchange="this.form.submit()">
-                <option value="">Selecione</option>
-                {% for usina in usinas %}
-                    <option value="{{ usina.id }}" {% if usina.id == usina_id %}selected{% endif %}>{{ usina.nome }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-2">
-            <label for="mes" class="form-label">Mês</label>
-            <input type="number" min="1" max="12" name="mes" id="mes" class="form-control" value="{{ mes or '' }}">
-        </div>
-        <div class="col-md-2">
-            <label for="ano" class="form-label">Ano</label>
-            <input type="number" name="ano" id="ano" class="form-control" value="{{ ano or ano_atual }}">
-        </div>
-        <div class="col-md-4 d-flex align-items-end justify-content-end">
-            <button type="submit" class="btn btn-primary"><i class="bi bi-funnel"></i> Filtrar</button>
-        </div>
-    </form>
+<div class="container mt-5 mb-5">
 
-    {% if relatorio %}
-        <!-- dados gerais da usina -->
-        <div class="card mb-4">
-            <div class="card-header bg-success text-white fw-bold">⚡ Usina: {{ relatorio.usina.nome }}</div>
-            <div class="card-body">
-                <p><strong>Potência:</strong> {{ relatorio.usina.potencia_kw or 'Não informada' }} kW</p>
-                <p><strong>Previsto:</strong> {{ relatorio.previsto | formato_brasileiro }} kWh</p>
-                <p><strong>Realizado:</strong> {{ relatorio.realizado | formato_brasileiro }} kWh</p>
-                <p><strong>Eficiência:</strong> {{ relatorio.eficiencia }}%</p>
-                <p><strong>Yield:</strong> {{ relatorio.yield_kwp or 'Não calculado' }}</p>
+    <div class="card shadow-sm border-0">
+
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+
+            <div>
+
+                <h4 class="mb-0">
+                    <i class="bi bi-file-earmark-bar-graph me-2"></i>
+                    Prestação de Contas da Usina
+                </h4>
+
+                <small>
+                    Relatório de geração e movimentação financeira
+                </small>
+
             </div>
+
+            <a href="{{ url_for('menu_relatorios') }}"
+            class="btn btn-light">
+
+                <i class="bi bi-arrow-left"></i>
+                Voltar
+
+            </a>
+
         </div>
 
-        <!-- fluxo financeiro -->
-        <h5 class="text-primary">💰 Fluxo Financeiro do Consórcio</h5>
-        <table class="table table-bordered table-sm">
-            <thead class="table-light">
-                <tr>
-                    <th>Data</th>
-                    <th>Descrição</th>
-                    <th class="text-end">Crédito</th>
-                    <th class="text-end">Débito</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for f in relatorio.fluxo %}
-                <tr>
-                    <td>{{ f.data.strftime('%d/%m/%Y') if f.data else '-' }}</td>
-                    <td>{{ f.descricao }}</td>
-                    <td class="text-end">{{ f.credito | formato_brasileiro }}</td>
-                    <td class="text-end">{{ f.debito | formato_brasileiro }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="card-body">
 
-        <!-- distribuição entre acionistas -->
-        <h5 class="text-primary mt-4">📈 Distribuição entre Acionistas</h5>
-        <ul>
-            {% for d in relatorio.distribuicao %}
-                <li>{{ d.acionista }} ({{ d.percentual }}%) → <strong>{{ d.valor | formato_brasileiro }}</strong></li>
-            {% endfor %}
-        </ul>
-    {% endif %}
+            <!-- FILTROS -->
+            <form method="GET" class="row g-3 mb-4">
+
+                <div class="col-md-4">
+
+                    <label
+                        for="usina_id"
+                        class="form-label fw-semibold"
+                    >
+                        Usina
+                    </label>
+
+                    <select
+                        name="usina_id"
+                        id="usina_id"
+                        class="form-select"
+                        required
+                    >
+
+                        <option value="">
+                            Selecione uma usina
+                        </option>
+
+                        {% for usina in usinas %}
+
+                            <option
+                                value="{{ usina.id }}"
+                                {% if usina.id == usina_id %}
+                                    selected
+                                {% endif %}
+                            >
+                                {{ usina.nome }}
+                            </option>
+
+                        {% endfor %}
+
+                    </select>
+
+                </div>
+
+                <div class="col-md-3">
+
+                    <label
+                        for="data_inicial"
+                        class="form-label fw-semibold"
+                    >
+                        Data inicial
+                    </label>
+
+                    <input
+                        type="date"
+                        name="data_inicial"
+                        id="data_inicial"
+                        class="form-control"
+                        value="{{ data_inicial.strftime('%Y-%m-%d') }}"
+                        required
+                    >
+
+                </div>
+
+                <div class="col-md-3">
+
+                    <label
+                        for="data_final"
+                        class="form-label fw-semibold"
+                    >
+                        Data final
+                    </label>
+
+                    <input
+                        type="date"
+                        name="data_final"
+                        id="data_final"
+                        class="form-control"
+                        value="{{ data_final.strftime('%Y-%m-%d') }}"
+                        required
+                    >
+
+                </div>
+
+                <div class="col-md-2 d-flex align-items-end">
+
+                    <button
+                        type="submit"
+                        class="btn btn-primary w-100"
+                    >
+                        <i class="bi bi-funnel me-1"></i>
+                        Filtrar
+                    </button>
+
+                </div>
+
+            </form>
+
+            {% if relatorio %}
+
+                <!-- PERÍODO -->
+                <div class="alert alert-light border mb-4">
+
+                    <i class="bi bi-calendar-range me-1"></i>
+
+                    Período de
+
+                    <strong>
+                        {{ data_inicial.strftime('%d/%m/%Y') }}
+                    </strong>
+
+                    até
+
+                    <strong>
+                        {{ data_final.strftime('%d/%m/%Y') }}
+                    </strong>
+
+                </div>
+
+                <!-- DADOS DA USINA -->
+                <div class="card mb-4 border-0 bg-light">
+
+                    <div class="card-body">
+
+                        <div class="d-flex align-items-center mb-3">
+
+                            <div
+                                class="rounded-circle bg-success text-white
+                                       d-flex align-items-center justify-content-center me-3"
+                                style="width: 48px; height: 48px;"
+                            >
+                                <i class="bi bi-lightning-charge-fill fs-4"></i>
+                            </div>
+
+                            <div>
+
+                                <small class="text-muted">
+                                    Usina selecionada
+                                </small>
+
+                                <h5 class="mb-0">
+                                    {{ relatorio.usina.nome }}
+                                </h5>
+
+                            </div>
+
+                        </div>
+
+                        <div class="row g-3">
+
+                            <div class="col-md-3">
+
+                                <div class="bg-white rounded border p-3 h-100">
+
+                                    <small class="text-muted d-block">
+                                        Potência instalada
+                                    </small>
+
+                                    <strong class="fs-5">
+                                        {{ relatorio.usina.potencia_kw
+                                           | formato_brasileiro }}
+                                        kWp
+                                    </strong>
+
+                                </div>
+
+                            </div>
+
+                            <div class="col-md-3">
+
+                                <div class="bg-white rounded border p-3 h-100">
+
+                                    <small class="text-muted d-block">
+                                        Geração prevista
+                                    </small>
+
+                                    <strong class="fs-5">
+                                        {{ relatorio.previsto
+                                           | formato_brasileiro }}
+                                        kWh
+                                    </strong>
+
+                                </div>
+
+                            </div>
+
+                            <div class="col-md-3">
+
+                                <div class="bg-white rounded border p-3 h-100">
+
+                                    <small class="text-muted d-block">
+                                        Geração realizada
+                                    </small>
+
+                                    <strong class="fs-5">
+                                        {{ relatorio.realizado
+                                           | formato_brasileiro }}
+                                        kWh
+                                    </strong>
+
+                                </div>
+
+                            </div>
+
+                            <div class="col-md-3">
+
+                                <div class="bg-white rounded border p-3 h-100">
+
+                                    <small class="text-muted d-block">
+                                        Eficiência
+                                    </small>
+
+                                    <strong class="fs-5">
+                                        {{ relatorio.eficiencia
+                                           | formato_brasileiro }}%
+                                    </strong>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <!-- RESUMO FINANCEIRO -->
+                <div class="row g-3 mb-4">
+
+                    <div class="col-md-3">
+
+                        <div class="card border-0 shadow-sm h-100">
+
+                            <div class="card-body">
+
+                                <small class="text-muted">
+                                    Saldo anterior
+                                </small>
+
+                                <h5
+                                    class="mb-0 mt-1
+                                    {% if relatorio.saldo_anterior >= 0 %}
+                                        text-primary
+                                    {% else %}
+                                        text-danger
+                                    {% endif %}"
+                                >
+                                    {{ relatorio.saldo_anterior
+                                       | formato_brasileiro }}
+                                </h5>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                    <div class="col-md-3">
+
+                        <div class="card border-0 shadow-sm h-100">
+
+                            <div class="card-body">
+
+                                <small class="text-muted">
+                                    Receitas no período
+                                </small>
+
+                                <h5 class="mb-0 mt-1 text-success">
+                                    {{ relatorio.receitas
+                                       | formato_brasileiro }}
+                                </h5>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                    <div class="col-md-3">
+
+                        <div class="card border-0 shadow-sm h-100">
+
+                            <div class="card-body">
+
+                                <small class="text-muted">
+                                    Despesas no período
+                                </small>
+
+                                <h5 class="mb-0 mt-1 text-danger">
+                                    {{ relatorio.despesas
+                                       | formato_brasileiro }}
+                                </h5>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                    <div class="col-md-3">
+
+                        <div class="card border-primary shadow-sm h-100">
+
+                            <div class="card-body">
+
+                                <small class="text-muted">
+                                    Saldo até
+                                    {{ data_final.strftime('%d/%m/%Y') }}
+                                </small>
+
+                                <h5
+                                    class="mb-0 mt-1
+                                    {% if relatorio.saldo_atual >= 0 %}
+                                        text-success
+                                    {% else %}
+                                        text-danger
+                                    {% endif %}"
+                                >
+                                    {{ relatorio.saldo_atual
+                                       | formato_brasileiro }}
+                                </h5>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <!-- YIELD -->
+                <div class="alert alert-info mb-4">
+
+                    <div class="row">
+
+                        <div class="col-md-4">
+
+                            <strong>Yield:</strong>
+
+                            {% if relatorio.yield_kwp is not none %}
+
+                                {{ relatorio.yield_kwp
+                                   | formato_brasileiro }}
+                                kWh/kWp
+
+                            {% else %}
+
+                                Não calculado
+
+                            {% endif %}
+
+                        </div>
+
+                        <div class="col-md-4">
+
+                            <strong>Dias no período:</strong>
+                            {{ relatorio.dias_periodo }}
+
+                        </div>
+
+                        <div class="col-md-4">
+
+                            <strong>Dias com geração:</strong>
+                            {{ relatorio.dias_validos }}
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <!-- FLUXO FINANCEIRO -->
+                <div class="d-flex justify-content-between align-items-center mb-3">
+
+                    <h5 class="text-primary mb-0">
+
+                        <i class="bi bi-cash-stack me-1"></i>
+                        Fluxo Financeiro
+
+                    </h5>
+
+                    <span class="badge bg-light text-dark border">
+
+                        {{ relatorio.fluxo | length }}
+                        movimentação(ões)
+
+                    </span>
+
+                </div>
+
+                <div class="table-responsive">
+
+                    <table
+                        class="table table-bordered table-hover table-sm align-middle"
+                    >
+
+                        <thead class="table-light">
+
+                            <tr>
+
+                                <th style="width: 120px;">
+                                    Data
+                                </th>
+
+                                <th>
+                                    Descrição
+                                </th>
+
+                                <th
+                                    class="text-end"
+                                    style="width: 150px;"
+                                >
+                                    Crédito
+                                </th>
+
+                                <th
+                                    class="text-end"
+                                    style="width: 150px;"
+                                >
+                                    Débito
+                                </th>
+
+                                <th
+                                    class="text-end"
+                                    style="width: 170px;"
+                                >
+                                    Saldo
+                                </th>
+
+                            </tr>
+
+                        </thead>
+
+                        <tbody>
+
+                            {% for f in relatorio.fluxo %}
+
+                                <tr>
+
+                                    <td>
+
+                                        {{ f.data.strftime('%d/%m/%Y')
+                                           if f.data
+                                           else '-' }}
+
+                                    </td>
+
+                                    <td>
+                                        {{ f.descricao or '-' }}
+                                    </td>
+
+                                    <td class="text-end text-success">
+
+                                        {% if f.credito > 0 %}
+
+                                            {{ f.credito
+                                               | formato_brasileiro }}
+
+                                        {% else %}
+
+                                            -
+
+                                        {% endif %}
+
+                                    </td>
+
+                                    <td class="text-end text-danger">
+
+                                        {% if f.debito > 0 %}
+
+                                            {{ f.debito
+                                               | formato_brasileiro }}
+
+                                        {% else %}
+
+                                            -
+
+                                        {% endif %}
+
+                                    </td>
+
+                                    <td
+                                        class="text-end fw-semibold
+                                        {% if f.saldo >= 0 %}
+                                            text-primary
+                                        {% else %}
+                                            text-danger
+                                        {% endif %}"
+                                    >
+
+                                        {{ f.saldo
+                                           | formato_brasileiro }}
+
+                                    </td>
+
+                                </tr>
+
+                            {% else %}
+
+                                <tr>
+
+                                    <td
+                                        colspan="5"
+                                        class="text-center text-muted py-4"
+                                    >
+
+                                        <i class="bi bi-inbox fs-4 d-block mb-2"></i>
+
+                                        Nenhuma movimentação encontrada
+                                        no período selecionado.
+
+                                    </td>
+
+                                </tr>
+
+                            {% endfor %}
+
+                        </tbody>
+
+                        <tfoot class="table-light">
+
+                            <tr class="fw-bold">
+
+                                <td colspan="2" class="text-end">
+                                    Totais do período
+                                </td>
+
+                                <td class="text-end text-success">
+
+                                    {{ relatorio.receitas
+                                       | formato_brasileiro }}
+
+                                </td>
+
+                                <td class="text-end text-danger">
+
+                                    {{ relatorio.despesas
+                                       | formato_brasileiro }}
+
+                                </td>
+
+                                <td
+                                    class="text-end
+                                    {% if relatorio.saldo_atual >= 0 %}
+                                        text-primary
+                                    {% else %}
+                                        text-danger
+                                    {% endif %}"
+                                >
+
+                                    {{ relatorio.saldo_atual
+                                       | formato_brasileiro }}
+
+                                </td>
+
+                            </tr>
+
+                        </tfoot>
+
+                    </table>
+
+                </div>
+
+            {% elif usina_id %}
+
+                <div class="alert alert-warning">
+                    Não foi possível gerar o relatório da usina.
+                </div>
+
+            {% else %}
+
+                <div class="text-center text-muted py-5">
+
+                    <i class="bi bi-funnel fs-1 d-block mb-3"></i>
+
+                    Selecione uma usina e informe o período
+                    para visualizar o relatório.
+
+                </div>
+
+            {% endif %}
+
+        </div>
+
+    </div>
+
 </div>
+
 {% endblock %}
