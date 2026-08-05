@@ -361,7 +361,8 @@
                     <div class="fw-bold">
 
                         {{ dashboard.participacao_percentual
-                           | formato_brasileiro }}%
+                           | formato_brasileiro
+                           | replace('R$ ', '') }}%
 
                     </div>
 
@@ -390,7 +391,8 @@
                             <div class="medidor-percentual">
 
                                 {{ dashboard.payback_percentual
-                                   | formato_brasileiro }}%
+                                   | formato_brasileiro
+                                   | replace('R$ ', '') }}%
 
                             </div>
 
@@ -433,7 +435,6 @@
 
                         <div class="fs-5 fw-bold">
 
-                            R$
                             {{ dashboard.investimento
                                | formato_brasileiro }}
 
@@ -444,13 +445,12 @@
                     <div class="resumo-payback">
 
                         <div class="indicador-label">
-                            Retorno líquido acumulado
+                            Receita acumulada
                         </div>
 
                         <div class="fs-5 fw-bold valor-positivo">
 
-                            R$
-                            {{ dashboard.retorno_total
+                            {{ dashboard.receita_total
                                | formato_brasileiro }}
 
                         </div>
@@ -465,7 +465,6 @@
 
                         <div class="fs-5 fw-bold text-warning">
 
-                            R$
                             {{ dashboard.valor_restante_payback
                                | formato_brasileiro }}
 
@@ -542,7 +541,6 @@
 
                         <div class="fs-5 fw-bold">
 
-                            R$
                             {{ dashboard.retorno_medio_mensal
                                | formato_brasileiro }}
 
@@ -559,7 +557,7 @@
         <!-- TEMPO REAL -->
         <div class="row g-3 mb-4">
 
-            <div class="col-md-6 col-xl-3">
+            <div class="col-md-6 col-xl-4">
 
                 <div class="dashboard-card p-3">
 
@@ -574,7 +572,8 @@
                             <div class="indicador-valor mt-2">
 
                                 {{ dashboard.potencia_agora
-                                   | formato_brasileiro }}
+                                   | formato_brasileiro
+                                   | replace('R$ ', '') }}
                                 kW
 
                             </div>
@@ -597,7 +596,8 @@
 
                             <span>
                                 {{ dashboard.percentual_capacidade
-                                   | formato_brasileiro }}%
+                                   | formato_brasileiro
+                                   | replace('R$ ', '') }}%
                             </span>
 
                         </div>
@@ -616,7 +616,7 @@
 
             </div>
 
-            <div class="col-md-6 col-xl-3">
+            <div class="col-md-6 col-xl-4">
 
                 <div class="dashboard-card p-3">
 
@@ -631,7 +631,8 @@
                             <div class="indicador-valor mt-2">
 
                                 {{ dashboard.geracao_hoje
-                                   | formato_brasileiro }}
+                                   | formato_brasileiro
+                                   | replace('R$ ', '') }}
                                 kWh
 
                             </div>
@@ -640,7 +641,8 @@
 
                                 Mês:
                                 {{ dashboard.geracao_mes
-                                   | formato_brasileiro }}
+                                   | formato_brasileiro
+                                   | replace('R$ ', '') }}
                                 kWh
 
                             </div>
@@ -657,7 +659,7 @@
 
             </div>
 
-            <div class="col-md-6 col-xl-3">
+            <div class="col-md-6 col-xl-4">
 
                 <div class="dashboard-card p-3">
 
@@ -671,7 +673,6 @@
 
                             <div class="indicador-valor mt-2 valor-positivo">
 
-                                R$
                                 {{ dashboard.faturamento_estimado_hoje
                                    | formato_brasileiro }}
 
@@ -680,7 +681,6 @@
                             <div class="indicador-secundario mt-2">
 
                                 Tarifa média estimada:
-                                R$
                                 {{ dashboard.tarifa_media_estimada
                                    | formato_brasileiro }}/kWh
 
@@ -698,59 +698,22 @@
 
             </div>
 
-            <div class="col-md-6 col-xl-3">
-
-                <div class="dashboard-card p-3">
-
-                    <div class="d-flex justify-content-between">
-
-                        <div>
-
-                            <div class="indicador-label">
-                                Inversores comunicando
-                            </div>
-
-                            <div class="indicador-valor mt-2">
-
-                                {{ dashboard.inversores_online }}
-                                /
-                                {{ dashboard.inversores_total }}
-
-                            </div>
-
-                            <div class="indicador-secundario mt-2">
-                                Status do monitoramento
-                            </div>
-
-                        </div>
-
-                        <div class="icone-indicador icone-roxo">
-                            <i class="bi bi-broadcast-pin"></i>
-                        </div>
-
-                    </div>
-
-                </div>
-
-            </div>
-
         </div>
 
-        <!-- FATURAMENTO E RETORNO -->
+        <!-- FATURAMENTO, RECEITA E DESPESAS -->
         <div class="row g-3 mb-4">
 
-            <div class="col-md-6 col-xl-3">
+            <div class="col-md-6 col-xl-4">
 
                 <div class="dashboard-card p-3">
 
                     <div class="indicador-label">
-                        Faturamento realizado no mês
+                        Faturamento bruto no mês
                     </div>
 
                     <div class="indicador-valor valor-positivo mt-2">
 
-                        R$
-                        {{ dashboard.faturamento_mes
+                        {{ dashboard.faturamento_bruto_mes
                            | formato_brasileiro }}
 
                     </div>
@@ -763,8 +726,7 @@
 
                     <div class="fw-bold text-primary">
 
-                        R$
-                        {{ dashboard.faturamento_previsto_mes
+                        {{ dashboard.faturamento_bruto_previsto_mes
                            | formato_brasileiro }}
 
                     </div>
@@ -773,23 +735,22 @@
 
             </div>
 
-            <div class="col-md-6 col-xl-3">
+            <div class="col-md-6 col-xl-4">
 
                 <div class="dashboard-card p-3">
 
                     <div class="indicador-label">
-                        Retorno líquido do mês
+                        Receita do mês
                     </div>
 
                     <div class="indicador-valor mt-2
-                        {% if dashboard.retorno_mes >= 0 %}
+                        {% if dashboard.receita_mes >= 0 %}
                             valor-positivo
                         {% else %}
                             valor-negativo
                         {% endif %}">
 
-                        R$
-                        {{ dashboard.retorno_mes
+                        {{ dashboard.receita_mes
                            | formato_brasileiro }}
 
                     </div>
@@ -803,7 +764,8 @@
                     <div class="fw-bold">
 
                         {{ dashboard.roi_mes_percentual
-                           | formato_brasileiro }}%
+                           | formato_brasileiro
+                           | replace('R$ ', '') }}%
 
                     </div>
 
@@ -811,18 +773,17 @@
 
             </div>
 
-            <div class="col-md-6 col-xl-3">
+            <div class="col-md-6 col-xl-4">
 
                 <div class="dashboard-card p-3">
 
                     <div class="indicador-label">
-                        Despesas no mês
+                        Despesa bruta no mês
                     </div>
 
                     <div class="indicador-valor valor-negativo mt-2">
 
-                        R$
-                        {{ dashboard.despesas_mes
+                        {{ dashboard.despesa_bruta_mes
                            | formato_brasileiro }}
 
                     </div>
@@ -830,13 +791,12 @@
                     <hr>
 
                     <div class="indicador-secundario">
-                        Despesas acumuladas
+                        Despesa bruta acumulada
                     </div>
 
                     <div class="fw-bold text-danger">
 
-                        R$
-                        {{ dashboard.despesas_total
+                        {{ dashboard.despesa_bruta_total
                            | formato_brasileiro }}
 
                     </div>
@@ -845,31 +805,30 @@
 
             </div>
 
-            <div class="col-md-6 col-xl-3">
+            <div class="col-md-6 col-xl-4">
 
                 <div class="dashboard-card p-3">
 
                     <div class="indicador-label">
-                        ROI acumulado
+                        Arrendamento no mês
                     </div>
 
-                    <div class="indicador-valor mt-2 text-primary">
+                    <div class="indicador-valor mt-2 text-secondary">
 
-                        {{ dashboard.roi_total_percentual
-                           | formato_brasileiro }}%
+                        {{ dashboard.arrendamento_mes
+                           | formato_brasileiro }}
 
                     </div>
 
                     <hr>
 
                     <div class="indicador-secundario">
-                        Faturamento acumulado
+                        Arrendamento acumulado
                     </div>
 
-                    <div class="fw-bold">
+                    <div class="fw-bold text-secondary">
 
-                        R$
-                        {{ dashboard.faturamento_total
+                        {{ dashboard.arrendamento_total
                            | formato_brasileiro }}
 
                     </div>
@@ -916,7 +875,8 @@
                     <div class="fs-3 fw-bold text-success mt-1">
 
                         {{ dashboard.geracao_total
-                           | formato_brasileiro }}
+                           | formato_brasileiro
+                           | replace('R$ ', '') }}
                         kWh
 
                     </div>
@@ -926,13 +886,12 @@
                 <div class="col-md-4">
 
                     <div class="indicador-label">
-                        Retorno líquido acumulado
+                        Receita acumulada
                     </div>
 
                     <div class="fs-3 fw-bold text-primary mt-1">
 
-                        R$
-                        {{ dashboard.retorno_total
+                        {{ dashboard.receita_total
                            | formato_brasileiro }}
 
                     </div>
@@ -948,7 +907,8 @@
                     <div class="fs-3 fw-bold text-warning mt-1">
 
                         {{ dashboard.geracao_prevista_mes
-                           | formato_brasileiro }}
+                           | formato_brasileiro
+                           | replace('R$ ', '') }}
                         kWh
 
                     </div>

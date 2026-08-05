@@ -26542,8 +26542,14 @@ def dashboard_investidor():
         * Decimal(str(dias_no_mes))
     )
 
-    # RECEITAS E DESPESAS DO MÊS
-    receitas_mes = para_decimal(
+    # FATURAMENTO BRUTO, DESPESA BRUTA E RECEITA DO MÊS
+    # Mesma regra de relatorio_financeiro_com_perda:
+    # - Faturamento bruto: receitas pagas + juros
+    # - Despesa bruta: despesas pagas, exceto categorias 5, 7, 12 e 14
+    # - Arrendamento: categoria 5, exibida separadamente
+    # - Receita: faturamento bruto - despesa bruta
+
+    faturamento_bruto_mes = para_decimal(
         db.session.query(
             func.coalesce(
                 func.sum(
@@ -26561,13 +26567,12 @@ def dashboard_investidor():
             FinanceiroUsina.tipo == 'receita',
             FinanceiroUsina.data_pagamento.isnot(None),
             FinanceiroUsina.data_pagamento >= inicio_mes,
-            FinanceiroUsina.data_pagamento
-            < fim_mes_exclusivo
+            FinanceiroUsina.data_pagamento < fim_mes_exclusivo
         )
         .scalar()
     )
 
-    despesas_mes = para_decimal(
+    despesa_bruta_mes = para_decimal(
         db.session.query(
             func.coalesce(
                 func.sum(
@@ -26581,19 +26586,45 @@ def dashboard_investidor():
             FinanceiroUsina.tipo == 'despesa',
             FinanceiroUsina.data_pagamento.isnot(None),
             FinanceiroUsina.data_pagamento >= inicio_mes,
-            FinanceiroUsina.data_pagamento
-            < fim_mes_exclusivo
+            FinanceiroUsina.data_pagamento < fim_mes_exclusivo,
+            or_(
+                FinanceiroUsina.categoria_id.is_(None),
+                FinanceiroUsina.categoria_id.notin_(
+                    [5, 7, 12, 14]
+                )
+            )
         )
         .scalar()
     )
 
-    resultado_mes = (
-        receitas_mes
-        - despesas_mes
+    arrendamento_mes = para_decimal(
+        db.session.query(
+            func.coalesce(
+                func.sum(
+                    FinanceiroUsina.valor
+                ),
+                0
+            )
+        )
+        .filter(
+            FinanceiroUsina.usina_id == usina.id,
+            FinanceiroUsina.tipo == 'despesa',
+            FinanceiroUsina.categoria_id == 5,
+            FinanceiroUsina.data_pagamento.isnot(None),
+            FinanceiroUsina.data_pagamento >= inicio_mes,
+            FinanceiroUsina.data_pagamento < fim_mes_exclusivo
+        )
+        .scalar()
     )
 
-    # RECEITAS E DESPESAS ACUMULADAS
-    receitas_total = para_decimal(
+    receita_mes = (
+        faturamento_bruto_mes
+        - despesa_bruta_mes
+    )
+
+    # FATURAMENTO BRUTO, DESPESA BRUTA E RECEITA ACUMULADOS
+
+    faturamento_bruto_total = para_decimal(
         db.session.query(
             func.coalesce(
                 func.sum(
@@ -26614,7 +26645,7 @@ def dashboard_investidor():
         .scalar()
     )
 
-    despesas_total = para_decimal(
+    despesa_bruta_total = para_decimal(
         db.session.query(
             func.coalesce(
                 func.sum(
@@ -26626,22 +26657,44 @@ def dashboard_investidor():
         .filter(
             FinanceiroUsina.usina_id == usina.id,
             FinanceiroUsina.tipo == 'despesa',
+            FinanceiroUsina.data_pagamento.isnot(None),
+            or_(
+                FinanceiroUsina.categoria_id.is_(None),
+                FinanceiroUsina.categoria_id.notin_(
+                    [5, 7, 12, 14]
+                )
+            )
+        )
+        .scalar()
+    )
+
+    arrendamento_total = para_decimal(
+        db.session.query(
+            func.coalesce(
+                func.sum(
+                    FinanceiroUsina.valor
+                ),
+                0
+            )
+        )
+        .filter(
+            FinanceiroUsina.usina_id == usina.id,
+            FinanceiroUsina.tipo == 'despesa',
+            FinanceiroUsina.categoria_id == 5,
             FinanceiroUsina.data_pagamento.isnot(None)
         )
         .scalar()
     )
 
-    retorno_total = (
-        receitas_total
-        - despesas_total
+    receita_total = (
+        faturamento_bruto_total
+        - despesa_bruta_total
     )
 
     # TARIFA MÉDIA E FATURAMENTO PROJETADO
-    # A tarifa média é estimada dividindo o faturamento
-    # histórico pela geração histórica.
 
     tarifa_media_estimada = (
-        receitas_total
+        faturamento_bruto_total
         / geracao_total
         if geracao_total > 0
         else Decimal('0')
@@ -26652,25 +26705,29 @@ def dashboard_investidor():
         * tarifa_media_estimada
     )
 
-    faturamento_previsto_mes = (
-        geracao_prevista_mes
-        * tarifa_media_estimada
+    faturamento_bruto_previsto_mes = (
+        faturamento_bruto_mes
+        / Decimal(str(dias_decorridos))
+        * Decimal(str(dias_no_mes))
+        if dias_decorridos > 0
+        else Decimal('0')
     )
 
-    # Caso ainda não exista geração histórica suficiente,
-    # projeta o mês pela receita já realizada.
+    despesa_bruta_prevista_mes = (
+        despesa_bruta_mes
+        / Decimal(str(dias_decorridos))
+        * Decimal(str(dias_no_mes))
+        if dias_decorridos > 0
+        else Decimal('0')
+    )
 
-    if faturamento_previsto_mes <= 0:
-
-        faturamento_previsto_mes = (
-            receitas_mes
-            / Decimal(str(dias_decorridos))
-            * Decimal(str(dias_no_mes))
-            if dias_decorridos > 0
-            else Decimal('0')
-        )
+    receita_prevista_mes = (
+        faturamento_bruto_previsto_mes
+        - despesa_bruta_prevista_mes
+    )
 
     # INVESTIMENTO, ROI E PAYBACK
+
     investimento_total = para_decimal(
         usina.valor_investido
     )
@@ -26680,38 +26737,58 @@ def dashboard_investidor():
         * fator_participacao
     )
 
-    retorno_acionista_total = (
-        retorno_total
+    faturamento_bruto_acionista_mes = (
+        faturamento_bruto_mes
         * fator_participacao
     )
 
-    retorno_acionista_mes = (
-        resultado_mes
+    faturamento_bruto_acionista_total = (
+        faturamento_bruto_total
         * fator_participacao
     )
 
-    faturamento_acionista_mes = (
-        receitas_mes
+    faturamento_bruto_previsto_acionista_mes = (
+        faturamento_bruto_previsto_mes
         * fator_participacao
     )
 
-    despesas_acionista_mes = (
-        despesas_mes
+    despesa_bruta_acionista_mes = (
+        despesa_bruta_mes
         * fator_participacao
     )
 
-    faturamento_acionista_total = (
-        receitas_total
+    despesa_bruta_acionista_total = (
+        despesa_bruta_total
         * fator_participacao
     )
 
-    despesas_acionista_total = (
-        despesas_total
+    arrendamento_acionista_mes = (
+        arrendamento_mes
+        * fator_participacao
+    )
+
+    arrendamento_acionista_total = (
+        arrendamento_total
+        * fator_participacao
+    )
+
+    receita_acionista_mes = (
+        receita_mes
+        * fator_participacao
+    )
+
+    receita_acionista_total = (
+        receita_total
+        * fator_participacao
+    )
+
+    receita_prevista_acionista_mes = (
+        receita_prevista_mes
         * fator_participacao
     )
 
     payback_percentual = (
-        retorno_acionista_total
+        receita_acionista_total
         / investimento_acionista
         * Decimal('100')
         if investimento_acionista > 0
@@ -26728,12 +26805,12 @@ def dashboard_investidor():
 
     valor_restante_payback = max(
         investimento_acionista
-        - retorno_acionista_total,
+        - receita_acionista_total,
         Decimal('0')
     )
 
     roi_mes_percentual = (
-        retorno_acionista_mes
+        receita_acionista_mes
         / investimento_acionista
         * Decimal('100')
         if investimento_acionista > 0
@@ -26741,7 +26818,7 @@ def dashboard_investidor():
     )
 
     roi_total_percentual = (
-        retorno_acionista_total
+        receita_acionista_total
         / investimento_acionista
         * Decimal('100')
         if investimento_acionista > 0
@@ -26767,12 +26844,13 @@ def dashboard_investidor():
 
     resultados_mensais = defaultdict(
         lambda: {
-            'receitas': Decimal('0'),
-            'despesas': Decimal('0')
+            'faturamento_bruto': Decimal('0'),
+            'despesa_bruta': Decimal('0')
         }
     )
 
     for movimento in movimentos_12_meses:
+
         chave = (
             movimento.data_pagamento.year,
             movimento.data_pagamento.month
@@ -26787,22 +26865,29 @@ def dashboard_investidor():
         )
 
         if movimento.tipo == 'receita':
+
             resultados_mensais[chave][
-                'receitas'
+                'faturamento_bruto'
             ] += valor + juros
 
         elif movimento.tipo == 'despesa':
 
-            resultados_mensais[chave][
-                'despesas'
-            ] += valor
+            categoria_id = movimento.categoria_id
+
+            if (
+                categoria_id is None
+                or categoria_id not in [5, 7, 12, 14]
+            ):
+                resultados_mensais[chave][
+                    'despesa_bruta'
+                ] += valor
 
     retornos_mensais = []
 
     for valores in resultados_mensais.values():
         retorno_mes_item = (
-            valores['receitas']
-            - valores['despesas']
+            valores['faturamento_bruto']
+            - valores['despesa_bruta']
         )
 
         retornos_mensais.append(
@@ -26926,33 +27011,44 @@ def dashboard_investidor():
             * fator_participacao
         ),
 
-        'faturamento_previsto_mes': arredondar(
-            faturamento_previsto_mes
-            * fator_participacao
+        'faturamento_bruto_mes': arredondar(
+            faturamento_bruto_acionista_mes
         ),
 
-        'faturamento_mes': arredondar(
-            faturamento_acionista_mes
+        'faturamento_bruto_total': arredondar(
+            faturamento_bruto_acionista_total
         ),
 
-        'faturamento_total': arredondar(
-            faturamento_acionista_total
+        'faturamento_bruto_previsto_mes': arredondar(
+            faturamento_bruto_previsto_acionista_mes
         ),
 
-        'despesas_mes': arredondar(
-            despesas_acionista_mes
+        'despesa_bruta_mes': arredondar(
+            despesa_bruta_acionista_mes
         ),
 
-        'despesas_total': arredondar(
-            despesas_acionista_total
+        'despesa_bruta_total': arredondar(
+            despesa_bruta_acionista_total
         ),
 
-        'retorno_mes': arredondar(
-            retorno_acionista_mes
+        'arrendamento_mes': arredondar(
+            arrendamento_acionista_mes
         ),
 
-        'retorno_total': arredondar(
-            retorno_acionista_total
+        'arrendamento_total': arredondar(
+            arrendamento_acionista_total
+        ),
+
+        'receita_mes': arredondar(
+            receita_acionista_mes
+        ),
+
+        'receita_total': arredondar(
+            receita_acionista_total
+        ),
+
+        'receita_prevista_mes': arredondar(
+            receita_prevista_acionista_mes
         ),
 
         'investimento': arredondar(
