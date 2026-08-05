@@ -1680,14 +1680,10 @@ def consulta():
         date.today().isoformat()
     )
 
-    # ==========================================
     # USINAS PERMITIDAS
-    # ==========================================
-
     usinas_permitidas_ids = None
 
     if current_user.perfil == 'acionista':
-
         usinas_permitidas_ids = [
             resultado.usina_id
             for resultado in (
@@ -1718,10 +1714,7 @@ def consulta():
         if not usinas_permitidas_ids:
             usinas_permitidas_ids = [-1]
 
-    # ==========================================
     # LISTA DE USINAS DO FILTRO
-    # ==========================================
-
     query_usinas = Usina.query
 
     if current_user.perfil == 'acionista':
@@ -1739,10 +1732,7 @@ def consulta():
         .all()
     )
 
-    # ==========================================
     # VALIDAÇÃO DO FILTRO DA USINA
-    # ==========================================
-
     if (
         current_user.perfil == 'acionista'
         and usina_id
@@ -1750,10 +1740,7 @@ def consulta():
     ):
         abort(403)
 
-    # ==========================================
     # CONSULTA DE GERAÇÃO
-    # ==========================================
-
     query = (
         db.session.query(
             Geracao,
@@ -1800,7 +1787,6 @@ def consulta():
     previsoes = []
 
     for geracao, usina in resultados:
-
         dias_no_mes = monthrange(
             geracao.data.year,
             geracao.data.month
@@ -1874,17 +1860,11 @@ def consulta():
 @login_required
 def producao_mensal(usina_id, ano, mes):
 
-    # ==========================================
     # VALIDAÇÃO DO PERÍODO
-    # ==========================================
-
     if mes < 1 or mes > 12:
         abort(404)
 
-    # ==========================================
     # RESTRIÇÃO PARA ACIONISTA
-    # ==========================================
-
     usinas_permitidas_ids = None
 
     if current_user.perfil == 'acionista':
@@ -1918,10 +1898,7 @@ def producao_mensal(usina_id, ano, mes):
         if usina_id not in usinas_permitidas_ids:
             abort(403)
 
-    # ==========================================
     # USINA ATUAL
-    # ==========================================
-
     usina = db.session.get(
         Usina,
         usina_id
@@ -1952,10 +1929,7 @@ def producao_mensal(usina_id, ano, mes):
         )
     )
 
-    # ==========================================
     # GERAÇÃO DO MÊS
-    # ==========================================
-
     resultados = (
         Geracao.query
         .filter(
@@ -2007,10 +1981,7 @@ def producao_mensal(usina_id, ano, mes):
         2
     )
 
-    # ==========================================
     # PREVISÃO MENSAL
-    # ==========================================
-
     previsao_registro = (
         PrevisaoMensal.query
         .filter_by(
@@ -2041,10 +2012,7 @@ def producao_mensal(usina_id, ano, mes):
         for _ in range(dias_mes)
     ]
 
-    # ==========================================
     # GERAÇÃO ACUMULADA NO ANO
-    # ==========================================
-
     inicio_ano = date(
         ano,
         1,
@@ -2088,10 +2056,7 @@ def producao_mensal(usina_id, ano, mes):
         2
     )
 
-    # ==========================================
     # MÉDIA DO YIELD ACUMULADO
-    # ==========================================
-
     geracoes_diarias = (
         db.session.query(
             Geracao.data,
@@ -13453,10 +13418,7 @@ def relatorio_financeiro_com_perda():
     ano = request.args.get('ano', type=int, default=datetime.now().year)
     logo_usina_data_uri = None
     
-    # ==========================================
     # RESTRIÇÃO PARA ACIONISTA
-    # ==========================================
-
     usinas_permitidas_ids = None
 
     if current_user.perfil == 'acionista':

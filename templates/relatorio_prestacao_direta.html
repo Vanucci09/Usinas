@@ -482,7 +482,7 @@
                                     </td>
 
                                     <td>
-                                        {{ f.descricao or '-' }}
+                                        {{ (f.descricao or '-').split('|')[0].strip() }}
                                     </td>
 
                                     <td class="text-end text-success">
