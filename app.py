@@ -26156,7 +26156,10 @@ def adicionar_observacao_conta_concessionaria(conta_id):
 @login_required
 def dashboard_investidor():
 
+    # =====================================================
     # CONTROLE DE ACESSO
+    # =====================================================
+
     if (
         current_user.perfil
         not in ['admin', 'financeiro', 'acionista']
@@ -26164,9 +26167,11 @@ def dashboard_investidor():
     ):
         abort(403)
 
+    # =====================================================
     # HELPERS
-    def para_decimal(valor, padrao='0'):
+    # =====================================================
 
+    def para_decimal(valor, padrao='0'):
         try:
             if valor is None:
                 return Decimal(padrao)
@@ -26181,36 +26186,16 @@ def dashboard_investidor():
             return Decimal(padrao)
 
     def arredondar(valor, casas=2):
+        mascara = Decimal(
+            '1' if casas == 0
+            else '1.' + ('0' * casas)
+        )
 
         return para_decimal(valor).quantize(
-            Decimal('1.' + ('0' * casas))
-        )
-
-    def primeiro_dia_mes(data_referencia):
-
-        return date(
-            data_referencia.year,
-            data_referencia.month,
-            1
-        )
-
-    def primeiro_dia_proximo_mes(data_referencia):
-
-        if data_referencia.month == 12:
-            return date(
-                data_referencia.year + 1,
-                1,
-                1
-            )
-
-        return date(
-            data_referencia.year,
-            data_referencia.month + 1,
-            1
+            mascara
         )
 
     def adicionar_meses(data_base, quantidade):
-
         indice_mes = (
             data_base.year * 12
             + data_base.month
@@ -26247,25 +26232,60 @@ def dashboard_investidor():
 
     hoje = agora.date()
 
-    inicio_mes = primeiro_dia_mes(
-        hoje
+    # =====================================================
+    # FILTRO DE PERÍODO
+    # =====================================================
+
+    ano = request.args.get(
+        'ano',
+        type=int,
+        default=hoje.year
     )
 
-    fim_mes_exclusivo = primeiro_dia_proximo_mes(
-        hoje
+    mes = request.args.get(
+        'mes',
+        type=int,
+        default=hoje.month
     )
 
-    dias_no_mes = calendar.monthrange(
-        hoje.year,
-        hoje.month
-    )[1]
+    if (
+        not ano
+        or ano < 2000
+        or ano > 2100
+        or mes < 1
+        or mes > 12
+    ):
+        abort(404)
 
-    dias_decorridos = max(
-        hoje.day,
+    data_inicio = date(
+        ano,
+        mes,
         1
     )
 
+    data_fim = (
+        date(
+            ano + 1,
+            1,
+            1
+        )
+        if mes == 12
+        else date(
+            ano,
+            mes + 1,
+            1
+        )
+    )
+
+    dias_no_mes = calendar.monthrange(
+        ano,
+        mes
+    )[1]
+
+    # =====================================================
     # USINAS PERMITIDAS
+    # =====================================================
+
     usinas_permitidas_ids = None
 
     if current_user.perfil == 'acionista':
@@ -26323,10 +26343,15 @@ def dashboard_investidor():
             usinas=[],
             usina_id=None,
             dashboard=None,
+            ano=ano,
+            mes=mes,
             agora=agora
         )
 
+    # =====================================================
     # USINA SELECIONADA
+    # =====================================================
+
     usina_id = request.args.get(
         'usina_id',
         type=int
@@ -26353,13 +26378,9 @@ def dashboard_investidor():
     if not usina:
         abort(404)
 
+    # =====================================================
     # PARTICIPAÇÃO DO ACIONISTA
-    # O percentual do acionista é buscado nas empresas
-    # investidoras vinculadas à usina.
-    #
-    # Como UsinaInvestidora não possui percentual da empresa
-    # na usina, considera-se o percentual cadastrado do
-    # acionista como percentual aplicável à usina.
+    # =====================================================
 
     participacao_percentual = Decimal('100')
 
@@ -26384,21 +26405,25 @@ def dashboard_investidor():
                 UsuarioAcionista.usuario_id
                 == current_user.id
             )
-            .distinct()
             .all()
         )
 
         participacao_percentual = sum(
             (
-                para_decimal(item.percentual)
-                for item in participacoes
+                para_decimal(
+                    percentual
+                )
+                for percentual, in participacoes
             ),
             Decimal('0')
         )
 
-        participacao_percentual = min(
-            participacao_percentual,
-            Decimal('100')
+        participacao_percentual = max(
+            Decimal('0'),
+            min(
+                participacao_percentual,
+                Decimal('100')
+            )
         )
 
     fator_participacao = (
@@ -26406,98 +26431,77 @@ def dashboard_investidor():
         / Decimal('100')
     )
 
-    # MONITORAMENTO EM TEMPO REAL
-    registros_monitoramento = (
-        Monitoramento.query
+    # =====================================================
+    # GERAÇÃO DO MÊS SELECIONADO
+    # Mesma regra utilizada em producao_mensal
+    # =====================================================
+
+    resultados_geracao = (
+        Geracao.query
         .filter(
-            Monitoramento.usina_id == usina.id,
-            Monitoramento.data == hoje
+            Geracao.usina_id == usina.id,
+            Geracao.data >= data_inicio,
+            Geracao.data < data_fim
         )
         .order_by(
-            Monitoramento.inverter_sn.asc(),
-            Monitoramento.coletado_em.desc()
+            Geracao.data.asc()
         )
         .all()
     )
 
-    ultimo_por_inversor = {}
-
-    for registro in registros_monitoramento:
-
-        if registro.inverter_sn not in ultimo_por_inversor:
-            ultimo_por_inversor[
-                registro.inverter_sn
-            ] = registro
-
-    registros_atuais = list(
-        ultimo_por_inversor.values()
-    )
-
-    potencia_agora = sum(
+    geracao_ate_agora = sum(
         (
             para_decimal(
-                registro.potencia_kw
+                resultado.energia_kwh
             )
-            for registro in registros_atuais
+            for resultado in resultados_geracao
         ),
         Decimal('0')
     )
 
-    geracao_hoje = sum(
-        (
-            para_decimal(
-                registro.etoday
-            )
-            for registro in registros_atuais
-        ),
-        Decimal('0')
+    dias_com_dado = len(
+        resultados_geracao
     )
 
-    inversores_total = len(
-        registros_atuais
+    media_diaria = (
+        geracao_ate_agora
+        / Decimal(str(dias_com_dado))
+        if dias_com_dado > 0
+        else Decimal('0')
     )
 
-    inversores_online = len([
-        registro
-        for registro in registros_atuais
-        if registro.online
-        or registro.comunicando
-    ])
-
-    ultimo_monitoramento = max(
-        (
-            registro.coletado_em
-            for registro in registros_atuais
-            if registro.coletado_em
-        ),
-        default=None
+    # Projeção baseada somente nos dias que possuem registro.
+    geracao_projetada_mes = (
+        media_diaria
+        * Decimal(str(dias_no_mes))
     )
 
-    # Caso não haja monitoramento do dia,
-    # tenta usar a tabela de geração diária.
-    if geracao_hoje <= 0:
-        geracao_hoje_banco = (
-            db.session.query(
-                func.coalesce(
-                    func.sum(
-                        Geracao.energia_kwh
-                    ),
-                    0
-                )
-            )
-            .filter(
-                Geracao.usina_id == usina.id,
-                Geracao.data == hoje
-            )
-            .scalar()
+    # =====================================================
+    # PREVISÃO MENSAL CADASTRADA
+    # =====================================================
+
+    previsao_registro = (
+        PrevisaoMensal.query
+        .filter_by(
+            usina_id=usina.id,
+            ano=ano,
+            mes=mes
         )
+        .first()
+    )
 
-        geracao_hoje = para_decimal(
-            geracao_hoje_banco
-        )
+    previsao_mensal = para_decimal(
+        previsao_registro.previsao_kwh
+        if previsao_registro
+        else 0
+    )
 
-    # GERAÇÃO MENSAL E ACUMULADA
-    geracao_mes = para_decimal(
+    # =====================================================
+    # GERAÇÃO ACUMULADA
+    # =====================================================
+
+    # Acumulado total da usina até o fim do mês selecionado.
+    geracao_acumulada = para_decimal(
         db.session.query(
             func.coalesce(
                 func.sum(
@@ -26508,13 +26512,12 @@ def dashboard_investidor():
         )
         .filter(
             Geracao.usina_id == usina.id,
-            Geracao.data >= inicio_mes,
-            Geracao.data < fim_mes_exclusivo
+            Geracao.data < data_fim
         )
         .scalar()
     )
 
-    geracao_total = para_decimal(
+    geracao_total_historica = para_decimal(
         db.session.query(
             func.coalesce(
                 func.sum(
@@ -26529,25 +26532,10 @@ def dashboard_investidor():
         .scalar()
     )
 
-    # Projeção da geração até o fechamento do mês
-    geracao_media_dia = (
-        geracao_mes
-        / Decimal(str(dias_decorridos))
-        if dias_decorridos > 0
-        else Decimal('0')
-    )
-
-    geracao_prevista_mes = (
-        geracao_media_dia
-        * Decimal(str(dias_no_mes))
-    )
-
-    # FATURAMENTO BRUTO, DESPESA BRUTA E RECEITA DO MÊS
-    # Mesma regra de relatorio_financeiro_com_perda:
-    # - Faturamento bruto: receitas pagas + juros
-    # - Despesa bruta: despesas pagas, exceto categorias 5, 7, 12 e 14
-    # - Arrendamento: categoria 5, exibida separadamente
-    # - Receita: faturamento bruto - despesa bruta
+    # =====================================================
+    # FATURAMENTO BRUTO DO MÊS
+    # Receita paga + juros
+    # =====================================================
 
     faturamento_bruto_mes = para_decimal(
         db.session.query(
@@ -26566,11 +26554,16 @@ def dashboard_investidor():
             FinanceiroUsina.usina_id == usina.id,
             FinanceiroUsina.tipo == 'receita',
             FinanceiroUsina.data_pagamento.isnot(None),
-            FinanceiroUsina.data_pagamento >= inicio_mes,
-            FinanceiroUsina.data_pagamento < fim_mes_exclusivo
+            FinanceiroUsina.data_pagamento >= data_inicio,
+            FinanceiroUsina.data_pagamento < data_fim
         )
         .scalar()
     )
+
+    # =====================================================
+    # DESPESA BRUTA DO MÊS
+    # Desconsidera categorias 5, 7, 12 e 14
+    # =====================================================
 
     despesa_bruta_mes = para_decimal(
         db.session.query(
@@ -26585,8 +26578,8 @@ def dashboard_investidor():
             FinanceiroUsina.usina_id == usina.id,
             FinanceiroUsina.tipo == 'despesa',
             FinanceiroUsina.data_pagamento.isnot(None),
-            FinanceiroUsina.data_pagamento >= inicio_mes,
-            FinanceiroUsina.data_pagamento < fim_mes_exclusivo,
+            FinanceiroUsina.data_pagamento >= data_inicio,
+            FinanceiroUsina.data_pagamento < data_fim,
             or_(
                 FinanceiroUsina.categoria_id.is_(None),
                 FinanceiroUsina.categoria_id.notin_(
@@ -26596,6 +26589,11 @@ def dashboard_investidor():
         )
         .scalar()
     )
+
+    # =====================================================
+    # ARRENDAMENTO DO MÊS
+    # Categoria 5, exibida separadamente
+    # =====================================================
 
     arrendamento_mes = para_decimal(
         db.session.query(
@@ -26611,8 +26609,8 @@ def dashboard_investidor():
             FinanceiroUsina.tipo == 'despesa',
             FinanceiroUsina.categoria_id == 5,
             FinanceiroUsina.data_pagamento.isnot(None),
-            FinanceiroUsina.data_pagamento >= inicio_mes,
-            FinanceiroUsina.data_pagamento < fim_mes_exclusivo
+            FinanceiroUsina.data_pagamento >= data_inicio,
+            FinanceiroUsina.data_pagamento < data_fim
         )
         .scalar()
     )
@@ -26622,7 +26620,9 @@ def dashboard_investidor():
         - despesa_bruta_mes
     )
 
-    # FATURAMENTO BRUTO, DESPESA BRUTA E RECEITA ACUMULADOS
+    # =====================================================
+    # VALORES ACUMULADOS ATÉ O FIM DO MÊS SELECIONADO
+    # =====================================================
 
     faturamento_bruto_total = para_decimal(
         db.session.query(
@@ -26640,7 +26640,8 @@ def dashboard_investidor():
         .filter(
             FinanceiroUsina.usina_id == usina.id,
             FinanceiroUsina.tipo == 'receita',
-            FinanceiroUsina.data_pagamento.isnot(None)
+            FinanceiroUsina.data_pagamento.isnot(None),
+            FinanceiroUsina.data_pagamento < data_fim
         )
         .scalar()
     )
@@ -26658,6 +26659,7 @@ def dashboard_investidor():
             FinanceiroUsina.usina_id == usina.id,
             FinanceiroUsina.tipo == 'despesa',
             FinanceiroUsina.data_pagamento.isnot(None),
+            FinanceiroUsina.data_pagamento < data_fim,
             or_(
                 FinanceiroUsina.categoria_id.is_(None),
                 FinanceiroUsina.categoria_id.notin_(
@@ -26681,7 +26683,8 @@ def dashboard_investidor():
             FinanceiroUsina.usina_id == usina.id,
             FinanceiroUsina.tipo == 'despesa',
             FinanceiroUsina.categoria_id == 5,
-            FinanceiroUsina.data_pagamento.isnot(None)
+            FinanceiroUsina.data_pagamento.isnot(None),
+            FinanceiroUsina.data_pagamento < data_fim
         )
         .scalar()
     )
@@ -26691,33 +26694,49 @@ def dashboard_investidor():
         - despesa_bruta_total
     )
 
-    # TARIFA MÉDIA E FATURAMENTO PROJETADO
+    # =====================================================
+    # TARIFA MÉDIA E ESTIMATIVAS
+    # =====================================================
 
+    # Tarifa histórica da usina.
     tarifa_media_estimada = (
         faturamento_bruto_total
-        / geracao_total
-        if geracao_total > 0
+        / geracao_acumulada
+        if geracao_acumulada > 0
         else Decimal('0')
     )
 
-    faturamento_estimado_hoje = (
-        geracao_hoje
+    # Valor estimado da geração já realizada no mês.
+    faturamento_estimado_geracao = (
+        geracao_ate_agora
         * tarifa_media_estimada
     )
 
+    # Projeção financeira com base na geração projetada.
     faturamento_bruto_previsto_mes = (
-        faturamento_bruto_mes
-        / Decimal(str(dias_decorridos))
-        * Decimal(str(dias_no_mes))
-        if dias_decorridos > 0
-        else Decimal('0')
+        geracao_projetada_mes
+        * tarifa_media_estimada
     )
+
+    # A despesa projetada usa a média dos dias transcorridos
+    # quando o mês selecionado é o mês atual.
+    if (
+        ano == hoje.year
+        and mes == hoje.month
+    ):
+        dias_base_financeiro = max(
+            hoje.day,
+            1
+        )
+
+    else:
+        dias_base_financeiro = dias_no_mes
 
     despesa_bruta_prevista_mes = (
         despesa_bruta_mes
-        / Decimal(str(dias_decorridos))
+        / Decimal(str(dias_base_financeiro))
         * Decimal(str(dias_no_mes))
-        if dias_decorridos > 0
+        if dias_base_financeiro > 0
         else Decimal('0')
     )
 
@@ -26726,7 +26745,9 @@ def dashboard_investidor():
         - despesa_bruta_prevista_mes
     )
 
-    # INVESTIMENTO, ROI E PAYBACK
+    # =====================================================
+    # VALORES PROPORCIONAIS AO ACIONISTA
+    # =====================================================
 
     investimento_total = para_decimal(
         usina.valor_investido
@@ -26734,6 +26755,11 @@ def dashboard_investidor():
 
     investimento_acionista = (
         investimento_total
+        * fator_participacao
+    )
+
+    faturamento_estimado_acionista = (
+        faturamento_estimado_geracao
         * fator_participacao
     )
 
@@ -26787,6 +26813,10 @@ def dashboard_investidor():
         * fator_participacao
     )
 
+    # =====================================================
+    # PAYBACK E ROI
+    # =====================================================
+
     payback_percentual = (
         receita_acionista_total
         / investimento_acionista
@@ -26817,17 +26847,13 @@ def dashboard_investidor():
         else Decimal('0')
     )
 
-    roi_total_percentual = (
-        receita_acionista_total
-        / investimento_acionista
-        * Decimal('100')
-        if investimento_acionista > 0
-        else Decimal('0')
-    )
+    # =====================================================
+    # RETORNO MÉDIO DOS ÚLTIMOS 12 MESES
+    # Considera os 12 meses encerrando no mês filtrado
+    # =====================================================
 
-    # MÉDIA DE RETORNO DOS ÚLTIMOS 12 MESES
     inicio_12_meses = adicionar_meses(
-        inicio_mes,
+        data_inicio,
         -11
     )
 
@@ -26836,8 +26862,8 @@ def dashboard_investidor():
         .filter(
             FinanceiroUsina.usina_id == usina.id,
             FinanceiroUsina.data_pagamento.isnot(None),
-            FinanceiroUsina.data_pagamento
-            >= inicio_12_meses
+            FinanceiroUsina.data_pagamento >= inicio_12_meses,
+            FinanceiroUsina.data_pagamento < data_fim
         )
         .all()
     )
@@ -26882,24 +26908,19 @@ def dashboard_investidor():
                     'despesa_bruta'
                 ] += valor
 
-    retornos_mensais = []
+    retornos_positivos = []
 
     for valores in resultados_mensais.values():
+
         retorno_mes_item = (
             valores['faturamento_bruto']
             - valores['despesa_bruta']
-        )
+        ) * fator_participacao
 
-        retornos_mensais.append(
-            retorno_mes_item
-            * fator_participacao
-        )
-
-    retornos_positivos = [
-        valor
-        for valor in retornos_mensais
-        if valor > 0
-    ]
+        if retorno_mes_item > 0:
+            retornos_positivos.append(
+                retorno_mes_item
+            )
 
     retorno_medio_mensal = (
         sum(
@@ -26933,84 +26954,83 @@ def dashboard_investidor():
         )
 
         previsao_payback = adicionar_meses(
-            hoje,
+            data_fim - timedelta(days=1),
             meses_restantes_payback
         )
 
     elif valor_restante_payback <= 0:
+
         meses_restantes_payback = 0
-        previsao_payback = hoje
-
-    # CAPACIDADE INSTANTÂNEA
-    potencia_instalada = para_decimal(
-        usina.potencia_kw
-    )
-
-    percentual_capacidade = (
-        potencia_agora
-        / potencia_instalada
-        * Decimal('100')
-        if potencia_instalada > 0
-        else Decimal('0')
-    )
-
-    percentual_capacidade_visual = max(
-        Decimal('0'),
-        min(
-            percentual_capacidade,
-            Decimal('100')
+        previsao_payback = (
+            data_fim
+            - timedelta(days=1)
         )
-    )
 
+    # =====================================================
     # DADOS DO DASHBOARD
+    # =====================================================
+
     dashboard = {
         'usina': usina,
+        'ano': ano,
+        'mes': mes,
 
         'participacao_percentual': arredondar(
             participacao_percentual
         ),
 
-        'potencia_agora': arredondar(
-            potencia_agora
-        ),
-
-        'potencia_instalada': arredondar(
-            potencia_instalada
-        ),
-
-        'percentual_capacidade': arredondar(
-            percentual_capacidade
-        ),
-
-        'percentual_capacidade_visual': arredondar(
-            percentual_capacidade_visual
-        ),
-
-        'geracao_hoje': arredondar(
-            geracao_hoje
+        # Geração
+        'geracao_ate_agora': arredondar(
+            geracao_ate_agora
         ),
 
         'geracao_mes': arredondar(
-            geracao_mes
+            geracao_ate_agora
+        ),
+
+        'geracao_acumulada': arredondar(
+            geracao_acumulada
         ),
 
         'geracao_total': arredondar(
-            geracao_total
+            geracao_acumulada
         ),
 
+        'media_diaria': arredondar(
+            media_diaria
+        ),
+
+        'dias_com_dado': dias_com_dado,
+        'dias_no_mes': dias_no_mes,
+
+        'geracao_projetada_mes': arredondar(
+            geracao_projetada_mes
+        ),
+
+        # Mantido para compatibilidade com o HTML anterior.
         'geracao_prevista_mes': arredondar(
-            geracao_prevista_mes
+            geracao_projetada_mes
         ),
 
+        'previsao_mensal': arredondar(
+            previsao_mensal
+        ),
+
+        # Estimativas
         'tarifa_media_estimada': tarifa_media_estimada.quantize(
             Decimal('0.0001')
         ),
 
-        'faturamento_estimado_hoje': arredondar(
-            faturamento_estimado_hoje
-            * fator_participacao
+        'faturamento_estimado_geracao': arredondar(
+            faturamento_estimado_acionista
         ),
 
+        # Mantido para compatibilidade com o HTML anterior.
+        'faturamento_estimado_mes': arredondar(
+            faturamento_estimado_acionista
+        ),
+
+        # Faturamento bruto
         'faturamento_bruto_mes': arredondar(
             faturamento_bruto_acionista_mes
         ),
@@ -27023,6 +27043,7 @@ def dashboard_investidor():
             faturamento_bruto_previsto_acionista_mes
         ),
 
+        # Despesas
         'despesa_bruta_mes': arredondar(
             despesa_bruta_acionista_mes
         ),
@@ -27031,6 +27052,7 @@ def dashboard_investidor():
             despesa_bruta_acionista_total
         ),
 
+        # Arrendamento
         'arrendamento_mes': arredondar(
             arrendamento_acionista_mes
         ),
@@ -27039,6 +27061,7 @@ def dashboard_investidor():
             arrendamento_acionista_total
         ),
 
+        # Receita
         'receita_mes': arredondar(
             receita_acionista_mes
         ),
@@ -27051,6 +27074,7 @@ def dashboard_investidor():
             receita_prevista_acionista_mes
         ),
 
+        # Investimento e payback
         'investimento': arredondar(
             investimento_acionista
         ),
@@ -27071,19 +27095,12 @@ def dashboard_investidor():
             roi_mes_percentual
         ),
 
-        'roi_total_percentual': arredondar(
-            roi_total_percentual
-        ),
-
         'retorno_medio_mensal': arredondar(
             retorno_medio_mensal
         ),
 
         'meses_restantes_payback': meses_restantes_payback,
         'previsao_payback': previsao_payback,
-        'inversores_total': inversores_total,
-        'inversores_online': inversores_online,
-        'ultimo_monitoramento': ultimo_monitoramento,
         'agora': agora
     }
 
@@ -27092,6 +27109,8 @@ def dashboard_investidor():
         usinas=usinas,
         usina_id=usina.id,
         dashboard=dashboard,
+        ano=ano,
+        mes=mes,
         agora=agora
     )
 

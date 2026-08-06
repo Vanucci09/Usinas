@@ -317,21 +317,18 @@
     <div class="dashboard-card p-3 mb-4">
 
         <form method="GET"
-              class="row g-3 align-items-end">
+            class="row g-3 align-items-end">
 
-            <div class="col-md-6 col-lg-4">
+            <div class="col-md-5">
 
                 <label for="usina_id"
-                       class="form-label fw-semibold">
-
+                    class="form-label fw-semibold">
                     Usina
-
                 </label>
 
                 <select name="usina_id"
                         id="usina_id"
-                        class="form-select"
-                        onchange="this.form.submit()">
+                        class="form-select">
 
                     {% for usina in usinas %}
 
@@ -350,25 +347,77 @@
 
             </div>
 
-            {% if dashboard %}
+            <div class="col-md-2">
 
-                <div class="col-md-6 col-lg-4">
+                <label for="mes"
+                    class="form-label fw-semibold">
+                    Mês
+                </label>
 
-                    <div class="indicador-label">
-                        Participação considerada
-                    </div>
+                <select name="mes"
+                        id="mes"
+                        class="form-select">
 
-                    <div class="fw-bold">
+                    {% set meses_nomes = [
+                        'Janeiro',
+                        'Fevereiro',
+                        'Março',
+                        'Abril',
+                        'Maio',
+                        'Junho',
+                        'Julho',
+                        'Agosto',
+                        'Setembro',
+                        'Outubro',
+                        'Novembro',
+                        'Dezembro'
+                    ] %}
 
-                        {{ dashboard.participacao_percentual
-                           | formato_brasileiro
-                           | replace('R$ ', '') }}%
+                    {% for numero_mes in range(1, 13) %}
 
-                    </div>
+                        <option value="{{ numero_mes }}"
+                                {% if numero_mes == mes %}
+                                    selected
+                                {% endif %}>
 
-                </div>
+                            {{ meses_nomes[numero_mes - 1] }}
 
-            {% endif %}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+            <div class="col-md-2">
+
+                <label for="ano"
+                    class="form-label fw-semibold">
+                    Ano
+                </label>
+
+                <input type="number"
+                    name="ano"
+                    id="ano"
+                    class="form-control"
+                    value="{{ ano }}"
+                    min="2020"
+                    max="2100">
+
+            </div>
+
+            <div class="col-md-3">
+
+                <button type="submit"
+                        class="btn btn-primary w-100">
+
+                    <i class="bi bi-funnel me-1"></i>
+                    Filtrar
+
+                </button>
+
+            </div>
 
         </form>
 
@@ -566,15 +615,24 @@
                         <div>
 
                             <div class="indicador-label">
-                                Potência agora
+                                Geração até agora
                             </div>
 
                             <div class="indicador-valor mt-2">
 
-                                {{ dashboard.potencia_agora
-                                   | formato_brasileiro
-                                   | replace('R$ ', '') }}
-                                kW
+                                {{ dashboard.geracao_ate_agora
+                                | formato_brasileiro }}
+                                kWh
+
+                            </div>
+
+                            <div class="indicador-secundario mt-2">
+
+                                Média diária:
+
+                                {{ dashboard.media_diaria
+                                | formato_brasileiro }}
+                                kWh
 
                             </div>
 
@@ -586,32 +644,6 @@
 
                     </div>
 
-                    <div class="mt-3">
-
-                        <div class="d-flex justify-content-between indicador-secundario mb-1">
-
-                            <span>
-                                Capacidade utilizada
-                            </span>
-
-                            <span>
-                                {{ dashboard.percentual_capacidade
-                                   | formato_brasileiro
-                                   | replace('R$ ', '') }}%
-                            </span>
-
-                        </div>
-
-                        <div class="barra-progresso">
-
-                            <div class="barra-laranja"
-                                 style="width: {{ dashboard.percentual_capacidade_visual }}%;">
-                            </div>
-
-                        </div>
-
-                    </div>
-
                 </div>
 
             </div>
@@ -625,32 +657,30 @@
                         <div>
 
                             <div class="indicador-label">
-                                Geração hoje
+                                Projeção do mês
                             </div>
 
-                            <div class="indicador-valor mt-2">
+                            <div class="indicador-valor mt-2 text-success">
 
-                                {{ dashboard.geracao_hoje
-                                   | formato_brasileiro
-                                   | replace('R$ ', '') }}
+                                {{ dashboard.geracao_prevista_mes
+                                | formato_brasileiro }}
                                 kWh
 
                             </div>
 
                             <div class="indicador-secundario mt-2">
 
-                                Mês:
-                                {{ dashboard.geracao_mes
-                                   | formato_brasileiro
-                                   | replace('R$ ', '') }}
-                                kWh
+                                {{ dashboard.dias_com_dado }}
+                                dia(s) com dados de
+
+                                {{ dashboard.dias_no_mes }}
 
                             </div>
 
                         </div>
 
                         <div class="icone-indicador icone-verde">
-                            <i class="bi bi-sun-fill"></i>
+                            <i class="bi bi-graph-up-arrow"></i>
                         </div>
 
                     </div>
@@ -668,21 +698,22 @@
                         <div>
 
                             <div class="indicador-label">
-                                Receita estimada hoje
+                                Faturamento estimado pela geração
                             </div>
 
                             <div class="indicador-valor mt-2 valor-positivo">
 
-                                {{ dashboard.faturamento_estimado_hoje
-                                   | formato_brasileiro }}
+                                {{ dashboard.faturamento_estimado_mes
+                                | formato_brasileiro }}
 
                             </div>
 
                             <div class="indicador-secundario mt-2">
 
                                 Tarifa média estimada:
+
                                 {{ dashboard.tarifa_media_estimada
-                                   | formato_brasileiro }}/kWh
+                                | formato_brasileiro }}/kWh
 
                             </div>
 
@@ -866,49 +897,32 @@
 
             <div class="row g-4">
 
-                <div class="col-md-4">
+                <div class="col-md-6">
 
                     <div class="indicador-label">
-                        Geração acumulada
+                        Geração acumulada até o período
                     </div>
 
                     <div class="fs-3 fw-bold text-success mt-1">
 
-                        {{ dashboard.geracao_total
-                           | formato_brasileiro
-                           | replace('R$ ', '') }}
+                        {{ dashboard.geracao_acumulada
+                        | formato_brasileiro }}
                         kWh
 
                     </div>
 
                 </div>
 
-                <div class="col-md-4">
+                <div class="col-md-6">
 
                     <div class="indicador-label">
-                        Receita acumulada
-                    </div>
-
-                    <div class="fs-3 fw-bold text-primary mt-1">
-
-                        {{ dashboard.receita_total
-                           | formato_brasileiro }}
-
-                    </div>
-
-                </div>
-
-                <div class="col-md-4">
-
-                    <div class="indicador-label">
-                        Geração projetada do mês
+                        Previsão cadastrada para o mês
                     </div>
 
                     <div class="fs-3 fw-bold text-warning mt-1">
 
-                        {{ dashboard.geracao_prevista_mes
-                           | formato_brasileiro
-                           | replace('R$ ', '') }}
+                        {{ dashboard.previsao_mensal
+                        | formato_brasileiro }}
                         kWh
 
                     </div>
