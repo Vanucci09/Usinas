@@ -315,7 +315,7 @@
                         <div>
                             <div class="indicador-label">Geração até Agora</div>
                             <div class="indicador-valor mt-1">
-                                {{ dashboard.geracao_ate_agora | formato_brasileiro }} <span class="fs-6 font-monospace fw-normal text-muted">kWh</span>
+                                {{ dashboard.geracao_ate_agora | formato_brasileiro | replace('R$ ', '') }} <span class="fs-6 font-monospace fw-normal text-muted">kWh</span>
                             </div>
                             <div class="indicador-secundario mt-2">
                                 Média diária: {{ dashboard.media_diaria | formato_brasileiro }} kWh
@@ -334,7 +334,7 @@
                         <div>
                             <div class="indicador-label">Projeção do Mês</div>
                             <div class="indicador-valor mt-1 text-success">
-                                {{ dashboard.geracao_prevista_mes | formato_brasileiro }} <span class="fs-6 font-monospace fw-normal text-muted">kWh</span>
+                                {{ dashboard.geracao_prevista_mes | formato_brasileiro | replace('R$ ', '') }} <span class="fs-6 font-monospace fw-normal text-muted">kWh</span>
                             </div>
                             <div class="indicador-secundario mt-2">
                                 {{ dashboard.dias_com_dado }} de {{ dashboard.dias_no_mes }} dias registrados
@@ -443,7 +443,7 @@
                     <div class="p-3 border rounded-3 bg-body-tertiary">
                         <div class="indicador-label">Geração Acumulada até o Período</div>
                         <div class="fs-4 fw-bold text-success mt-1">
-                            {{ dashboard.geracao_acumulada | formato_brasileiro }} <span class="fs-6 font-monospace text-muted">kWh</span>
+                            {{ dashboard.geracao_acumulada | formato_brasileiro | replace('R$ ', '') }} <span class="fs-6 font-monospace text-muted">kWh</span>
                         </div>
                     </div>
                 </div>

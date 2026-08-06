@@ -26176,7 +26176,13 @@ def dashboard_investidor():
             if valor is None:
                 return Decimal(padrao)
 
-            return Decimal(str(valor))
+            d = Decimal(str(valor))
+            
+            # Proteção contra NaN e Infinito que quebram comparações
+            if d.is_nan() or d.is_infinite():
+                return Decimal(padrao)
+                
+            return d
 
         except (
             InvalidOperation,
@@ -26698,24 +26704,67 @@ def dashboard_investidor():
     # TARIFA MÉDIA E ESTIMATIVAS
     # =====================================================
 
-    # Tarifa histórica da usina.
-    tarifa_media_estimada = (
-        faturamento_bruto_total
-        / geracao_acumulada
-        if geracao_acumulada > 0
-        else Decimal('0')
-    )
+    # 1. Tenta calcular a tarifa do MÊS ATUAL (Faturamento do Mês / Geração do Mês)
+    if faturamento_bruto_mes > 0 and geracao_ate_agora > 0:
+        tarifa_media_estimada = faturamento_bruto_mes / geracao_ate_agora
 
-    # Valor estimado da geração já realizada no mês.
+    else:
+        # 2. Se não houver faturamento no mês atual, calcula com base no MÊS ANTERIOR
+        data_inicio_mes_anterior = adicionar_meses(data_inicio, -1)
+        data_fim_mes_anterior = data_inicio
+
+        faturamento_mes_anterior = para_decimal(
+            db.session.query(
+                func.coalesce(
+                    func.sum(
+                        FinanceiroUsina.valor
+                        + func.coalesce(FinanceiroUsina.juros, 0)
+                    ),
+                    0
+                )
+            )
+            .filter(
+                FinanceiroUsina.usina_id == usina.id,
+                FinanceiroUsina.tipo == 'receita',
+                FinanceiroUsina.data_pagamento.isnot(None),
+                FinanceiroUsina.data_pagamento >= data_inicio_mes_anterior,
+                FinanceiroUsina.data_pagamento < data_fim_mes_anterior
+            )
+            .scalar()
+        )
+
+        geracao_mes_anterior = para_decimal(
+            db.session.query(
+                func.coalesce(
+                    func.sum(Geracao.energia_kwh),
+                    0
+                )
+            )
+            .filter(
+                Geracao.usina_id == usina.id,
+                Geracao.data >= data_inicio_mes_anterior,
+                Geracao.data < data_fim_mes_anterior
+            )
+            .scalar()
+        )
+
+        if faturamento_mes_anterior > 0 and geracao_mes_anterior > 0:
+            tarifa_media_estimada = faturamento_mes_anterior / geracao_mes_anterior
+        else:
+            tarifa_media_estimada = Decimal('0')
+
+    # Proteção contra NaN / Infinito
+    if tarifa_media_estimada.is_nan() or tarifa_media_estimada.is_infinite():
+        tarifa_media_estimada = Decimal('0')
+
+    # Valor estimado da geração já realizada no mês
     faturamento_estimado_geracao = (
-        geracao_ate_agora
-        * tarifa_media_estimada
+        geracao_ate_agora * tarifa_media_estimada
     )
 
-    # Projeção financeira com base na geração projetada.
+    # Projeção financeira com base na geração projetada
     faturamento_bruto_previsto_mes = (
-        geracao_projetada_mes
-        * tarifa_media_estimada
+        geracao_projetada_mes * tarifa_media_estimada
     )
 
     # A despesa projetada usa a média dos dias transcorridos
