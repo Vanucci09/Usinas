@@ -13,127 +13,90 @@
         --cor-laranja: #fd7e14;
         --cor-vermelha: #dc3545;
         --cor-roxa: #6f42c1;
-        --cor-cinza: #f4f6f9;
     }
 
     .dashboard-header {
-        background:
-            linear-gradient(
-                135deg,
-                #0d6efd,
-                #084298
-            );
-        border-radius: 16px;
-        color: white;
-        padding: 24px;
+        background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+        border-radius: 1rem;
+        color: #fff;
+        padding: 1.75rem;
     }
 
     .dashboard-card {
-        background: white;
-        border: 1px solid #e7eaf0;
-        border-radius: 15px;
-        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.05);
+        background-color: var(--bs-body-bg);
+        border: 1px solid var(--bs-border-color);
+        border-radius: 1rem;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.04);
         height: 100%;
-        transition:
-            transform 0.2s ease,
-            box-shadow 0.2s ease;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
 
     .dashboard-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+        transform: translateY(-3px);
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.08);
     }
 
     .indicador-label {
-        color: #6c757d;
-        font-size: 0.78rem;
-        font-weight: 600;
-        letter-spacing: 0.04rem;
+        color: var(--bs-secondary-color);
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
         text-transform: uppercase;
     }
 
     .indicador-valor {
-        color: #20242a;
+        color: var(--bs-body-color);
         font-size: 1.65rem;
         font-weight: 700;
-        line-height: 1.15;
+        line-height: 1.2;
     }
 
     .indicador-secundario {
-        color: #6c757d;
-        font-size: 0.83rem;
+        color: var(--bs-secondary-color);
+        font-size: 0.85rem;
     }
 
     .icone-indicador {
         align-items: center;
-        border-radius: 12px;
+        border-radius: 0.75rem;
         display: flex;
-        font-size: 1.3rem;
-        height: 44px;
+        font-size: 1.35rem;
+        height: 48px;
         justify-content: center;
-        width: 44px;
+        width: 48px;
+        flex-shrink: 0;
     }
 
-    .icone-azul {
-        background: rgba(13, 110, 253, 0.12);
-        color: var(--cor-azul);
-    }
-
-    .icone-verde {
-        background: rgba(25, 135, 84, 0.12);
-        color: var(--cor-verde);
-    }
-
-    .icone-laranja {
-        background: rgba(253, 126, 20, 0.14);
-        color: var(--cor-laranja);
-    }
-
-    .icone-vermelho {
-        background: rgba(220, 53, 69, 0.12);
-        color: var(--cor-vermelha);
-    }
-
-    .icone-roxo {
-        background: rgba(111, 66, 193, 0.12);
-        color: var(--cor-roxa);
-    }
+    .icone-azul { background: rgba(13, 110, 253, 0.12); color: var(--cor-azul); }
+    .icone-verde { background: rgba(25, 135, 84, 0.12); color: var(--cor-verde); }
+    .icone-laranja { background: rgba(253, 126, 20, 0.14); color: var(--cor-laranja); }
+    .icone-vermelho { background: rgba(220, 53, 69, 0.12); color: var(--cor-vermelha); }
+    .icone-roxo { background: rgba(111, 66, 193, 0.12); color: var(--cor-roxa); }
 
     .payback-area {
-        background:
-            radial-gradient(
-                circle at top right,
-                rgba(253, 126, 20, 0.18),
-                transparent 38%
-            ),
-            white;
+        background: radial-gradient(circle at top right, rgba(253, 126, 20, 0.12), transparent 40%), var(--bs-body-bg);
     }
 
     .medidor-circular {
         --valor: 0;
         align-items: center;
-        background:
-            conic-gradient(
-                var(--cor-laranja)
-                calc(var(--valor) * 1%),
-                #e9ecef 0
-            );
+        background: conic-gradient(var(--cor-laranja) calc(var(--valor) * 1%), var(--bs-border-color) 0);
         border-radius: 50%;
         display: flex;
-        height: 220px;
+        height: 200px;
         justify-content: center;
         margin: auto;
         position: relative;
-        width: 220px;
+        width: 200px;
     }
 
     .medidor-circular::before {
-        background: white;
+        background: var(--bs-body-bg);
         border-radius: 50%;
         content: "";
-        height: 172px;
+        height: 156px;
         position: absolute;
-        width: 172px;
+        width: 156px;
     }
 
     .medidor-conteudo {
@@ -143,69 +106,42 @@
     }
 
     .medidor-percentual {
-        color: #212529;
-        font-size: 2.3rem;
+        color: var(--bs-body-color);
+        font-size: 2.2rem;
         font-weight: 800;
         line-height: 1;
     }
 
     .medidor-texto {
-        color: #6c757d;
-        font-size: 0.8rem;
+        color: var(--bs-secondary-color);
+        font-size: 0.75rem;
         margin-top: 6px;
         text-transform: uppercase;
-    }
-
-    .barra-progresso {
-        background: #e9ecef;
-        border-radius: 10px;
-        height: 9px;
-        overflow: hidden;
-    }
-
-    .barra-progresso > div {
-        border-radius: 10px;
-        height: 100%;
-    }
-
-    .barra-azul {
-        background: var(--cor-azul);
-    }
-
-    .barra-verde {
-        background: var(--cor-verde);
-    }
-
-    .barra-laranja {
-        background: var(--cor-laranja);
+        font-weight: 600;
     }
 
     .status-online {
         align-items: center;
         display: inline-flex;
         gap: 6px;
+        font-weight: 500;
     }
 
     .status-online::before {
         background: #20c997;
         border-radius: 50%;
-        box-shadow: 0 0 0 4px rgba(32, 201, 151, 0.15);
+        box-shadow: 0 0 0 4px rgba(32, 201, 151, 0.2);
         content: "";
-        height: 9px;
-        width: 9px;
+        height: 8px;
+        width: 8px;
     }
 
-    .valor-positivo {
-        color: var(--cor-verde);
-    }
-
-    .valor-negativo {
-        color: var(--cor-vermelha);
-    }
+    .valor-positivo { color: var(--cor-verde) !important; }
+    .valor-negativo { color: var(--cor-vermelha) !important; }
 
     .resumo-payback {
-        border-bottom: 1px solid #edf0f3;
-        padding: 12px 0;
+        border-bottom: 1px solid var(--bs-border-color);
+        padding: 10px 0;
     }
 
     .resumo-payback:last-child {
@@ -214,733 +150,320 @@
 
     .atualizacao-painel {
         font-size: 0.8rem;
-        opacity: 0.9;
+        opacity: 0.85;
     }
 
     @media (max-width: 767px) {
-        .dashboard-header {
-            padding: 18px;
-        }
-
-        .indicador-valor {
-            font-size: 1.35rem;
-        }
-
-        .medidor-circular {
-            height: 190px;
-            width: 190px;
-        }
-
-        .medidor-circular::before {
-            height: 148px;
-            width: 148px;
-        }
+        .dashboard-header { padding: 1.25rem; }
+        .indicador-valor { font-size: 1.4rem; }
+        .medidor-circular { height: 170px; width: 170px; }
+        .medidor-circular::before { height: 130px; width: 130px; }
+        .medidor-percentual { font-size: 1.8rem; }
     }
 </style>
 
 <div class="container-fluid py-4 investidor-page">
 
     <!-- CABEÇALHO -->
-    <div class="dashboard-header mb-4">
-
+    <div class="dashboard-header mb-4 shadow-sm">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
-
             <div>
-
                 <div class="d-flex align-items-center gap-2 mb-1">
-
                     <i class="bi bi-speedometer2 fs-3"></i>
-
-                    <h3 class="mb-0 fw-bold">
-                        Dashboard do Investidor
-                    </h3>
-
+                    <h3 class="mb-0 fw-bold">Dashboard do Investidor</h3>
                 </div>
-
                 {% if dashboard %}
-
-                    <div class="opacity-75">
-                        {{ dashboard.usina.nome }}
+                    <div class="opacity-75 fs-6">
+                        <i class="bi bi-lightning-sun me-1"></i>{{ dashboard.usina.nome }}
                     </div>
-
                 {% endif %}
-
             </div>
 
-            <div class="d-flex flex-wrap align-items-center gap-2">
-
+            <div class="d-flex flex-wrap align-items-center gap-3">
                 {% if dashboard %}
-
-                    <div class="text-end me-2">
-
-                        <div class="status-online">
-                            Painel atualizado
-                        </div>
-
+                    <div class="text-md-end">
+                        <div class="status-online">Painel ativo</div>
                         <div class="atualizacao-painel">
-
                             {% if dashboard.ultimo_monitoramento %}
-
-                                Último monitoramento:
-
-                                {{ dashboard.ultimo_monitoramento.strftime(
-                                    '%d/%m/%Y %H:%M'
-                                ) }}
-
+                                Último dado: {{ dashboard.ultimo_monitoramento.strftime('%d/%m/%Y %H:%M') }}
                             {% else %}
-
                                 Sem monitoramento hoje
-
                             {% endif %}
-
                         </div>
-
                     </div>
-
                 {% endif %}
-
-                <a href="{{ url_for('menu_relatorios') }}"
-                   class="btn btn-light">
-
-                    <i class="bi bi-arrow-left me-1"></i>
-                    Voltar
-
+                <a href="{{ url_for('menu_relatorios') }}" class="btn btn-light btn-sm px-3 fw-semibold shadow-sm">
+                    <i class="bi bi-arrow-left me-1"></i> Voltar
                 </a>
-
             </div>
-
         </div>
-
     </div>
 
     <!-- FILTRO -->
     <div class="dashboard-card p-3 mb-4">
-
-        <form method="GET"
-            class="row g-3 align-items-end">
-
-            <div class="col-md-5">
-
-                <label for="usina_id"
-                    class="form-label fw-semibold">
-                    Usina
-                </label>
-
-                <select name="usina_id"
-                        id="usina_id"
-                        class="form-select">
-
+        <form method="GET" class="row g-3 align-items-end">
+            <div class="col-12 col-md-5">
+                <label for="usina_id" class="form-label indicador-label">Usina</label>
+                <select name="usina_id" id="usina_id" class="form-select form-select-sm">
                     {% for usina in usinas %}
-
-                        <option value="{{ usina.id }}"
-                                {% if usina.id == usina_id %}
-                                    selected
-                                {% endif %}>
-
+                        <option value="{{ usina.id }}" {% if usina.id == usina_id %}selected{% endif %}>
                             {{ usina.nome }}
-
                         </option>
-
                     {% endfor %}
-
                 </select>
-
             </div>
 
-            <div class="col-md-2">
-
-                <label for="mes"
-                    class="form-label fw-semibold">
-                    Mês
-                </label>
-
-                <select name="mes"
-                        id="mes"
-                        class="form-select">
-
-                    {% set meses_nomes = [
-                        'Janeiro',
-                        'Fevereiro',
-                        'Março',
-                        'Abril',
-                        'Maio',
-                        'Junho',
-                        'Julho',
-                        'Agosto',
-                        'Setembro',
-                        'Outubro',
-                        'Novembro',
-                        'Dezembro'
-                    ] %}
-
+            <div class="col-6 col-md-2">
+                <label for="mes" class="form-label indicador-label">Mês</label>
+                <select name="mes" id="mes" class="form-select form-select-sm">
+                    {% set meses_nomes = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'] %}
                     {% for numero_mes in range(1, 13) %}
-
-                        <option value="{{ numero_mes }}"
-                                {% if numero_mes == mes %}
-                                    selected
-                                {% endif %}>
-
+                        <option value="{{ numero_mes }}" {% if numero_mes == mes %}selected{% endif %}>
                             {{ meses_nomes[numero_mes - 1] }}
-
                         </option>
-
                     {% endfor %}
-
                 </select>
-
             </div>
 
-            <div class="col-md-2">
-
-                <label for="ano"
-                    class="form-label fw-semibold">
-                    Ano
-                </label>
-
-                <input type="number"
-                    name="ano"
-                    id="ano"
-                    class="form-control"
-                    value="{{ ano }}"
-                    min="2020"
-                    max="2100">
-
+            <div class="col-6 col-md-2">
+                <label for="ano" class="form-label indicador-label">Ano</label>
+                <input type="number" name="ano" id="ano" class="form-control form-control-sm" value="{{ ano }}" min="2020" max="2100">
             </div>
 
-            <div class="col-md-3">
-
-                <button type="submit"
-                        class="btn btn-primary w-100">
-
-                    <i class="bi bi-funnel me-1"></i>
-                    Filtrar
-
+            <div class="col-12 col-md-3">
+                <button type="submit" class="btn btn-primary btn-sm w-100 fw-semibold">
+                    <i class="bi bi-funnel me-1"></i> Filtrar
                 </button>
-
             </div>
-
         </form>
-
     </div>
 
     {% if dashboard %}
 
         <!-- PAYBACK -->
         <div class="dashboard-card payback-area p-4 mb-4">
-
             <div class="row align-items-center g-4">
-
-                <div class="col-lg-4 text-center">
-
-                    <div class="medidor-circular"
-                         style="--valor: {{ dashboard.payback_percentual_visual }};">
-
+                <div class="col-12 col-lg-4 text-center">
+                    <div class="medidor-circular" style="--valor: {{ dashboard.payback_percentual_visual }};">
                         <div class="medidor-conteudo">
-
                             <div class="medidor-percentual">
-
-                                {{ dashboard.payback_percentual
-                                   | formato_brasileiro
-                                   | replace('R$ ', '') }}%
-
+                                {{ dashboard.payback_percentual | formato_brasileiro | replace('R$ ', '') }}%
                             </div>
-
-                            <div class="medidor-texto">
-                                Payback realizado
-                            </div>
-
+                            <div class="medidor-texto">Payback Realizado</div>
                         </div>
-
                     </div>
-
                 </div>
 
-                <div class="col-lg-4">
-
+                <div class="col-12 col-md-6 col-lg-4">
                     <div class="mb-3">
-
-                        <span class="badge bg-warning text-dark mb-2">
-                            Retorno do investimento
-                        </span>
-
-                        <h3 class="fw-bold mb-1">
-                            Evolução do Payback
-                        </h3>
-
-                        <p class="text-muted mb-0">
-
-                            Acompanhamento do valor líquido recuperado
-                            em relação ao investimento inicial.
-
-                        </p>
-
+                        <span class="badge bg-warning text-dark mb-2 fw-bold">Retorno do Investimento</span>
+                        <h4 class="fw-bold mb-1">Evolução do Payback</h4>
+                        <p class="text-muted small mb-0">Acompanhamento do valor líquido recuperado sobre o aporte inicial.</p>
                     </div>
 
                     <div class="resumo-payback">
-
-                        <div class="indicador-label">
-                            Investimento considerado
-                        </div>
-
-                        <div class="fs-5 fw-bold">
-
-                            {{ dashboard.investimento
-                               | formato_brasileiro }}
-
-                        </div>
-
+                        <div class="indicador-label">Investimento Considerado</div>
+                        <div class="fs-6 fw-bold">{{ dashboard.investimento | formato_brasileiro }}</div>
                     </div>
 
                     <div class="resumo-payback">
-
-                        <div class="indicador-label">
-                            Receita acumulada
-                        </div>
-
-                        <div class="fs-5 fw-bold valor-positivo">
-
-                            {{ dashboard.receita_total
-                               | formato_brasileiro }}
-
-                        </div>
-
+                        <div class="indicador-label">Receita Acumulada</div>
+                        <div class="fs-6 fw-bold valor-positivo">{{ dashboard.receita_total | formato_brasileiro }}</div>
                     </div>
 
                     <div class="resumo-payback">
-
-                        <div class="indicador-label">
-                            Valor restante
-                        </div>
-
-                        <div class="fs-5 fw-bold text-warning">
-
-                            {{ dashboard.valor_restante_payback
-                               | formato_brasileiro }}
-
-                        </div>
-
+                        <div class="indicador-label">Valor Restante</div>
+                        <div class="fs-6 fw-bold text-warning">{{ dashboard.valor_restante_payback | formato_brasileiro }}</div>
                     </div>
-
                 </div>
 
-                <div class="col-lg-4">
-
-                    <div class="p-4 bg-light rounded-4">
-
-                        <div class="indicador-label mb-2">
-                            Previsão de conclusão
-                        </div>
-
+                <div class="col-12 col-md-6 col-lg-4">
+                    <div class="p-3 border rounded-3 bg-body-tertiary">
+                        <div class="indicador-label mb-1">Previsão de Conclusão</div>
                         {% if dashboard.previsao_payback %}
-
                             <div class="display-6 fw-bold text-primary">
-
-                                {{ dashboard.previsao_payback.strftime(
-                                    '%m/%Y'
-                                ) }}
-
+                                {{ dashboard.previsao_payback.strftime('%m/%Y') }}
                             </div>
-
                             {% if dashboard.meses_restantes_payback > 0 %}
-
-                                <div class="text-muted mt-2">
-
-                                    Aproximadamente
-
-                                    <strong>
-                                        {{ dashboard.meses_restantes_payback }}
-                                        meses
-                                    </strong>
-
-                                    restantes.
-
+                                <div class="text-muted small mt-1">
+                                    Aproximadamente <strong>{{ dashboard.meses_restantes_payback }} meses</strong> restantes.
                                 </div>
-
                             {% else %}
-
-                                <div class="text-success mt-2 fw-semibold">
-
-                                    <i class="bi bi-check-circle-fill me-1"></i>
-                                    Investimento recuperado
-
+                                <div class="text-success small mt-1 fw-semibold">
+                                    <i class="bi bi-check-circle-fill me-1"></i> Investimento recuperado!
                                 </div>
-
                             {% endif %}
-
                         {% else %}
-
-                            <div class="fs-5 fw-bold text-muted">
-                                Ainda não calculável
-                            </div>
-
-                            <div class="text-muted mt-2">
-
-                                É necessário possuir histórico positivo
-                                de retorno mensal.
-
-                            </div>
-
+                            <div class="fs-6 fw-bold text-muted">Ainda não calculável</div>
+                            <div class="text-muted small mt-1">Exige histórico positivo de retorno mensal.</div>
                         {% endif %}
 
-                        <hr>
+                        <hr class="my-2">
 
-                        <div class="indicador-label">
-                            Retorno médio mensal
-                        </div>
-
-                        <div class="fs-5 fw-bold">
-
-                            {{ dashboard.retorno_medio_mensal
-                               | formato_brasileiro }}
-
-                        </div>
-
+                        <div class="indicador-label">Retorno Médio Mensal</div>
+                        <div class="fs-6 fw-bold">{{ dashboard.retorno_medio_mensal | formato_brasileiro }}</div>
                     </div>
-
                 </div>
-
             </div>
-
         </div>
 
         <!-- TEMPO REAL -->
         <div class="row g-3 mb-4">
-
-            <div class="col-md-6 col-xl-4">
-
+            <div class="col-12 col-md-4">
                 <div class="dashboard-card p-3">
-
-                    <div class="d-flex justify-content-between">
-
+                    <div class="d-flex justify-content-between align-items-start">
                         <div>
-
-                            <div class="indicador-label">
-                                Geração até agora
+                            <div class="indicador-label">Geração até Agora</div>
+                            <div class="indicador-valor mt-1">
+                                {{ dashboard.geracao_ate_agora | formato_brasileiro }} <span class="fs-6 font-monospace fw-normal text-muted">kWh</span>
                             </div>
-
-                            <div class="indicador-valor mt-2">
-
-                                {{ dashboard.geracao_ate_agora
-                                | formato_brasileiro }}
-                                kWh
-
-                            </div>
-
                             <div class="indicador-secundario mt-2">
-
-                                Média diária:
-
-                                {{ dashboard.media_diaria
-                                | formato_brasileiro }}
-                                kWh
-
+                                Média diária: {{ dashboard.media_diaria | formato_brasileiro }} kWh
                             </div>
-
                         </div>
-
                         <div class="icone-indicador icone-laranja">
                             <i class="bi bi-lightning-charge-fill"></i>
                         </div>
-
                     </div>
-
                 </div>
-
             </div>
 
-            <div class="col-md-6 col-xl-4">
-
+            <div class="col-12 col-md-4">
                 <div class="dashboard-card p-3">
-
-                    <div class="d-flex justify-content-between">
-
+                    <div class="d-flex justify-content-between align-items-start">
                         <div>
-
-                            <div class="indicador-label">
-                                Projeção do mês
+                            <div class="indicador-label">Projeção do Mês</div>
+                            <div class="indicador-valor mt-1 text-success">
+                                {{ dashboard.geracao_prevista_mes | formato_brasileiro }} <span class="fs-6 font-monospace fw-normal text-muted">kWh</span>
                             </div>
-
-                            <div class="indicador-valor mt-2 text-success">
-
-                                {{ dashboard.geracao_prevista_mes
-                                | formato_brasileiro }}
-                                kWh
-
-                            </div>
-
                             <div class="indicador-secundario mt-2">
-
-                                {{ dashboard.dias_com_dado }}
-                                dia(s) com dados de
-
-                                {{ dashboard.dias_no_mes }}
-
+                                {{ dashboard.dias_com_dado }} de {{ dashboard.dias_no_mes }} dias registrados
                             </div>
-
                         </div>
-
                         <div class="icone-indicador icone-verde">
                             <i class="bi bi-graph-up-arrow"></i>
                         </div>
-
                     </div>
-
                 </div>
-
             </div>
 
-            <div class="col-md-6 col-xl-4">
-
+            <div class="col-12 col-md-4">
                 <div class="dashboard-card p-3">
-
-                    <div class="d-flex justify-content-between">
-
+                    <div class="d-flex justify-content-between align-items-start">
                         <div>
-
-                            <div class="indicador-label">
-                                Faturamento estimado pela geração
+                            <div class="indicador-label">Faturamento Estimado (Geração)</div>
+                            <div class="indicador-valor mt-1 valor-positivo">
+                                {{ dashboard.faturamento_estimado_mes | formato_brasileiro }}
                             </div>
-
-                            <div class="indicador-valor mt-2 valor-positivo">
-
-                                {{ dashboard.faturamento_estimado_mes
-                                | formato_brasileiro }}
-
-                            </div>
-
                             <div class="indicador-secundario mt-2">
-
-                                Tarifa média estimada:
-
-                                {{ dashboard.tarifa_media_estimada
-                                | formato_brasileiro }}/kWh
-
+                                Tarifa média: {{ dashboard.tarifa_media_estimada | formato_brasileiro }}/kWh
                             </div>
-
                         </div>
-
                         <div class="icone-indicador icone-azul">
                             <i class="bi bi-currency-dollar"></i>
                         </div>
-
                     </div>
-
                 </div>
-
             </div>
-
         </div>
 
         <!-- FATURAMENTO, RECEITA E DESPESAS -->
         <div class="row g-3 mb-4">
-
-            <div class="col-md-6 col-xl-4">
-
+            <div class="col-12 col-sm-6 col-xl-3">
                 <div class="dashboard-card p-3">
-
-                    <div class="indicador-label">
-                        Faturamento bruto no mês
+                    <div class="indicador-label">Faturamento Bruto</div>
+                    <div class="indicador-valor valor-positivo mt-1">
+                        {{ dashboard.faturamento_bruto_mes | formato_brasileiro }}
                     </div>
-
-                    <div class="indicador-valor valor-positivo mt-2">
-
-                        {{ dashboard.faturamento_bruto_mes
-                           | formato_brasileiro }}
-
+                    <hr class="my-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="indicador-secundario">Previsão:</span>
+                        <span class="fw-bold text-primary small">{{ dashboard.faturamento_bruto_previsto_mes | formato_brasileiro }}</span>
                     </div>
-
-                    <hr>
-
-                    <div class="indicador-secundario">
-                        Previsão para o mês
-                    </div>
-
-                    <div class="fw-bold text-primary">
-
-                        {{ dashboard.faturamento_bruto_previsto_mes
-                           | formato_brasileiro }}
-
-                    </div>
-
                 </div>
-
             </div>
 
-            <div class="col-md-6 col-xl-4">
-
+            <div class="col-12 col-sm-6 col-xl-3">
                 <div class="dashboard-card p-3">
-
-                    <div class="indicador-label">
-                        Receita do mês
+                    <div class="indicador-label">Receita Líquida</div>
+                    <div class="indicador-valor mt-1 {% if dashboard.receita_mes >= 0 %}valor-positivo{% else %}valor-negativo{% endif %}">
+                        {{ dashboard.receita_mes | formato_brasileiro }}
                     </div>
-
-                    <div class="indicador-valor mt-2
-                        {% if dashboard.receita_mes >= 0 %}
-                            valor-positivo
-                        {% else %}
-                            valor-negativo
-                        {% endif %}">
-
-                        {{ dashboard.receita_mes
-                           | formato_brasileiro }}
-
+                    <hr class="my-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="indicador-secundario">ROI Mês:</span>
+                        <span class="fw-bold small">{{ dashboard.roi_mes_percentual | formato_brasileiro | replace('R$ ', '') }}%</span>
                     </div>
-
-                    <hr>
-
-                    <div class="indicador-secundario">
-                        ROI do mês
-                    </div>
-
-                    <div class="fw-bold">
-
-                        {{ dashboard.roi_mes_percentual
-                           | formato_brasileiro
-                           | replace('R$ ', '') }}%
-
-                    </div>
-
                 </div>
-
             </div>
 
-            <div class="col-md-6 col-xl-4">
-
+            <div class="col-12 col-sm-6 col-xl-3">
                 <div class="dashboard-card p-3">
-
-                    <div class="indicador-label">
-                        Despesa bruta no mês
+                    <div class="indicador-label">Despesa Bruta</div>
+                    <div class="indicador-valor valor-negativo mt-1">
+                        {{ dashboard.despesa_bruta_mes | formato_brasileiro }}
                     </div>
-
-                    <div class="indicador-valor valor-negativo mt-2">
-
-                        {{ dashboard.despesa_bruta_mes
-                           | formato_brasileiro }}
-
+                    <hr class="my-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="indicador-secundario">Acumulada:</span>
+                        <span class="fw-bold text-danger small">{{ dashboard.despesa_bruta_total | formato_brasileiro }}</span>
                     </div>
-
-                    <hr>
-
-                    <div class="indicador-secundario">
-                        Despesa bruta acumulada
-                    </div>
-
-                    <div class="fw-bold text-danger">
-
-                        {{ dashboard.despesa_bruta_total
-                           | formato_brasileiro }}
-
-                    </div>
-
                 </div>
-
             </div>
 
-            <div class="col-md-6 col-xl-4">
-
+            <div class="col-12 col-sm-6 col-xl-3">
                 <div class="dashboard-card p-3">
-
-                    <div class="indicador-label">
-                        Arrendamento no mês
+                    <div class="indicador-label">Arrendamento</div>
+                    <div class="indicador-valor mt-1 text-secondary">
+                        {{ dashboard.arrendamento_mes | formato_brasileiro }}
                     </div>
-
-                    <div class="indicador-valor mt-2 text-secondary">
-
-                        {{ dashboard.arrendamento_mes
-                           | formato_brasileiro }}
-
+                    <hr class="my-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="indicador-secundario">Acumulado:</span>
+                        <span class="fw-bold text-secondary small">{{ dashboard.arrendamento_total | formato_brasileiro }}</span>
                     </div>
-
-                    <hr>
-
-                    <div class="indicador-secundario">
-                        Arrendamento acumulado
-                    </div>
-
-                    <div class="fw-bold text-secondary">
-
-                        {{ dashboard.arrendamento_total
-                           | formato_brasileiro }}
-
-                    </div>
-
                 </div>
-
             </div>
-
         </div>
 
         <!-- ACUMULADOS -->
         <div class="dashboard-card p-4">
-
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
-
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
                 <div>
-
-                    <h5 class="fw-bold mb-1">
-                        Visão acumulada
-                    </h5>
-
-                    <div class="text-muted">
-                        Histórico total da usina
-                    </div>
-
+                    <h5 class="fw-bold mb-0">Visão Acumulada</h5>
+                    <div class="text-muted small">Histórico consolidade da usina</div>
                 </div>
-
-                <span class="badge bg-light text-dark border">
-
-                    Atualização automática em 60 segundos
-
+                <span class="badge bg-body-tertiary text-body border fw-normal">
+                    <i class="bi bi-arrow-repeat me-1"></i>Atualiza a cada 60s
                 </span>
-
             </div>
 
-            <div class="row g-4">
-
-                <div class="col-md-6">
-
-                    <div class="indicador-label">
-                        Geração acumulada até o período
+            <div class="row g-3">
+                <div class="col-12 col-md-6">
+                    <div class="p-3 border rounded-3 bg-body-tertiary">
+                        <div class="indicador-label">Geração Acumulada até o Período</div>
+                        <div class="fs-4 fw-bold text-success mt-1">
+                            {{ dashboard.geracao_acumulada | formato_brasileiro }} <span class="fs-6 font-monospace text-muted">kWh</span>
+                        </div>
                     </div>
-
-                    <div class="fs-3 fw-bold text-success mt-1">
-
-                        {{ dashboard.geracao_acumulada
-                        | formato_brasileiro }}
-                        kWh
-
-                    </div>
-
                 </div>
 
-                <div class="col-md-6">
-
-                    <div class="indicador-label">
-                        Previsão cadastrada para o mês
+                <div class="col-12 col-md-6">
+                    <div class="p-3 border rounded-3 bg-body-tertiary">
+                        <div class="indicador-label">Previsão Cadastrada para o Mês</div>
+                        <div class="fs-4 fw-bold text-warning mt-1">
+                            {{ dashboard.previsao_mensal | formato_brasileiro }} <span class="fs-6 font-monospace text-muted">kWh</span>
+                        </div>
                     </div>
-
-                    <div class="fs-3 fw-bold text-warning mt-1">
-
-                        {{ dashboard.previsao_mensal
-                        | formato_brasileiro }}
-                        kWh
-
-                    </div>
-
                 </div>
-
             </div>
-
         </div>
 
     {% else %}
 
-        <div class="alert alert-warning">
-
-            <i class="bi bi-exclamation-triangle me-1"></i>
-
-            Nenhuma usina está disponível para este usuário.
-
+        <div class="alert alert-warning d-flex align-items-center" role="alert">
+            <i class="bi bi-exclamation-triangle-fill fs-4 me-2"></i>
+            <div>Nenhuma usina está disponível para este usuário ou período selecionado.</div>
         </div>
 
     {% endif %}
@@ -949,13 +472,10 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-
         const tempoAtualizacao = 60000;
-
         window.setTimeout(function () {
             window.location.reload();
         }, tempoAtualizacao);
-
     });
 </script>
 
