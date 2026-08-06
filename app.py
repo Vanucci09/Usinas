@@ -13631,13 +13631,43 @@ def relatorio_financeiro_com_perda():
             "roi_mensal": _safe_round(roi_mensal, 4),
         })
 
-    roi_mes_vigente = next(
-        (
-            item['roi_mensal']
-            for item in consolidacao_mensal
-            if item['mes'] == mes_limite
-        ),
-        0.0
+    # Último mês do período que possui movimentação financeira.
+    # Para o ano atual, considera somente até o mês vigente.
+    meses_com_movimento = [
+        item
+        for item in consolidacao_mensal
+        if (
+            item['mes'] <= mes_limite
+            and (
+                item['receita'] != 0
+                or item['despesa'] != 0
+                or item['transferencia_empresa'] != 0
+            )
+        )
+    ]
+
+    ultimo_mes_financeiro = (
+        meses_com_movimento[-1]
+        if meses_com_movimento
+        else None
+    )
+
+    mes_kpi = (
+        ultimo_mes_financeiro['mes']
+        if ultimo_mes_financeiro
+        else mes_limite
+    )
+
+    roi_mes_vigente = (
+        ultimo_mes_financeiro['roi_mensal']
+        if ultimo_mes_financeiro
+        else 0.0
+    )
+
+    liquido_mes_kpi = (
+        ultimo_mes_financeiro['liquido']
+        if ultimo_mes_financeiro
+        else 0.0
     )
 
     # SÉRIE DO LÍQUIDO (Gráfico)
@@ -13898,9 +13928,20 @@ def relatorio_financeiro_com_perda():
         logo_usina_data_uri=logo_usina_data_uri,
         consolidacao_mensal=consolidacao_mensal,
         mes_limite=mes_limite,
-        participacao_percentual=_safe_round(participacao_percentual, 4),
-        investimento_acionista=_safe_round(investimento_acionista, 2),
-        roi_mes_vigente=_safe_round(roi_mes_vigente, 4)
+        mes_kpi=mes_kpi,
+        liquido_mes_kpi=_safe_round(liquido_mes_kpi, 2),
+        participacao_percentual=_safe_round(
+            participacao_percentual,
+            4
+        ),
+        investimento_acionista=_safe_round(
+            investimento_acionista,
+            2
+        ),
+        roi_mes_vigente=_safe_round(
+            roi_mes_vigente,
+            4
+        )
     )
     
 @app.route("/injecoes_mensais")

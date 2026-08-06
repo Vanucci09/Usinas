@@ -162,19 +162,8 @@
 
     {# mês vigente (limite) vindo do backend #}
     {% set mes_lim = mes_limite or 12 %}
-    {% set ultimo_mes = mes_lim %}
-    {% set liq_ultimo = (
-        liquidos_mensais
-        | selectattr('mes', 'equalto', ultimo_mes)
-        | list
-        | first
-    ) %}
-
-    {% set v_ultimo = (
-        liq_ultimo.liquido
-        if liq_ultimo
-        else 0
-    ) %}
+    {% set ultimo_mes = mes_kpi or mes_lim %}
+    {% set v_ultimo = liquido_mes_kpi or 0 %}
 
     {% set k = consolidacao[0] if consolidacao else None %}
 
@@ -190,7 +179,10 @@
                         {{ v_ultimo | formato_brasileiro }}
                     </div>
                     <div class="kpi-sub text-muted mt-1">
-                        Resultado financeiro de <strong>{{ "%02d"|format(ultimo_mes) }}/{{ ano }}</strong>
+                        Última competência com movimentação:
+                        <strong>
+                            {{ "%02d"|format(ultimo_mes) }}/{{ ano }}
+                        </strong>
                     </div>
                 </div>
             </div>
