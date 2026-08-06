@@ -13485,7 +13485,10 @@ def relatorio_financeiro_com_perda():
             acumulado_total=None,
             logo_usina_data_uri=None,
             consolidacao_mensal=[],
-            mes_limite=None
+            mes_limite=None,
+            participacao_percentual=0,
+            investimento_acionista=0,
+            roi_mes_vigente=0
         )
 
     if not usina_id:
@@ -13498,6 +13501,53 @@ def relatorio_financeiro_com_perda():
     ):
         abort(403)
     usina_id = usina_selecionada.id
+
+    # PARTICIPAÇÃO E INVESTIMENTO DO ACIONISTA
+    # Admin/financeiro visualizam 100% da usina.
+    participacao_percentual = 100.0
+
+    if current_user.perfil == 'acionista':
+        participacoes = (
+            db.session.query(
+                ParticipacaoAcionista.percentual
+            )
+            .join(
+                UsinaInvestidora,
+                UsinaInvestidora.empresa_id ==
+                ParticipacaoAcionista.empresa_id
+            )
+            .join(
+                UsuarioAcionista,
+                UsuarioAcionista.acionista_id ==
+                ParticipacaoAcionista.acionista_id
+            )
+            .filter(
+                UsinaInvestidora.usina_id == usina_selecionada.id,
+                UsuarioAcionista.usuario_id == current_user.id
+            )
+            .distinct()
+            .all()
+        )
+
+        participacao_percentual = sum(
+            _safe_float(item.percentual)
+            for item in participacoes
+        )
+
+        participacao_percentual = min(
+            participacao_percentual,
+            100.0
+        )
+
+    fator_participacao = participacao_percentual / 100.0
+
+    investimento_total = _safe_float(
+        getattr(usina_selecionada, 'valor_investido', 0) or 0
+    )
+
+    investimento_acionista = _safe_float(
+        investimento_total * fator_participacao
+    )
 
     # REGRA: ano vigente -> acumula até mês vigente
     # ano passado -> fecha em dezembro
@@ -13554,8 +13604,21 @@ def relatorio_financeiro_com_perda():
         ).scalar()
         transferencia_m = _safe_float(transferencia_m)
 
-        # Geração de Caixa NÃO muda
+        # Receita líquida da usina no mês
         liquido_m = _safe_float(receita_m - despesa_m)
+
+        # Parcela mensal pertencente ao acionista
+        receita_acionista_m = _safe_float(
+            liquido_m * fator_participacao
+        )
+
+        # ROI mensal =
+        # (receita líquida do mês x % de cotas) / investimento do acionista
+        roi_mensal = _safe_float(
+            (receita_acionista_m / investimento_acionista) * 100.0
+            if investimento_acionista > 0
+            else 0.0
+        )
 
         consolidacao_mensal.append({
             "mes": m,
@@ -13564,7 +13627,18 @@ def relatorio_financeiro_com_perda():
             "despesa": _safe_round(despesa_m, 2),
             "transferencia_empresa": _safe_round(transferencia_m, 2),
             "liquido": _safe_round(liquido_m, 2),
+            "receita_acionista": _safe_round(receita_acionista_m, 2),
+            "roi_mensal": _safe_round(roi_mensal, 4),
         })
+
+    roi_mes_vigente = next(
+        (
+            item['roi_mensal']
+            for item in consolidacao_mensal
+            if item['mes'] == mes_limite
+        ),
+        0.0
+    )
 
     # SÉRIE DO LÍQUIDO (Gráfico)
     liquidos_mensais = []
@@ -13750,6 +13824,26 @@ def relatorio_financeiro_com_perda():
 
     resultado_total_geral = _safe_float(receita_total_geral - despesa_total_geral)
 
+    receita_acionista_ano = _safe_float(
+        resultado_ate * fator_participacao
+    )
+
+    roi_ano_percentual = _safe_float(
+        (receita_acionista_ano / investimento_acionista) * 100.0
+        if investimento_acionista > 0
+        else 0.0
+    )
+
+    receita_acionista_total_geral = _safe_float(
+        resultado_total_geral * fator_participacao
+    )
+
+    roi_total_percentual = _safe_float(
+        (receita_acionista_total_geral / investimento_acionista) * 100.0
+        if investimento_acionista > 0
+        else 0.0
+    )
+
     # CONSOLIDAÇÃO PRINCIPAL (Ano até mês vigente + Total Geral)
     consolidacao = [{
         'usina_nome': usina_selecionada.nome,
@@ -13763,6 +13857,12 @@ def relatorio_financeiro_com_perda():
         'geracao_ref': _safe_round(geracao_ate_perf, 2),
         'previsao_ref': _safe_round(previsao_ate_perf, 2),
         'performance_pct': _safe_round(performance_pct_ate, 2),
+        'participacao_percentual': _safe_round(participacao_percentual, 4),
+        'investimento_acionista': _safe_round(investimento_acionista, 2),
+        'receita_acionista_ano': _safe_round(receita_acionista_ano, 2),
+        'roi_ano_percentual': _safe_round(roi_ano_percentual, 4),
+        'receita_acionista_total_geral': _safe_round(receita_acionista_total_geral, 2),
+        'roi_total_percentual': _safe_round(roi_total_percentual, 4),
         'mes_limite': mes_limite,
         'ano_ref': ano,
     }]
@@ -13797,7 +13897,10 @@ def relatorio_financeiro_com_perda():
         acumulado_total=acumulado_total,
         logo_usina_data_uri=logo_usina_data_uri,
         consolidacao_mensal=consolidacao_mensal,
-        mes_limite=mes_limite
+        mes_limite=mes_limite,
+        participacao_percentual=_safe_round(participacao_percentual, 4),
+        investimento_acionista=_safe_round(investimento_acionista, 2),
+        roi_mes_vigente=_safe_round(roi_mes_vigente, 4)
     )
     
 @app.route("/injecoes_mensais")

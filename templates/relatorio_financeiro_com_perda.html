@@ -163,20 +163,18 @@
     {# mês vigente (limite) vindo do backend #}
     {% set mes_lim = mes_limite or 12 %}
     {% set ultimo_mes = mes_lim %}
-    {% set mes_anterior = (mes_lim - 1) if mes_lim > 1 else 12 %}
-    {% set ano_mes_anterior = ano if mes_lim > 1 else (ano - 1) %}
+    {% set liq_ultimo = (
+        liquidos_mensais
+        | selectattr('mes', 'equalto', ultimo_mes)
+        | list
+        | first
+    ) %}
 
-    {# pega último mês e anterior da série do gráfico #}
-    {% set liq_ultimo = (liquidos_mensais | selectattr('mes', 'equalto', ultimo_mes) | list | first) %}
-    {% set liq_anterior = (liquidos_mensais | selectattr('mes', 'equalto', mes_anterior) | list | first) %}
-    {% set v_ultimo = (liq_ultimo.liquido if liq_ultimo else 0) %}
-    {% set v_anterior = (liq_anterior.liquido if liq_anterior else 0) %}
-
-    {% if v_anterior %}
-        {% set variacao_pct = ((v_ultimo - v_anterior) / (v_anterior | abs) * 100) %}
-    {% else %}
-        {% set variacao_pct = None %}
-    {% endif %}
+    {% set v_ultimo = (
+        liq_ultimo.liquido
+        if liq_ultimo
+        else 0
+    ) %}
 
     {% set k = consolidacao[0] if consolidacao else None %}
 
@@ -252,28 +250,62 @@
             </div>
         </div>
 
-        <!-- KPI 4: Variação vs mês anterior -->
+        <!-- KPI 4: Retorno sobre o investimento -->
         <div class="col-md-3">
-            {% set var_class = 'text-muted' %}
-            {% if variacao_pct is not none and variacao_pct > 0 %}{% set var_class = 'text-success' %}{% endif %}
-            {% if variacao_pct is not none and variacao_pct < 0 %}{% set var_class = 'text-danger' %}{% endif %}
+
+            {% set roi = roi_mes_vigente or 0 %}
+            {% set roi_class = 'text-muted' %}
+
+            {% if roi > 0 %}
+                {% set roi_class = 'text-success' %}
+            {% elif roi < 0 %}
+                {% set roi_class = 'text-danger' %}
+            {% endif %}
+
             <div class="card shadow-sm kpi-card border-0 bg-light h-100">
+
                 <div class="card-body">
-                    <div class="kpi-label text-muted">Variação de caixa vs mês anterior</div>
-                    <div class="kpi-value {{ var_class }}">
-                        {% if variacao_pct is none %}
-                            -
-                        {% else %}
-                            {{ ('%.2f'|format(variacao_pct)).replace('.', ',') }}%
-                        {% endif %}
+
+                    <div class="kpi-label text-muted">
+                        Retorno sobre o investimento
                     </div>
+
+                    <div class="kpi-value {{ roi_class }}">
+                        {{ ('%.4f'|format(roi)).replace('.', ',') }}%
+                    </div>
+
                     <div class="kpi-sub text-muted mt-1">
-                        Comparação <strong>{{ "%02d"|format(ultimo_mes) }}/{{ ano }}</strong>
-                        vs
-                        <strong>{{ "%02d"|format(mes_anterior) }}/{{ ano_mes_anterior }}</strong>
+
+                        Competência
+                        <strong>
+                            {{ "%02d"|format(ultimo_mes) }}/{{ ano }}
+                        </strong>
+
+                        <br>
+
+                        <span>
+                            Participação:
+                            <strong>
+                                {{ ('%.4f'|format(participacao_percentual or 0))
+                                    .replace('.', ',')
+                                    .rstrip('0')
+                                    .rstrip(',') }}%
+                            </strong>
+                        </span>
+
+                        <span class="ms-1">
+                            • Investimento:
+                            <strong>
+                                {{ investimento_acionista | formato_brasileiro }}
+                            </strong>
+                        </span>
+
                     </div>
+
                 </div>
+
             </div>
+
         </div>
 
         <!-- Gráfico -->
@@ -472,9 +504,28 @@
                     </table>
 
                     <div class="alert alert-secondary mt-3">
+
                         <strong>KPIs:</strong>
-                        KPI 1 e 4 são do <strong>mês vigente ({{ "%02d"|format(mes_lim) }}/{{ ano }})</strong>.
-                        EBITDA e Performance são <strong>anuais acumulados até o mês vigente</strong>.
+
+                        Geração de Caixa e Retorno sobre o Investimento são da competência
+
+                        <strong>
+                            {{ "%02d"|format(mes_lim) }}/{{ ano }}
+                        </strong>.
+
+                        EBITDA e Performance são
+
+                        <strong>
+                            anuais acumulados até o mês vigente
+                        </strong>.
+
+                        <br>
+
+                        <small>
+                            ROI mensal = receita líquida proporcional à participação do
+                            acionista ÷ valor investido pelo acionista × 100.
+                        </small>
+
                     </div>
                 </div>
 
@@ -494,43 +545,138 @@
                                     <th>Despesa Bruta (R$)</th>
                                     <th>Arrendamento (R$)</th>
                                     <th>Receita (R$)</th>
+                                    <th>ROI Mensal (%)</th>
                                 </tr>
                             </thead>
                             <tbody>
+
                                 {% for m in consolidacao_mensal %}
+
                                     <tr>
-                                    <td><strong>{{ "%02d"|format(m.mes) }}/{{ m.ano }}</strong></td>
-                                    <td>{{ m.receita | formato_brasileiro }}</td>
-                                    <td>{{ m.despesa | formato_brasileiro }}</td>
-                                    <td class="text-muted">{{ (m.transferencia_empresa or 0) | formato_brasileiro }}</td>
-                                    <td class="
-                                        {% if m.liquido < 0 %}
-                                            text-danger fw-semibold
-                                        {% else %}
-                                            {% if m.transferencia_empresa and m.transferencia_empresa > 0 %}
-                                                text-success-soft
+
+                                        <td>
+                                            <strong>
+                                                {{ "%02d"|format(m.mes) }}/{{ m.ano }}
+                                            </strong>
+                                        </td>
+
+                                        <td>
+                                            {{ m.receita | formato_brasileiro }}
+                                        </td>
+
+                                        <td>
+                                            {{ m.despesa | formato_brasileiro }}
+                                        </td>
+
+                                        <td class="text-muted">
+                                            {{ (m.transferencia_empresa or 0) | formato_brasileiro }}
+                                        </td>
+
+                                        <td class="
+                                            {% if m.liquido < 0 %}
+                                                text-danger fw-semibold
                                             {% else %}
-                                                text-success fw-semibold
+                                                {% if m.transferencia_empresa
+                                                    and m.transferencia_empresa > 0 %}
+                                                    text-success-soft
+                                                {% else %}
+                                                    text-success fw-semibold
+                                                {% endif %}
                                             {% endif %}
-                                        {% endif %}
-                                    ">
-                                    {{ m.liquido | formato_brasileiro }}
-                                    </td>
+                                        ">
+                                            {{ m.liquido | formato_brasileiro }}
+                                        </td>
+
+                                        <td class="
+                                            {% if m.roi_mensal < 0 %}
+                                                text-danger fw-semibold
+                                            {% elif m.roi_mensal > 0 %}
+                                                text-success fw-semibold
+                                            {% else %}
+                                                text-muted
+                                            {% endif %}
+                                        ">
+                                            {{ ('%.4f'|format(m.roi_mensal or 0))
+                                                .replace('.', ',') }}%
+                                        </td>
+
                                     </tr>
+
                                 {% endfor %}
 
-                                {% set soma_receita = consolidacao_mensal | sum(attribute='receita') %}
-                                {% set soma_despesa = consolidacao_mensal | sum(attribute='despesa') %}
-                                {% set soma_transf = consolidacao_mensal | sum(attribute='transferencia_empresa') %}
-                                {% set soma_liquido = consolidacao_mensal | sum(attribute='liquido') %}
+                                {% set soma_receita =
+                                    consolidacao_mensal
+                                    | sum(attribute='receita')
+                                %}
+
+                                {% set soma_despesa =
+                                    consolidacao_mensal
+                                    | sum(attribute='despesa')
+                                %}
+
+                                {% set soma_transf =
+                                    consolidacao_mensal
+                                    | sum(attribute='transferencia_empresa')
+                                %}
+
+                                {% set soma_liquido =
+                                    consolidacao_mensal
+                                    | sum(attribute='liquido')
+                                %}
+
+                                {% set roi_total_ano =
+                                    consolidacao[0].roi_ano_percentual
+                                    if consolidacao
+                                    else 0
+                                %}
 
                                 <tr class="table-light">
-                                <td><strong>Total {{ ano }}</strong></td>
-                                <td><strong>{{ soma_receita | formato_brasileiro }}</strong></td>
-                                <td><strong>{{ soma_despesa | formato_brasileiro }}</strong></td>
-                                <td><strong>{{ soma_transf | formato_brasileiro }}</strong></td>
-                                <td><strong>{{ soma_liquido | formato_brasileiro }}</strong></td>
+
+                                    <td>
+                                        <strong>Total {{ ano }}</strong>
+                                    </td>
+
+                                    <td>
+                                        <strong>
+                                            {{ soma_receita | formato_brasileiro }}
+                                        </strong>
+                                    </td>
+
+                                    <td>
+                                        <strong>
+                                            {{ soma_despesa | formato_brasileiro }}
+                                        </strong>
+                                    </td>
+
+                                    <td>
+                                        <strong>
+                                            {{ soma_transf | formato_brasileiro }}
+                                        </strong>
+                                    </td>
+
+                                    <td>
+                                        <strong>
+                                            {{ soma_liquido | formato_brasileiro }}
+                                        </strong>
+                                    </td>
+
+                                    <td class="
+                                        {% if roi_total_ano < 0 %}
+                                            text-danger
+                                        {% elif roi_total_ano > 0 %}
+                                            text-success
+                                        {% else %}
+                                            text-muted
+                                        {% endif %}
+                                    ">
+                                        <strong>
+                                            {{ ('%.4f'|format(roi_total_ano or 0))
+                                                .replace('.', ',') }}%
+                                        </strong>
+                                    </td>
+
                                 </tr>
+
                             </tbody>
                         </table>
                     </div>
