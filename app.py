@@ -26851,10 +26851,7 @@ def adicionar_observacao_conta_concessionaria(conta_id):
 @login_required
 def dashboard_investidor():
 
-    # =====================================================
     # CONTROLE DE ACESSO
-    # =====================================================
-
     if (
         current_user.perfil
         not in ['admin', 'financeiro', 'acionista']
@@ -26862,10 +26859,7 @@ def dashboard_investidor():
     ):
         abort(403)
 
-    # =====================================================
     # HELPERS
-    # =====================================================
-
     def para_decimal(valor, padrao='0'):
         try:
             if valor is None:
@@ -26933,10 +26927,7 @@ def dashboard_investidor():
 
     hoje = agora.date()
 
-    # =====================================================
     # FILTRO DE PERÍODO
-    # =====================================================
-
     ano = request.args.get(
         'ano',
         type=int,
@@ -26983,10 +26974,7 @@ def dashboard_investidor():
         mes
     )[1]
 
-    # =====================================================
     # USINAS PERMITIDAS
-    # =====================================================
-
     usinas_permitidas_ids = None
 
     if current_user.perfil == 'acionista':
@@ -27022,7 +27010,6 @@ def dashboard_investidor():
     query_usinas = Usina.query
 
     if current_user.perfil == 'acionista':
-
         query_usinas = query_usinas.filter(
             Usina.id.in_(
                 usinas_permitidas_ids
@@ -27049,10 +27036,7 @@ def dashboard_investidor():
             agora=agora
         )
 
-    # =====================================================
     # USINA SELECIONADA
-    # =====================================================
-
     usina_id = request.args.get(
         'usina_id',
         type=int
@@ -27079,45 +27063,46 @@ def dashboard_investidor():
     if not usina:
         abort(404)
 
-    # =====================================================
     # PARTICIPAÇÃO DO ACIONISTA
-    # =====================================================
-
     participacao_percentual = Decimal('100')
+    empresa_investidora = None
 
     if current_user.perfil == 'acionista':
 
-        participacoes = (
-            db.session.query(
-                ParticipacaoAcionista.percentual
-            )
-            .join(
-                UsinaInvestidora,
-                UsinaInvestidora.empresa_id
-                == ParticipacaoAcionista.empresa_id
-            )
-            .join(
-                UsuarioAcionista,
-                UsuarioAcionista.acionista_id
-                == ParticipacaoAcionista.acionista_id
-            )
-            .filter(
-                UsinaInvestidora.usina_id == usina.id,
-                UsuarioAcionista.usuario_id
-                == current_user.id
-            )
-            .all()
+        empresa_usina = (
+            UsinaInvestidora.query
+            .filter_by(usina_id=usina.id)
+            .first()
         )
 
-        participacao_percentual = sum(
-            (
-                para_decimal(
-                    percentual
+        empresa_investidora = None
+        participacao_percentual = Decimal('0')
+
+        if empresa_usina:
+
+            empresa_investidora = empresa_usina.empresa
+
+            participacao = (
+                ParticipacaoAcionista.query
+                .join(
+                    UsuarioAcionista,
+                    UsuarioAcionista.acionista_id ==
+                    ParticipacaoAcionista.acionista_id
                 )
-                for percentual, in participacoes
-            ),
-            Decimal('0')
-        )
+                .filter(
+                    ParticipacaoAcionista.empresa_id ==
+                    empresa_usina.empresa_id,
+
+                    UsuarioAcionista.usuario_id ==
+                    current_user.id
+                )
+                .first()
+            )
+
+            if participacao:
+                participacao_percentual = para_decimal(
+                    participacao.percentual
+                )
 
         participacao_percentual = max(
             Decimal('0'),
@@ -27132,11 +27117,8 @@ def dashboard_investidor():
         / Decimal('100')
     )
 
-    # =====================================================
     # GERAÇÃO DO MÊS SELECIONADO
     # Mesma regra utilizada em producao_mensal
-    # =====================================================
-
     resultados_geracao = (
         Geracao.query
         .filter(
@@ -27177,10 +27159,7 @@ def dashboard_investidor():
         * Decimal(str(dias_no_mes))
     )
 
-    # =====================================================
     # PREVISÃO MENSAL CADASTRADA
-    # =====================================================
-
     previsao_registro = (
         PrevisaoMensal.query
         .filter_by(
@@ -27197,10 +27176,7 @@ def dashboard_investidor():
         else 0
     )
 
-    # =====================================================
     # GERAÇÃO ACUMULADA
-    # =====================================================
-
     # Acumulado total da usina até o fim do mês selecionado.
     geracao_acumulada = para_decimal(
         db.session.query(
@@ -27233,11 +27209,8 @@ def dashboard_investidor():
         .scalar()
     )
 
-    # =====================================================
     # FATURAMENTO BRUTO DO MÊS
     # Receita paga + juros
-    # =====================================================
-
     faturamento_bruto_mes = para_decimal(
         db.session.query(
             func.coalesce(
@@ -27261,11 +27234,8 @@ def dashboard_investidor():
         .scalar()
     )
 
-    # =====================================================
     # DESPESA BRUTA DO MÊS
     # Desconsidera categorias 5, 7, 12 e 14
-    # =====================================================
-
     despesa_bruta_mes = para_decimal(
         db.session.query(
             func.coalesce(
@@ -27718,6 +27688,7 @@ def dashboard_investidor():
         'usina': usina,
         'ano': ano,
         'mes': mes,
+        'empresa_investidora': empresa_investidora,
 
         'participacao_percentual': arredondar(
             participacao_percentual

@@ -168,16 +168,32 @@
     <div class="dashboard-header mb-4 shadow-sm">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
             <div>
-                <div class="d-flex align-items-center gap-2 mb-1">
-                    <i class="bi bi-speedometer2 fs-3"></i>
-                    <h3 class="mb-0 fw-bold">Dashboard do Investidor</h3>
-                </div>
-                {% if dashboard %}
-                    <div class="opacity-75 fs-6">
-                        <i class="bi bi-lightning-sun me-1"></i>{{ dashboard.usina.nome }}
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <i class="bi bi-speedometer2 fs-3"></i>
+                        <h3 class="mb-0 fw-bold">Dashboard do Investidor</h3>
                     </div>
-                {% endif %}
-            </div>
+
+                    {% if dashboard %}
+                        <div class="opacity-75 fs-6">
+                            <i class="bi bi-lightning-sun me-1"></i>
+                            {{ dashboard.usina.nome }}
+                        </div>
+
+                        {% if dashboard.empresa_investidora %}
+                            <div class="mt-2">
+                                <span class="badge bg-light text-dark border">
+                                    <i class="bi bi-building me-1"></i>
+                                    {{ dashboard.empresa_investidora.razao_social }}
+                                </span>
+
+                                <span class="badge bg-success ms-2">
+                                    {{ dashboard.participacao_percentual | formato_brasileiro | replace('R$ ', '') }}%
+                                </span>
+                            </div>
+                        {% endif %}
+                    {% endif %}
+                </div>
 
             <div class="d-flex flex-wrap align-items-center gap-3">
                 {% if dashboard %}
