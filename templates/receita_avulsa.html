@@ -32,7 +32,10 @@
               {% endif %}
             {% endwith %}
 
-            <form method="POST" class="row g-3">
+            <form
+                method="POST"
+                enctype="multipart/form-data"
+                class="row g-3">
                 <!-- Seção 1: Origem e Destino -->
                 <div class="col-md-6">
                     <label class="form-label fw-bold">Usina <span class="text-danger">*</span></label>
@@ -108,6 +111,102 @@
                         {% endfor %}
                     </select>
                 </div>
+
+                <div class="col-md-12">
+
+                    <label class="form-label fw-bold">
+                        Comprovantes
+                    </label>
+
+                    <input
+                        type="file"
+                        name="novos_comprovantes"
+                        class="form-control"
+                        accept=".pdf,.png,.jpg,.jpeg,.webp"
+                        multiple
+                    >
+
+                    <div class="form-text">
+                        Você pode selecionar um ou mais arquivos.
+                    </div>
+
+                </div>
+
+                {% if receita and receita.anexos %}
+
+                <div class="col-12">
+
+                    <div class="card border">
+
+                        <div class="card-header bg-light">
+
+                            <strong>
+
+                                Comprovantes cadastrados
+
+                            </strong>
+
+                        </div>
+
+                        <div class="list-group list-group-flush">
+
+                            {% for anexo in receita.anexos %}
+
+                                <div
+                                    class="list-group-item
+                                        d-flex
+                                        justify-content-between
+                                        align-items-center">
+
+                                    <div>
+
+                                        <i class="bi bi-paperclip me-2"></i>
+
+                                        {{ anexo.nome_original }}
+
+                                    </div>
+
+                                    <div>
+
+                                        <a
+                                            href="{{ url_for(
+                                                'abrir_comprovante_financeiro_usina',
+                                                anexo_id=anexo.id
+                                            ) }}"
+                                            target="_blank"
+                                            class="btn btn-sm btn-outline-primary">
+
+                                            Visualizar
+
+                                        </a>
+
+                                        <a
+                                            href="{{ url_for(
+                                                'excluir_comprovante_financeiro_usina',
+                                                anexo_id=anexo.id
+                                            ) }}"
+                                            class="btn btn-sm btn-outline-danger"
+                                            onclick="return confirm(
+                                                'Excluir este comprovante?'
+                                            )">
+
+                                            Excluir
+
+                                        </a>
+
+                                    </div>
+
+                                </div>
+
+                            {% endfor %}
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+                {% endif %}
 
                 <!-- Seção 5: Período de Referência -->
                 <div class="col-md-3">

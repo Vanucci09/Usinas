@@ -173,7 +173,8 @@
                             {% else %}
                                 <form method="POST"
                                     action="{{ url_for('atualizar_pagamento', id=item.id) }}"
-                                    class="row g-1">
+                                    enctype="multipart/form-data"
+                                    class="row g-1 align-items-center">
 
                                     <div class="col-auto">
                                         <input type="date"
@@ -186,6 +187,7 @@
                                         <select name="conta_id"
                                                 class="form-select form-select-sm"
                                                 required>
+
                                             <option value="">Banco</option>
 
                                             {% for conta in item.contas_bancos %}
@@ -193,6 +195,7 @@
                                                     {{ conta.nome }}
                                                 </option>
                                             {% endfor %}
+
                                         </select>
                                     </div>
 
@@ -206,6 +209,17 @@
                                             style="width:80px;">
                                     </div>
                                     {% endif %}
+
+                                    <div class="col-auto">
+                                        <input
+                                            type="file"
+                                            name="comprovantes"
+                                            class="form-control form-control-sm"
+                                            accept=".pdf,.png,.jpg,.jpeg,.webp"
+                                            multiple
+                                            required
+                                        >
+                                    </div>
 
                                     <div class="col-auto">
                                         <button type="submit"

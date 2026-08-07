@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="container mt-4">
+
+    <div class="card shadow">
+
+        <div class="card-header">
+
+            <h5>
+
+                Comprovantes
+
+                #{{ financeiro.id }}
+
+            </h5>
+
+        </div>
+
+        <div class="card-body">
+
+            <table class="table">
+
+                <thead>
+
+                    <tr>
+
+                        <th>Arquivo</th>
+
+                        <th>Data</th>
+
+                        <th width="160">Ações</th>
+
+                    </tr>
+
+                </thead>
+
+                <tbody>
+
+                {% for anexo in financeiro.anexos %}
+
+                    <tr>
+
+                        <td>
+
+                            {{ anexo.nome_original }}
+
+                        </td>
+
+                        <td>
+
+                            {{ anexo.criado_em.strftime('%d/%m/%Y %H:%M') }}
+
+                        </td>
+
+                        <td>
+
+                            <a
+                                href="{{ url_for(
+                                    'abrir_comprovante_financeiro_usina',
+                                    anexo_id=anexo.id
+                                ) }}"
+                                target="_blank"
+                                class="btn btn-sm btn-primary">
+
+                                Visualizar
+
+                            </a>
+
+                        </td>
+
+                    </tr>
+
+                {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

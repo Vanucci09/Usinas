@@ -328,6 +328,64 @@ class FinanceiroUsina(db.Model):
         ),
         lazy='joined'
     )
+    
+    anexos = db.relationship(
+        'FinanceiroUsinaAnexo',
+        back_populates='financeiro',
+        cascade='all, delete-orphan',
+        passive_deletes=True,
+        lazy='selectin'
+    )
+    
+class FinanceiroUsinaAnexo(db.Model):
+    __tablename__ = 'financeiro_usina_anexos'
+
+    id = db.Column(
+        db.Integer,
+        primary_key=True
+    )
+
+    financeiro_usina_id = db.Column(
+        db.Integer,
+        db.ForeignKey(
+            'financeiro_usina.id',
+            ondelete='CASCADE'
+        ),
+        nullable=False,
+        index=True
+    )
+
+    tipo = db.Column(
+        db.String(20),
+        nullable=False,
+        default='baixa'
+    )
+
+    nome_arquivo = db.Column(
+        db.String(255),
+        nullable=False
+    )
+
+    nome_original = db.Column(
+        db.String(255),
+        nullable=True
+    )
+
+    caminho_relativo = db.Column(
+        db.String(500),
+        nullable=False
+    )
+
+    criado_em = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now()
+    )
+
+    financeiro = db.relationship(
+        'FinanceiroUsina',
+        back_populates='anexos'
+    )
 
 class EconomiaExtra(db.Model):
     __tablename__ = 'economias_extra'
@@ -9312,16 +9370,31 @@ def imagem_para_base64(caminho):
     with open(caminho, "rb") as img_file:
         return base64.b64encode(img_file.read()).decode("utf-8")
 
-@app.route('/atualizar_pagamento/<int:id>', methods=['POST'])
+@app.route(
+    '/atualizar_pagamento/<int:id>',
+    methods=['POST']
+)
 @login_required
 def atualizar_pagamento(id):
 
     financeiro = FinanceiroUsina.query.get_or_404(id)
-
     data_str = request.form.get('data_pagamento')
     juros_str = request.form.get('juros')
-    conta_id = request.form.get('conta_id', type=int)
-    
+    conta_id = request.form.get(
+        'conta_id',
+        type=int
+    )
+
+    comprovantes = request.files.getlist(
+        'comprovantes'
+    )
+
+    comprovantes_validos = [
+        arquivo
+        for arquivo in comprovantes
+        if arquivo and arquivo.filename
+    ]
+
     if financeiro.data_pagamento:
 
         flash(
@@ -9330,19 +9403,46 @@ def atualizar_pagamento(id):
         )
 
         return redirect(
-            request.referrer or url_for('financeiro')
+            request.referrer
+            or url_for('financeiro')
         )
 
     try:
 
         if not conta_id:
+
             flash(
                 'Selecione uma conta bancária.',
                 'warning'
             )
 
             return redirect(
-                request.referrer or url_for('financeiro')
+                request.referrer
+                or url_for('financeiro')
+            )
+
+        if not data_str:
+
+            flash(
+                'Informe a data do pagamento.',
+                'warning'
+            )
+
+            return redirect(
+                request.referrer
+                or url_for('financeiro')
+            )
+
+        if not comprovantes_validos:
+
+            flash(
+                'Inclua pelo menos um comprovante.',
+                'warning'
+            )
+
+            return redirect(
+                request.referrer
+                or url_for('financeiro')
             )
 
         conta = db.session.get(
@@ -9351,92 +9451,231 @@ def atualizar_pagamento(id):
         )
 
         if not conta:
+
             flash(
                 'Conta bancária não encontrada.',
                 'warning'
             )
 
             return redirect(
-                request.referrer or url_for('financeiro')
+                request.referrer
+                or url_for('financeiro')
             )
+
         financeiro.caixa_banco_id = conta.id
 
-        # Atualiza data pagamento
-        if data_str:
-            financeiro.data_pagamento = datetime.strptime(
+        financeiro.data_pagamento = (
+            datetime.strptime(
                 data_str,
                 '%Y-%m-%d'
             ).date()
+        )
 
-        else:
-            financeiro.data_pagamento = None
+        if (
+            financeiro.tipo == 'receita'
+            and juros_str
+        ):
 
-        # Atualiza juros
-        if juros_str:
             financeiro.juros = Decimal(
                 juros_str.replace(',', '.')
             )
 
         else:
-            financeiro.juros = Decimal('0.00')
+
+            financeiro.juros = Decimal(
+                '0.00'
+            )
 
         # Evita movimentação duplicada
-        movimento_existente = MovimentoCaixaBanco.query.filter_by(
-            origem='financeiro',
-            referencia_id=financeiro.id
-        ).first()
+        movimento_existente = (
+            MovimentoCaixaBanco.query
+            .filter_by(
+                origem='financeiro',
+                referencia_id=financeiro.id
+            )
+            .first()
+        )
 
         if not movimento_existente:
-
             valor_movimento = Decimal(
-                str(financeiro.valor or 0)
+                str(
+                    financeiro.valor
+                    or 0
+                )
             )
 
             if financeiro.tipo == 'receita':
                 valor_movimento += Decimal(
-                    str(financeiro.juros or 0)
+                    str(
+                        financeiro.juros
+                        or 0
+                    )
                 )
 
             movimento = MovimentoCaixaBanco(
                 conta_id=conta.id,
                 data=financeiro.data_pagamento,
-                tipo='entrada'
+                tipo=(
+                    'entrada'
                     if financeiro.tipo == 'receita'
-                    else 'saida',
+                    else 'saida'
+                ),
                 descricao=financeiro.descricao,
                 valor=valor_movimento,
                 origem='financeiro',
                 referencia_id=financeiro.id
             )
 
-            db.session.add(movimento)
+            db.session.add(
+                movimento
+            )
 
             saldo_atual = Decimal(
-                str(conta.saldo_atual or 0)
+                str(
+                    conta.saldo_atual
+                    or 0
+                )
             )
 
             if financeiro.tipo == 'receita':
+
                 conta.saldo_atual = (
-                    saldo_atual +
-                    valor_movimento
+                    saldo_atual
+                    + valor_movimento
                 )
 
             else:
+
                 conta.saldo_atual = (
-                    saldo_atual -
-                    valor_movimento
+                    saldo_atual
+                    - valor_movimento
                 )
+
+        # SALVAR COMPROVANTES
+        extensoes_permitidas = {
+            'pdf',
+            'png',
+            'jpg',
+            'jpeg',
+            'webp'
+        }
+
+        pasta_base = os.getenv(
+            'COMPROVANTES_PATH',
+            '/data/uploads'
+        )
+
+        pasta_lancamento = os.path.join(
+            pasta_base,
+            'financeiro_usina',
+            str(financeiro.id)
+        )
+
+        os.makedirs(
+            pasta_lancamento,
+            exist_ok=True
+        )
+
+        arquivos_salvos = []
+
+        for arquivo in comprovantes_validos:
+
+            nome_original = arquivo.filename
+
+            if '.' not in nome_original:
+
+                raise ValueError(
+                    f'Arquivo sem extensão: '
+                    f'{nome_original}'
+                )
+
+            extensao = (
+                nome_original
+                .rsplit('.', 1)[1]
+                .lower()
+            )
+
+            if extensao not in extensoes_permitidas:
+
+                raise ValueError(
+                    f'Tipo de arquivo não permitido: '
+                    f'{nome_original}'
+                )
+
+            nome_seguro = secure_filename(
+                nome_original
+            )
+
+            extensao_segura = (
+                nome_seguro
+                .rsplit('.', 1)[1]
+                .lower()
+            )
+
+            nome_salvo = (
+                f'{uuid.uuid4().hex}.'
+                f'{extensao_segura}'
+            )
+
+            caminho_completo = os.path.join(
+                pasta_lancamento,
+                nome_salvo
+            )
+
+            arquivo.save(
+                caminho_completo
+            )
+
+            arquivos_salvos.append(
+                caminho_completo
+            )
+
+            caminho_relativo = os.path.join(
+                'financeiro_usina',
+                str(financeiro.id),
+                nome_salvo
+            ).replace('\\', '/')
+
+            anexo = FinanceiroUsinaAnexo(
+                financeiro_usina_id=financeiro.id,
+                tipo='baixa',
+                nome_arquivo=nome_salvo,
+                nome_original=nome_original,
+                caminho_relativo=caminho_relativo
+            )
+
+            db.session.add(
+                anexo
+            )
 
         db.session.commit()
 
         flash(
-            'Pagamento atualizado com sucesso!',
+            'Pagamento atualizado e comprovantes '
+            'salvos com sucesso!',
             'success'
         )
 
     except Exception as e:
-
         db.session.rollback()
+
+        # Remove arquivos que foram gravados,
+        # caso o banco não consiga concluir.
+        for caminho in locals().get(
+            'arquivos_salvos',
+            []
+        ):
+
+            try:
+                if os.path.exists(caminho):
+                    os.remove(caminho)
+
+            except Exception:
+                pass
+
+        current_app.logger.exception(
+            'Erro ao atualizar pagamento'
+        )
 
         flash(
             f'Erro ao atualizar pagamento: {e}',
@@ -9444,7 +9683,8 @@ def atualizar_pagamento(id):
         )
 
     return redirect(
-        request.referrer or url_for('financeiro')
+        request.referrer
+        or url_for('financeiro')
     )
 
 def extensao_permitida(filename):
@@ -12432,6 +12672,53 @@ def extrato_usina(usina_id):
         total_geral=total_geral,
         banco_filtro=banco_filtro
     )
+    
+def salvar_comprovante_financeiro_usina(financeiro, arquivo):
+
+    pasta_base = os.getenv(
+        'COMPROVANTES_PATH',
+        '/data/uploads'
+    )
+
+    pasta = os.path.join(
+        pasta_base,
+        'financeiro_usina',
+        str(financeiro.id)
+    )
+
+    os.makedirs(
+        pasta,
+        exist_ok=True
+    )
+
+    nome_original = arquivo.filename
+
+    extensao = nome_original.rsplit('.', 1)[1].lower()
+
+    nome_salvo = (
+        f'{uuid.uuid4().hex}.{extensao}'
+    )
+
+    arquivo.save(
+        os.path.join(
+            pasta,
+            nome_salvo
+        )
+    )
+
+    anexo = FinanceiroUsinaAnexo(
+        financeiro_usina_id=financeiro.id,
+        tipo='baixa',
+        nome_arquivo=nome_salvo,
+        nome_original=nome_original,
+        caminho_relativo=os.path.join(
+            'financeiro_usina',
+            str(financeiro.id),
+            nome_salvo
+        ).replace('\\', '/')
+    )
+
+    db.session.add(anexo)
 
 @app.route('/comprovantes/<path:nome_arquivo>')
 @login_required
@@ -12592,6 +12879,20 @@ def editar_receita_avulsa(id):
                 if request.form.get('caixa_banco_id')
                 else None
             )
+            
+            novos = request.files.getlist(
+                'novos_comprovantes'
+            )
+
+            for arquivo in novos:
+
+                if not arquivo or not arquivo.filename:
+                    continue
+
+                salvar_comprovante_financeiro_usina(
+                    receita,
+                    arquivo
+                )
 
             db.session.commit()
 
@@ -12630,6 +12931,38 @@ def editar_receita_avulsa(id):
         credores=credores,
         bancos=bancos
     )
+    
+@app.route(
+    '/financeiro-usina/comprovante/<int:anexo_id>/excluir'
+)
+@login_required
+def excluir_comprovante_financeiro_usina(anexo_id):
+
+    anexo = FinanceiroUsinaAnexo.query.get_or_404(
+        anexo_id
+    )
+
+    caminho = os.path.join(
+        os.getenv(
+            'COMPROVANTES_PATH',
+            '/data/uploads'
+        ),
+        anexo.caminho_relativo
+    )
+
+    if os.path.exists(caminho):
+        os.remove(caminho)
+
+    db.session.delete(anexo)
+
+    db.session.commit()
+
+    flash(
+        'Comprovante excluído.',
+        'success'
+    )
+
+    return redirect(request.referrer)
 
 @app.route('/receitas_avulsas')
 @login_required
@@ -13269,11 +13602,13 @@ def relatorio_prestacao_direta():
                 continue
 
             fluxo.append({
+                'id': movimento.id,
                 'data': movimento.data_pagamento,
                 'descricao': movimento.descricao,
                 'credito': credito,
                 'debito': debito,
-                'saldo': saldo_acumulado
+                'saldo': saldo_acumulado,
+                'anexos': list(movimento.anexos or [])
             })
 
         liquido_periodo = (
@@ -13346,6 +13681,87 @@ def relatorio_prestacao_direta():
         relatorio=relatorio,
         data_inicial=data_inicial,
         data_final=data_final
+    )
+    
+@app.route(
+    '/financeiro-usina/<int:financeiro_id>/comprovantes'
+)
+@login_required
+def visualizar_comprovantes_financeiro_usina(financeiro_id):
+
+    financeiro = FinanceiroUsina.query.get_or_404(
+        financeiro_id
+    )
+
+    return render_template(
+        'financeiro_usina_comprovantes.html',
+        financeiro=financeiro
+    )
+
+@app.route(
+    '/financeiro-usina/comprovante/<int:anexo_id>'
+)
+@login_required
+def abrir_comprovante_financeiro_usina(anexo_id):
+
+    anexo = FinanceiroUsinaAnexo.query.get_or_404(
+        anexo_id
+    )
+
+    caminho = os.path.join(
+        os.getenv(
+            'COMPROVANTES_PATH',
+            '/data/uploads'
+        ),
+        anexo.caminho_relativo
+    )
+
+    return send_file(
+        caminho,
+        as_attachment=False
+    )
+    
+@app.route(
+    '/financeiro-usina/comprovantes/<int:anexo_id>/baixar'
+)
+@login_required
+def baixar_comprovante_financeiro_usina(anexo_id):
+
+    anexo = FinanceiroUsinaAnexo.query.get_or_404(
+        anexo_id
+    )
+
+    pasta_base = os.getenv(
+        'COMPROVANTES_PATH',
+        '/data/uploads'
+    )
+
+    caminho_completo = os.path.abspath(
+        os.path.join(
+            pasta_base,
+            anexo.caminho_relativo
+        )
+    )
+
+    pasta_base_absoluta = os.path.abspath(
+        pasta_base
+    )
+
+    if not caminho_completo.startswith(
+        pasta_base_absoluta + os.sep
+    ):
+        abort(403)
+
+    if not os.path.isfile(caminho_completo):
+        abort(404)
+
+    return send_file(
+        caminho_completo,
+        as_attachment=True,
+        download_name=(
+            anexo.nome_original
+            or anexo.nome_arquivo
+        )
     )
 
 @app.route('/cadastrar_injecao', methods=['GET', 'POST'])

@@ -314,6 +314,13 @@
                                     Saldo
                                 </th>
 
+                                <th
+                                    class="text-center"
+                                    style="width: 150px;"
+                                >
+                                    Comprovantes
+                                </th>
+
                             </tr>
 
                         </thead>
@@ -380,6 +387,35 @@
 
                                     </td>
 
+                                    <td class="text-center">
+
+                                        {% if f.anexos %}
+
+                                            <button
+                                                type="button"
+                                                class="btn btn-sm btn-outline-primary"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#modalComprovantes{{ f.id }}"
+                                            >
+                                                <i class="bi bi-paperclip me-1"></i>
+
+                                                Ver
+
+                                                <span class="badge bg-primary ms-1">
+                                                    {{ f.anexos | length }}
+                                                </span>
+                                            </button>
+
+                                        {% else %}
+
+                                            <span class="text-muted">
+                                                -
+                                            </span>
+
+                                        {% endif %}
+
+                                    </td>
+
                                 </tr>
 
                             {% else %}
@@ -387,7 +423,7 @@
                                 <tr>
 
                                     <td
-                                        colspan="5"
+                                        colspan="6"
                                         class="text-center text-muted py-4"
                                     >
 
@@ -413,17 +449,11 @@
                                 </td>
 
                                 <td class="text-end text-success">
-
-                                    {{ relatorio.receitas
-                                       | formato_brasileiro }}
-
+                                    {{ relatorio.receitas | formato_brasileiro }}
                                 </td>
 
                                 <td class="text-end text-danger">
-
-                                    {{ relatorio.despesas
-                                       | formato_brasileiro }}
-
+                                    {{ relatorio.despesas | formato_brasileiro }}
                                 </td>
 
                                 <td
@@ -434,10 +464,11 @@
                                         text-danger
                                     {% endif %}"
                                 >
+                                    {{ relatorio.saldo_atual | formato_brasileiro }}
+                                </td>
 
-                                    {{ relatorio.saldo_atual
-                                       | formato_brasileiro }}
-
+                                <td class="text-center text-muted">
+                                    -
                                 </td>
 
                             </tr>
@@ -445,6 +476,143 @@
                         </tfoot>
 
                     </table>
+
+                    {% for f in relatorio.fluxo %}
+
+                        {% if f.anexos %}
+
+                            <div
+                                class="modal fade"
+                                id="modalComprovantes{{ f.id }}"
+                                tabindex="-1"
+                                aria-hidden="true"
+                            >
+
+                                <div class="modal-dialog modal-lg modal-dialog-centered">
+
+                                    <div class="modal-content">
+
+                                        <div class="modal-header">
+
+                                            <div>
+
+                                                <h5 class="modal-title mb-1">
+                                                    <i class="bi bi-paperclip me-1"></i>
+                                                    Comprovantes da movimentação
+                                                </h5>
+
+                                                <small class="text-muted">
+                                                    {{ (f.descricao or '-').split('|')[0].strip() }}
+                                                </small>
+
+                                            </div>
+
+                                            <button
+                                                type="button"
+                                                class="btn-close"
+                                                data-bs-dismiss="modal"
+                                                aria-label="Fechar"
+                                            ></button>
+
+                                        </div>
+
+                                        <div class="modal-body">
+
+                                            <div class="list-group">
+
+                                                {% for anexo in f.anexos %}
+
+                                                    <div
+                                                        class="list-group-item
+                                                            d-flex
+                                                            flex-column
+                                                            flex-md-row
+                                                            justify-content-between
+                                                            align-items-md-center
+                                                            gap-3"
+                                                    >
+
+                                                        <div>
+
+                                                            <div class="fw-semibold">
+                                                                <i class="bi bi-file-earmark me-1"></i>
+
+                                                                {{ anexo.nome_original
+                                                                or anexo.nome_arquivo }}
+                                                            </div>
+
+                                                            {% if anexo.criado_em %}
+
+                                                                <small class="text-muted">
+
+                                                                    Enviado em
+
+                                                                    {{ anexo.criado_em.strftime(
+                                                                        '%d/%m/%Y %H:%M'
+                                                                    ) }}
+
+                                                                </small>
+
+                                                            {% endif %}
+
+                                                        </div>
+
+                                                        <div class="d-flex gap-2">
+
+                                                            <a
+                                                                href="{{ url_for(
+                                                                    'abrir_comprovante_financeiro_usina',
+                                                                    anexo_id=anexo.id
+                                                                ) }}"
+                                                                target="_blank"
+                                                                class="btn btn-sm btn-primary"
+                                                            >
+                                                                <i class="bi bi-eye me-1"></i>
+                                                                Visualizar
+                                                            </a>
+
+                                                            <a
+                                                                href="{{ url_for(
+                                                                    'baixar_comprovante_financeiro_usina',
+                                                                    anexo_id=anexo.id
+                                                                ) }}"
+                                                                class="btn btn-sm btn-outline-secondary"
+                                                            >
+                                                                <i class="bi bi-download me-1"></i>
+                                                                Baixar
+                                                            </a>
+
+                                                        </div>
+
+                                                    </div>
+
+                                                {% endfor %}
+
+                                            </div>
+
+                                        </div>
+
+                                        <div class="modal-footer">
+
+                                            <button
+                                                type="button"
+                                                class="btn btn-secondary"
+                                                data-bs-dismiss="modal"
+                                            >
+                                                Fechar
+                                            </button>
+
+                                        </div>
+
+                                    </div>
+
+                                </div>
+
+                            </div>
+
+                        {% endif %}
+
+                    {% endfor %}
 
                 </div>
 
