@@ -12731,19 +12731,97 @@ def visualizar_comprovante(nome_arquivo):
 @app.route('/receita_avulsa', methods=['GET', 'POST'])
 @login_required
 def receita_avulsa():
-    usinas = Usina.query.order_by(Usina.nome).all()
-    credores = Credor.query.order_by(Credor.nome).all()
+
+    if not current_user.pode_acessar_financeiro:
+        abort(403)
+
+    usinas = (
+        Usina.query
+        .order_by(Usina.nome)
+        .all()
+    )
+
+    credores = (
+        Credor.query
+        .order_by(Credor.nome)
+        .all()
+    )
+
+    bancos = (
+        CaixaBanco.query
+        .order_by(CaixaBanco.nome)
+        .all()
+    )
+
+    def converter_decimal(valor):
+        valor = str(valor or '').strip()
+
+        if not valor:
+            return Decimal('0.00')
+
+        valor = (
+            valor
+            .replace('R$', '')
+            .replace(' ', '')
+        )
+
+        # Formato brasileiro: 1.234,56
+        if ',' in valor:
+            valor = (
+                valor
+                .replace('.', '')
+                .replace(',', '.')
+            )
+
+        return Decimal(valor)
 
     if request.method == 'POST':
+
         try:
-            usina_id = int(request.form['usina_id'])
+
+            usina_id = int(
+                request.form['usina_id']
+            )
+
             data = request.form['data']
-            descricao = request.form['descricao']
-            valor = float(request.form['valor'])
-            referencia_mes = int(request.form['referencia_mes']) if request.form['referencia_mes'] else None
-            referencia_ano = int(request.form['referencia_ano']) if request.form['referencia_ano'] else None
-            data_pagamento = request.form['data_pagamento'] or None
-            credor_id = int(request.form['credor_id']) if request.form['credor_id'] else None
+
+            descricao = (
+                request.form['descricao']
+                .strip()
+            )
+
+            valor = converter_decimal(
+                request.form['valor']
+            )
+
+            referencia_mes = (
+                int(request.form['referencia_mes'])
+                if request.form.get('referencia_mes')
+                else None
+            )
+
+            referencia_ano = (
+                int(request.form['referencia_ano'])
+                if request.form.get('referencia_ano')
+                else None
+            )
+
+            data_pagamento = (
+                request.form.get('data_pagamento')
+                or None
+            )
+
+            credor_id = (
+                int(request.form['credor_id'])
+                if request.form.get('credor_id')
+                else None
+            )
+
+            caixa_banco_id = (
+                int(request.form['caixa_banco_id'])
+                if request.form.get('caixa_banco_id')
+                else None
+            )
 
             nova_receita = FinanceiroUsina(
                 usina_id=usina_id,
@@ -12754,19 +12832,76 @@ def receita_avulsa():
                 referencia_mes=referencia_mes,
                 referencia_ano=referencia_ano,
                 data_pagamento=data_pagamento,
-                credor_id=credor_id
+                credor_id=credor_id,
+                caixa_banco_id=caixa_banco_id
             )
 
             db.session.add(nova_receita)
+
+            # Gera o ID antes do commit.
+            # Necessário para vincular os comprovantes à receita.
+            db.session.flush()
+
+            # SALVAR COMPROVANTES
+            novos = request.files.getlist(
+                'novos_comprovantes'
+            )
+
+            for arquivo in novos:
+
+                if (
+                    not arquivo
+                    or not arquivo.filename
+                ):
+                    continue
+
+                salvar_comprovante_financeiro_usina(
+                    nova_receita,
+                    arquivo
+                )
+
             db.session.commit()
-            flash("✅ Receita cadastrada com sucesso!", "success")
-            return redirect(url_for('receita_avulsa'))
+
+            flash(
+                "Receita cadastrada com sucesso!",
+                "success"
+            )
+
+            return redirect(
+                url_for(
+                    'editar_receita_avulsa',
+                    id=nova_receita.id
+                )
+            )
+
+        except (
+            ValueError,
+            InvalidOperation
+        ):
+
+            db.session.rollback()
+
+            flash(
+                "Informe valores numéricos válidos.",
+                "danger"
+            )
 
         except Exception as e:
-            db.session.rollback()
-            flash(f"❌ Erro ao cadastrar receita: {e}", "danger")
 
-    return render_template('receita_avulsa.html', usinas=usinas, credores=credores)
+            db.session.rollback()
+
+            flash(
+                f"Erro ao cadastrar receita: {e}",
+                "danger"
+            )
+
+    return render_template(
+        'receita_avulsa.html',
+        receita=None,
+        usinas=usinas,
+        credores=credores,
+        bancos=bancos
+    )
 
 @app.route(
     '/editar_receita_avulsa/<int:id>',
