@@ -418,7 +418,8 @@
             <div class="col-md-4 col-lg-3"><a href="{{ url_for('menu_relatorios') }}" class="card-menu"><div class="icon-box"><i class="bi bi-bar-chart"></i></div><h5>Relatório</h5><p>Geral</p></a></div>
             <div class="col-md-4 col-lg-3"><a href="{{ url_for('listar_empresas') }}" class="card-menu"><div class="icon-box"><i class="bi bi-list-ul"></i></div><h5>Empresas Cadastradas</h5><p>Lista</p></a></div>
             <div class="col-md-4 col-lg-3"><a href="{{ url_for('listar_acionistas') }}" class="card-menu"><div class="icon-box"><i class="bi bi-people-fill"></i></div><h5>Acionistas Cadastrados</h5><p>Lista</p></a></div>
-            <div class="col-md-4 col-lg-3"><a href="{{ url_for('cadastrar_participacao_direta') }}" class="card-menu"><div class="icon-box"><i class="bi bi-share"></i></div><h5>Vincular Acionistas</h5><p>Usina</p></a></div>
+            {# Classe ocultada #}
+            <div class="col-md-4 col-lg-3 d-none"><a href="{{ url_for('cadastrar_participacao_direta') }}" class="card-menu"><div class="icon-box"><i class="bi bi-share"></i></div><h5>Vincular Acionistas</h5><p>Usina</p></a></div>
         </div>
     </section>
 

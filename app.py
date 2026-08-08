@@ -10716,10 +10716,24 @@ def relatorio_financeiro_empresa():
 
     return render_template('relatorio_financeiro_empresa.html', resultados=None, empresas=empresas)
 
-def calcular_distribuicao_lucro(empresa_id, mes, ano):
-    empresa = EmpresaInvestidora.query.get_or_404(empresa_id)
+def calcular_distribuicao_lucro(
+    empresa_id,
+    mes,
+    ano
+):
 
-    usinas_ids = [vinculo.usina_id for vinculo in empresa.usinas]
+    empresa = (
+        EmpresaInvestidora.query
+        .get_or_404(
+            empresa_id
+        )
+    )
+
+    usinas_ids = [
+        vinculo.usina_id
+        for vinculo in empresa.usinas
+    ]
+
     if not usinas_ids:
         return {
             'empresa': empresa.razao_social,
@@ -10739,56 +10753,131 @@ def calcular_distribuicao_lucro(empresa_id, mes, ano):
             }
         }
 
-    total_usina_expr = (func.coalesce(FinanceiroUsina.valor, 0.0) + func.coalesce(FinanceiroUsina.juros, 0.0))
-    valor_empresa_expr = func.coalesce(FinanceiroEmpresaInvestidora.valor, 0.0)
+    total_usina_expr = (
+        func.coalesce(
+            FinanceiroUsina.valor,
+            0.0
+        )
+        +
+        func.coalesce(
+            FinanceiroUsina.juros,
+            0.0
+        )
+    )
 
-    # =========================
-    # RECEITAS VINDAS DA USINA = categoria_id 14
-    # (apenas itens pagos no mês/ano filtrado)
-    # =========================
+    valor_empresa_expr = func.coalesce(
+        FinanceiroEmpresaInvestidora.valor,
+        0.0
+    )
+
+    # RECEITAS VINDAS DAS USINAS
+    # Categoria 14
     receitas_usinas_rows = (
         db.session.query(
             FinanceiroUsina.usina_id,
-            Usina.nome.label("usina_nome"),
+            Usina.nome.label(
+                'usina_nome'
+            ),
             FinanceiroUsina.data_pagamento,
             FinanceiroUsina.descricao,
-            func.coalesce(FinanceiroUsina.valor, 0.0).label("valor"),
-            func.coalesce(FinanceiroUsina.juros, 0.0).label("juros"),
-            total_usina_expr.label("total"),
+            func.coalesce(
+                FinanceiroUsina.valor,
+                0.0
+            ).label(
+                'valor'
+            ),
+            func.coalesce(
+                FinanceiroUsina.juros,
+                0.0
+            ).label(
+                'juros'
+            ),
+            total_usina_expr.label(
+                'total'
+            )
         )
-        .join(Usina, Usina.id == FinanceiroUsina.usina_id)
+        .join(
+            Usina,
+            Usina.id ==
+            FinanceiroUsina.usina_id
+        )
         .filter(
-            FinanceiroUsina.usina_id.in_(usinas_ids),
+            FinanceiroUsina.usina_id.in_(
+                usinas_ids
+            ),
             FinanceiroUsina.categoria_id == 14,
-            FinanceiroUsina.data_pagamento.isnot(None),
-            db.extract('month', FinanceiroUsina.data_pagamento) == mes,
-            db.extract('year', FinanceiroUsina.data_pagamento) == ano,
+            FinanceiroUsina.data_pagamento.isnot(
+                None
+            ),
+            db.extract(
+                'month',
+                FinanceiroUsina.data_pagamento
+            ) == mes,
+            db.extract(
+                'year',
+                FinanceiroUsina.data_pagamento
+            ) == ano
         )
-        .order_by(FinanceiroUsina.data_pagamento.asc())
+        .order_by(
+            FinanceiroUsina.data_pagamento.asc()
+        )
         .all()
     )
 
-    receitas_usinas = [{
-        "usina_id": r.usina_id,
-        "usina": r.usina_nome,
-        "data_pagamento": r.data_pagamento,
-        "descricao": r.descricao,
-        "valor": float(r.valor or 0),
-        "juros": float(r.juros or 0),
-        "total": float(r.total or 0),
-    } for r in receitas_usinas_rows]
+    receitas_usinas = [
+        {
+            'usina_id': r.usina_id,
+            'usina': r.usina_nome,
+            'data_pagamento': r.data_pagamento,
+            'descricao': r.descricao,
+            'valor': float(
+                r.valor or 0
+            ),
+            'juros': float(
+                r.juros or 0
+            ),
+            'total': float(
+                r.total or 0
+            )
+        }
+        for r in receitas_usinas_rows
+    ]
 
-    # =========================
-    # MOVIMENTOS DA EMPRESA (detalhado)
-    # =========================
+    # MOVIMENTOS DA EMPRESA
     filtro_mes_ano_empresa = (
-        (FinanceiroEmpresaInvestidora.mes_referencia == mes) &
-        (FinanceiroEmpresaInvestidora.ano_referencia == ano)
+        (
+            FinanceiroEmpresaInvestidora.mes_referencia
+            == mes
+        )
+        &
+        (
+            FinanceiroEmpresaInvestidora.ano_referencia
+            == ano
+        )
     ) | (
-        (FinanceiroEmpresaInvestidora.mes_referencia.is_(None)) &
-        (FinanceiroEmpresaInvestidora.ano_referencia.is_(None)) &
-        (db.extract('month', FinanceiroEmpresaInvestidora.data) == mes) &
-        (db.extract('year', FinanceiroEmpresaInvestidora.data) == ano)
+        (
+            FinanceiroEmpresaInvestidora.mes_referencia
+            .is_(None)
+        )
+        &
+        (
+            FinanceiroEmpresaInvestidora.ano_referencia
+            .is_(None)
+        )
+        &
+        (
+            db.extract(
+                'month',
+                FinanceiroEmpresaInvestidora.data
+            ) == mes
+        )
+        &
+        (
+            db.extract(
+                'year',
+                FinanceiroEmpresaInvestidora.data
+            ) == ano
+        )
     )
 
     movimentos_empresa_rows = (
@@ -10798,15 +10887,22 @@ def calcular_distribuicao_lucro(empresa_id, mes, ano):
             FinanceiroEmpresaInvestidora.data,
             FinanceiroEmpresaInvestidora.mes_referencia,
             FinanceiroEmpresaInvestidora.ano_referencia,
-            valor_empresa_expr.label("valor"),
+            valor_empresa_expr.label(
+                'valor'
+            )
         )
         .filter(
-            FinanceiroEmpresaInvestidora.empresa_id == empresa.id,
+            FinanceiroEmpresaInvestidora.empresa_id
+            == empresa.id,
             filtro_mes_ano_empresa
         )
         .order_by(
-            FinanceiroEmpresaInvestidora.ano_referencia.asc().nullslast(),
-            FinanceiroEmpresaInvestidora.mes_referencia.asc().nullslast(),
+            FinanceiroEmpresaInvestidora.ano_referencia
+            .asc()
+            .nullslast(),
+            FinanceiroEmpresaInvestidora.mes_referencia
+            .asc()
+            .nullslast(),
             FinanceiroEmpresaInvestidora.data.asc()
         )
         .all()
@@ -10814,39 +10910,97 @@ def calcular_distribuicao_lucro(empresa_id, mes, ano):
 
     movimentos_empresa_receitas = []
     movimentos_empresa_despesas = []
+
     for r in movimentos_empresa_rows:
+
         item = {
-            "tipo": r.tipo,
-            "descricao": r.descricao,
-            "data": r.data,
-            "mes_referencia": r.mes_referencia,
-            "ano_referencia": r.ano_referencia,
-            "valor": float(r.valor or 0),
+            'tipo': r.tipo,
+            'descricao': r.descricao,
+            'data': r.data,
+            'mes_referencia': r.mes_referencia,
+            'ano_referencia': r.ano_referencia,
+            'valor': float(
+                r.valor or 0
+            )
         }
-        if (r.tipo or "").lower() == "receita":
-            movimentos_empresa_receitas.append(item)
+
+        if (
+            r.tipo or ''
+        ).lower() == 'receita':
+            movimentos_empresa_receitas.append(
+                item
+            )
+
         else:
-            movimentos_empresa_despesas.append(item)
+            movimentos_empresa_despesas.append(
+                item
+            )
 
-    # =========================
-    # TOTAIS E LUCRO (SEM DESPESAS DA USINA)
-    # =========================
-    receita_usinas_total = round(sum(x["total"] for x in receitas_usinas), 2)
-    receita_empresa_total = round(sum(x["valor"] for x in movimentos_empresa_receitas), 2)
-    despesa_empresa_total = round(sum(x["valor"] for x in movimentos_empresa_despesas), 2)
-
-    lucro_liquido = round(
-        (receita_usinas_total + receita_empresa_total) - despesa_empresa_total,
+    # TOTAIS E LUCRO
+    receita_usinas_total = round(
+        sum(
+            x['total']
+            for x in receitas_usinas
+        ),
         2
     )
 
+    receita_empresa_total = round(
+        sum(
+            x['valor']
+            for x in movimentos_empresa_receitas
+        ),
+        2
+    )
+
+    despesa_empresa_total = round(
+        sum(
+            x['valor']
+            for x in movimentos_empresa_despesas
+        ),
+        2
+    )
+
+    lucro_liquido = round(
+        (
+            receita_usinas_total
+            + receita_empresa_total
+        )
+        - despesa_empresa_total,
+        2
+    )
+
+    # DISTRIBUIÇÃO ENTRE ACIONISTAS
     distribuicoes = []
+
     for participacao in empresa.acionistas:
-        valor_participante = round(lucro_liquido * (participacao.percentual / 100.0), 2)
+
+        percentual = float(
+            participacao.percentual
+            or 0
+        )
+
+        valor_participante = round(
+            lucro_liquido
+            * (
+                percentual
+                / 100.0
+            ),
+            2
+        )
+
         distribuicoes.append({
-            'acionista': participacao.acionista.nome,
-            'percentual': participacao.percentual,
-            'valor': valor_participante
+            'acionista_id':
+                participacao.acionista_id,
+
+            'acionista':
+                participacao.acionista.nome,
+
+            'percentual':
+                percentual,
+
+            'valor':
+                valor_participante
         })
 
     return {
@@ -10856,22 +11010,131 @@ def calcular_distribuicao_lucro(empresa_id, mes, ano):
         'lucro_liquido': lucro_liquido,
         'distribuicoes': distribuicoes,
         'extrato': {
-            'receitas_usinas': receitas_usinas,  # só cat=14
-            'movimentos_empresa_receitas': movimentos_empresa_receitas,
-            'movimentos_empresa_despesas': movimentos_empresa_despesas,
+            'receitas_usinas':
+                receitas_usinas,
+
+            'movimentos_empresa_receitas':
+                movimentos_empresa_receitas,
+
+            'movimentos_empresa_despesas':
+                movimentos_empresa_despesas,
+
             'totais': {
-                'receita_usinas': receita_usinas_total,
-                'receita_empresa': receita_empresa_total,
-                'despesa_empresa': despesa_empresa_total
+                'receita_usinas':
+                    receita_usinas_total,
+
+                'receita_empresa':
+                    receita_empresa_total,
+
+                'despesa_empresa':
+                    despesa_empresa_total
             }
         }
     }
 
-@app.route('/distribuicao_lucro_empresa/<int:empresa_id>/<int:mes>/<int:ano>')
+@app.route(
+    '/distribuicao_lucro_empresa/<int:empresa_id>/<int:mes>/<int:ano>'
+)
 @login_required
-def distribuicao_lucro_empresa(empresa_id, mes, ano):
-    resultado = calcular_distribuicao_lucro(empresa_id, mes, ano)
-    return render_template('distribuicao_lucro_empresa.html', resultado=resultado)
+def distribuicao_lucro_empresa(
+    empresa_id,
+    mes,
+    ano
+):
+
+    # ==========================================
+    # CONTROLE DE ACESSO
+    # ==========================================
+
+    if (
+        current_user.perfil
+        not in ['admin', 'financeiro', 'acionista']
+        and not current_user.pode_acessar_financeiro
+    ):
+        abort(403)
+
+    # ==========================================
+    # EMPRESA
+    # ==========================================
+
+    empresa = db.session.get(
+        EmpresaInvestidora,
+        empresa_id
+    )
+
+    if not empresa:
+        abort(404)
+
+    participacao_usuario = None
+    acionista_vinculado = None
+
+    # ==========================================
+    # RESTRIÇÃO PARA ACIONISTA
+    # ==========================================
+
+    if current_user.perfil == 'acionista':
+
+        participacao_usuario = (
+            ParticipacaoAcionista.query
+            .join(
+                UsuarioAcionista,
+                UsuarioAcionista.acionista_id
+                == ParticipacaoAcionista.acionista_id
+            )
+            .filter(
+                UsuarioAcionista.usuario_id
+                == current_user.id,
+
+                ParticipacaoAcionista.empresa_id
+                == empresa_id
+            )
+            .first()
+        )
+
+        # Não possui participação nessa empresa.
+        if not participacao_usuario:
+            abort(403)
+
+        acionista_vinculado = db.session.get(
+            Acionista,
+            participacao_usuario.acionista_id
+        )
+
+        if not acionista_vinculado:
+            abort(403)
+
+    # ==========================================
+    # CÁLCULO DA DISTRIBUIÇÃO
+    # ==========================================
+
+    resultado = calcular_distribuicao_lucro(
+        empresa_id,
+        mes,
+        ano
+    )
+
+    # ==========================================
+    # FILTRA SOMENTE O ACIONISTA LOGADO
+    # ==========================================
+
+    if current_user.perfil == 'acionista':
+
+        resultado['distribuicoes'] = [
+            distribuicao
+            for distribuicao in resultado.get(
+                'distribuicoes',
+                []
+            )
+            if distribuicao.get('acionista_id')
+            == acionista_vinculado.id
+        ]
+
+    return render_template(
+        'distribuicao_lucro_empresa.html',
+        resultado=resultado,
+        participacao_usuario=participacao_usuario,
+        acionista_vinculado=acionista_vinculado
+    )
 
 @app.route('/selecionar_distribuicao_lucro', methods=['GET', 'POST'])
 @login_required
@@ -11087,19 +11350,207 @@ def relatorio_empresas_acionistas():
 def menu_relatorios():
     return render_template('menu_relatorios.html')
 
-@app.route('/distribuicao_lucro', methods=['GET', 'POST'])
+@app.route(
+    '/distribuicao_lucro',
+    methods=['GET', 'POST']
+)
 @login_required
 def distribuicao_lucro_formulario():
-    empresas = EmpresaInvestidora.query.all()
-    anos = list(range(2022, date.today().year + 1))  # Exemplo
+
+    # ==========================================
+    # CONTROLE DE ACESSO
+    # ==========================================
+
+    if (
+        current_user.perfil
+        not in ['admin', 'financeiro', 'acionista']
+        and not current_user.pode_acessar_financeiro
+    ):
+        abort(403)
+
+    # ==========================================
+    # RESTRIÇÃO DAS USINAS PARA O ACIONISTA
+    # MESMA CONSULTA DA PRESTAÇÃO DIRETA
+    # ==========================================
+
+    usinas_permitidas_ids = None
+
+    if current_user.perfil == 'acionista':
+
+        usinas_permitidas_ids = [
+            resultado.usina_id
+            for resultado in (
+                db.session.query(
+                    UsinaInvestidora.usina_id
+                )
+                .join(
+                    ParticipacaoAcionista,
+                    ParticipacaoAcionista.empresa_id
+                    == UsinaInvestidora.empresa_id
+                )
+                .join(
+                    UsuarioAcionista,
+                    UsuarioAcionista.acionista_id
+                    == ParticipacaoAcionista.acionista_id
+                )
+                .filter(
+                    UsuarioAcionista.usuario_id
+                    == current_user.id
+                )
+                .distinct()
+                .all()
+            )
+        ]
+
+        if not usinas_permitidas_ids:
+            usinas_permitidas_ids = [-1]
+
+    # ==========================================
+    # CARREGAMENTO DAS USINAS
+    # ==========================================
+
+    query_usinas = Usina.query
+
+    if current_user.perfil == 'acionista':
+
+        query_usinas = query_usinas.filter(
+            Usina.id.in_(
+                usinas_permitidas_ids
+            )
+        )
+
+    usinas = (
+        query_usinas
+        .order_by(
+            Usina.nome.asc()
+        )
+        .all()
+    )
+
+    # ==========================================
+    # ANOS
+    # ==========================================
+
+    anos = list(
+        range(
+            2022,
+            date.today().year + 1
+        )
+    )
+
+    # ==========================================
+    # POST
+    # ==========================================
 
     if request.method == 'POST':
-        empresa_id = int(request.form['empresa_id'])
-        mes = int(request.form['mes'])
-        ano = int(request.form['ano'])
-        return redirect(url_for('distribuicao_lucro_empresa', empresa_id=empresa_id, mes=mes, ano=ano))
 
-    return render_template('form_distribuicao_lucro.html', empresas=empresas, anos=anos)
+        usina_id = request.form.get(
+            'usina_id',
+            type=int
+        )
+
+        mes = request.form.get(
+            'mes',
+            type=int
+        )
+
+        ano = request.form.get(
+            'ano',
+            type=int
+        )
+
+        if not usina_id or not mes or not ano:
+
+            flash(
+                'Selecione a usina, o mês e o ano.',
+                'warning'
+            )
+
+            return render_template(
+                'form_distribuicao_lucro.html',
+                usinas=usinas,
+                anos=anos
+            )
+
+        if mes < 1 or mes > 12:
+            abort(400)
+
+        # ======================================
+        # PROTEÇÃO DO ACIONISTA
+        # ======================================
+
+        if (
+            current_user.perfil == 'acionista'
+            and usina_id not in usinas_permitidas_ids
+        ):
+            abort(403)
+
+        usina = db.session.get(
+            Usina,
+            usina_id
+        )
+
+        if not usina:
+            abort(404)
+
+        # ======================================
+        # DESCOBRE A EMPRESA DA USINA
+        # ======================================
+
+        if current_user.perfil == 'acionista':
+
+            vinculo = (
+                UsinaInvestidora.query
+                .join(
+                    ParticipacaoAcionista,
+                    ParticipacaoAcionista.empresa_id
+                    == UsinaInvestidora.empresa_id
+                )
+                .join(
+                    UsuarioAcionista,
+                    UsuarioAcionista.acionista_id
+                    == ParticipacaoAcionista.acionista_id
+                )
+                .filter(
+                    UsinaInvestidora.usina_id
+                    == usina_id,
+
+                    UsuarioAcionista.usuario_id
+                    == current_user.id
+                )
+                .first()
+            )
+
+        else:
+
+            vinculo = (
+                UsinaInvestidora.query
+                .filter(
+                    UsinaInvestidora.usina_id
+                    == usina_id
+                )
+                .first()
+            )
+
+        if not vinculo:
+            abort(404)
+
+        empresa_id = vinculo.empresa_id
+
+        return redirect(
+            url_for(
+                'distribuicao_lucro_empresa',
+                empresa_id=empresa_id,
+                mes=mes,
+                ano=ano
+            )
+        )
+
+    return render_template(
+        'form_distribuicao_lucro.html',
+        usinas=usinas,
+        anos=anos
+    )
 
 @app.route('/editar_financeiro_empresa/<int:id>', methods=['GET', 'POST'])
 @login_required

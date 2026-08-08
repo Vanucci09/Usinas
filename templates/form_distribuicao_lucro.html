@@ -1,47 +1,88 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="container mt-5">
-    <h2 class="mb-4 text-center text-primary">📈 Distribuição de Lucro</h2>
+<div class="container py-4">
 
-    <form method="POST" class="row g-3 shadow-sm p-4 bg-white rounded border">
+    <!-- CABEÇALHO DA PÁGINA -->
+    <div class="d-flex align-items-center justify-content-between mb-4 border-bottom pb-3">
+        <div class="d-flex align-items-center">
+            <div class="bg-primary text-white p-3 rounded-circle me-3 shadow-sm d-flex align-items-center justify-content-center" style="width: 50px; height: 50px;">
+                <i class="bi bi-graph-up-arrow fs-4"></i>
+            </div>
+            <div>
+                <h3 class="text-primary mb-0 fw-bold">Distribuição de Lucro</h3>
+                <small class="text-muted">Selecione os parâmetros para gerar o relatório consolidado</small>
+            </div>
+        </div>
+        <a href="{{ url_for('menu_relatorios') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i> Voltar ao Menu
+        </a>
+    </div>
+
+    <!-- FORMULÁRIO DE FILTROS -->
+    <form method="POST" class="row g-3 shadow-sm p-4 bg-white rounded-3 border">
+
+        <!-- USINA -->
         <div class="col-md-6">
-            <label for="empresa_id" class="form-label">Empresa Investidora</label>
-            <select name="empresa_id" id="empresa_id" class="form-select" required>
-                <option value="" disabled selected>Selecione uma empresa</option>
-                {% for empresa in empresas %}
-                    <option value="{{ empresa.id }}">{{ empresa.razao_social }}</option>
+            <label for="usina_id" class="form-label fw-semibold text-secondary">
+                <i class="bi bi-building me-1"></i> Usina
+            </label>
+            <select name="usina_id" id="usina_id" class="form-select shadow-none" required>
+                <option value="" disabled {% if not request.form.get('usina_id') %}selected{% endif %}>
+                    Selecione uma usina...
+                </option>
+                {% for usina in usinas %}
+                    <option value="{{ usina.id }}" {% if request.form.get('usina_id', type=int) == usina.id %}selected{% endif %}>
+                        {{ usina.nome }}
+                    </option>
                 {% endfor %}
             </select>
         </div>
 
-        <div class="col-md-3">
-            <label for="mes" class="form-label">Mês</label>
-            <select name="mes" id="mes" class="form-select" required>
+        <!-- MÊS -->
+        <div class="col-md-3 col-sm-6">
+            <label for="mes" class="form-label fw-semibold text-secondary">
+                <i class="bi bi-calendar-month me-1"></i> Mês
+            </label>
+            <select name="mes" id="mes" class="form-select shadow-none" required>
+                {% set mes_atual = request.form.get('mes', hoje.month if hoje is defined else 1)|int %}
+                {% set meses_nomes = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'] %}
+                
                 {% for m in range(1, 13) %}
-                    <option value="{{ m }}">{{ "%02d"|format(m) }}</option>
+                    <option value="{{ m }}" {% if mes_atual == m %}selected{% endif %}>
+                        {{ "%02d"|format(m) }} - {{ meses_nomes[m] }}
+                    </option>
                 {% endfor %}
             </select>
         </div>
 
-        <div class="col-md-3">
-            <label for="ano" class="form-label">Ano</label>
-            <select name="ano" id="ano" class="form-select" required>
+        <!-- ANO -->
+        <div class="col-md-3 col-sm-6">
+            <label for="ano" class="form-label fw-semibold text-secondary">
+                <i class="bi bi-calendar-event me-1"></i> Ano
+            </label>
+            <select name="ano" id="ano" class="form-select shadow-none" required>
+                {% set ano_atual = request.form.get('ano', hoje.year if hoje is defined else (anos[-1] if anos else 2026))|int %}
+                
                 {% for a in anos %}
-                    <option value="{{ a }}">{{ a }}</option>
+                    <option value="{{ a }}" {% if ano_atual == a %}selected{% endif %}>
+                        {{ a }}
+                    </option>
                 {% endfor %}
             </select>
         </div>
 
-        <div class="col-12 d-flex justify-content-end">
-            <button type="submit" class="btn btn-primary mt-3">
-                <i class="bi bi-file-earmark-bar-graph"></i> Gerar Relatório
+        <!-- BOTÕES DE AÇÃO -->
+        <div class="col-12 mt-4 pt-2 border-top d-flex justify-content-end gap-2">
+            <a href="{{ url_for('menu_relatorios') }}" class="btn btn-light border">
+                Cancelar
+            </a>
+            <button type="submit" class="btn btn-primary px-4 fw-semibold">
+                <i class="bi bi-file-earmark-bar-graph me-1"></i> Gerar Relatório
             </button>
         </div>
+
     </form>
 
-    <div class="text-center mt-4">
-        <a href="{{ url_for('menu_relatorios') }}" class="btn btn-secondary">← Voltar ao Menu de Relatórios</a>
-    </div>
 </div>
 {% endblock %}
