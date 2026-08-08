@@ -6484,12 +6484,12 @@ def api_clientes_da_usina(usina_id):
 )
 @login_required
 def cadastrar_usuario():
+
     if not current_user.is_admin:
         flash(
             'Você não possui permissão para acessar esta página.',
             'danger'
         )
-
         return redirect(
             url_for('index')
         )
@@ -6508,15 +6508,21 @@ def cadastrar_usuario():
 
     if request.method == 'POST':
 
-        nome = request.form.get(
-            'nome',
-            ''
-        ).strip()
+        nome = (
+            request.form.get(
+                'nome',
+                ''
+            ).strip()
+        )
 
-        email = request.form.get(
-            'email',
-            ''
-        ).strip().lower()
+        email = (
+            request.form.get(
+                'email',
+                ''
+            )
+            .strip()
+            .lower()
+        )
 
         senha = request.form.get(
             'senha',
@@ -6550,26 +6556,19 @@ def cadastrar_usuario():
             if cliente_id.isdigit()
         ]
 
-        acionistas_ids = request.form.getlist(
-            'acionistas_ids'
+        acionista_id = request.form.get(
+            'acionista_id',
+            type=int
         )
 
-        acionistas_ids = [
-            int(acionista_id)
-            for acionista_id in acionistas_ids
-            if acionista_id.isdigit()
-        ]
-
-        # Evita variáveis não definidas.
         clientes_selecionados = []
-        acionistas_selecionados = []
+        acionista_selecionado = None
 
         if not nome:
             flash(
                 'Informe o nome do usuário.',
                 'warning'
             )
-
             return render_template(
                 'cadastrar_usuario.html',
                 usinas=usinas,
@@ -6581,7 +6580,6 @@ def cadastrar_usuario():
                 'Informe o e-mail do usuário.',
                 'warning'
             )
-
             return render_template(
                 'cadastrar_usuario.html',
                 usinas=usinas,
@@ -6593,7 +6591,6 @@ def cadastrar_usuario():
                 'Informe a senha do usuário.',
                 'warning'
             )
-
             return render_template(
                 'cadastrar_usuario.html',
                 usinas=usinas,
@@ -6615,21 +6612,22 @@ def cadastrar_usuario():
                 'Já existe um usuário cadastrado com este e-mail.',
                 'warning'
             )
-
             return render_template(
                 'cadastrar_usuario.html',
                 usinas=usinas,
                 acionistas=acionistas
             )
 
+        # ==========================
         # PERFIL CLIENTE
+        # ==========================
         if perfil == 'cliente':
+
             if not clientes_ids:
                 flash(
                     'Selecione pelo menos um cliente para esse usuário.',
                     'warning'
                 )
-
                 return render_template(
                     'cadastrar_usuario.html',
                     usinas=usinas,
@@ -6639,29 +6637,22 @@ def cadastrar_usuario():
             clientes_selecionados = (
                 Cliente.query
                 .filter(
-                    Cliente.id.in_(
-                        clientes_ids
-                    ),
+                    Cliente.id.in_(clientes_ids),
                     Cliente.ativo.is_(True)
                 )
                 .all()
             )
 
             ids_encontrados = {
-                cliente.id
-                for cliente in clientes_selecionados
+                c.id
+                for c in clientes_selecionados
             }
 
-            ids_solicitados = set(
-                clientes_ids
-            )
-
-            if ids_encontrados != ids_solicitados:
+            if ids_encontrados != set(clientes_ids):
                 flash(
-                    'Um ou mais clientes selecionados são inválidos ou estão inativos.',
+                    'Um ou mais clientes são inválidos.',
                     'danger'
                 )
-
                 return render_template(
                     'cadastrar_usuario.html',
                     usinas=usinas,
@@ -6673,9 +6664,7 @@ def cadastrar_usuario():
                     Rateio.cliente_id
                 )
                 .filter(
-                    Rateio.cliente_id.in_(
-                        clientes_ids
-                    ),
+                    Rateio.cliente_id.in_(clientes_ids),
                     Rateio.ativo.is_(True),
                     Rateio.percentual > 0
                 )
@@ -6683,17 +6672,16 @@ def cadastrar_usuario():
                 .all()
             )
 
-            ids_com_rateio = {
-                resultado.cliente_id
-                for resultado in clientes_com_rateio
+            ids_rateio = {
+                r.cliente_id
+                for r in clientes_com_rateio
             }
 
-            if ids_com_rateio != ids_solicitados:
+            if ids_rateio != set(clientes_ids):
                 flash(
-                    'Um ou mais clientes selecionados não possuem rateio ativo.',
+                    'Um ou mais clientes não possuem rateio ativo.',
                     'danger'
                 )
-
                 return render_template(
                     'cadastrar_usuario.html',
                     usinas=usinas,
@@ -6709,56 +6697,38 @@ def cadastrar_usuario():
             vender_usina = False
             vender_energia = False
 
+        # ==========================
         # PERFIL ACIONISTA
+        # ==========================
         elif perfil == 'acionista':
 
-            if not acionistas_ids:
+            if not acionista_id:
                 flash(
-                    'Selecione pelo menos um acionista.',
+                    'Selecione um acionista.',
                     'warning'
                 )
-
                 return render_template(
                     'cadastrar_usuario.html',
                     usinas=usinas,
                     acionistas=acionistas
                 )
 
-            acionistas_selecionados = (
-                Acionista.query
-                .filter(
-                    Acionista.id.in_(
-                        acionistas_ids
-                    )
-                )
-                .all()
+            acionista_selecionado = db.session.get(
+                Acionista,
+                acionista_id
             )
 
-            ids_acionistas_encontrados = {
-                acionista.id
-                for acionista in acionistas_selecionados
-            }
-
-            ids_acionistas_solicitados = set(
-                acionistas_ids
-            )
-
-            if (
-                ids_acionistas_encontrados
-                != ids_acionistas_solicitados
-            ):
+            if not acionista_selecionado:
                 flash(
-                    'Um ou mais acionistas selecionados são inválidos.',
+                    'Acionista inválido.',
                     'danger'
                 )
-
                 return render_template(
                     'cadastrar_usuario.html',
                     usinas=usinas,
                     acionistas=acionistas
                 )
 
-            # Acionista não recebe permissões administrativas.
             pode_geracao = False
             pode_cliente = False
             pode_fatura = False
@@ -6768,7 +6738,9 @@ def cadastrar_usuario():
             vender_usina = False
             vender_energia = False
 
+        # ==========================
         # DEMAIS PERFIS
+        # ==========================
         else:
 
             pode_geracao = (
@@ -6828,40 +6800,44 @@ def cadastrar_usuario():
 
             db.session.flush()
 
-            # Vincula clientes.
             for cliente in clientes_selecionados:
-                vinculo_cliente = UsuarioCliente(
-                    usuario_id=novo_usuario.id,
-                    cliente_id=cliente.id
-                )
 
                 db.session.add(
-                    vinculo_cliente
+                    UsuarioCliente(
+                        usuario_id=novo_usuario.id,
+                        cliente_id=cliente.id
+                    )
                 )
 
-            # Vincula acionistas.
-            for acionista in acionistas_selecionados:
-                vinculo_acionista = UsuarioAcionista(
-                    usuario_id=novo_usuario.id,
-                    acionista_id=acionista.id
-                )
+            if (
+                perfil == 'acionista'
+                and acionista_selecionado
+            ):
 
                 db.session.add(
-                    vinculo_acionista
+                    UsuarioAcionista(
+                        usuario_id=novo_usuario.id,
+                        acionista_id=acionista_selecionado.id
+                    )
                 )
 
             db.session.commit()
+
             flash(
                 'Usuário cadastrado com sucesso!',
                 'success'
             )
 
             return redirect(
-                url_for('cadastrar_usuario')
+                url_for(
+                    'cadastrar_usuario'
+                )
             )
 
         except Exception as erro:
+
             db.session.rollback()
+
             print(
                 f'Erro ao cadastrar usuário: {erro}'
             )
@@ -6917,7 +6893,6 @@ def editar_usuario(id):
             'Você não possui permissão para acessar esta página.',
             'danger'
         )
-
         return redirect(
             url_for('index')
         )
@@ -6932,7 +6907,6 @@ def editar_usuario(id):
             'Usuário não encontrado.',
             'warning'
         )
-
         return redirect(
             url_for('listar_usuarios')
         )
@@ -6961,36 +6935,46 @@ def editar_usuario(id):
             )
         )
 
-        acionistas_vinculados_ids = [
-            vinculo.acionista_id
-            for vinculo in (
-                UsuarioAcionista.query
-                .filter_by(
-                    usuario_id=usuario.id
-                )
-                .all()
+        vinculo_acionista = (
+            UsuarioAcionista.query
+            .filter_by(
+                usuario_id=usuario.id
             )
-        ]
+            .first()
+        )
+
+        acionista_vinculado_id = (
+            vinculo_acionista.acionista_id
+            if vinculo_acionista
+            else None
+        )
 
         return {
             'usuario': usuario,
             'usinas': usinas,
             'acionistas': acionistas,
             'clientes_vinculados': clientes_vinculados,
-            'acionistas_vinculados_ids': acionistas_vinculados_ids
+            'acionista_vinculado_id': acionista_vinculado_id
         }
 
     if request.method == 'POST':
 
-        nome = request.form.get(
-            'nome',
-            ''
-        ).strip()
+        nome = (
+            request.form.get(
+                'nome',
+                ''
+            )
+            .strip()
+        )
 
-        email = request.form.get(
-            'email',
-            ''
-        ).strip().lower()
+        email = (
+            request.form.get(
+                'email',
+                ''
+            )
+            .strip()
+            .lower()
+        )
 
         perfil = request.form.get(
             'perfil',
@@ -7022,25 +7006,20 @@ def editar_usuario(id):
             if cliente_id.isdigit()
         })
 
-        acionistas_ids = request.form.getlist(
-            'acionistas_ids'
+        # Apenas UM acionista por usuário.
+        acionista_id = request.form.get(
+            'acionista_id',
+            type=int
         )
 
-        acionistas_ids = list({
-            int(acionista_id)
-            for acionista_id in acionistas_ids
-            if acionista_id.isdigit()
-        })
-
         clientes_selecionados = []
-        acionistas_selecionados = []
+        acionista_selecionado = None
 
         if not nome:
             flash(
                 'Informe o nome do usuário.',
                 'warning'
             )
-
             return render_template(
                 'editar_usuario.html',
                 **carregar_dados_template()
@@ -7051,7 +7030,6 @@ def editar_usuario(id):
                 'Informe o e-mail do usuário.',
                 'warning'
             )
-
             return render_template(
                 'editar_usuario.html',
                 **carregar_dados_template()
@@ -7073,13 +7051,15 @@ def editar_usuario(id):
                 'Já existe outro usuário cadastrado com esse e-mail.',
                 'warning'
             )
-
             return render_template(
                 'editar_usuario.html',
                 **carregar_dados_template()
             )
 
-        # Atualiza os dados básicos.
+        # ==========================================
+        # ATUALIZA DADOS BÁSICOS
+        # ==========================================
+
         usuario.nome = nome
         usuario.email = email
         usuario.perfil = perfil
@@ -7099,7 +7079,6 @@ def editar_usuario(id):
                     'Selecione pelo menos um cliente para esse usuário.',
                     'warning'
                 )
-
                 return render_template(
                     'editar_usuario.html',
                     **carregar_dados_template()
@@ -7130,7 +7109,6 @@ def editar_usuario(id):
                     'Um ou mais clientes selecionados são inválidos ou estão inativos.',
                     'danger'
                 )
-
                 return render_template(
                     'editar_usuario.html',
                     **carregar_dados_template()
@@ -7161,7 +7139,6 @@ def editar_usuario(id):
                     'Um ou mais clientes não possuem rateio ativo.',
                     'danger'
                 )
-
                 return render_template(
                     'editar_usuario.html',
                     **carregar_dados_template()
@@ -7183,45 +7160,28 @@ def editar_usuario(id):
 
         elif perfil == 'acionista':
 
-            if not acionistas_ids:
+            if not acionista_id:
                 flash(
-                    'Selecione pelo menos um acionista para esse usuário.',
+                    'Selecione um acionista para esse usuário.',
                     'warning'
                 )
-
                 return render_template(
                     'editar_usuario.html',
                     **carregar_dados_template()
                 )
 
-            acionistas_selecionados = (
-                Acionista.query
-                .filter(
-                    Acionista.id.in_(
-                        acionistas_ids
-                    )
+            acionista_selecionado = (
+                db.session.get(
+                    Acionista,
+                    acionista_id
                 )
-                .all()
             )
 
-            ids_acionistas_encontrados = {
-                acionista.id
-                for acionista in acionistas_selecionados
-            }
-
-            ids_acionistas_solicitados = set(
-                acionistas_ids
-            )
-
-            if (
-                ids_acionistas_encontrados
-                != ids_acionistas_solicitados
-            ):
+            if not acionista_selecionado:
                 flash(
-                    'Um ou mais acionistas selecionados são inválidos.',
+                    'Acionista selecionado é inválido.',
                     'danger'
                 )
-
                 return render_template(
                     'editar_usuario.html',
                     **carregar_dados_template()
@@ -7305,21 +7265,26 @@ def editar_usuario(id):
 
         try:
 
-            # Remove vínculos antigos de clientes.
+            # ==========================================
+            # REMOVE VÍNCULOS ANTIGOS
+            # ==========================================
+
             UsuarioCliente.query.filter_by(
                 usuario_id=usuario.id
             ).delete(
                 synchronize_session=False
             )
 
-            # Remove vínculos antigos de acionistas.
             UsuarioAcionista.query.filter_by(
                 usuario_id=usuario.id
             ).delete(
                 synchronize_session=False
             )
 
-            # Recria os vínculos de clientes.
+            # ==========================================
+            # RECRIA VÍNCULO DE CLIENTES
+            # ==========================================
+
             if perfil == 'cliente':
 
                 for cliente in clientes_selecionados:
@@ -7333,19 +7298,23 @@ def editar_usuario(id):
                         vinculo_cliente
                     )
 
-            # Recria os vínculos de acionistas.
-            elif perfil == 'acionista':
+            # ==========================================
+            # RECRIA VÍNCULO DO ACIONISTA
+            # ==========================================
 
-                for acionista in acionistas_selecionados:
+            elif (
+                perfil == 'acionista'
+                and acionista_selecionado
+            ):
 
-                    vinculo_acionista = UsuarioAcionista(
-                        usuario_id=usuario.id,
-                        acionista_id=acionista.id
-                    )
+                vinculo_acionista = UsuarioAcionista(
+                    usuario_id=usuario.id,
+                    acionista_id=acionista_selecionado.id
+                )
 
-                    db.session.add(
-                        vinculo_acionista
-                    )
+                db.session.add(
+                    vinculo_acionista
+                )
 
             db.session.commit()
 
@@ -7355,7 +7324,9 @@ def editar_usuario(id):
             )
 
             return redirect(
-                url_for('listar_usuarios')
+                url_for(
+                    'listar_usuarios'
+                )
             )
 
         except Exception as erro:
@@ -14058,31 +14029,76 @@ def relatorio_financeiro_com_perda():
     participacao_percentual = 100.0
 
     if current_user.perfil == 'acionista':
-        participacoes = (
-            db.session.query(
-                ParticipacaoAcionista.percentual
+        # =====================================================
+        # PARTICIPAÇÃO E INVESTIMENTO DO ACIONISTA
+        # =====================================================
+        # Admin/financeiro visualizam 100% da usina.
+
+        participacao_percentual = 100.0
+        empresa_investidora = None
+
+        if current_user.perfil == 'acionista':
+
+            participacao = (
+                ParticipacaoAcionista.query
+                .join(
+                    UsuarioAcionista,
+                    UsuarioAcionista.acionista_id ==
+                    ParticipacaoAcionista.acionista_id
+                )
+                .join(
+                    UsinaInvestidora,
+                    UsinaInvestidora.empresa_id ==
+                    ParticipacaoAcionista.empresa_id
+                )
+                .filter(
+                    UsuarioAcionista.usuario_id ==
+                    current_user.id,
+
+                    UsinaInvestidora.usina_id ==
+                    usina_selecionada.id
+                )
+                .first()
             )
-            .join(
-                UsinaInvestidora,
-                UsinaInvestidora.empresa_id ==
-                ParticipacaoAcionista.empresa_id
+
+            if not participacao:
+                abort(403)
+
+            participacao_percentual = _safe_float(
+                participacao.percentual
             )
-            .join(
-                UsuarioAcionista,
-                UsuarioAcionista.acionista_id ==
-                ParticipacaoAcionista.acionista_id
+
+            empresa_investidora = (
+                db.session.get(
+                    EmpresaInvestidora,
+                    participacao.empresa_id
+                )
             )
-            .filter(
-                UsinaInvestidora.usina_id == usina_selecionada.id,
-                UsuarioAcionista.usuario_id == current_user.id
+
+            participacao_percentual = max(
+                0.0,
+                min(
+                    participacao_percentual,
+                    100.0
+                )
             )
-            .distinct()
-            .all()
+
+        fator_participacao = (
+            participacao_percentual
+            / 100.0
         )
 
-        participacao_percentual = sum(
-            _safe_float(item.percentual)
-            for item in participacoes
+        investimento_total = _safe_float(
+            getattr(
+                usina_selecionada,
+                'valor_investido',
+                0
+            ) or 0
+        )
+
+        investimento_acionista = _safe_float(
+            investimento_total
+            * fator_participacao
         )
 
         participacao_percentual = min(

@@ -357,27 +357,43 @@ Editar Usuário
 
                         </div>
 
-                        <div class="list-group">
+                        <div class="mb-3">
 
-                            {% for acionista in acionistas %}
-
-                            <label class="list-group-item">
-
-                                <input
-                                    type="checkbox"
-                                    class="form-check-input me-2"
-                                    name="acionistas_ids"
-                                    value="{{ acionista.id }}"
-                                    {% if acionista.id in acionistas_vinculados_ids %}
-                                        checked
-                                    {% endif %}
-                                >
-
-                                {{ acionista.nome }}
-
+                            <label
+                                for="acionista_id"
+                                class="form-label fw-medium text-secondary"
+                            >
+                                Acionista
                             </label>
 
-                            {% endfor %}
+                            <select
+                                id="acionista_id"
+                                name="acionista_id"
+                                class="form-select"
+                            >
+
+                                <option value="">
+                                    Selecione um acionista
+                                </option>
+
+                                {% for acionista in acionistas %}
+
+                                <option
+                                    value="{{ acionista.id }}"
+                                    {% if request.form.get('acionista_id', type=int) == acionista.id
+                                        or acionista_vinculado_id == acionista.id %}
+                                        selected
+                                    {% endif %}
+                                >
+                                    {{ acionista.nome }}
+                                    {% if acionista.cpf %}
+                                        - {{ acionista.cpf }}
+                                    {% endif %}
+                                </option>
+
+                                {% endfor %}
+
+                            </select>
 
                         </div>
 
@@ -877,12 +893,26 @@ document.addEventListener('DOMContentLoaded', function () {
 
             if (perfil === 'acionista') {
 
-                const selecionados =
-                    document.querySelectorAll(
-                        'input[name="acionistas_ids"]:checked'
+                const acionista =
+                    document.getElementById(
+                        'acionista_id'
                     );
 
-                if (selecionados.length === 0) {
+                if (!acionista.value) {
+
+                    event.preventDefault();
+
+                    alert(
+                        'Selecione um acionista.'
+                    );
+
+                    containerAcionista.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center'
+                    });
+
+                    return;
+                } {
 
                     event.preventDefault();
 
