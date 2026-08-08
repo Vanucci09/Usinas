@@ -13513,6 +13513,64 @@ def relatorio_prestacao_direta():
             and usina.id not in usinas_permitidas_ids
         ):
             abort(403)
+            
+        # PARTICIPAÇÃO DO ACIONISTA
+        participacao_percentual = Decimal('100')
+        empresa_investidora = None
+
+        if current_user.perfil == 'acionista':
+
+            participacao = (
+                ParticipacaoAcionista.query
+                .join(
+                    UsuarioAcionista,
+                    UsuarioAcionista.acionista_id
+                    == ParticipacaoAcionista.acionista_id
+                )
+                .join(
+                    UsinaInvestidora,
+                    UsinaInvestidora.empresa_id
+                    == ParticipacaoAcionista.empresa_id
+                )
+                .filter(
+                    UsuarioAcionista.usuario_id
+                    == current_user.id,
+
+                    UsinaInvestidora.usina_id
+                    == usina.id
+                )
+                .first()
+            )
+
+            if not participacao:
+                abort(403)
+
+            participacao_percentual = Decimal(
+                str(
+                    participacao.percentual
+                    or 0
+                )
+            )
+
+            empresa_investidora = (
+                db.session.get(
+                    EmpresaInvestidora,
+                    participacao.empresa_id
+                )
+            )
+
+            participacao_percentual = max(
+                Decimal('0'),
+                min(
+                    participacao_percentual,
+                    Decimal('100')
+                )
+            )
+
+        fator_participacao = (
+            participacao_percentual
+            / Decimal('100')
+        )
 
         # PREVISÃO DO PERÍODO
         # Considera as previsões mensais que tenham
@@ -13620,18 +13678,24 @@ def relatorio_prestacao_direta():
         saldo_anterior = Decimal('0')
 
         for movimento in movimentos_anteriores:
-            valor = Decimal(
-                str(
-                    movimento.valor
-                    or 0
+            valor = (
+                Decimal(
+                    str(
+                        movimento.valor
+                        or 0
+                    )
                 )
+                * fator_participacao
             )
 
-            juros = Decimal(
-                str(
-                    movimento.juros
-                    or 0
+            juros = (
+                Decimal(
+                    str(
+                        movimento.juros
+                        or 0
+                    )
                 )
+                * fator_participacao
             )
 
             if movimento.tipo == 'receita':
@@ -13669,18 +13733,24 @@ def relatorio_prestacao_direta():
 
         for movimento in movimentos_periodo:
 
-            valor = Decimal(
-                str(
-                    movimento.valor
-                    or 0
+            valor = (
+                Decimal(
+                    str(
+                        movimento.valor
+                        or 0
+                    )
                 )
+                * fator_participacao
             )
 
-            juros = Decimal(
-                str(
-                    movimento.juros
-                    or 0
+            juros = (
+                Decimal(
+                    str(
+                        movimento.juros
+                        or 0
+                    )
                 )
+                * fator_participacao
             )
 
             credito = Decimal('0')
@@ -13766,6 +13836,8 @@ def relatorio_prestacao_direta():
         # DADOS ENVIADOS AO TEMPLATE
         relatorio = {
             'usina': usina,
+            'empresa_investidora': empresa_investidora,
+            'participacao_percentual': participacao_percentual,
             'previsto': previsto,
             'realizado': realizado,
             'eficiencia': eficiencia,
