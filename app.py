@@ -27063,46 +27063,55 @@ def dashboard_investidor():
     if not usina:
         abort(404)
 
+    # =====================================================
     # PARTICIPAÇÃO DO ACIONISTA
+    # =====================================================
+
     participacao_percentual = Decimal('100')
     empresa_investidora = None
 
     if current_user.perfil == 'acionista':
 
-        empresa_usina = (
-            UsinaInvestidora.query
-            .filter_by(usina_id=usina.id)
+        # Busca a participação do usuário cuja empresa
+        # realmente esteja vinculada à usina selecionada.
+        participacao = (
+            ParticipacaoAcionista.query
+            .join(
+                UsuarioAcionista,
+                UsuarioAcionista.acionista_id
+                == ParticipacaoAcionista.acionista_id
+            )
+            .join(
+                UsinaInvestidora,
+                UsinaInvestidora.empresa_id
+                == ParticipacaoAcionista.empresa_id
+            )
+            .filter(
+                UsuarioAcionista.usuario_id
+                == current_user.id,
+
+                UsinaInvestidora.usina_id
+                == usina.id
+            )
             .first()
         )
 
-        empresa_investidora = None
-        participacao_percentual = Decimal('0')
-
-        if empresa_usina:
-
-            empresa_investidora = empresa_usina.empresa
-
-            participacao = (
-                ParticipacaoAcionista.query
-                .join(
-                    UsuarioAcionista,
-                    UsuarioAcionista.acionista_id ==
-                    ParticipacaoAcionista.acionista_id
-                )
-                .filter(
-                    ParticipacaoAcionista.empresa_id ==
-                    empresa_usina.empresa_id,
-
-                    UsuarioAcionista.usuario_id ==
-                    current_user.id
-                )
-                .first()
+        if participacao:
+            participacao_percentual = para_decimal(
+                participacao.percentual
             )
 
-            if participacao:
-                participacao_percentual = para_decimal(
-                    participacao.percentual
+            empresa_investidora = (
+                EmpresaInvestidora.query.get(
+                    participacao.empresa_id
                 )
+            )
+
+        else:
+            # Se o usuário não possui participação
+            # em nenhuma empresa vinculada à usina,
+            # ele não deveria visualizar essa usina.
+            abort(403)
 
         participacao_percentual = max(
             Decimal('0'),
