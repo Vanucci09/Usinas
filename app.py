@@ -6375,6 +6375,13 @@ def login():
                 )
             )
 
+        if usuario.perfil == 'acionista':
+            return redirect(
+                url_for(
+                    'dashboard_investidor'
+                )
+            )
+
         return redirect(
             url_for(
                 'index'
