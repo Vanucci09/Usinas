@@ -7063,10 +7063,7 @@ def editar_usuario(id):
                 **carregar_dados_template()
             )
 
-        # ==========================================
         # ATUALIZA DADOS BÁSICOS
-        # ==========================================
-
         usuario.nome = nome
         usuario.email = email
         usuario.perfil = perfil
@@ -7075,10 +7072,7 @@ def editar_usuario(id):
         usuario.vender_usina = vender_usina
         usuario.vender_energia = vender_energia
 
-        # ==========================================
         # PERFIL CLIENTE
-        # ==========================================
-
         if perfil == 'cliente':
 
             if not clientes_ids:
@@ -7161,10 +7155,7 @@ def editar_usuario(id):
             usuario.vender_usina = False
             usuario.vender_energia = False
 
-        # ==========================================
         # PERFIL ACIONISTA
-        # ==========================================
-
         elif perfil == 'acionista':
 
             if not acionista_id:
@@ -7204,10 +7195,7 @@ def editar_usuario(id):
             usuario.vender_usina = False
             usuario.vender_energia = False
 
-        # ==========================================
         # DEMAIS PERFIS
-        # ==========================================
-
         else:
 
             usuario.pode_cadastrar_geracao = (
@@ -7260,21 +7248,26 @@ def editar_usuario(id):
             else:
                 usuario.pode_aprovar_financeiro = False
 
-        senha = request.form.get(
-            'senha',
-            ''
+        senha = (
+            request.form.get(
+                'senha',
+                ''
+            )
+            .strip()
         )
 
         if senha:
+
             usuario.set_senha(
                 senha
             )
 
-        try:
+            # Obriga o usuário a alterar a senha
+            # no próximo login
+            usuario.primeiro_login = True
 
-            # ==========================================
+        try:
             # REMOVE VÍNCULOS ANTIGOS
-            # ==========================================
 
             UsuarioCliente.query.filter_by(
                 usuario_id=usuario.id
@@ -7288,10 +7281,7 @@ def editar_usuario(id):
                 synchronize_session=False
             )
 
-            # ==========================================
             # RECRIA VÍNCULO DE CLIENTES
-            # ==========================================
-
             if perfil == 'cliente':
 
                 for cliente in clientes_selecionados:
@@ -7305,10 +7295,7 @@ def editar_usuario(id):
                         vinculo_cliente
                     )
 
-            # ==========================================
             # RECRIA VÍNCULO DO ACIONISTA
-            # ==========================================
-
             elif (
                 perfil == 'acionista'
                 and acionista_selecionado
