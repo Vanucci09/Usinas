@@ -105,13 +105,31 @@
                         {{ "{:,}".format(item.energia_kwh|round(2)).replace(",", "X").replace(".", ",").replace("X", ".") }}
                     </td>
                     <td class="text-center">
-                        {% if item.energia_kwh >= item.previsao_diaria %}
-                            <span class="badge bg-success">Excelente</span>
-                        {% elif item.energia_kwh >= (item.previsao_diaria * 0.9) %}
-                            <span class="badge bg-warning text-dark">Atenção</span>
+
+                        {% if item.tem_ocorrencia %}
+
+                            <div>
+                                <span class="badge bg-danger">
+                                    Ocorrência
+                                </span>
+                            </div>
+
+                            <div class="small text-danger fw-semibold mt-1">
+                                Perda: {{ '%.2f'|format(item.perda_percentual)|replace('.', ',') }}%
+                            </div>
+
+                            <div class="small text-muted mt-1">
+                                {{ item.mensagem_ocorrencia }}
+                            </div>
+
                         {% else %}
-                            <span class="badge bg-danger">Abaixo da Meta</span>
+
+                            <span class="badge bg-success">
+                                OK
+                            </span>
+
                         {% endif %}
+
                     </td>
                 </tr>
                 {% else %}

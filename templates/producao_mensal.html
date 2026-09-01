@@ -225,14 +225,32 @@
     const producao = {{ totais | tojson }};
     const previsoes = {{ previsoes | tojson }};
 
+    const diasComOcorrencia = {{ dias_com_ocorrencia | tojson }};
+
     const cores = producao.map((valor, idx) => {
-        const previsao = previsoes[idx] || 0;
-        if (valor >= previsao) return 'rgba(54, 162, 235, 0.6)';
-        if (valor >= previsao * 0.9) return 'rgba(255, 206, 86, 0.6)';
-        return 'rgba(255, 99, 132, 0.6)';
+
+        // idx começa em 0, mas o dia começa em 1
+        const dia = idx + 1;
+
+        if (diasComOcorrencia.includes(dia)) {
+            // Dia com ocorrência
+            return 'rgba(220, 53, 69, 0.75)';
+        }
+
+        // Dia normal
+        return 'rgba(54, 162, 235, 0.65)';
     });
 
-    const bordas = cores.map(cor => cor.replace('0.6', '1'));
+    const bordas = producao.map((valor, idx) => {
+
+        const dia = idx + 1;
+
+        if (diasComOcorrencia.includes(dia)) {
+            return 'rgba(220, 53, 69, 1)';
+        }
+
+        return 'rgba(54, 162, 235, 1)';
+    });
 
     new Chart(document.getElementById('graficoProducaoOriginal').getContext('2d'), {
         type: 'bar',

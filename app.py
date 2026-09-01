@@ -553,6 +553,54 @@ class Monitoramento(db.Model):
         Index('idx_mon_usina_sn_data_coletado', 'usina_id', 'inverter_sn', 'data', db.text('coletado_em DESC')),
     )
     
+class OcorrenciaUsina(db.Model):
+    __tablename__ = 'ocorrencias_usina'
+
+    id = db.Column(
+        db.Integer,
+        primary_key=True
+    )
+
+    usina_id = db.Column(
+        db.Integer,
+        db.ForeignKey('usinas.id'),
+        nullable=False,
+        index=True
+    )
+
+    usina = db.relationship(
+        'Usina',
+        backref=db.backref(
+            'ocorrencias',
+            lazy='dynamic',
+            cascade='all, delete-orphan'
+        )
+    )
+
+    data = db.Column(
+        db.Date,
+        nullable=False,
+        default=date.today,
+        index=True
+    )
+
+    mensagem = db.Column(
+        db.String(500),
+        nullable=False
+    )
+
+    percentual_impacto = db.Column(
+        db.Numeric(5, 2),
+        nullable=False,
+        default=0
+    )
+
+    criado_em = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow
+    )
+    
 class InversorCadastrado(db.Model):
     __tablename__ = 'inversores_cadastrados'
     id = db.Column(db.Integer, primary_key=True)
@@ -1845,6 +1893,7 @@ def consulta():
     previsoes = []
 
     for geracao, usina in resultados:
+
         dias_no_mes = monthrange(
             geracao.data.year,
             geracao.data.month
@@ -1872,17 +1921,63 @@ def consulta():
             else 0
         )
 
-        producao_negativa = (
-            geracao.energia_kwh
-            < previsao_diaria
+        # ==========================================
+        # OCORRÊNCIAS DA USINA NESTE DIA
+        # ==========================================
+
+        ocorrencias = (
+            OcorrenciaUsina.query
+            .filter(
+                OcorrenciaUsina.usina_id == usina.id,
+                OcorrenciaUsina.data == geracao.data
+            )
+            .order_by(
+                OcorrenciaUsina.id.asc()
+            )
+            .all()
         )
+
+        # Soma o percentual de perda das ocorrências
+        perda_percentual = sum(
+            float(
+                ocorrencia.percentual_impacto or 0
+            )
+            for ocorrencia in ocorrencias
+        )
+
+        # Não deixa passar de 100%
+        perda_percentual = min(
+            perda_percentual,
+            100
+        )
+
+        # Junta as mensagens caso exista mais de uma
+        mensagens_ocorrencia = [
+            ocorrencia.mensagem
+            for ocorrencia in ocorrencias
+            if ocorrencia.mensagem
+        ]
+
+        mensagem_ocorrencia = (
+            ' | '.join(mensagens_ocorrencia)
+            if mensagens_ocorrencia
+            else None
+        )
+
+        # ==========================================
+        # DADOS DA TABELA
+        # ==========================================
 
         dados.append({
             'nome': usina.nome,
             'data': geracao.data,
             'energia_kwh': geracao.energia_kwh,
             'previsao_diaria': previsao_diaria,
-            'producao_negativa': producao_negativa
+
+            # ocorrência
+            'tem_ocorrencia': bool(ocorrencias),
+            'mensagem_ocorrencia': mensagem_ocorrencia,
+            'perda_percentual': perda_percentual
         })
 
         dias.append(
@@ -2069,6 +2164,46 @@ def producao_mensal(usina_id, ano, mes):
         )
         for _ in range(dias_mes)
     ]
+    
+    # ==========================================
+    # OCORRÊNCIAS DA USINA NO MÊS
+    # ==========================================
+
+    ocorrencias_mes = (
+        OcorrenciaUsina.query
+        .filter(
+            OcorrenciaUsina.usina_id == usina_id,
+            OcorrenciaUsina.data >= data_inicio,
+            OcorrenciaUsina.data < data_fim
+        )
+        .order_by(
+            OcorrenciaUsina.data.asc()
+        )
+        .all()
+    )
+
+    # Dias que possuem ocorrência
+    dias_com_ocorrencia = list({
+        ocorrencia.data.day
+        for ocorrencia in ocorrencias_mes
+    })
+
+    # Informações das ocorrências por dia
+    ocorrencias_por_dia = {}
+
+    for ocorrencia in ocorrencias_mes:
+
+        dia = ocorrencia.data.day
+
+        if dia not in ocorrencias_por_dia:
+            ocorrencias_por_dia[dia] = []
+
+        ocorrencias_por_dia[dia].append({
+            'mensagem': ocorrencia.mensagem,
+            'percentual': float(
+                ocorrencia.percentual_impacto or 0
+            )
+        })
 
     # GERAÇÃO ACUMULADA NO ANO
     inicio_ano = date(
@@ -2292,6 +2427,8 @@ def producao_mensal(usina_id, ano, mes):
         usina_nome=usina.nome,
         potencia_kw=potencia_kw,
         usina_id=usina_id,
+        dias_com_ocorrencia=dias_com_ocorrencia,
+        ocorrencias_por_dia=ocorrencias_por_dia,
         ano=ano,
         mes=mes,
         usinas=usinas,
@@ -4984,10 +5121,7 @@ def editar_fatura(id):
 @app.route('/relatorio/<int:fatura_id>')
 def relatorio_fatura(fatura_id):
 
-    # =====================================================
     # FATURA, CLIENTE E USINA
-    # =====================================================
-
     fatura = (
         FaturaMensal.query
         .get_or_404(
@@ -5001,7 +5135,6 @@ def relatorio_fatura(fatura_id):
     )
 
     if not cliente:
-
         abort(
             404,
             description='Cliente da fatura não encontrado.'
@@ -5022,16 +5155,12 @@ def relatorio_fatura(fatura_id):
     )
 
     if not usina:
-
         abort(
             404,
             description='Usina da fatura não encontrada.'
         )
 
-    # =====================================================
     # CÁLCULO DA FATURA ATUAL
-    # =====================================================
-
     calculo = calcular_valores_fatura(
         fatura=fatura,
         cliente=cliente,
@@ -5074,10 +5203,7 @@ def relatorio_fatura(fatura_id):
         ]
     )
 
-    # =====================================================
     # ECONOMIA DAS FATURAS ANTERIORES
-    # =====================================================
-
     faturas_anteriores = (
         FaturaMensal.query
         .filter(
@@ -5116,9 +5242,7 @@ def relatorio_fatura(fatura_id):
     )
 
     for fatura_anterior in faturas_anteriores:
-
         try:
-
             usina_anterior_id = (
                 getattr(
                     fatura_anterior,
@@ -5131,18 +5255,15 @@ def relatorio_fatura(fatura_id):
             # Na maioria dos casos será a mesma usina,
             # então reutiliza o objeto já carregado.
             if usina_anterior_id == usina.id:
-
                 usina_anterior = usina
 
             else:
-
                 usina_anterior = db.session.get(
                     Usina,
                     usina_anterior_id
                 )
 
             if not usina_anterior:
-
                 app.logger.warning(
                     '[RELATORIO] Usina não encontrada para '
                     'a fatura anterior id=%s.',
@@ -5175,10 +5296,7 @@ def relatorio_fatura(fatura_id):
 
             continue
 
-    # =====================================================
     # ECONOMIA EXTRA
-    # =====================================================
-
     economia_extra_total = (
         db.session.query(
             db.func.sum(
@@ -5211,14 +5329,10 @@ def relatorio_fatura(fatura_id):
         rounding=ROUND_HALF_UP
     )
 
-    # =====================================================
     # GERAÇÃO DO PERÍODO
-    # =====================================================
-
     geracao_periodo = None
 
     if cliente.consumo_instantaneo:
-
         geracao_periodo = (
             db.session.query(
                 db.func.sum(
@@ -5243,10 +5357,7 @@ def relatorio_fatura(fatura_id):
             rounding=ROUND_HALF_UP
         )
 
-    # =====================================================
     # FICHA DE COMPENSAÇÃO
-    # =====================================================
-
     pasta_boletos = (
         '/data/boletos'
     )
@@ -5266,7 +5377,6 @@ def relatorio_fatura(fatura_id):
     )
 
     ficha_compensacao_data_uri = None
-
     if os.path.exists(
         pdf_path
     ):
@@ -5303,10 +5413,7 @@ def relatorio_fatura(fatura_id):
                 fatura.id
             )
 
-    # =====================================================
     # LOGO CGR
-    # =====================================================
-
     logo_cgr_data_uri = None
 
     logo_cgr_path = os.path.abspath(
@@ -5337,10 +5444,7 @@ def relatorio_fatura(fatura_id):
             logo_cgr_path
         )
 
-    # =====================================================
     # LOGO DA USINA
-    # =====================================================
-
     logo_usina_data_uri = None
 
     if usina.logo_url:
@@ -5404,7 +5508,6 @@ def relatorio_fatura(fatura_id):
         if caminho_logo:
 
             try:
-
                 extensao = (
                     os.path.splitext(
                         caminho_logo
@@ -5437,10 +5540,7 @@ def relatorio_fatura(fatura_id):
                     usina.id
                 )
 
-    # =====================================================
     # BOOTSTRAP
-    # =====================================================
-
     bootstrap_arquivo = os.path.abspath(
         'static/css/bootstrap.min.css'
     ).replace(
@@ -5453,7 +5553,6 @@ def relatorio_fatura(fatura_id):
     )
 
     # RENDERIZAÇÃO
-
     return render_template(
         'relatorio_fatura.html',
         fatura=fatura,
@@ -15830,99 +15929,139 @@ def excluir_geracao_inversor(usina_id, geracao_id):
 
     return redirect(url_for('painel_inversores_usina', usina_id=usina.id, **request.args))
 
-@app.route('/usinas/<int:usina_id>/analise-diaria', methods=['GET', 'POST'], endpoint='analise_diaria')
+@app.route(
+    '/usinas/<int:usina_id>/analise-diaria',
+    methods=['GET', 'POST'],
+    endpoint='analise_diaria'
+)
 @login_required
 def analise_diaria(usina_id):
+
     usina = Usina.query.get_or_404(usina_id)
 
-    # Data de referência (GET ou POST mantém o mesmo comportamento)
+    # DATA DE REFERÊNCIA
     data_str = request.values.get('data') or ''
+
     try:
-        data_ref = datetime.strptime(data_str, '%Y-%m-%d').date() if data_str else date.today()
+        data_ref = (
+            datetime.strptime(
+                data_str,
+                '%Y-%m-%d'
+            ).date()
+            if data_str
+            else date.today()
+        )
     except ValueError:
         data_ref = date.today()
 
-    # Inversores ativos
-    inversores = (InversorCadastrado.query
-                  .filter_by(usina_id=usina_id, ativo=True)
-                  .order_by(InversorCadastrado.nome.asc().nullslast(),
-                            InversorCadastrado.inverter_sn.asc())
-                  .all())
-
-    # POST: criar um novo status (múltiplas vezes ao dia)
+    # CADASTRAR OCORRÊNCIA
     if request.method == 'POST':
-        inverter_sn   = (request.form.get('inverter_sn') or '').strip()
-        if not inverter_sn:
-            flash('Selecione um inversor.', 'warning')
-            return redirect(url_for('analise_diaria', usina_id=usina_id, data=data_ref.strftime('%Y-%m-%d')))
 
-        online        = bool(request.form.get('online'))
-        comunicando   = bool(request.form.get('comunicando'))
-        mensagem_erro = (request.form.get('mensagem_erro') or '').strip() or None
+        mensagem = (
+            request.form.get('mensagem')
+            or ''
+        ).strip()
 
-        # Hora do registro (HH:MM)
-        hora_str = request.form.get('hora') or ''
+        percentual_str = (
+            request.form.get('percentual_impacto')
+            or '0'
+        ).replace(',', '.')
+
         try:
-            hora = datetime.strptime(hora_str, '%H:%M').time() if hora_str else datetime.now().time()
-        except ValueError:
-            hora = datetime.now().time()
+            percentual_impacto = Decimal(
+                percentual_str
+            )
+        except Exception:
+            percentual_impacto = Decimal('0')
 
-        coletado_em = datetime.combine(data_ref, hora)
+        # VALIDAÇÕES
+        if not mensagem:
 
-        # Último ping (datetime-local: YYYY-MM-DDTHH:MM)
-        up_str = request.form.get('ultimo_ping_dt') or ''
-        try:
-            ultimo_ping = datetime.strptime(up_str, '%Y-%m-%dT%H:%M') if up_str else None
-        except ValueError:
-            ultimo_ping = None
+            flash(
+                'Informe a descrição do erro.',
+                'warning'
+            )
 
-        # Cria um novo registro (NÃO faz upsert por dia, permite vários)
-        reg = Monitoramento(
+            return redirect(
+                url_for(
+                    'analise_diaria',
+                    usina_id=usina_id,
+                    data=data_ref.strftime('%Y-%m-%d')
+                )
+            )
+
+        if (
+            percentual_impacto < 0
+            or percentual_impacto > 100
+        ):
+
+            flash(
+                'O impacto deve estar entre 0% e 100%.',
+                'warning'
+            )
+
+            return redirect(
+                url_for(
+                    'analise_diaria',
+                    usina_id=usina_id,
+                    data=data_ref.strftime('%Y-%m-%d')
+                )
+            )
+
+        ocorrencia = OcorrenciaUsina(
             usina_id=usina_id,
-            inverter_sn=inverter_sn,
             data=data_ref,
-            online=online,
-            comunicando=comunicando,
-            mensagem_erro=mensagem_erro,
-            coletado_em=coletado_em,
-            ultimo_ping=ultimo_ping
+            mensagem=mensagem,
+            percentual_impacto=percentual_impacto
         )
 
-        # puxa potência do cadastro se houver
-        inv = next((i for i in inversores if i.inverter_sn == inverter_sn), None)
-        if inv and inv.potencia_kw is not None:
-            reg.potencia_kw = inv.potencia_kw
-
-        db.session.add(reg)
+        db.session.add(ocorrencia)
         db.session.commit()
-        flash('Status registrado com sucesso!', 'success')
-        return redirect(url_for('analise_diaria', usina_id=usina_id, data=data_ref.strftime('%Y-%m-%d')))
 
-    # Carrega TODOS os registros do dia para a usina (podem existir vários por inversor)
-    regs_do_dia = (Monitoramento.query
-                   .filter(Monitoramento.usina_id == usina_id,
-                           Monitoramento.data == data_ref)
-                   .order_by(Monitoramento.inverter_sn.asc(),
-                             Monitoramento.coletado_em.desc().nullslast(),
-                             Monitoramento.id.desc())
-                   .all())
+        flash(
+            'Ocorrência registrada com sucesso!',
+            'success'
+        )
 
-    # Mapa: inverter_sn -> ÚLTIMO registro do dia (o mais recente)
-    reg_por_sn = {}
-    # Histórico por SN
-    historico_por_sn = {}
-    for r in regs_do_dia:
-        historico_por_sn.setdefault(r.inverter_sn, []).append(r)
-        if r.inverter_sn not in reg_por_sn:
-            reg_por_sn[r.inverter_sn] = r  # primeiro da lista já é o mais recente pelo order_by
+        return redirect(
+            url_for(
+                'analise_diaria',
+                usina_id=usina_id,
+                data=data_ref.strftime('%Y-%m-%d')
+            )
+        )
+
+    # OCORRÊNCIAS DO DIA
+    ocorrencias = (
+        OcorrenciaUsina.query
+        .filter(
+            OcorrenciaUsina.usina_id == usina_id,
+            OcorrenciaUsina.data == data_ref
+        )
+        .order_by(
+            OcorrenciaUsina.id.desc()
+        )
+        .all()
+    )
+
+    # IMPACTO TOTAL DO DIA
+    impacto_total = sum(
+        (
+            o.percentual_impacto or Decimal('0')
+            for o in ocorrencias
+        ),
+        Decimal('0')
+    )
+
+    if impacto_total > 100:
+        impacto_total = Decimal('100')
 
     return render_template(
         'analise_diaria.html',
         usina=usina,
-        inversores=inversores,
         data_ref=data_ref,
-        reg_por_sn=reg_por_sn,           # usado para exibir "o estado atual" por inversor
-        historico_por_sn=historico_por_sn # usado para exibir o histórico do dia
+        ocorrencias=ocorrencias,
+        impacto_total=impacto_total
     )
     
 @app.route('/empresa/cadastrar', methods=['GET','POST'], endpoint='cadastrar_empresa_operacional')
