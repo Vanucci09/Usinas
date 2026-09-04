@@ -862,6 +862,17 @@ class ContaConcessionaria(db.Model):
         db.ForeignKey('empresas.id'),
         nullable=False
     )
+    
+    cancelado = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=False
+    )
+
+    cancelado_em = db.Column(
+        db.DateTime(timezone=True),
+        nullable=True
+    )
 
     vendedor_id = db.Column(
         db.Integer,
@@ -2165,10 +2176,7 @@ def producao_mensal(usina_id, ano, mes):
         for _ in range(dias_mes)
     ]
     
-    # ==========================================
     # OCORRÊNCIAS DA USINA NO MÊS
-    # ==========================================
-
     ocorrencias_mes = (
         OcorrenciaUsina.query
         .filter(
@@ -2432,27 +2440,15 @@ def producao_mensal(usina_id, ano, mes):
         ano=ano,
         mes=mes,
         usinas=usinas,
-        meses=[
-            str(i + 1)
-            for i in range(dias_mes)
-        ],
+        meses=[str(i + 1) for i in range(dias_mes)],
         totais=totais,
         detalhes=detalhes,
         soma_total=soma,
-        media_diaria=round(
-            media_diaria,
-            2
-        ),
+        media_diaria=round(media_diaria, 2),
         previsao_total=previsao_total,
         previsoes=previsoes,
-        previsao_mensal=round(
-            valor_mensal,
-            2
-        ),
-        ano_geracao_total=round(
-            ano_sum,
-            2
-        ),
+        previsao_mensal=round(valor_mensal, 2),
+        ano_geracao_total=round(ano_sum, 2),
         ano_faturamento_bruto=ano_bruto,
         ano_faturamento_liquido=ano_liquido,
         dias_no_mes=dias_mes,
@@ -23084,9 +23080,13 @@ def nova_conta_concessionaria():
         vendedor_logado=vendedor_logado
     )
     
+from datetime import datetime, timedelta, timezone
+
+
 @app.route('/contas-concessionaria')
 @login_required
 def listar_contas_concessionaria():
+
     pagina = request.args.get(
         'page',
         1,
@@ -23107,106 +23107,197 @@ def listar_contas_concessionaria():
         ''
     ).strip()
 
+    # CANCELAMENTO AUTOMÁTICO APÓS 15 DIAS
+    data_limite = (
+        datetime.now(timezone.utc)
+        - timedelta(days=15)
+    )
+
+    propostas_vencidas = (
+        ContaConcessionaria.query
+        .filter(
+            ContaConcessionaria.validacao_cliente.is_(False),
+            ContaConcessionaria.cancelado.is_(False),
+            ContaConcessionaria.criado_em < data_limite
+        )
+        .all()
+    )
+
+    if propostas_vencidas:
+
+        agora = datetime.now(timezone.utc)
+
+        for conta in propostas_vencidas:
+
+            conta.cancelado = True
+            conta.cancelado_em = agora
+
+        db.session.commit()
+
+    # QUERY BASE
     query = (
         ContaConcessionaria.query
         .join(
             CentroCusto,
-            ContaConcessionaria.centro_custo_id == CentroCusto.id
+            ContaConcessionaria.centro_custo_id
+            == CentroCusto.id
         )
     )
 
-    # Comercial vê apenas os próprios registros
+    # CANCELADOS
+    # =========================================================
+    # Por padrão NÃO mostra cancelados.
+    # Só mostra quando selecionar o filtro Cancelado.
+
+    if status == 'cancelado':
+
+        query = query.filter(
+            ContaConcessionaria.cancelado.is_(True)
+        )
+
+    else:
+
+        query = query.filter(
+            ContaConcessionaria.cancelado.is_(False)
+        )
+
+    # COMERCIAL VÊ APENAS OS PRÓPRIOS REGISTROS
     if (
         current_user.pode_acessar_comercial
-        and current_user.perfil not in ['admin', 'gerente_comercial']
+        and current_user.perfil not in [
+            'admin',
+            'gerente_comercial'
+        ]
     ):
 
-        vendedor = Vendedor.query.filter_by(
-            usuario_id=current_user.id,
-            ativo=True
-        ).first()
+        vendedor = (
+            Vendedor.query
+            .filter_by(
+                usuario_id=current_user.id,
+                ativo=True
+            )
+            .first()
+        )
 
         if vendedor:
 
             query = query.filter(
-                ContaConcessionaria.vendedor_id == vendedor.id
+                ContaConcessionaria.vendedor_id
+                == vendedor.id
             )
 
         else:
+
             query = query.filter(False)
 
-    # Filtro por vendedor
+    # FILTRO POR VENDEDOR
     if vendedor_id:
+
         query = query.filter(
-            ContaConcessionaria.vendedor_id == vendedor_id
+            ContaConcessionaria.vendedor_id
+            == vendedor_id
         )
 
-    # Filtro por nome
+    # FILTRO POR NOME
     if nome:
+
         query = query.filter(
-            CentroCusto.nome.ilike(f'%{nome}%')
+            CentroCusto.nome.ilike(
+                f'%{nome}%'
+            )
         )
 
-    # Filtro por status
+    # FILTRO POR STATUS
     if status == 'analise':
+
         query = query.filter(
             ContaConcessionaria.email_enviado.is_(False),
             ContaConcessionaria.validacao_cliente.is_(False)
         )
 
     elif status == 'proposta_enviada':
+
         query = query.filter(
             ContaConcessionaria.email_enviado.is_(True),
             ContaConcessionaria.validacao_cliente.is_(False)
         )
 
     elif status == 'aprovado':
+
         query = query.filter(
             ContaConcessionaria.validacao_cliente.is_(True)
         )
 
     elif status == 'documentacao':
+
         query = query.filter(
             ContaConcessionaria.validacao_cliente.is_(True),
             ContaConcessionaria.documentacao_enviada.is_(False)
         )
 
     elif status == 'assinatura':
+
         query = query.filter(
             ContaConcessionaria.termo_enviado.is_(True),
             ContaConcessionaria.termo_assinado.is_(False)
         )
 
     elif status == 'assinado':
+
         query = query.filter(
             ContaConcessionaria.termo_assinado.is_(True)
         )
 
-    # KPIs já considerando todos os filtros
+    # Cancelado já foi tratado anteriormente,
+    # então não precisa aplicar outro filtro aqui.
+
+    # KPIs
     total = query.count()
-    aceitas = query.filter(
-        ContaConcessionaria.validacao_cliente.is_(True)
-    ).count()
 
-    cliente_aprovar = query.filter(
-        ContaConcessionaria.email_enviado.is_(True),
-        ContaConcessionaria.validacao_cliente.is_(False)
-    ).count()
+    aceitas = (
+        query
+        .filter(
+            ContaConcessionaria.validacao_cliente.is_(True)
+        )
+        .count()
+    )
 
-    documentacao = query.filter(
-        ContaConcessionaria.validacao_cliente.is_(True),
-        ContaConcessionaria.documentacao_enviada.is_(False)
-    ).count()
+    cliente_aprovar = (
+        query
+        .filter(
+            ContaConcessionaria.email_enviado.is_(True),
+            ContaConcessionaria.validacao_cliente.is_(False)
+        )
+        .count()
+    )
 
-    assinatura = query.filter(
-        ContaConcessionaria.termo_enviado.is_(True),
-        ContaConcessionaria.termo_assinado.is_(False)
-    ).count()
+    documentacao = (
+        query
+        .filter(
+            ContaConcessionaria.validacao_cliente.is_(True),
+            ContaConcessionaria.documentacao_enviada.is_(False)
+        )
+        .count()
+    )
 
-    proposta_enviada = query.filter(
-        ContaConcessionaria.email_enviado.is_(True)
-    ).count()
+    assinatura = (
+        query
+        .filter(
+            ContaConcessionaria.termo_enviado.is_(True),
+            ContaConcessionaria.termo_assinado.is_(False)
+        )
+        .count()
+    )
 
+    proposta_enviada = (
+        query
+        .filter(
+            ContaConcessionaria.email_enviado.is_(True)
+        )
+        .count()
+    )
+
+    # PAGINAÇÃO
     contas = (
         query
         .order_by(
@@ -23219,13 +23310,19 @@ def listar_contas_concessionaria():
         )
     )
 
+    # VENDEDORES
     vendedores = (
         Vendedor.query
-        .filter_by(ativo=True)
-        .order_by(Vendedor.nome)
+        .filter_by(
+            ativo=True
+        )
+        .order_by(
+            Vendedor.nome
+        )
         .all()
     )
 
+    # TEMPLATE
     return render_template(
         'contas_concessionaria_lista.html',
         contas=contas,
@@ -23239,6 +23336,65 @@ def listar_contas_concessionaria():
         documentacao=documentacao,
         assinatura=assinatura,
         proposta_enviada=proposta_enviada
+    )
+    
+@app.route(
+    '/contas-concessionaria/<int:conta_id>/cancelar',
+    methods=['POST']
+)
+@login_required
+def cancelar_conta_concessionaria(conta_id):
+
+    conta = ContaConcessionaria.query.get_or_404(
+        conta_id
+    )
+
+    # NÃO PERMITE CANCELAR SE CLIENTE JÁ APROVOU
+    if conta.validacao_cliente:
+
+        flash(
+            'Não é possível cancelar uma proposta que já foi aprovada pelo cliente.',
+            'warning'
+        )
+
+        return redirect(
+            url_for(
+                'listar_contas_concessionaria'
+            )
+        )
+
+    # JÁ ESTÁ CANCELADA
+    if conta.cancelado:
+
+        flash(
+            'Esta proposta já está cancelada.',
+            'warning'
+        )
+
+        return redirect(
+            url_for(
+                'listar_contas_concessionaria',
+                status='cancelado'
+            )
+        )
+
+    # CANCELAR
+    conta.cancelado = True
+    conta.cancelado_em = datetime.now(
+        timezone.utc
+    )
+
+    db.session.commit()
+
+    flash(
+        'Proposta cancelada com sucesso.',
+        'success'
+    )
+
+    return redirect(
+        url_for(
+            'listar_contas_concessionaria'
+        )
     )
     
 @app.route('/contas-concessionaria/<int:conta_id>/proposta/<slug>')
@@ -25496,6 +25652,7 @@ def baixar_documento_adesao(arquivo):
 @login_required
 def excluir_documento_adesao(documento_id):
 
+    # SOMENTE ADMIN PODE EXCLUIR
     if current_user.perfil != 'admin':
         abort(403)
 
@@ -25508,10 +25665,27 @@ def excluir_documento_adesao(documento_id):
         documento.conta_concessionaria_id
     )
 
-    conta_id = (
-        documento.conta_concessionaria_id
-    )
+    if not conta:
+        abort(404)
 
+    conta_id = conta.id
+
+    # NÃO PERMITE EXCLUIR SE O TERMO JÁ FOI ENVIADO
+    if conta.termo_enviado:
+
+        flash(
+            'Não é possível excluir documentos após o envio do termo.',
+            'warning'
+        )
+
+        return redirect(
+            url_for(
+                'visualizar_documentos_adesao',
+                conta_id=conta_id
+            )
+        )
+
+    # CAMINHO DOS DOCUMENTOS
     caminho_base = os.getenv(
         'DOCUMENTOS_PATH',
         os.path.join(
@@ -25523,12 +25697,8 @@ def excluir_documento_adesao(documento_id):
 
     try:
 
-        # Se for o termo assinado,
-        # reinicia todo o processo
-        if (
-            documento.tipo_documento
-            == 'termo_assinado'
-        ):
+        # TERMO ASSINADO
+        if documento.tipo_documento == 'termo_assinado':
 
             # Remove arquivo da assinatura
             if conta.assinatura_arquivo:
@@ -25538,20 +25708,17 @@ def excluir_documento_adesao(documento_id):
                     conta.assinatura_arquivo
                 )
 
-                if os.path.exists(
-                    caminho_assinatura
-                ):
-                    os.remove(
-                        caminho_assinatura
-                    )
+                if os.path.exists(caminho_assinatura):
+                    os.remove(caminho_assinatura)
 
-            # Remove todos os documentos
-            # relacionados ao termo
+            # Busca todos os documentos relacionados ao termo
             documentos_termo = (
-                DocumentoAdesao.query.filter_by(
+                DocumentoAdesao.query
+                .filter_by(
                     conta_concessionaria_id=conta.id,
                     tipo_documento='termo_assinado'
-                ).all()
+                )
+                .all()
             )
 
             for doc in documentos_termo:
@@ -25561,16 +25728,10 @@ def excluir_documento_adesao(documento_id):
                     doc.caminho
                 )
 
-                if os.path.exists(
-                    caminho_doc
-                ):
-                    os.remove(
-                        caminho_doc
-                    )
+                if os.path.exists(caminho_doc):
+                    os.remove(caminho_doc)
 
-                db.session.delete(
-                    doc
-                )
+                db.session.delete(doc)
 
             # Limpa informações da assinatura
             conta.termo_assinado = False
@@ -25579,17 +25740,11 @@ def excluir_documento_adesao(documento_id):
             conta.user_agent_assinatura = None
             conta.assinatura_arquivo = None
 
-            # Permite reenviar o termo
+            # Reinicia controle do termo
             conta.termo_enviado = False
             conta.data_envio_termo = None
 
-            db.session.commit()
-
-            flash(
-                'Processo de assinatura reiniciado com sucesso.',
-                'success'
-            )
-
+        # DOCUMENTO NORMAL
         else:
 
             caminho_arquivo = os.path.join(
@@ -25597,24 +25752,38 @@ def excluir_documento_adesao(documento_id):
                 documento.caminho
             )
 
-            if os.path.exists(
-                caminho_arquivo
-            ):
-                os.remove(
-                    caminho_arquivo
-                )
+            if os.path.exists(caminho_arquivo):
+                os.remove(caminho_arquivo)
 
-            db.session.delete(
-                documento
-            )
+            db.session.delete(documento)
 
-            db.session.commit()
-            flash(
-                'Documento excluído com sucesso.',
-                'success'
+        # FORÇA O DELETE ANTES DE CONTAR
+        db.session.flush()
+
+        # VERIFICA SE AINDA EXISTEM DOCUMENTOS
+        quantidade_documentos = (
+            DocumentoAdesao.query
+            .filter_by(
+                conta_concessionaria_id=conta.id
             )
+            .count()
+        )
+
+        # Se não restou nenhum documento,
+        # documentação volta para não enviada
+        if quantidade_documentos == 0:
+            conta.documentacao_enviada = False
+
+        # SALVA TUDO
+        db.session.commit()
+
+        flash(
+            'Documento excluído com sucesso.',
+            'success'
+        )
 
     except Exception as e:
+
         db.session.rollback()
         print(
             'ERRO AO EXCLUIR DOCUMENTO:',

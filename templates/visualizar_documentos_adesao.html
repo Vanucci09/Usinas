@@ -156,38 +156,43 @@
 
                                     {% if current_user.perfil == 'admin' %}
 
-                                    <!-- Editar -->
-                                    <button
-                                        type="button"
-                                        class="btn btn-sm btn-outline-warning"
-                                        data-bs-toggle="modal"
-                                        data-bs-target="#editarDocumento{{ doc.id }}"
-                                        title="Substituir Arquivo">
-
-                                        <i class="bi bi-pencil"></i>
-
-                                    </button>
-
-                                    <!-- Excluir -->
-                                    <form method="POST"
-                                        action="{{ url_for(
-                                            'excluir_documento_adesao',
-                                            documento_id=doc.id
-                                        ) }}"
-                                        class="d-inline">
-
-                                        <button type="submit"
-                                                class="btn btn-sm btn-outline-danger"
-                                                title="Excluir"
-                                                onclick="return confirm('Deseja realmente excluir este documento?')">
-
-                                            <i class="bi bi-trash"></i>
-
+                                        <!-- Editar -->
+                                        <button
+                                            type="button"
+                                            class="btn btn-sm btn-outline-warning"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#editarDocumento{{ doc.id }}"
+                                            title="Substituir Arquivo"
+                                        >
+                                            <i class="bi bi-pencil"></i>
                                         </button>
 
-                                    </form>
+                                        {% if not conta.termo_enviado %}
 
-                                {% endif %}
+                                            <!-- Excluir -->
+                                            <form
+                                                method="POST"
+                                                action="{{ url_for(
+                                                    'excluir_documento_adesao',
+                                                    documento_id=doc.id
+                                                ) }}"
+                                                class="d-inline"
+                                            >
+                                                <button
+                                                    type="submit"
+                                                    class="btn btn-sm btn-outline-danger"
+                                                    title="Excluir"
+                                                    onclick="return confirm(
+                                                        'Deseja realmente excluir este documento?'
+                                                    )"
+                                                >
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
+
+                                        {% endif %}
+
+                                    {% endif %}
 
                                     </form>
 

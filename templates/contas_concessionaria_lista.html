@@ -220,6 +220,11 @@
                         Termo Assinado
                     </option>
 
+                    <option value="cancelado"
+                        {% if status == 'cancelado' %}selected{% endif %}>
+                        Cancelado
+                    </option>
+
                 </select>
             </div>
 
@@ -284,7 +289,14 @@
                         </td>
                         <td class="text-center">
 
-                            {% if conta.termo_assinado %}
+                            {% if conta.cancelado %}
+
+                                <span class="badge bg-danger-subtle text-danger border px-2 py-1.5 rounded-pill w-100 d-inline-block text-center">
+                                    <i class="bi bi-x-circle me-1"></i>
+                                    Cancelado
+                                </span>
+
+                            {% elif conta.termo_assinado %}
 
                                 <span class="badge bg-success-subtle text-success border px-2 py-1.5 rounded-pill w-100 d-inline-block text-center">
                                     <i class="bi bi-pen me-1"></i>
@@ -336,12 +348,10 @@
                         </td>
                         <td class="pe-4">
                             <div class="d-flex justify-content-center gap-1">
-                                <a href="{{ url_for('proposta_conta_concessionaria', conta_id=conta.id, slug=(conta.centro_custo.nome|lower|replace(' ', '-'))) }}" 
-                                   target="_blank" 
-                                   class="btn btn-sm btn-light border shadow-xs btn-action" 
-                                   title="Visualizar Proposta">
-                                    <i class="bi bi-file-earmark-text text-success"></i>
-                                </a>                                
+
+                                {# ========================================= #}
+                                {# OBSERVAÇÕES - SEMPRE DISPONÍVEL           #}
+                                {# ========================================= #}
 
                                 <a
                                     href="#"
@@ -369,127 +379,228 @@
                                     {% endif %}
                                 </a>
 
-                                {% if conta.validacao_cliente and not conta.termo_enviado %}
 
-                                <a href="{{ url_for(
-                                    'termo_adesao_concessionaria',
-                                    conta_id=conta.id
-                                ) }}"
-                                target="_blank"
-                                class="btn btn-sm btn-light border shadow-xs btn-action"
-                                title="Termo de Adesão">
+                                {# ========================================= #}
+                                {# DEMAIS AÇÕES - SOMENTE SE NÃO CANCELADO  #}
+                                {# ========================================= #}
 
-                                    <i class="bi bi-file-earmark-richtext text-warning"></i>
+                                {% if not conta.cancelado %}
 
-                                </a>
+                                    {# CANCELAR PROPOSTA #}
 
-                                {% endif %}
+                                    {% if not conta.validacao_cliente %}
 
-                                {% if conta.validacao_cliente %}
-
-                                {% if conta.documentacao_enviada
-                                    and not conta.termo_assinado
-                                    and not conta.termo_enviado %}
-
-                                <a href="{{ url_for(
-                                    'enviar_termo_concessionaria',
-                                    conta_id=conta.id
-                                ) }}"
-                                class="btn btn-sm btn-light border shadow-xs btn-action"
-                                title="Enviar Termo para Assinatura">
-
-                                    <i class="bi bi-envelope-paper text-primary"></i>
-
-                                </a>
-
-                                {% endif %}
-
-                                {% if conta.termo_assinado %}
-
-                                <a href="{{ url_for(
-                                    'visualizar_termo_assinado',
-                                    conta_id=conta.id
-                                ) }}"
-                                target="_blank"
-                                class="btn btn-sm btn-light border shadow-xs btn-action"
-                                title="Visualizar Termo Assinado">
-
-                                    <i class="bi bi-file-earmark-check text-success"></i>
-
-                                </a>
-
-                                {% endif %}
-
-                                {% if conta.termo_enviado
-                                    and not conta.termo_assinado %}
-
-                                <a href="{{ url_for(
-                                    'enviar_termo_concessionaria',
-                                    conta_id=conta.id
-                                ) }}"
-                                class="btn btn-sm btn-light border shadow-xs btn-action"
-                                title="Reenviar Termo">
-
-                                    <i class="bi bi-arrow-repeat text-info"></i>
-
-                                </a>
-
-                                {% endif %}
-
-                                {% if not conta.documentacao_enviada %}
-                                <a href="{{ url_for(
-                                    'documentos_adesao_concessionaria',
-                                    conta_id=conta.id
-                                ) }}"
-                                class="btn btn-sm btn-light border shadow-xs btn-action"
-                                title="Enviar Documentação">
-                                    <i class="bi bi-cloud-upload text-primary"></i>
-                                </a>
-                                {% endif %}
-
-                                {% if conta.documentacao_enviada %}
-                                <a href="{{ url_for(
-                                    'visualizar_documentos_adesao',
-                                    conta_id=conta.id
-                                ) }}"
-                                class="btn btn-sm btn-light border shadow-xs btn-action"
-                                title="Visualizar Documentação">
-                                    <i class="bi bi-folder2-open text-primary"></i>
-                                </a>
-                                {% endif %}
-
-                                {% endif %}
-
-                                {% if not conta.validacao_cliente %}
-
-                                {% if conta.validacao_vendedor %}
-                                    <a href="{{ url_for('enviar_email_conta_concessionaria', conta_id=conta.id) }}" 
-                                    class="btn btn-sm btn-light border shadow-xs btn-action" 
-                                    title="Enviar por e-mail">
-                                        <i class="bi bi-envelope text-dark"></i>
-                                    </a>
-                                {% else %}
-
-                                    <a href="{{ url_for('editar_conta_concessionaria', conta_id=conta.id) }}" 
-                                    class="btn btn-sm btn-light border shadow-xs btn-action" 
-                                    title="Editar">
-                                        <i class="bi bi-pencil text-primary"></i>
-                                    </a>
-
-                                    <form method="POST"
-                                        action="{{ url_for('excluir_conta_concessionaria', conta_id=conta.id) }}"
-                                        onsubmit="return confirm('Deseja realmente excluir esta conta?');"
-                                        class="d-inline">
-                                        <button type="submit"
+                                        <form
+                                            method="POST"
+                                            action="{{ url_for(
+                                                'cancelar_conta_concessionaria',
+                                                conta_id=conta.id
+                                            ) }}"
+                                            class="d-inline"
+                                            onsubmit="return confirm('Deseja realmente cancelar esta proposta?');"
+                                        >
+                                            <button
+                                                type="submit"
                                                 class="btn btn-sm btn-light border shadow-xs btn-action"
-                                                title="Excluir">
-                                            <i class="bi bi-trash text-danger"></i>
-                                        </button>
-                                    </form>
+                                                title="Cancelar Proposta"
+                                            >
+                                                <i class="bi bi-x-circle text-danger"></i>
+                                            </button>
+                                        </form>
+
+                                    {% endif %}
+
+
+                                    {# VISUALIZAR PROPOSTA #}
+
+                                    <a
+                                        href="{{ url_for(
+                                            'proposta_conta_concessionaria',
+                                            conta_id=conta.id,
+                                            slug=(
+                                                conta.centro_custo.nome
+                                                |lower
+                                                |replace(' ', '-')
+                                            )
+                                        ) }}"
+                                        target="_blank"
+                                        class="btn btn-sm btn-light border shadow-xs btn-action"
+                                        title="Visualizar Proposta"
+                                    >
+                                        <i class="bi bi-file-earmark-text text-success"></i>
+                                    </a>
+
+
+                                    {# TERMO DE ADESÃO #}
+
+                                    {% if conta.validacao_cliente
+                                        and not conta.termo_enviado %}
+
+                                        <a
+                                            href="{{ url_for(
+                                                'termo_adesao_concessionaria',
+                                                conta_id=conta.id
+                                            ) }}"
+                                            target="_blank"
+                                            class="btn btn-sm btn-light border shadow-xs btn-action"
+                                            title="Termo de Adesão"
+                                        >
+                                            <i class="bi bi-file-earmark-richtext text-warning"></i>
+                                        </a>
+
+                                    {% endif %}
+
+
+                                    {% if conta.validacao_cliente %}
+
+                                        {# ENVIAR TERMO #}
+
+                                        {% if conta.documentacao_enviada
+                                            and not conta.termo_assinado
+                                            and not conta.termo_enviado %}
+
+                                            <a
+                                                href="{{ url_for(
+                                                    'enviar_termo_concessionaria',
+                                                    conta_id=conta.id
+                                                ) }}"
+                                                class="btn btn-sm btn-light border shadow-xs btn-action"
+                                                title="Enviar Termo para Assinatura"
+                                            >
+                                                <i class="bi bi-envelope-paper text-primary"></i>
+                                            </a>
+
+                                        {% endif %}
+
+
+                                        {# VISUALIZAR TERMO ASSINADO #}
+
+                                        {% if conta.termo_assinado %}
+
+                                            <a
+                                                href="{{ url_for(
+                                                    'visualizar_termo_assinado',
+                                                    conta_id=conta.id
+                                                ) }}"
+                                                target="_blank"
+                                                class="btn btn-sm btn-light border shadow-xs btn-action"
+                                                title="Visualizar Termo Assinado"
+                                            >
+                                                <i class="bi bi-file-earmark-check text-success"></i>
+                                            </a>
+
+                                        {% endif %}
+
+
+                                        {# REENVIAR TERMO #}
+
+                                        {% if conta.termo_enviado
+                                            and not conta.termo_assinado %}
+
+                                            <a
+                                                href="{{ url_for(
+                                                    'enviar_termo_concessionaria',
+                                                    conta_id=conta.id
+                                                ) }}"
+                                                class="btn btn-sm btn-light border shadow-xs btn-action"
+                                                title="Reenviar Termo"
+                                            >
+                                                <i class="bi bi-arrow-repeat text-info"></i>
+                                            </a>
+
+                                        {% endif %}
+
+
+                                        {# DOCUMENTAÇÃO #}
+
+                                        {% if not conta.documentacao_enviada %}
+
+                                            <a
+                                                href="{{ url_for(
+                                                    'documentos_adesao_concessionaria',
+                                                    conta_id=conta.id
+                                                ) }}"
+                                                class="btn btn-sm btn-light border shadow-xs btn-action"
+                                                title="Enviar Documentação"
+                                            >
+                                                <i class="bi bi-cloud-upload text-primary"></i>
+                                            </a>
+
+                                        {% endif %}
+
+
+                                        {% if conta.documentacao_enviada %}
+
+                                            <a
+                                                href="{{ url_for(
+                                                    'visualizar_documentos_adesao',
+                                                    conta_id=conta.id
+                                                ) }}"
+                                                class="btn btn-sm btn-light border shadow-xs btn-action"
+                                                title="Visualizar Documentação"
+                                            >
+                                                <i class="bi bi-folder2-open text-primary"></i>
+                                            </a>
+
+                                        {% endif %}
+
+                                    {% endif %}
+
+
+                                    {# EMAIL / EDITAR / EXCLUIR #}
+
+                                    {% if not conta.validacao_cliente %}
+
+                                        {% if conta.validacao_vendedor %}
+
+                                            <a
+                                                href="{{ url_for(
+                                                    'enviar_email_conta_concessionaria',
+                                                    conta_id=conta.id
+                                                ) }}"
+                                                class="btn btn-sm btn-light border shadow-xs btn-action"
+                                                title="Enviar por e-mail"
+                                            >
+                                                <i class="bi bi-envelope text-dark"></i>
+                                            </a>
+
+                                        {% else %}
+
+                                            <a
+                                                href="{{ url_for(
+                                                    'editar_conta_concessionaria',
+                                                    conta_id=conta.id
+                                                ) }}"
+                                                class="btn btn-sm btn-light border shadow-xs btn-action"
+                                                title="Editar"
+                                            >
+                                                <i class="bi bi-pencil text-primary"></i>
+                                            </a>
+
+                                            <form
+                                                method="POST"
+                                                action="{{ url_for(
+                                                    'excluir_conta_concessionaria',
+                                                    conta_id=conta.id
+                                                ) }}"
+                                                onsubmit="return confirm('Deseja realmente excluir esta conta?');"
+                                                class="d-inline"
+                                            >
+                                                <button
+                                                    type="submit"
+                                                    class="btn btn-sm btn-light border shadow-xs btn-action"
+                                                    title="Excluir"
+                                                >
+                                                    <i class="bi bi-trash text-danger"></i>
+                                                </button>
+                                            </form>
+
+                                        {% endif %}
+
+                                    {% endif %}
 
                                 {% endif %}
 
-                            {% endif %}
                             </div>
                         </td>
                     </tr>
