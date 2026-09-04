@@ -381,6 +381,28 @@
 
 
                                 {# ========================================= #}
+                                {# VISUALIZAR PROPOSTA - SEMPRE DISPONÍVEL   #}
+                                {# ========================================= #}
+
+                                <a
+                                    href="{{ url_for(
+                                        'proposta_conta_concessionaria',
+                                        conta_id=conta.id,
+                                        slug=(
+                                            conta.centro_custo.nome
+                                            |lower
+                                            |replace(' ', '-')
+                                        )
+                                    ) }}"
+                                    target="_blank"
+                                    class="btn btn-sm btn-light border shadow-xs btn-action"
+                                    title="Visualizar Proposta"
+                                >
+                                    <i class="bi bi-file-earmark-text text-success"></i>
+                                </a>
+
+
+                                {# ========================================= #}
                                 {# DEMAIS AÇÕES - SOMENTE SE NÃO CANCELADO  #}
                                 {# ========================================= #}
 
@@ -409,26 +431,6 @@
                                         </form>
 
                                     {% endif %}
-
-
-                                    {# VISUALIZAR PROPOSTA #}
-
-                                    <a
-                                        href="{{ url_for(
-                                            'proposta_conta_concessionaria',
-                                            conta_id=conta.id,
-                                            slug=(
-                                                conta.centro_custo.nome
-                                                |lower
-                                                |replace(' ', '-')
-                                            )
-                                        ) }}"
-                                        target="_blank"
-                                        class="btn btn-sm btn-light border shadow-xs btn-action"
-                                        title="Visualizar Proposta"
-                                    >
-                                        <i class="bi bi-file-earmark-text text-success"></i>
-                                    </a>
 
 
                                     {# TERMO DE ADESÃO #}

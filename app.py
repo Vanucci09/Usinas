@@ -23146,8 +23146,9 @@ def listar_contas_concessionaria():
 
     # CANCELADOS
     # =========================================================
-    # Por padrão NÃO mostra cancelados.
-    # Só mostra quando selecionar o filtro Cancelado.
+    # Se selecionar "Cancelado", mostra apenas cancelados.
+    # Se selecionar qualquer outro status específico, não mostra cancelados.
+    # Se status estiver vazio ("Todos"), mostra cancelados e não cancelados.
 
     if status == 'cancelado':
 
@@ -23155,7 +23156,7 @@ def listar_contas_concessionaria():
             ContaConcessionaria.cancelado.is_(True)
         )
 
-    else:
+    elif status:
 
         query = query.filter(
             ContaConcessionaria.cancelado.is_(False)
