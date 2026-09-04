@@ -199,7 +199,7 @@
 
         <tr>
             <td class="label">Desconto:</td>
-            <td>{{ conta.desconto|int }}% Sobre a TE</td>
+            <td>{{ "%.2f"|format(conta.desconto|float) }}% Sobre a TE</td>
         </tr>
 
         {% set prazo_fidelidade = 36 if (conta.desconto or 0) > 20 else 12 %}
