@@ -23400,6 +23400,21 @@ def cancelar_conta_concessionaria(conta_id):
     
 @app.route('/contas-concessionaria/<int:conta_id>/proposta/<slug>')
 def proposta_conta_concessionaria(conta_id, slug):
+    
+    conta = ContaConcessionaria.query.get_or_404(
+        conta_id
+    )
+
+    # ==========================================
+    # PROPOSTA CANCELADA
+    # ==========================================
+
+    if conta.cancelado:
+
+        return render_template(
+            'proposta_expirada.html',
+            conta=conta
+        ), 410
 
     conta = db.session.get(ContaConcessionaria, conta_id)
 
