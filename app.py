@@ -28232,61 +28232,87 @@ def dashboard_investidor():
     )
 
     # =====================================================
-    # TARIFA MÉDIA E ESTIMATIVAS
+    # TARIFA MÉDIA DOS CLIENTES ATIVOS
+    # =====================================================
+    # Considera somente clientes ativos da usina.
+    # Para cada cliente, utiliza o rateio ativo mais recente.
+
+    subquery_ultimo_rateio = (
+        db.session.query(
+            Rateio.cliente_id,
+            func.max(Rateio.id).label('ultimo_rateio_id')
+        )
+        .filter(
+            Rateio.usina_id == usina.id,
+            Rateio.ativo.is_(True)
+        )
+        .group_by(
+            Rateio.cliente_id
+        )
+        .subquery()
+    )
+
+    rateios_ativos = (
+        db.session.query(Rateio)
+        .join(
+            subquery_ultimo_rateio,
+            Rateio.id == subquery_ultimo_rateio.c.ultimo_rateio_id
+        )
+        .join(
+            Cliente,
+            Cliente.id == Rateio.cliente_id
+        )
+        .filter(
+            Cliente.usina_id == usina.id,
+            Cliente.ativo.is_(True)
+        )
+        .all()
+    )
+
+    # =====================================================
+    # TARIFA MÉDIA PONDERADA PELO RATEIO
     # =====================================================
 
-    # 1. Tenta calcular a tarifa do MÊS ATUAL (Faturamento do Mês / Geração do Mês)
-    if faturamento_bruto_mes > 0 and geracao_ate_agora > 0:
-        tarifa_media_estimada = faturamento_bruto_mes / geracao_ate_agora
+    soma_tarifa_ponderada = Decimal('0')
+    soma_percentual_rateio = Decimal('0')
 
-    else:
-        # 2. Se não houver faturamento no mês atual, calcula com base no MÊS ANTERIOR
-        data_inicio_mes_anterior = adicionar_meses(data_inicio, -1)
-        data_fim_mes_anterior = data_inicio
+    for rateio in rateios_ativos:
 
-        faturamento_mes_anterior = para_decimal(
-            db.session.query(
-                func.coalesce(
-                    func.sum(
-                        FinanceiroUsina.valor
-                        + func.coalesce(FinanceiroUsina.juros, 0)
-                    ),
-                    0
-                )
-            )
-            .filter(
-                FinanceiroUsina.usina_id == usina.id,
-                FinanceiroUsina.tipo == 'receita',
-                FinanceiroUsina.data_pagamento.isnot(None),
-                FinanceiroUsina.data_pagamento >= data_inicio_mes_anterior,
-                FinanceiroUsina.data_pagamento < data_fim_mes_anterior
-            )
-            .scalar()
+        tarifa = para_decimal(
+            rateio.tarifa_kwh
         )
 
-        geracao_mes_anterior = para_decimal(
-            db.session.query(
-                func.coalesce(
-                    func.sum(Geracao.energia_kwh),
-                    0
-                )
-            )
-            .filter(
-                Geracao.usina_id == usina.id,
-                Geracao.data >= data_inicio_mes_anterior,
-                Geracao.data < data_fim_mes_anterior
-            )
-            .scalar()
+        percentual = para_decimal(
+            rateio.percentual
         )
 
-        if faturamento_mes_anterior > 0 and geracao_mes_anterior > 0:
-            tarifa_media_estimada = faturamento_mes_anterior / geracao_mes_anterior
-        else:
-            tarifa_media_estimada = Decimal('0')
+        if (
+            tarifa > 0
+            and percentual > 0
+        ):
 
-    # Proteção contra NaN / Infinito
-    if tarifa_media_estimada.is_nan() or tarifa_media_estimada.is_infinite():
-        tarifa_media_estimada = Decimal('0')
+            soma_tarifa_ponderada += (
+                tarifa
+                * percentual
+            )
+
+            soma_percentual_rateio += percentual
+
+
+    tarifa_media_estimada = (
+        soma_tarifa_ponderada
+        / soma_percentual_rateio
+
+        if soma_percentual_rateio > 0
+
+        else Decimal('0')
+    )
+
+
+    tarifa_media_estimada = arredondar(
+        tarifa_media_estimada,
+        4
+    )
 
     # Valor estimado da geração já realizada no mês
     faturamento_estimado_geracao = (
@@ -28296,6 +28322,24 @@ def dashboard_investidor():
     # Projeção financeira com base na geração projetada
     faturamento_bruto_previsto_mes = (
         geracao_projetada_mes * tarifa_media_estimada
+    )
+    
+    # =====================================================
+    # DESVIO DA GERAÇÃO
+    # =====================================================
+    # Compara a projeção do mês com a previsão cadastrada.
+
+    desvio_geracao_kwh = (
+        geracao_projetada_mes
+        - previsao_mensal
+    )
+
+    desvio_geracao_percentual = (
+        desvio_geracao_kwh
+        / previsao_mensal
+        * Decimal('100')
+        if previsao_mensal > 0
+        else Decimal('0')
     )
 
     # A despesa projetada usa a média dos dias transcorridos
@@ -28517,6 +28561,14 @@ def dashboard_investidor():
         if retornos_positivos
         else Decimal('0')
     )
+    
+    retorno_medio_mensal_percentual = (
+        retorno_medio_mensal
+        / investimento_acionista
+        * Decimal('100')
+        if investimento_acionista > 0
+        else Decimal('0')
+    )
 
     meses_restantes_payback = None
     previsao_payback = None
@@ -28678,6 +28730,18 @@ def dashboard_investidor():
 
         'retorno_medio_mensal': arredondar(
             retorno_medio_mensal
+        ),
+        
+        'retorno_medio_mensal_percentual': arredondar(
+            retorno_medio_mensal_percentual
+        ),
+
+        'desvio_geracao_kwh': arredondar(
+            desvio_geracao_kwh
+        ),
+
+        'desvio_geracao_percentual': arredondar(
+            desvio_geracao_percentual
         ),
 
         'meses_restantes_payback': meses_restantes_payback,

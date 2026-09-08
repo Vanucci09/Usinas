@@ -317,8 +317,18 @@
 
                         <hr class="my-2">
 
-                        <div class="indicador-label">Retorno Médio Mensal</div>
-                        <div class="fs-6 fw-bold">{{ dashboard.retorno_medio_mensal | formato_brasileiro }}</div>
+                        <div class="indicador-label">
+                            Retorno Médio Mensal
+                        </div>
+
+                        <div class="fs-6 fw-bold">
+                            {{ dashboard.retorno_medio_mensal | formato_brasileiro }}
+                        </div>
+
+                        <div class="small text-success fw-semibold mt-1">
+                            {{ dashboard.retorno_medio_mensal_percentual | formato_brasileiro | replace('R$ ', '') }}%
+                            ao mês sobre o investimento
+                        </div>
                     </div>
                 </div>
             </div>
@@ -367,18 +377,50 @@
             <div class="col-12 col-md-4">
                 <div class="dashboard-card p-3">
                     <div class="d-flex justify-content-between align-items-start">
+
                         <div>
-                            <div class="indicador-label">Faturamento Estimado (Geração)</div>
-                            <div class="indicador-valor mt-1 valor-positivo">
-                                {{ dashboard.faturamento_estimado_mes | formato_brasileiro }}
+                            <div class="indicador-label">
+                                Previsão Cadastrada para o Mês
                             </div>
+
+                            <div class="indicador-valor mt-1 text-warning">
+                                {{ dashboard.previsao_mensal | formato_brasileiro | replace('R$ ', '') }}
+                                <span class="fs-6 font-monospace fw-normal text-muted">
+                                    kWh
+                                </span>
+                            </div>
+
                             <div class="indicador-secundario mt-2">
-                                Tarifa média: {{ dashboard.tarifa_media_estimada | formato_brasileiro }}/kWh
+
+                                {% if dashboard.desvio_geracao_percentual > 0 %}
+
+                                    Projeção
+                                    <strong class="text-success">
+                                        +{{ dashboard.desvio_geracao_percentual | formato_brasileiro | replace('R$ ', '') }}%
+                                    </strong>
+                                    acima da previsão
+
+                                {% elif dashboard.desvio_geracao_percentual < 0 %}
+
+                                    Projeção
+                                    <strong class="text-danger">
+                                        {{ dashboard.desvio_geracao_percentual | formato_brasileiro | replace('R$ ', '') }}%
+                                    </strong>
+                                    abaixo da previsão
+
+                                {% else %}
+
+                                    Projeção dentro da previsão cadastrada
+
+                                {% endif %}
+
                             </div>
                         </div>
-                        <div class="icone-indicador icone-azul">
-                            <i class="bi bi-currency-dollar"></i>
+
+                        <div class="icone-indicador icone-laranja">
+                            <i class="bi bi-bullseye"></i>
                         </div>
+
                     </div>
                 </div>
             </div>
@@ -386,7 +428,33 @@
 
         <!-- FATURAMENTO, RECEITA E DESPESAS -->
         <div class="row g-3 mb-4">
-            <div class="col-12 col-sm-6 col-xl-3">
+
+            <div class="col-12 col-sm-6 col-xl">
+                <div class="dashboard-card p-3">
+
+                    <div class="indicador-label">
+                        Faturamento Estimado
+                    </div>
+
+                    <div class="indicador-valor mt-1 text-primary">
+                        {{ dashboard.faturamento_estimado_mes | formato_brasileiro }}
+                    </div>
+
+                    <hr class="my-2">
+
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="indicador-secundario">
+                            Tarifa média:
+                        </span>
+
+                        <span class="fw-bold small">
+                            {{ dashboard.tarifa_media_estimada | formato_brasileiro }}/kWh
+                        </span>
+                    </div>
+
+                </div>
+            </div>
+            <div class="col-12 col-sm-6 col-xl">
                 <div class="dashboard-card p-3">
                     <div class="indicador-label">Faturamento Bruto</div>
                     <div class="indicador-valor valor-positivo mt-1">
@@ -400,7 +468,7 @@
                 </div>
             </div>
 
-            <div class="col-12 col-sm-6 col-xl-3">
+            <div class="col-12 col-sm-6 col-xl">
                 <div class="dashboard-card p-3">
                     <div class="indicador-label">Receita Líquida</div>
                     <div class="indicador-valor mt-1 {% if dashboard.receita_mes >= 0 %}valor-positivo{% else %}valor-negativo{% endif %}">
@@ -414,7 +482,7 @@
                 </div>
             </div>
 
-            <div class="col-12 col-sm-6 col-xl-3">
+            <div class="col-12 col-sm-6 col-xl">
                 <div class="dashboard-card p-3">
                     <div class="indicador-label">Despesa Bruta</div>
                     <div class="indicador-valor valor-negativo mt-1">
@@ -428,7 +496,7 @@
                 </div>
             </div>
 
-            <div class="col-12 col-sm-6 col-xl-3">
+            <div class="col-12 col-sm-6 col-xl">
                 <div class="dashboard-card p-3">
                     <div class="indicador-label">Arrendamento</div>
                     <div class="indicador-valor mt-1 text-secondary">
@@ -456,20 +524,11 @@
             </div>
 
             <div class="row g-3">
-                <div class="col-12 col-md-6">
+                <div class="col-12">
                     <div class="p-3 border rounded-3 bg-body-tertiary">
                         <div class="indicador-label">Geração Acumulada até o Período</div>
                         <div class="fs-4 fw-bold text-success mt-1">
                             {{ dashboard.geracao_acumulada | formato_brasileiro | replace('R$ ', '') }} <span class="fs-6 font-monospace text-muted">kWh</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-12 col-md-6">
-                    <div class="p-3 border rounded-3 bg-body-tertiary">
-                        <div class="indicador-label">Previsão Cadastrada para o Mês</div>
-                        <div class="fs-4 fw-bold text-warning mt-1">
-                            {{ dashboard.previsao_mensal | formato_brasileiro }} <span class="fs-6 font-monospace text-muted">kWh</span>
                         </div>
                     </div>
                 </div>
