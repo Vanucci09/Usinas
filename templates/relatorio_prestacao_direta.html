@@ -389,34 +389,61 @@
 
                                     <td class="text-center">
 
-                                        {% if f.anexos %}
+                                        <div class="d-flex justify-content-center gap-1">
 
-                                            <button
-                                                type="button"
-                                                class="btn btn-sm btn-outline-primary"
-                                                data-bs-toggle="modal"
-                                                data-bs-target="#modalComprovantes{{ f.id }}"
-                                            >
-                                                <i class="bi bi-paperclip me-1"></i>
+                                            <!-- FATURA -->
+                                            {% if f.fatura_id %}
 
-                                                Ver
+                                                <a
+                                                    href="{{ url_for(
+                                                        'relatorio_fatura',
+                                                        fatura_id=f.fatura_id
+                                                    ) }}"
+                                                    target="_blank"
+                                                    class="btn btn-sm btn-outline-success"
+                                                    title="Visualizar fatura"
+                                                >
+                                                    <i class="bi bi-file-earmark-text me-1"></i>
+                                                    Fatura
+                                                </a>
 
-                                                <span class="badge bg-primary ms-1">
-                                                    {{ f.anexos | length }}
+                                            {% endif %}
+
+
+                                            <!-- COMPROVANTES -->
+                                            {% if f.anexos %}
+
+                                                <button
+                                                    type="button"
+                                                    class="btn btn-sm btn-outline-primary"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#modalComprovantes{{ f.id }}"
+                                                    title="Visualizar comprovantes"
+                                                >
+                                                    <i class="bi bi-paperclip me-1"></i>
+
+                                                    Comprovante
+
+                                                    <span class="badge bg-primary ms-1">
+                                                        {{ f.anexos | length }}
+                                                    </span>
+                                                </button>
+
+                                            {% endif %}
+
+
+                                            <!-- SEM FATURA E SEM COMPROVANTE -->
+                                            {% if not f.fatura_id and not f.anexos %}
+
+                                                <span class="text-muted">
+                                                    -
                                                 </span>
-                                            </button>
 
-                                        {% else %}
+                                            {% endif %}
 
-                                            <span class="text-muted">
-                                                -
-                                            </span>
-
-                                        {% endif %}
+                                        </div>
 
                                     </td>
-
-                                </tr>
 
                             {% else %}
 

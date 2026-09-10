@@ -14270,6 +14270,18 @@ def relatorio_prestacao_direta():
         receitas = Decimal('0')
         despesas = Decimal('0')
         saldo_acumulado = saldo_anterior
+        
+        # FATURAS PARA VINCULAR AO FINANCEIRO
+        faturas_identificadores = (
+            db.session.query(
+                FaturaMensal.id,
+                FaturaMensal.identificador
+            )
+            .filter(
+                FaturaMensal.identificador.isnot(None)
+            )
+            .all()
+        )
 
         for movimento in movimentos_periodo:
 
@@ -14310,6 +14322,7 @@ def relatorio_prestacao_direta():
             elif movimento.tipo == 'despesa':
 
                 valor_total = valor
+
                 debito = valor_total
                 despesas += valor_total
                 saldo_acumulado -= valor_total
@@ -14317,6 +14330,32 @@ def relatorio_prestacao_direta():
             else:
                 continue
 
+            # LOCALIZA A FATURA PELO IDENTIFICADOR NA DESCRIÇÃO
+            fatura_id = None
+
+            descricao = (
+                movimento.descricao
+                or ''
+            ).strip()
+
+            if (
+                movimento.tipo == 'receita'
+                and descricao.startswith('Fatura ')
+            ):
+
+                for id_fatura, identificador in faturas_identificadores:
+
+                    if not identificador:
+                        continue
+
+                    texto_busca = f"Fatura {identificador}"
+
+                    if texto_busca in descricao:
+
+                        fatura_id = id_fatura
+                        break
+
+            # ADICIONA AO FLUXO
             fluxo.append({
                 'id': movimento.id,
                 'data': movimento.data_pagamento,
@@ -14324,7 +14363,11 @@ def relatorio_prestacao_direta():
                 'credito': credito,
                 'debito': debito,
                 'saldo': saldo_acumulado,
-                'anexos': list(movimento.anexos or [])
+                'anexos': list(
+                    movimento.anexos
+                    or []
+                ),
+                'fatura_id': fatura_id
             })
 
         liquido_periodo = (
@@ -28269,10 +28312,7 @@ def dashboard_investidor():
         .all()
     )
 
-    # =====================================================
     # TARIFA MÉDIA PONDERADA PELO RATEIO
-    # =====================================================
-
     soma_tarifa_ponderada = Decimal('0')
     soma_percentual_rateio = Decimal('0')
 
