@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify, send_file, flash, send_from_directory, abort, current_app, make_response
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from calendar import monthrange
 import os, uuid, calendar, subprocess, threading
 import pandas as pd
@@ -1234,6 +1234,12 @@ class Vendedor(db.Model):
         db.ForeignKey('usuarios.id'),
         nullable=True,
         unique=True
+    )
+    
+    desconto_maximo = db.Column(
+        db.Numeric(10, 2),
+        nullable=False,
+        default=15.00
     )
 
     nome = db.Column(db.String(150), nullable=False)
@@ -19431,46 +19437,61 @@ def excluir_comercial(comercial_id):
 @app.route('/vendedores')
 @login_required
 def listar_vendedores():
-    empresa_id = request.args.get('empresa_id', type=int)
-    comercial_id = request.args.get('comercial_id', type=int)
-    busca = request.args.get('busca', '', type=str).strip()
-    ativo = request.args.get('ativo', '', type=str)
 
-    empresas = Empresa.query.order_by(Empresa.nome).all()
-    comerciais = Comercial.query.order_by(Comercial.nome).all()
+    busca = request.args.get(
+        'busca',
+        '',
+        type=str
+    ).strip()
 
-    query = Vendedor.query.join(Empresa).outerjoin(Comercial)
+    ativo = request.args.get(
+        'ativo',
+        '',
+        type=str
+    )
 
-    if empresa_id:
-        query = query.filter(Vendedor.empresa_id == empresa_id)
+    query = Vendedor.query
 
-    if comercial_id:
-        query = query.filter(Vendedor.comercial_id == comercial_id)
-
+    # BUSCA
     if busca:
         query = query.filter(
             or_(
-                Vendedor.nome.ilike(f'%{busca}%'),
-                Vendedor.email.ilike(f'%{busca}%'),
-                Vendedor.telefone.ilike(f'%{busca}%'),
-                Empresa.nome.ilike(f'%{busca}%')
+                Vendedor.nome.ilike(
+                    f'%{busca}%'
+                ),
+                Vendedor.email.ilike(
+                    f'%{busca}%'
+                ),
+                Vendedor.telefone.ilike(
+                    f'%{busca}%'
+                )
             )
         )
 
+    # SITUAÇÃO
     if ativo == '1':
-        query = query.filter(Vendedor.ativo.is_(True))
-    elif ativo == '0':
-        query = query.filter(Vendedor.ativo.is_(False))
 
-    vendedores = query.order_by(Empresa.nome, Vendedor.nome).all()
+        query = query.filter(
+            Vendedor.ativo.is_(True)
+        )
+
+    elif ativo == '0':
+
+        query = query.filter(
+            Vendedor.ativo.is_(False)
+        )
+
+    vendedores = (
+        query
+        .order_by(
+            Vendedor.nome.asc()
+        )
+        .all()
+    )
 
     return render_template(
         'listar_vendedores.html',
         vendedores=vendedores,
-        empresas=empresas,
-        comerciais=comerciais,
-        empresa_id=empresa_id,
-        comercial_id=comercial_id,
         busca=busca,
         ativo=ativo
     )
@@ -19556,9 +19577,23 @@ def cadastrar_vendedor():
                 else Decimal('0.00')
             )
 
-            if not empresa_id:
+            desconto_maximo_str = request.form.get(
+                'desconto_maximo',
+                ''
+            ).strip()
+
+            desconto_maximo = (
+                Decimal(
+                    desconto_maximo_str.replace(',', '.')
+                )
+                if desconto_maximo_str
+                else Decimal('15.00')
+            )
+
+            # Validação
+            if desconto_maximo < 0 or desconto_maximo > 100:
                 flash(
-                    'Selecione uma empresa.',
+                    'O desconto máximo deve estar entre 0% e 100%.',
                     'warning'
                 )
 
@@ -19594,6 +19629,7 @@ def cadastrar_vendedor():
                 email=email or None,
                 cpf=cpf or None,
                 comissao_percentual=comissao_percentual,
+                desconto_maximo=desconto_maximo,
                 observacoes=observacoes or None,
                 ativo=ativo
             )
@@ -19716,24 +19752,22 @@ def editar_vendedor(vendedor_id):
                 else Decimal('0.00')
             )
 
-            if not empresa_id:
-                flash(
-                    'Selecione uma empresa.',
-                    'warning'
-                )
+            desconto_maximo_str = request.form.get(
+                'desconto_maximo',
+                ''
+            ).strip()
 
-                return render_template(
-                    'vendedores_form.html',
-                    vendedor=vendedor,
-                    empresas=empresas,
-                    comerciais=comerciais,
-                    empresa_unica=empresa_unica,
-                    comercial_unico=comercial_unico
+            desconto_maximo = (
+                Decimal(
+                    desconto_maximo_str.replace(',', '.')
                 )
+                if desconto_maximo_str
+                else Decimal('15.00')
+            )
 
-            if not nome:
+            if desconto_maximo < 0 or desconto_maximo > 100:
                 flash(
-                    'Informe o nome do vendedor.',
+                    'O desconto máximo deve estar entre 0% e 100%.',
                     'warning'
                 )
 
@@ -19753,6 +19787,7 @@ def editar_vendedor(vendedor_id):
             vendedor.email = email or None
             vendedor.cpf = cpf or None
             vendedor.comissao_percentual = comissao_percentual
+            vendedor.desconto_maximo = desconto_maximo
             vendedor.observacoes = observacoes or None
             vendedor.ativo = ativo
 
@@ -22841,20 +22876,64 @@ def nova_conta_concessionaria():
                 .strip()
             )
 
-            # Administrador não possui limite.
+            # DEFINE O VENDEDOR DA PROPOSTA
+            vendedor_id = (
+                vendedor_logado.id
+                if vendedor_logado
+                else request.form.get(
+                    'vendedor_id',
+                    type=int
+                )
+            )
+
+            vendedor_selecionado = None
+
+            if vendedor_id:
+                vendedor_selecionado = db.session.get(
+                    Vendedor,
+                    vendedor_id
+                )
+
+            # VALIDAÇÃO DO DESCONTO
+            # Administrador continua sem limite
             if current_user.perfil != 'admin':
 
-                limite_desconto = 15
-
+                # Gerente comercial continua com limite de 20%
                 if current_user.perfil == 'gerente_comercial':
-                    limite_desconto = 20
 
-                if desconto > limite_desconto:
+                    limite_desconto = Decimal('20.00')
+
+                else:
+
+                    # Comercial usa o limite cadastrado no vendedor
+                    if not vendedor_selecionado:
+
+                        flash(
+                            'Não foi possível identificar o vendedor.',
+                            'warning'
+                        )
+
+                        return render_template(
+                            'contas_concessionaria_form.html',
+                            empresas=empresas,
+                            vendedores=vendedores,
+                            centros=centros,
+                            vendedor_logado=vendedor_logado
+                        )
+
+                    limite_desconto = Decimal(
+                        str(
+                            vendedor_selecionado.desconto_maximo
+                            or 0
+                        )
+                    )
+
+                if Decimal(str(desconto)) > limite_desconto:
 
                     flash(
                         (
-                            'Desconto máximo permitido para seu perfil '
-                            f'é {limite_desconto}%.'
+                            'Desconto máximo permitido: '
+                            f'{limite_desconto:.2f}%.'
                         ),
                         'warning'
                     )
@@ -22866,15 +22945,6 @@ def nova_conta_concessionaria():
                         centros=centros,
                         vendedor_logado=vendedor_logado
                     )
-
-            vendedor_id = (
-                vendedor_logado.id
-                if vendedor_logado
-                else request.form.get(
-                    'vendedor_id',
-                    type=int
-                )
-            )
 
             conta = ContaConcessionaria(
 
@@ -23122,9 +23192,6 @@ def nova_conta_concessionaria():
         centros=centros,
         vendedor_logado=vendedor_logado
     )
-    
-from datetime import datetime, timedelta, timezone
-
 
 @app.route('/contas-concessionaria')
 @login_required
@@ -23646,7 +23713,10 @@ def proposta_conta_concessionaria(conta_id, slug):
         validade_proposta=validade_proposta
     )
         
-@app.route('/contas-concessionaria/<int:conta_id>/editar', methods=['GET', 'POST'])
+@app.route(
+    '/contas-concessionaria/<int:conta_id>/editar',
+    methods=['GET', 'POST']
+)
 @login_required
 def editar_conta_concessionaria(conta_id):
 
@@ -23660,20 +23730,29 @@ def editar_conta_concessionaria(conta_id):
             'Conta não encontrada.',
             'warning'
         )
+
         return redirect(
             url_for(
                 'listar_contas_concessionaria'
             )
         )
 
-    empresas = Empresa.query.order_by(
-        Empresa.nome
-    ).all()
+    empresas = (
+        Empresa.query
+        .order_by(
+            Empresa.nome
+        )
+        .all()
+    )
 
     vendedores = (
         Vendedor.query
-        .filter_by(ativo=True)
-        .order_by(Vendedor.nome)
+        .filter_by(
+            ativo=True
+        )
+        .order_by(
+            Vendedor.nome
+        )
         .all()
     )
 
@@ -23681,10 +23760,14 @@ def editar_conta_concessionaria(conta_id):
 
     if current_user.perfil == 'comercial':
 
-        vendedor_logado = Vendedor.query.filter_by(
-            usuario_id=current_user.id,
-            ativo=True
-        ).first()
+        vendedor_logado = (
+            Vendedor.query
+            .filter_by(
+                usuario_id=current_user.id,
+                ativo=True
+            )
+            .first()
+        )
 
         if not vendedor_logado:
 
@@ -23700,8 +23783,9 @@ def editar_conta_concessionaria(conta_id):
         centros = (
             CentroCusto.query
             .filter(
-                CentroCusto.ativo == True,
-                CentroCusto.vendedor_id == vendedor_logado.id
+                CentroCusto.ativo.is_(True),
+                CentroCusto.vendedor_id
+                == vendedor_logado.id
             )
             .order_by(
                 CentroCusto.nome
@@ -23713,8 +23797,8 @@ def editar_conta_concessionaria(conta_id):
 
         centros = (
             CentroCusto.query
-            .filter_by(
-                ativo=True
+            .filter(
+                CentroCusto.ativo.is_(True)
             )
             .order_by(
                 CentroCusto.nome
@@ -23723,25 +23807,83 @@ def editar_conta_concessionaria(conta_id):
         )
 
     if request.method == 'POST':
-
         try:
 
-            desconto = float(
-                request.form.get('desconto') or 0
+            # DESCONTO
+            desconto = Decimal(
+                str(
+                    request.form.get(
+                        'desconto'
+                    ) or '0'
+                ).replace(',', '.')
             )
 
-            # ADMIN = sem limite
+            # DEFINE O VENDEDOR
+            vendedor_id = (
+                vendedor_logado.id
+                if vendedor_logado
+                else request.form.get(
+                    'vendedor_id',
+                    type=int
+                )
+            )
+
+            vendedor_selecionado = None
+
+            if vendedor_id:
+
+                vendedor_selecionado = (
+                    db.session.get(
+                        Vendedor,
+                        vendedor_id
+                    )
+                )
+
+            # VALIDAÇÃO DO DESCONTO
+            # Administrador continua sem limite
             if current_user.perfil != 'admin':
 
-                limite_desconto = 15
-
+                # Gerente comercial continua com 20%
                 if current_user.perfil == 'gerente_comercial':
-                    limite_desconto = 20
+
+                    limite_desconto = Decimal(
+                        '20.00'
+                    )
+
+                else:
+
+                    # Comercial usa o limite
+                    # configurado no próprio vendedor
+                    if not vendedor_selecionado:
+
+                        flash(
+                            'Não foi possível identificar o vendedor.',
+                            'warning'
+                        )
+
+                        return render_template(
+                            'contas_concessionaria_form.html',
+                            conta=conta,
+                            empresas=empresas,
+                            vendedores=vendedores,
+                            centros=centros,
+                            vendedor_logado=vendedor_logado
+                        )
+
+                    limite_desconto = Decimal(
+                        str(
+                            vendedor_selecionado.desconto_maximo
+                            or 0
+                        )
+                    )
 
                 if desconto > limite_desconto:
 
                     flash(
-                        f'Desconto máximo permitido para seu perfil é {limite_desconto}%.',
+                        (
+                            'Desconto máximo permitido: '
+                            f'{limite_desconto:.2f}%.'
+                        ),
                         'warning'
                     )
 
@@ -23754,7 +23896,7 @@ def editar_conta_concessionaria(conta_id):
                         vendedor_logado=vendedor_logado
                     )
 
-            # Identificação
+            # IDENTIFICAÇÃO
             conta.empresa_id = request.form.get(
                 'empresa_id',
                 type=int
@@ -23765,44 +23907,52 @@ def editar_conta_concessionaria(conta_id):
                 type=int
             )
 
-            conta.vendedor_id = (
-                vendedor_logado.id
-                if vendedor_logado
-                else request.form.get(
-                    'vendedor_id',
-                    type=int
+            conta.vendedor_id = vendedor_id
+
+            # DADOS PRINCIPAIS
+            conta.n_uc = (
+                request.form.get(
+                    'n_uc',
+                    ''
                 )
+                .strip()
             )
 
-            # Dados principais
-            conta.n_uc = request.form.get(
-                'n_uc'
+            conta.fase = (
+                request.form.get(
+                    'fase'
+                )
+                or None
             )
 
-            conta.fase = request.form.get(
-                'fase'
-            ) or None
-
-            conta.bandeira = request.form.get(
-                'bandeira'
-            ) or None
+            conta.bandeira = (
+                request.form.get(
+                    'bandeira'
+                )
+                or None
+            )
 
             conta.desconto = desconto
-
             conta.me_epp = (
                 True
-                if request.form.get('me_epp')
+                if request.form.get(
+                    'me_epp'
+                )
                 else False
             )
 
-            conta.observacao = request.form.get(
-                'observacao'
+            conta.observacao = (
+                request.form.get(
+                    'observacao'
+                )
             )
 
-            # Consumo dos últimos 12 meses
+            # CONSUMO DOS ÚLTIMOS 12 MESES
             for i in range(1, 13):
 
-                campo_mes = f'consumo_mes_{i}'
+                campo_mes = (
+                    f'consumo_mes_{i}'
+                )
 
                 valor_mes = request.form.get(
                     campo_mes,
@@ -23812,48 +23962,72 @@ def editar_conta_concessionaria(conta_id):
                 setattr(
                     conta,
                     campo_mes,
-                    valor_mes
-                    if valor_mes is not None
-                    else None
+                    (
+                        valor_mes
+                        if valor_mes is not None
+                        else None
+                    )
                 )
 
-            # Tarifas e consumo
-            conta.consumo_medio = request.form.get(
-                'consumo_medio',
-                type=float
-            ) or 0.0
+            # TARIFAS E CONSUMO
+            conta.consumo_medio = (
+                request.form.get(
+                    'consumo_medio',
+                    type=float
+                )
+                or 0.0
+            )
 
-            conta.tarifa_energia = request.form.get(
-                'tarifa_energia',
-                type=float
-            ) or 0.0
+            conta.tarifa_energia = (
+                request.form.get(
+                    'tarifa_energia',
+                    type=float
+                )
+                or 0.0
+            )
 
-            conta.tarifa_concessionaria = request.form.get(
-                'tarifa_concessionaria',
-                type=float
-            ) or 0.0
+            conta.tarifa_concessionaria = (
+                request.form.get(
+                    'tarifa_concessionaria',
+                    type=float
+                )
+                or 0.0
+            )
 
-            conta.cip = request.form.get(
-                'cip',
-                type=float
-            ) or 0.0
+            conta.cip = (
+                request.form.get(
+                    'cip',
+                    type=float
+                )
+                or 0.0
+            )
 
-            # Impostos
-            conta.icms = request.form.get(
-                'icms',
-                type=float
-            ) or 0.0
+            # IMPOSTOS
+            conta.icms = (
+                request.form.get(
+                    'icms',
+                    type=float
+                )
+                or 0.0
+            )
 
-            conta.pis = request.form.get(
-                'pis',
-                type=float
-            ) or 0.0
+            conta.pis = (
+                request.form.get(
+                    'pis',
+                    type=float
+                )
+                or 0.0
+            )
 
-            conta.cofins = request.form.get(
-                'cofins',
-                type=float
-            ) or 0.0
+            conta.cofins = (
+                request.form.get(
+                    'cofins',
+                    type=float
+                )
+                or 0.0
+            )
 
+            # SALVA
             db.session.commit()
 
             flash(
@@ -23870,13 +24044,15 @@ def editar_conta_concessionaria(conta_id):
         except Exception as e:
 
             db.session.rollback()
-
             print(
                 f'ERRO AO EDITAR CONTA: {e}'
             )
 
             flash(
-                'Erro ao atualizar a conta. Verifique os dados inseridos.',
+                (
+                    'Erro ao atualizar a conta. '
+                    'Verifique os dados inseridos.'
+                ),
                 'danger'
             )
 

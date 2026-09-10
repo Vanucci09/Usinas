@@ -121,19 +121,85 @@
                     </div>
 
                     <div class="col-md-3">
-                        <label class="form-label fw-medium text-secondary">Comissão (%)</label>
+                        <label class="form-label fw-medium text-secondary">
+                            Comissão (%)
+                        </label>
+
                         <div class="input-group">
-                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-percent"></i></span>
-                            <input type="text" name="comissao_percentual" class="form-control border-start-0 ps-0 text-end fw-bold text-primary" value="{{ vendedor.comissao_percentual if vendedor and vendedor.comissao_percentual is not none else '' }}" placeholder="0.00">
+
+                            <span class="input-group-text bg-white border-end-0 text-muted">
+                                <i class="bi bi-percent"></i>
+                            </span>
+
+                            <input
+                                type="text"
+                                name="comissao_percentual"
+                                class="form-control border-start-0 ps-0 text-end fw-bold text-primary"
+                                value="{{ vendedor.comissao_percentual if vendedor and vendedor.comissao_percentual is not none else '' }}"
+                                placeholder="0,00"
+                            >
+
                         </div>
                     </div>
 
-                    <div class="col-md-3 d-flex align-items-center">
-                        <div class="form-check form-switch bg-light p-2.5 px-5 rounded border shadow-inner w-100 d-flex align-items-center" style="height: 38px;">
-                            <input class="form-check-input switch-ativo ms-3" type="checkbox" name="ativo" id="vendedor_ativo" style="transform: scale(1.25); margin-top: 0;"
-                                   {% if vendedor %}{% if vendedor.ativo %}checked{% endif %}{% else %}checked{% endif %}>
-                            <label class="form-check-label fw-semibold text-dark ms-2" for="vendedor_ativo">Consultor Ativo</label>
+
+                    <div class="col-md-3">
+                        <label class="form-label fw-medium text-secondary">
+                            Desconto Máximo (%)
+                        </label>
+
+                        <div class="input-group">
+
+                            <span class="input-group-text bg-white border-end-0 text-muted">
+                                <i class="bi bi-percent"></i>
+                            </span>
+
+                            <input
+                                type="text"
+                                name="desconto_maximo"
+                                class="form-control border-start-0 ps-0 text-end fw-bold text-danger"
+                                value="{{ vendedor.desconto_maximo if vendedor and vendedor.desconto_maximo is not none else '15.00' }}"
+                                placeholder="15,00"
+                                required
+                            >
+
                         </div>
+
+                        <div class="form-text">
+                            Limite máximo que este vendedor pode conceder.
+                        </div>
+                    </div>
+
+
+                    <div class="col-md-3 d-flex align-items-center">
+
+                        <div
+                            class="form-check form-switch bg-light p-2.5 px-5 rounded border shadow-inner w-100 d-flex align-items-center"
+                            style="height: 38px;"
+                        >
+
+                            <input
+                                class="form-check-input switch-ativo ms-3"
+                                type="checkbox"
+                                name="ativo"
+                                id="vendedor_ativo"
+                                style="transform: scale(1.25); margin-top: 0;"
+                                {% if vendedor %}
+                                    {% if vendedor.ativo %}checked{% endif %}
+                                {% else %}
+                                    checked
+                                {% endif %}
+                            >
+
+                            <label
+                                class="form-check-label fw-semibold text-dark ms-2"
+                                for="vendedor_ativo"
+                            >
+                                Consultor Ativo
+                            </label>
+
+                        </div>
+
                     </div>
 
                     <div class="col-12">
