@@ -168,130 +168,39 @@
     {% set k = consolidacao[0] if consolidacao else None %}
 
     <!-- KPIs -->
-    <div class="row g-3 mb-4 align-items-stretch">
+        <!-- KPIs -->
+    <div class="row g-3 mb-4">
 
-        <!-- KPI 1: Geração de Caixa (mês vigente) -->
-        <div class="col-md-3">
-            <div class="card shadow-sm kpi-card border-0 bg-light h-100">
-                <div class="card-body">
-                    <div class="kpi-label text-muted">Geração de Caixa (mês vigente)</div>
-                    <div class="kpi-value {% if v_ultimo < 0 %}text-danger{% else %}text-success{% endif %}">
-                        {{ v_ultimo | formato_brasileiro }}
-                    </div>
-                    <div class="kpi-sub text-muted mt-1">
-                        Última competência com movimentação:
-                        <strong>
-                            {{ "%02d"|format(ultimo_mes) }}/{{ ano }}
-                        </strong>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- KPI 2: EBITDA anual acumulado até mês vigente -->
-        <div class="col-md-3">
-            {% set e = (k.ebitda_pct if k else 0) %}
-            {% set e_class = 'text-muted' %}
-            {% if e > 0 %}{% set e_class = 'text-success' %}{% endif %}
-            {% if e < 0 %}{% set e_class = 'text-danger' %}{% endif %}
-            <div class="card shadow-sm kpi-card border-0 bg-light h-100">
-                <div class="card-body">
-                    <div class="kpi-label text-muted">Resultado EBITDA (%) (Ano)</div>
-                    <div class="kpi-value {{ e_class }}">
-                        {{ ('%.2f'|format(e)).replace('.', ',') }}% 
-                    </div>
-                    <div class="kpi-sub text-muted mt-1">
-                        Acumulado até <strong>{{ "%02d"|format(mes_lim) }}/{{ ano }}</strong>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- KPI 3: Performance anual acumulada até mês vigente -->
-        <div class="col-md-3">
-            {% set prev = (k.previsao_ref if k else 0) %}
-            {% set real = (k.geracao_ref if k else 0) %}
-            {% set p = (k.performance_pct if k else 0) %}
-
-            {% if prev == 0 %}
-                {% set p_text = '-' %}
-                {% set p_class = 'text-muted' %}
-            {% else %}
-                {% set p_text = ('%.2f'|format(p)).replace('.', ',') ~ '%' %}
-                {% set p_class = 'text-muted' %}
-                {% if p >= 100 %}{% set p_class = 'text-success' %}{% endif %}
-                {% if p < 95 %}{% set p_class = 'text-danger' %}{% endif %}
-            {% endif %}
-
-            <div class="card shadow-sm kpi-card border-0 bg-light h-100">
-                <div class="card-body">
-                    <div class="kpi-label text-muted">Performance da Usina (%) (Ano)</div>
-                    <div class="kpi-value {{ p_class }}">
-                        {{ p_text }}
-                    </div>
-                    <div class="kpi-sub text-muted mt-1">
-                        {% if prev == 0 %}
-                            Sem previsão cadastrada até <strong>{{ "%02d"|format(mes_lim) }}/{{ ano }}</strong>
-                        {% else %}
-                            Previsto {{ prev | formato_kwh }}
-                            • Real {{ real | formato_kwh }}
-                            <span class="ms-1">(até {{ "%02d"|format(mes_lim) }}/{{ ano }})</span>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- KPI 4: Retorno sobre o investimento -->
-        <div class="col-md-3">
-
-            {% set roi = roi_mes_vigente or 0 %}
-            {% set roi_class = 'text-muted' %}
-
-            {% if roi > 0 %}
-                {% set roi_class = 'text-success' %}
-            {% elif roi < 0 %}
-                {% set roi_class = 'text-danger' %}
-            {% endif %}
+        <!-- GERAÇÃO DE CAIXA -->
+        <div class="col-md-4">
 
             <div class="card shadow-sm kpi-card border-0 bg-light h-100">
 
                 <div class="card-body">
 
                     <div class="kpi-label text-muted">
-                        Retorno sobre o investimento
+                        Geração de Caixa
                     </div>
 
-                    <div class="kpi-value {{ roi_class }}">
-                        {{ ('%.4f'|format(roi)).replace('.', ',') }}%
+                    <div class="
+                        kpi-value
+                        {% if v_ultimo < 0 %}
+                            text-danger
+                        {% else %}
+                            text-success
+                        {% endif %}
+                    ">
+                        {{ v_ultimo | formato_brasileiro }}
                     </div>
 
                     <div class="kpi-sub text-muted mt-1">
 
-                        Competência
+                        Última competência com movimentação:
+
                         <strong>
                             {{ "%02d"|format(ultimo_mes) }}/{{ ano }}
                         </strong>
 
-                        <br>
-
-                        <span>
-                            Participação:
-                            <strong>
-                                {{ ('%.4f'|format(participacao_percentual or 0))
-                                    .replace('.', ',')
-                                    .rstrip('0')
-                                    .rstrip(',') }}%
-                            </strong>
-                        </span>
-
-                        <span class="ms-1">
-                            • Investimento:
-                            <strong>
-                                {{ investimento_acionista | formato_brasileiro }}
-                            </strong>
-                        </span>
-
                     </div>
 
                 </div>
@@ -300,21 +209,29 @@
 
         </div>
 
-        <!-- Gráfico -->
+        <!-- GRÁFICO -->
         {% if liquidos_mensais %}
-        <div class="col-12">
-            <div class="card shadow-sm kpi-card border-0 bg-light h-100">
-                <div class="card-body">
-                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-2">
-                        <div class="kpi-label text-muted">Geração de Caixa mês a mês em {{ ano }}</div>
+
+            <div class="col-12">
+
+                <div class="card shadow-sm kpi-card border-0 bg-light">
+
+                    <div class="card-body">
+
+                        <div class="kpi-label text-muted mb-2">
+                            Geração de Caixa mês a mês em {{ ano }}
+                        </div>
+
+                        <div style="height: 180px;">
+                            <canvas id="liquidoMensalChart"></canvas>
+                        </div>
+
                     </div>
 
-                    <div style="height: 180px;">
-                        <canvas id="liquidoMensalChart"></canvas>
-                    </div>
                 </div>
+
             </div>
-        </div>
+
         {% endif %}
 
     </div>
@@ -494,31 +411,6 @@
                             {% endfor %}
                         </tbody>
                     </table>
-
-                    <div class="alert alert-secondary mt-3">
-
-                        <strong>KPIs:</strong>
-
-                        Geração de Caixa e Retorno sobre o Investimento são da competência
-
-                        <strong>
-                            {{ "%02d"|format(mes_lim) }}/{{ ano }}
-                        </strong>.
-
-                        EBITDA e Performance são
-
-                        <strong>
-                            anuais acumulados até o mês vigente
-                        </strong>.
-
-                        <br>
-
-                        <small>
-                            ROI mensal = receita líquida proporcional à participação do
-                            acionista ÷ valor investido pelo acionista × 100.
-                        </small>
-
-                    </div>
                 </div>
 
                 <!-- DETALHE MENSAL -->
