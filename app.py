@@ -14053,9 +14053,25 @@ def relatorio_prestacao_direta():
         ):
             abort(403)
             
-        # PARTICIPAÇÃO DO ACIONISTA
+        # =====================================================
+        # EMPRESA INVESTIDORA
+        # =====================================================
+        # Todos os perfis visualizam 100% dos valores.
+        #
+        # Para o acionista, o vínculo societário continua sendo
+        # utilizado somente para:
+        # - validar o acesso à usina;
+        # - identificar a empresa investidora.
+        #
+        # A porcentagem do acionista NÃO altera os valores
+        # apresentados neste relatório.
+        # =====================================================
+
         participacao_percentual = Decimal('100')
+        fator_participacao = Decimal('1')
+
         empresa_investidora = None
+        participacao = None
 
         if current_user.perfil == 'acionista':
 
@@ -14084,13 +14100,6 @@ def relatorio_prestacao_direta():
             if not participacao:
                 abort(403)
 
-            participacao_percentual = Decimal(
-                str(
-                    participacao.percentual
-                    or 0
-                )
-            )
-
             empresa_investidora = (
                 db.session.get(
                     EmpresaInvestidora,
@@ -14098,18 +14107,28 @@ def relatorio_prestacao_direta():
                 )
             )
 
-            participacao_percentual = max(
-                Decimal('0'),
-                min(
-                    participacao_percentual,
-                    Decimal('100')
+        else:
+
+            # Admin / Financeiro:
+            # identifica a empresa vinculada à usina.
+
+            vinculo_empresa = (
+                UsinaInvestidora.query
+                .filter(
+                    UsinaInvestidora.usina_id
+                    == usina.id
                 )
+                .first()
             )
 
-        fator_participacao = (
-            participacao_percentual
-            / Decimal('100')
-        )
+            if vinculo_empresa:
+
+                empresa_investidora = (
+                    db.session.get(
+                        EmpresaInvestidora,
+                        vinculo_empresa.empresa_id
+                    )
+                )
 
         # PREVISÃO DO PERÍODO
         # Considera as previsões mensais que tenham
@@ -14419,7 +14438,6 @@ def relatorio_prestacao_direta():
         relatorio = {
             'usina': usina,
             'empresa_investidora': empresa_investidora,
-            'participacao_percentual': participacao_percentual,
             'previsto': previsto,
             'realizado': realizado,
             'eficiencia': eficiencia,
