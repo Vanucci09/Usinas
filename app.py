@@ -28752,123 +28752,36 @@ def dashboard_investidor():
     )
     
     # =====================================================
-    # DISTRIBUIÇÃO DE LUCROS DO ACIONISTA
+    # DISTRIBUIÇÃO DE LUCROS DA EMPRESA
+    # =====================================================
+    # Regra:
+    # Distribuição =
+    # Faturamento / Arrendamento
+    # - (Despesas + Impostos)
     # =====================================================
 
-    distribuicao_acionista_mes = Decimal('0')
-    distribuicao_acionista_total = Decimal('0')
+    lucro_liquido_empresa_mes = (
+        receita_empresa_mes
+        - despesa_empresa_mes
+    )
 
-    lucro_liquido_empresa_mes = Decimal('0')
+    lucro_liquido_empresa_total = (
+        receita_empresa_total
+        - despesa_empresa_total
+    )
 
-    # Para admin/financeiro não existe necessariamente
-    # um acionista específico para calcular a distribuição.
-    acionista_id_dashboard = None
+    # Não existe distribuição negativa.
+    # Caso as despesas superem o faturamento,
+    # a distribuição do período fica zerada.
+    distribuicao_acionista_mes = max(
+        lucro_liquido_empresa_mes,
+        Decimal('0')
+    )
 
-    if (
-        current_user.perfil == 'acionista'
-        and participacao
-        and empresa_investidora
-    ):
-        acionista_id_dashboard = (
-            participacao.acionista_id
-        )
-
-        # ==============================================
-        # DISTRIBUIÇÃO DO MÊS SELECIONADO
-        # ==============================================
-
-        resultado_distribuicao_mes = (
-            calcular_distribuicao_lucro(
-                empresa_investidora.id,
-                mes,
-                ano
-            )
-        )
-
-        lucro_liquido_empresa_mes = para_decimal(
-            resultado_distribuicao_mes.get(
-                'lucro_liquido',
-                0
-            )
-        )
-
-        for distribuicao in (
-            resultado_distribuicao_mes.get(
-                'distribuicoes',
-                []
-            )
-        ):
-
-            if (
-                distribuicao.get(
-                    'acionista_id'
-                )
-                == acionista_id_dashboard
-            ):
-                distribuicao_acionista_mes = (
-                    para_decimal(
-                        distribuicao.get(
-                            'valor',
-                            0
-                        )
-                    )
-                )
-                break
-
-        # ==============================================
-        # DISTRIBUIÇÃO ACUMULADA
-        # ==============================================
-        # Soma todas as distribuições desde 2022
-        # até o mês selecionado no filtro.
-
-        for ano_item in range(
-            2022,
-            ano + 1
-        ):
-
-            mes_final = (
-                mes
-                if ano_item == ano
-                else 12
-            )
-
-            for mes_item in range(
-                1,
-                mes_final + 1
-            ):
-
-                resultado_item = (
-                    calcular_distribuicao_lucro(
-                        empresa_investidora.id,
-                        mes_item,
-                        ano_item
-                    )
-                )
-
-                for distribuicao in (
-                    resultado_item.get(
-                        'distribuicoes',
-                        []
-                    )
-                ):
-
-                    if (
-                        distribuicao.get(
-                            'acionista_id'
-                        )
-                        == acionista_id_dashboard
-                    ):
-
-                        distribuicao_acionista_total += (
-                            para_decimal(
-                                distribuicao.get(
-                                    'valor',
-                                    0
-                                )
-                            )
-                        )
-
-                        break
+    distribuicao_acionista_total = max(
+        lucro_liquido_empresa_total,
+        Decimal('0')
+    )
 
     # =====================================================
     # PAYBACK E ROI
@@ -29142,7 +29055,7 @@ def dashboard_investidor():
             despesa_empresa_total
         ),
         
-                'retorno_empresa_mes': arredondar(
+        'retorno_empresa_mes': arredondar(
             retorno_empresa_mes
         ),
 
