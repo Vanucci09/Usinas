@@ -28643,9 +28643,14 @@ def dashboard_investidor():
         4
     )
 
-    # Valor estimado da geração já realizada no mês
+    # =====================================================
+    # FATURAMENTO ESTIMADO
+    # =====================================================
+    # Previsão contratada × tarifa média dos clientes ativos
+
     faturamento_estimado_geracao = (
-        geracao_ate_agora * tarifa_media_estimada
+        previsao_mensal
+        * tarifa_media_estimada
     )
 
     # Projeção financeira com base na geração projetada

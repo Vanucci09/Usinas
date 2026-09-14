@@ -450,11 +450,13 @@
                         <div>
                             <span class="indicador-label">Geração até Agora</span>
                             <div class="indicador-valor mt-1">
-                                {{ "%.0f"|format(dashboard.geracao_ate_agora) }}
+                                {{ "{:,.0f}".format(dashboard.geracao_ate_agora).replace(",", ".") }}
                                 <span class="fs-6 text-muted fw-normal">kWh</span>
                             </div>
                             <div class="indicador-secundario mt-2">
-                                Média diária: {{ "%.1f"|format(dashboard.media_diaria) }} kWh
+                                Média diária:
+                                {{ "{:,.1f}".format(dashboard.media_diaria).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                                kWh
                             </div>
                         </div>
                         <div class="icone-indicador icone-laranja">
@@ -471,7 +473,7 @@
                         <div>
                             <span class="indicador-label">Projeção do Mês</span>
                             <div class="indicador-valor text-success mt-1">
-                                {{ "%.0f"|format(dashboard.geracao_prevista_mes) }}
+                                {{ "{:,.0f}".format(dashboard.geracao_prevista_mes).replace(",", ".") }}
                                 <span class="fs-6 text-muted fw-normal">kWh</span>
                             </div>
                             <div class="indicador-secundario mt-2">
@@ -492,7 +494,7 @@
                         <div>
                             <span class="indicador-label">Previsão Contratada</span>
                             <div class="indicador-valor text-warning-emphasis mt-1">
-                                {{ "%.0f"|format(dashboard.previsao_mensal) }}
+                                {{ "{:,.0f}".format(dashboard.previsao_mensal).replace(",", ".") }}
                                 <span class="fs-6 text-muted fw-normal">kWh</span>
                             </div>
                             <div class="indicador-secundario mt-2">
@@ -589,7 +591,7 @@
             <div class="p-3 border rounded-3 bg-body-tertiary">
                 <span class="indicador-label">Geração Acumulada Histórica</span>
                 <div class="fs-4 fw-bold text-success mt-1">
-                    {{ "%.0f"|format(dashboard.geracao_acumulada) }} <span class="fs-6 font-monospace text-muted fw-normal">kWh</span>
+                    {{ "{:,.0f}".format(dashboard.geracao_acumulada).replace(",", ".") }} <span class="fs-6 font-monospace text-muted fw-normal">kWh</span>
                 </div>
             </div>
         </div>
