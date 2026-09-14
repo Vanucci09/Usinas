@@ -28872,11 +28872,33 @@ def dashboard_investidor():
 
     # =====================================================
     # PAYBACK E ROI
-    # Base: distribuição efetivamente recebida
+    # Base:
+    # faturamento/arrendamento da empresa
+    # menos despesas e impostos
     # =====================================================
 
+    retorno_empresa_mes = (
+        receita_empresa_mes
+        - despesa_empresa_mes
+    )
+
+    retorno_empresa_total = (
+        receita_empresa_total
+        - despesa_empresa_total
+    )
+
+    # Evita retorno negativo no cálculo do payback
+    retorno_empresa_total_payback = max(
+        retorno_empresa_total,
+        Decimal('0')
+    )
+
+    # -----------------------------------------------------
+    # PAYBACK
+    # -----------------------------------------------------
+
     payback_percentual = (
-        distribuicao_acionista_total
+        retorno_empresa_total_payback
         / investimento_acionista
         * Decimal('100')
         if investimento_acionista > 0
@@ -28893,20 +28915,28 @@ def dashboard_investidor():
 
     valor_restante_payback = max(
         investimento_acionista
-        - distribuicao_acionista_total,
+        - retorno_empresa_total_payback,
         Decimal('0')
     )
 
+    # -----------------------------------------------------
+    # ROI DO MÊS
+    # -----------------------------------------------------
+
     roi_mes_percentual = (
-        distribuicao_acionista_mes
+        retorno_empresa_mes
         / investimento_acionista
         * Decimal('100')
         if investimento_acionista > 0
         else Decimal('0')
     )
-    
+
+    # -----------------------------------------------------
+    # ROI ACUMULADO
+    # -----------------------------------------------------
+
     roi_acumulado_percentual = (
-        distribuicao_acionista_total
+        retorno_empresa_total
         / investimento_acionista
         * Decimal('100')
         if investimento_acionista > 0
@@ -28915,57 +28945,119 @@ def dashboard_investidor():
 
     # =====================================================
     # RETORNO MÉDIO DOS ÚLTIMOS 12 MESES
-    # Base: distribuição de lucros do acionista
+    # Base:
+    # arrendamento recebido pela empresa
+    # menos despesas + impostos
     # =====================================================
 
     retornos_12_meses = []
 
-    if (
-        current_user.perfil == 'acionista'
-        and empresa_investidora
-        and acionista_id_dashboard
-    ):
+    for deslocamento in range(-11, 1):
 
-        for deslocamento in range(-11, 1):
+        data_referencia = adicionar_meses(
+            data_inicio,
+            deslocamento
+        )
 
-            data_referencia = adicionar_meses(
-                data_inicio,
-                deslocamento
+        ano_referencia = data_referencia.year
+        mes_referencia = data_referencia.month
+
+        inicio_referencia = date(
+            ano_referencia,
+            mes_referencia,
+            1
+        )
+
+        fim_referencia = (
+            date(
+                ano_referencia + 1,
+                1,
+                1
             )
-
-            resultado_item = calcular_distribuicao_lucro(
-                empresa_investidora.id,
-                data_referencia.month,
-                data_referencia.year
+            if mes_referencia == 12
+            else date(
+                ano_referencia,
+                mes_referencia + 1,
+                1
             )
+        )
 
-            distribuicao_mes_item = Decimal('0')
+        # ---------------------------------------------
+        # ARRENDAMENTO RECEBIDO NO MÊS
+        # Categoria 5 da usina
+        # ---------------------------------------------
 
-            for distribuicao in (
-                resultado_item.get(
-                    'distribuicoes',
-                    []
+        arrendamento_referencia = para_decimal(
+            db.session.query(
+                func.coalesce(
+                    func.sum(
+                        FinanceiroUsina.valor
+                    ),
+                    0
                 )
-            ):
-
-                if (
-                    distribuicao.get('acionista_id')
-                    == acionista_id_dashboard
-                ):
-
-                    distribuicao_mes_item = para_decimal(
-                        distribuicao.get(
-                            'valor',
-                            0
-                        )
-                    )
-
-                    break
-
-            # Considera o mês mesmo que a distribuição seja zero.
-            retornos_12_meses.append(
-                distribuicao_mes_item
             )
+            .filter(
+                FinanceiroUsina.usina_id == usina.id,
+                FinanceiroUsina.tipo == 'despesa',
+                FinanceiroUsina.categoria_id == 5,
+                FinanceiroUsina.data_pagamento.isnot(None),
+                FinanceiroUsina.data_pagamento >= inicio_referencia,
+                FinanceiroUsina.data_pagamento < fim_referencia
+            )
+            .scalar()
+        )
+
+        # ---------------------------------------------
+        # DESPESAS + IMPOSTOS DA EMPRESA NO MÊS
+        # ---------------------------------------------
+
+        despesas_empresa_referencia = Decimal('0')
+
+        if empresa_investidora:
+
+            despesas_empresa_referencia = para_decimal(
+                db.session.query(
+                    func.coalesce(
+                        func.sum(
+                            FinanceiroEmpresaInvestidora.valor
+                        ),
+                        0
+                    )
+                )
+                .filter(
+                    FinanceiroEmpresaInvestidora.empresa_id
+                    == empresa_investidora.id,
+
+                    FinanceiroEmpresaInvestidora.tipo.in_(
+                        ['despesa', 'imposto']
+                    ),
+
+                    FinanceiroEmpresaInvestidora.data
+                    >= inicio_referencia,
+
+                    FinanceiroEmpresaInvestidora.data
+                    < fim_referencia
+                )
+                .scalar()
+            )
+
+        # ---------------------------------------------
+        # RETORNO LÍQUIDO DO MÊS
+        # ---------------------------------------------
+
+        retorno_referencia = (
+            arrendamento_referencia
+            - despesas_empresa_referencia
+        )
+
+        retornos_12_meses.append(
+            retorno_referencia
+        )
+
+
+    # =====================================================
+    # MÉDIA MENSAL DO RETORNO
+    # =====================================================
 
     retorno_medio_mensal = (
         sum(
@@ -28977,6 +29069,7 @@ def dashboard_investidor():
         else Decimal('0')
     )
 
+
     retorno_medio_mensal_percentual = (
         retorno_medio_mensal
         / investimento_acionista
@@ -28984,6 +29077,11 @@ def dashboard_investidor():
         if investimento_acionista > 0
         else Decimal('0')
     )
+
+
+    # =====================================================
+    # PREVISÃO DE CONCLUSÃO DO PAYBACK
+    # =====================================================
 
     meses_restantes_payback = None
     previsao_payback = None
@@ -29008,6 +29106,7 @@ def dashboard_investidor():
     elif valor_restante_payback <= 0:
 
         meses_restantes_payback = 0
+
         previsao_payback = (
             data_fim
             - timedelta(days=1)
@@ -29041,6 +29140,14 @@ def dashboard_investidor():
 
         'despesa_empresa_total': arredondar(
             despesa_empresa_total
+        ),
+        
+                'retorno_empresa_mes': arredondar(
+            retorno_empresa_mes
+        ),
+
+        'retorno_empresa_total': arredondar(
+            retorno_empresa_total
         ),
 
         'lucro_liquido_empresa_mes': arredondar(
