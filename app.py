@@ -28133,19 +28133,26 @@ def dashboard_investidor():
         abort(404)
 
     # =====================================================
-    # PARTICIPAÇÃO DO ACIONISTA / EMPRESA INVESTIDORA
+    # EMPRESA INVESTIDORA
+    # =====================================================
+    # Todos os usuários visualizam 100% dos valores.
+    # A participação societária é utilizada apenas
+    # para identificar a empresa/usinas permitidas.
     # =====================================================
 
     participacao_percentual = Decimal('100')
+    fator_participacao = Decimal('1')
+
     empresa_investidora = None
     participacao = None
+
 
     if current_user.perfil == 'acionista':
 
         # -------------------------------------------------
         # ACIONISTA
-        # Busca a empresa em que o usuário possui
-        # participação e que esteja vinculada à usina.
+        # Identifica a empresa vinculada ao usuário e
+        # confirma acesso à usina selecionada.
         # -------------------------------------------------
 
         participacao = (
@@ -28173,21 +28180,9 @@ def dashboard_investidor():
         if not participacao:
             abort(403)
 
-        participacao_percentual = para_decimal(
-            participacao.percentual
-        )
-
         empresa_investidora = (
             EmpresaInvestidora.query.get(
                 participacao.empresa_id
-            )
-        )
-
-        participacao_percentual = max(
-            Decimal('0'),
-            min(
-                participacao_percentual,
-                Decimal('100')
             )
         )
 
@@ -28195,7 +28190,7 @@ def dashboard_investidor():
 
         # -------------------------------------------------
         # ADMIN / FINANCEIRO
-        # Busca a empresa investidora vinculada à usina.
+        # Identifica a empresa vinculada à usina.
         # -------------------------------------------------
 
         vinculo_empresa = (
@@ -28214,16 +28209,6 @@ def dashboard_investidor():
                     vinculo_empresa.empresa_id
                 )
             )
-
-        # Admin/financeiro visualizam 100% dos valores
-        # operacionais da usina.
-        participacao_percentual = Decimal('100')
-
-
-    fator_participacao = (
-        participacao_percentual
-        / Decimal('100')
-    )
 
     # GERAÇÃO DO MÊS SELECIONADO
     # Mesma regra utilizada em producao_mensal
