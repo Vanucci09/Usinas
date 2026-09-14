@@ -11136,11 +11136,7 @@ def distribuicao_lucro_empresa(
     mes,
     ano
 ):
-
-    # ==========================================
     # CONTROLE DE ACESSO
-    # ==========================================
-
     if (
         current_user.perfil
         not in ['admin', 'financeiro', 'acionista']
@@ -11148,10 +11144,7 @@ def distribuicao_lucro_empresa(
     ):
         abort(403)
 
-    # ==========================================
     # EMPRESA
-    # ==========================================
-
     empresa = db.session.get(
         EmpresaInvestidora,
         empresa_id
@@ -28140,16 +28133,21 @@ def dashboard_investidor():
         abort(404)
 
     # =====================================================
-    # PARTICIPAÇÃO DO ACIONISTA
+    # PARTICIPAÇÃO DO ACIONISTA / EMPRESA INVESTIDORA
     # =====================================================
 
     participacao_percentual = Decimal('100')
     empresa_investidora = None
+    participacao = None
 
     if current_user.perfil == 'acionista':
 
-        # Busca a participação do usuário cuja empresa
-        # realmente esteja vinculada à usina selecionada.
+        # -------------------------------------------------
+        # ACIONISTA
+        # Busca a empresa em que o usuário possui
+        # participação e que esteja vinculada à usina.
+        # -------------------------------------------------
+
         participacao = (
             ParticipacaoAcionista.query
             .join(
@@ -28172,22 +28170,18 @@ def dashboard_investidor():
             .first()
         )
 
-        if participacao:
-            participacao_percentual = para_decimal(
-                participacao.percentual
-            )
-
-            empresa_investidora = (
-                EmpresaInvestidora.query.get(
-                    participacao.empresa_id
-                )
-            )
-
-        else:
-            # Se o usuário não possui participação
-            # em nenhuma empresa vinculada à usina,
-            # ele não deveria visualizar essa usina.
+        if not participacao:
             abort(403)
+
+        participacao_percentual = para_decimal(
+            participacao.percentual
+        )
+
+        empresa_investidora = (
+            EmpresaInvestidora.query.get(
+                participacao.empresa_id
+            )
+        )
 
         participacao_percentual = max(
             Decimal('0'),
@@ -28196,6 +28190,35 @@ def dashboard_investidor():
                 Decimal('100')
             )
         )
+
+    else:
+
+        # -------------------------------------------------
+        # ADMIN / FINANCEIRO
+        # Busca a empresa investidora vinculada à usina.
+        # -------------------------------------------------
+
+        vinculo_empresa = (
+            UsinaInvestidora.query
+            .filter(
+                UsinaInvestidora.usina_id
+                == usina.id
+            )
+            .first()
+        )
+
+        if vinculo_empresa:
+
+            empresa_investidora = (
+                EmpresaInvestidora.query.get(
+                    vinculo_empresa.empresa_id
+                )
+            )
+
+        # Admin/financeiro visualizam 100% dos valores
+        # operacionais da usina.
+        participacao_percentual = Decimal('100')
+
 
     fator_participacao = (
         participacao_percentual
@@ -28449,6 +28472,81 @@ def dashboard_investidor():
         faturamento_bruto_total
         - despesa_bruta_total
     )
+    
+    # =====================================================
+    # FINANCEIRO DA EMPRESA INVESTIDORA
+    # =====================================================
+
+    receita_empresa_mes = Decimal('0')
+    receita_empresa_total = Decimal('0')
+
+    despesa_empresa_mes = Decimal('0')
+    despesa_empresa_total = Decimal('0')
+
+    if empresa_investidora:
+
+        # -------------------------------------------------
+        # RECEITA DA EMPRESA
+        # Receita da empresa = arrendamento pago pela usina
+        # -------------------------------------------------
+
+        receita_empresa_mes = arrendamento_mes
+
+        receita_empresa_total = arrendamento_total
+
+        # -------------------------------------------------
+        # DESPESAS DA EMPRESA
+        # Inclui despesas normais + impostos
+        # -------------------------------------------------
+
+        despesa_empresa_mes = para_decimal(
+            db.session.query(
+                func.coalesce(
+                    func.sum(
+                        FinanceiroEmpresaInvestidora.valor
+                    ),
+                    0
+                )
+            )
+            .filter(
+                FinanceiroEmpresaInvestidora.empresa_id
+                == empresa_investidora.id,
+
+                FinanceiroEmpresaInvestidora.tipo.in_(
+                    ['despesa', 'imposto']
+                ),
+
+                FinanceiroEmpresaInvestidora.data
+                >= data_inicio,
+
+                FinanceiroEmpresaInvestidora.data
+                < data_fim
+            )
+            .scalar()
+        )
+
+        despesa_empresa_total = para_decimal(
+            db.session.query(
+                func.coalesce(
+                    func.sum(
+                        FinanceiroEmpresaInvestidora.valor
+                    ),
+                    0
+                )
+            )
+            .filter(
+                FinanceiroEmpresaInvestidora.empresa_id
+                == empresa_investidora.id,
+
+                FinanceiroEmpresaInvestidora.tipo.in_(
+                    ['despesa', 'imposto']
+                ),
+
+                FinanceiroEmpresaInvestidora.data
+                < data_fim
+            )
+            .scalar()
+        )
 
     # =====================================================
     # TARIFA MÉDIA DOS CLIENTES ATIVOS
@@ -28652,13 +28750,133 @@ def dashboard_investidor():
         receita_prevista_mes
         * fator_participacao
     )
+    
+    # =====================================================
+    # DISTRIBUIÇÃO DE LUCROS DO ACIONISTA
+    # =====================================================
+
+    distribuicao_acionista_mes = Decimal('0')
+    distribuicao_acionista_total = Decimal('0')
+
+    lucro_liquido_empresa_mes = Decimal('0')
+
+    # Para admin/financeiro não existe necessariamente
+    # um acionista específico para calcular a distribuição.
+    acionista_id_dashboard = None
+
+    if (
+        current_user.perfil == 'acionista'
+        and participacao
+        and empresa_investidora
+    ):
+        acionista_id_dashboard = (
+            participacao.acionista_id
+        )
+
+        # ==============================================
+        # DISTRIBUIÇÃO DO MÊS SELECIONADO
+        # ==============================================
+
+        resultado_distribuicao_mes = (
+            calcular_distribuicao_lucro(
+                empresa_investidora.id,
+                mes,
+                ano
+            )
+        )
+
+        lucro_liquido_empresa_mes = para_decimal(
+            resultado_distribuicao_mes.get(
+                'lucro_liquido',
+                0
+            )
+        )
+
+        for distribuicao in (
+            resultado_distribuicao_mes.get(
+                'distribuicoes',
+                []
+            )
+        ):
+
+            if (
+                distribuicao.get(
+                    'acionista_id'
+                )
+                == acionista_id_dashboard
+            ):
+                distribuicao_acionista_mes = (
+                    para_decimal(
+                        distribuicao.get(
+                            'valor',
+                            0
+                        )
+                    )
+                )
+                break
+
+        # ==============================================
+        # DISTRIBUIÇÃO ACUMULADA
+        # ==============================================
+        # Soma todas as distribuições desde 2022
+        # até o mês selecionado no filtro.
+
+        for ano_item in range(
+            2022,
+            ano + 1
+        ):
+
+            mes_final = (
+                mes
+                if ano_item == ano
+                else 12
+            )
+
+            for mes_item in range(
+                1,
+                mes_final + 1
+            ):
+
+                resultado_item = (
+                    calcular_distribuicao_lucro(
+                        empresa_investidora.id,
+                        mes_item,
+                        ano_item
+                    )
+                )
+
+                for distribuicao in (
+                    resultado_item.get(
+                        'distribuicoes',
+                        []
+                    )
+                ):
+
+                    if (
+                        distribuicao.get(
+                            'acionista_id'
+                        )
+                        == acionista_id_dashboard
+                    ):
+
+                        distribuicao_acionista_total += (
+                            para_decimal(
+                                distribuicao.get(
+                                    'valor',
+                                    0
+                                )
+                            )
+                        )
+
+                        break
 
     # =====================================================
     # PAYBACK E ROI
+    # Base: distribuição efetivamente recebida
     # =====================================================
 
     payback_percentual = (
-        receita_acionista_total
+        distribuicao_acionista_total
         / investimento_acionista
         * Decimal('100')
         if investimento_acionista > 0
@@ -28675,12 +28893,20 @@ def dashboard_investidor():
 
     valor_restante_payback = max(
         investimento_acionista
-        - receita_acionista_total,
+        - distribuicao_acionista_total,
         Decimal('0')
     )
 
     roi_mes_percentual = (
-        receita_acionista_mes
+        distribuicao_acionista_mes
+        / investimento_acionista
+        * Decimal('100')
+        if investimento_acionista > 0
+        else Decimal('0')
+    )
+    
+    roi_acumulado_percentual = (
+        distribuicao_acionista_total
         / investimento_acionista
         * Decimal('100')
         if investimento_acionista > 0
@@ -28689,95 +28915,68 @@ def dashboard_investidor():
 
     # =====================================================
     # RETORNO MÉDIO DOS ÚLTIMOS 12 MESES
-    # Considera os 12 meses encerrando no mês filtrado
+    # Base: distribuição de lucros do acionista
     # =====================================================
 
-    inicio_12_meses = adicionar_meses(
-        data_inicio,
-        -11
-    )
+    retornos_12_meses = []
 
-    movimentos_12_meses = (
-        FinanceiroUsina.query
-        .filter(
-            FinanceiroUsina.usina_id == usina.id,
-            FinanceiroUsina.data_pagamento.isnot(None),
-            FinanceiroUsina.data_pagamento >= inicio_12_meses,
-            FinanceiroUsina.data_pagamento < data_fim
-        )
-        .all()
-    )
+    if (
+        current_user.perfil == 'acionista'
+        and empresa_investidora
+        and acionista_id_dashboard
+    ):
 
-    resultados_mensais = defaultdict(
-        lambda: {
-            'faturamento_bruto': Decimal('0'),
-            'despesa_bruta': Decimal('0')
-        }
-    )
+        for deslocamento in range(-11, 1):
 
-    for movimento in movimentos_12_meses:
+            data_referencia = adicionar_meses(
+                data_inicio,
+                deslocamento
+            )
 
-        chave = (
-            movimento.data_pagamento.year,
-            movimento.data_pagamento.month
-        )
+            resultado_item = calcular_distribuicao_lucro(
+                empresa_investidora.id,
+                data_referencia.month,
+                data_referencia.year
+            )
 
-        valor = para_decimal(
-            movimento.valor
-        )
+            distribuicao_mes_item = Decimal('0')
 
-        juros = para_decimal(
-            movimento.juros
-        )
-
-        if movimento.tipo == 'receita':
-
-            resultados_mensais[chave][
-                'faturamento_bruto'
-            ] += valor + juros
-
-        elif movimento.tipo == 'despesa':
-
-            categoria_id = movimento.categoria_id
-
-            if (
-                categoria_id is None
-                or categoria_id not in [5, 7, 12, 14]
+            for distribuicao in (
+                resultado_item.get(
+                    'distribuicoes',
+                    []
+                )
             ):
-                resultados_mensais[chave][
-                    'despesa_bruta'
-                ] += valor
 
-    retornos_positivos = []
+                if (
+                    distribuicao.get('acionista_id')
+                    == acionista_id_dashboard
+                ):
 
-    for valores in resultados_mensais.values():
+                    distribuicao_mes_item = para_decimal(
+                        distribuicao.get(
+                            'valor',
+                            0
+                        )
+                    )
 
-        retorno_mes_item = (
-            valores['faturamento_bruto']
-            - valores['despesa_bruta']
-        ) * fator_participacao
+                    break
 
-        if retorno_mes_item > 0:
-            retornos_positivos.append(
-                retorno_mes_item
+            # Considera o mês mesmo que a distribuição seja zero.
+            retornos_12_meses.append(
+                distribuicao_mes_item
             )
 
     retorno_medio_mensal = (
         sum(
-            retornos_positivos,
+            retornos_12_meses,
             Decimal('0')
         )
-        / Decimal(
-            str(
-                len(
-                    retornos_positivos
-                )
-            )
-        )
-        if retornos_positivos
+        / Decimal(str(len(retornos_12_meses)))
+        if retornos_12_meses
         else Decimal('0')
     )
-    
+
     retorno_medio_mensal_percentual = (
         retorno_medio_mensal
         / investimento_acionista
@@ -28823,6 +29022,38 @@ def dashboard_investidor():
         'ano': ano,
         'mes': mes,
         'empresa_investidora': empresa_investidora,
+        
+        # =================================================
+        # DADOS DA EMPRESA INVESTIDORA
+        # =================================================
+
+        'receita_empresa_mes': arredondar(
+            receita_empresa_mes
+        ),
+
+        'receita_empresa_total': arredondar(
+            receita_empresa_total
+        ),
+
+        'despesa_empresa_mes': arredondar(
+            despesa_empresa_mes
+        ),
+
+        'despesa_empresa_total': arredondar(
+            despesa_empresa_total
+        ),
+
+        'lucro_liquido_empresa_mes': arredondar(
+            lucro_liquido_empresa_mes
+        ),
+
+        'distribuicao_acionista_mes': arredondar(
+            distribuicao_acionista_mes
+        ),
+
+        'distribuicao_acionista_total': arredondar(
+            distribuicao_acionista_total
+        ),
 
         'participacao_percentual': arredondar(
             participacao_percentual
@@ -28942,6 +29173,10 @@ def dashboard_investidor():
 
         'roi_mes_percentual': arredondar(
             roi_mes_percentual
+        ),
+        
+        'roi_acumulado_percentual': arredondar(
+            roi_acumulado_percentual
         ),
 
         'retorno_medio_mensal': arredondar(

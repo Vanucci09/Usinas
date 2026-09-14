@@ -19,52 +19,53 @@
         background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
         border-radius: 1rem;
         color: #fff;
-        padding: 1.75rem;
+        padding: 1.5rem 1.75rem;
     }
 
     .dashboard-card {
         background-color: var(--bs-body-bg);
-        border: 1px solid var(--bs-border-color);
+        border: 1px solid var(--bs-border-color-translucent);
         border-radius: 1rem;
-        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.04);
+        box-shadow: 0 0.125rem 0.35rem rgba(0, 0, 0, 0.03);
         height: 100%;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), 
+                    box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     .dashboard-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.08);
+        transform: translateY(-2px);
+        box-shadow: 0 0.5rem 1.25rem rgba(0, 0, 0, 0.07);
     }
 
     .indicador-label {
         color: var(--bs-secondary-color);
-        font-size: 0.75rem;
+        font-size: 0.72rem;
         font-weight: 700;
-        letter-spacing: 0.05em;
+        letter-spacing: 0.06em;
         text-transform: uppercase;
     }
 
     .indicador-valor {
         color: var(--bs-body-color);
-        font-size: 1.65rem;
+        font-size: 1.75rem;
         font-weight: 700;
         line-height: 1.2;
     }
 
     .indicador-secundario {
         color: var(--bs-secondary-color);
-        font-size: 0.85rem;
+        font-size: 0.825rem;
     }
 
     .icone-indicador {
         align-items: center;
         border-radius: 0.75rem;
         display: flex;
+        flex-shrink: 0;
         font-size: 1.35rem;
         height: 48px;
-        justify-content: center;
         width: 48px;
-        flex-shrink: 0;
+        justify-content: center;
     }
 
     .icone-azul { background: rgba(13, 110, 253, 0.12); color: var(--cor-azul); }
@@ -74,29 +75,34 @@
     .icone-roxo { background: rgba(111, 66, 193, 0.12); color: var(--cor-roxa); }
 
     .payback-area {
-        background: radial-gradient(circle at top right, rgba(253, 126, 20, 0.12), transparent 40%), var(--bs-body-bg);
+        background: radial-gradient(circle at top right, rgba(253, 126, 20, 0.08), transparent 45%),
+                    var(--bs-body-bg);
     }
 
+    /* Medidor circular com fallback e transição */
     .medidor-circular {
         --valor: 0;
         align-items: center;
-        background: conic-gradient(var(--cor-laranja) calc(var(--valor) * 1%), var(--bs-border-color) 0);
+        background: conic-gradient(
+            var(--cor-laranja) calc(var(--valor) * 1%),
+            var(--bs-border-color) 0
+        );
         border-radius: 50%;
         display: flex;
-        height: 200px;
+        height: 190px;
+        width: 190px;
         justify-content: center;
         margin: auto;
         position: relative;
-        width: 200px;
     }
 
     .medidor-circular::before {
         background: var(--bs-body-bg);
         border-radius: 50%;
         content: "";
-        height: 156px;
+        height: 148px;
+        width: 148px;
         position: absolute;
-        width: 156px;
     }
 
     .medidor-conteudo {
@@ -107,118 +113,118 @@
 
     .medidor-percentual {
         color: var(--bs-body-color);
-        font-size: 2.2rem;
+        font-size: 2.1rem;
         font-weight: 800;
         line-height: 1;
     }
 
     .medidor-texto {
         color: var(--bs-secondary-color);
-        font-size: 0.75rem;
+        font-size: 0.72rem;
+        font-weight: 600;
         margin-top: 6px;
         text-transform: uppercase;
-        font-weight: 600;
+        letter-spacing: 0.04em;
     }
 
     .status-online {
         align-items: center;
         display: inline-flex;
-        gap: 6px;
         font-weight: 500;
+        gap: 6px;
     }
 
     .status-online::before {
         background: #20c997;
         border-radius: 50%;
-        box-shadow: 0 0 0 4px rgba(32, 201, 151, 0.2);
+        box-shadow: 0 0 0 4px rgba(32, 201, 151, 0.25);
         content: "";
         height: 8px;
         width: 8px;
     }
 
-    .valor-positivo { color: var(--cor-verde) !important; }
-    .valor-negativo { color: var(--cor-vermelha) !important; }
-
     .resumo-payback {
-        border-bottom: 1px solid var(--bs-border-color);
-        padding: 10px 0;
+        border-bottom: 1px dashed var(--bs-border-color);
+        padding: 0.65rem 0;
     }
 
     .resumo-payback:last-child {
         border-bottom: none;
     }
 
-    .atualizacao-painel {
-        font-size: 0.8rem;
-        opacity: 0.85;
+    .titulo-secao {
+        border-bottom: 1px solid var(--bs-border-color);
+        padding-bottom: 0.65rem;
     }
 
-    @media (max-width: 767px) {
+    @media (max-width: 767.98px) {
         .dashboard-header { padding: 1.25rem; }
-        .indicador-valor { font-size: 1.4rem; }
-        .medidor-circular { height: 170px; width: 170px; }
-        .medidor-circular::before { height: 130px; width: 130px; }
-        .medidor-percentual { font-size: 1.8rem; }
+        .indicador-valor { font-size: 1.45rem; }
+        .medidor-circular { height: 160px; width: 160px; }
+        .medidor-circular::before { height: 124px; width: 124px; }
+        .medidor-percentual { font-size: 1.7rem; }
     }
 </style>
 
 <div class="container-fluid py-4 investidor-page">
 
+    <!-- ================================================= -->
     <!-- CABEÇALHO -->
-    <div class="dashboard-header mb-4 shadow-sm">
+    <!-- ================================================= -->
+    <header class="dashboard-header mb-4 shadow-sm">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
             <div>
-                <div>
-                    <div class="d-flex align-items-center gap-2 mb-1">
-                        <i class="bi bi-speedometer2 fs-3"></i>
-                        <h3 class="mb-0 fw-bold">Dashboard do Investidor</h3>
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <i class="bi bi-speedometer2 fs-3" aria-hidden="true"></i>
+                    <h3 class="mb-0 fw-bold">Dashboard do Investidor</h3>
+                </div>
+
+                {% if dashboard %}
+                    <div class="opacity-75 fs-6 d-flex align-items-center gap-1">
+                        <i class="bi bi-lightning-sun" aria-hidden="true"></i>
+                        <span>{{ dashboard.usina.nome }}</span>
                     </div>
 
-                    {% if dashboard %}
-                        <div class="opacity-75 fs-6">
-                            <i class="bi bi-lightning-sun me-1"></i>
-                            {{ dashboard.usina.nome }}
+                    {% if dashboard.empresa_investidora %}
+                        <div class="mt-2 d-flex align-items-center gap-2 flex-wrap">
+                            <span class="badge bg-light text-dark border">
+                                <i class="bi bi-building me-1" aria-hidden="true"></i>
+                                {{ dashboard.empresa_investidora.razao_social }}
+                            </span>
+                            <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                Participação: {{ "%.2f"|format(dashboard.participacao_percentual) }}%
+                            </span>
                         </div>
-
-                        {% if dashboard.empresa_investidora %}
-                            <div class="mt-2">
-                                <span class="badge bg-light text-dark border">
-                                    <i class="bi bi-building me-1"></i>
-                                    {{ dashboard.empresa_investidora.razao_social }}
-                                </span>
-
-                                <span class="badge bg-success ms-2">
-                                    {{ dashboard.participacao_percentual | formato_brasileiro | replace('R$ ', '') }}%
-                                </span>
-                            </div>
-                        {% endif %}
                     {% endif %}
-                </div>
+                {% endif %}
             </div>
 
             <div class="d-flex flex-wrap align-items-center gap-3">
                 {% if dashboard %}
-                    <div class="text-md-end">
-                        <div class="status-online">Painel ativo</div>
-                        <div class="atualizacao-painel">
+                    <div class="text-md-end text-light">
+                        <div class="status-online small">Painel conectado</div>
+                        <div class="small opacity-75">
                             {% if dashboard.ultimo_monitoramento %}
-                                Último dado: {{ dashboard.ultimo_monitoramento.strftime('%d/%m/%Y %H:%M') }}
+                                Última leitura: {{ dashboard.ultimo_monitoramento.strftime('%d/%m/%Y %H:%M') }}
                             {% else %}
-                                Sem monitoramento hoje
+                                Sem leituras recentes
                             {% endif %}
                         </div>
                     </div>
                 {% endif %}
+
                 <a href="{{ url_for('index') }}" class="btn btn-light btn-sm px-3 fw-semibold shadow-sm">
-                    Menu
+                    <i class="bi bi-arrow-left-short" aria-hidden="true"></i> Menu Principal
                 </a>
             </div>
         </div>
-    </div>
+    </header>
 
+    <!-- ================================================= -->
     <!-- FILTRO -->
+    <!-- ================================================= -->
     <div class="dashboard-card p-3 mb-4">
-        <form method="GET" class="row g-3 align-items-end">
+        <form method="GET" class="row g-3 align-items-end" id="filtroDashboardForm">
             <div class="col-12 col-md-5">
                 <label for="usina_id" class="form-label indicador-label">Usina</label>
                 <select name="usina_id" id="usina_id" class="form-select form-select-sm">
@@ -230,10 +236,11 @@
                 </select>
             </div>
 
-            <div class="col-6 col-md-2">
+            <div class="col-6 col-md-3">
                 <label for="mes" class="form-label indicador-label">Mês</label>
                 <select name="mes" id="mes" class="form-select form-select-sm">
-                    {% set meses_nomes = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'] %}
+                    {% set meses_nomes = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
+                                          'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'] %}
                     {% for numero_mes in range(1, 13) %}
                         <option value="{{ numero_mes }}" {% if numero_mes == mes %}selected{% endif %}>
                             {{ meses_nomes[numero_mes - 1] }}
@@ -244,12 +251,13 @@
 
             <div class="col-6 col-md-2">
                 <label for="ano" class="form-label indicador-label">Ano</label>
-                <input type="number" name="ano" id="ano" class="form-control form-control-sm" value="{{ ano }}" min="2020" max="2100">
+                <input type="number" name="ano" id="ano" class="form-control form-control-sm"
+                       value="{{ ano }}" min="2020" max="2100">
             </div>
 
-            <div class="col-12 col-md-3">
+            <div class="col-12 col-md-2">
                 <button type="submit" class="btn btn-primary btn-sm w-100 fw-semibold">
-                    <i class="bi bi-funnel me-1"></i> Filtrar
+                    <i class="bi bi-funnel me-1" aria-hidden="true"></i> Filtrar
                 </button>
             </div>
         </form>
@@ -257,280 +265,334 @@
 
     {% if dashboard %}
 
+        <!-- ================================================= -->
+        <!-- FINANCEIRO DA EMPRESA -->
+        <!-- ================================================= -->
+        <div class="d-flex align-items-center gap-2 mb-3 titulo-secao">
+            <i class="bi bi-building fs-4 text-primary" aria-hidden="true"></i>
+            <div>
+                <h4 class="fw-bold mb-0">Dados da Empresa</h4>
+                <div class="text-muted small">Resultado financeiro e retorno do investimento da cota societária</div>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-4">
+            <!-- FATURAMENTO -->
+            <div class="col-12 col-md-4">
+                <div class="dashboard-card p-3">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="indicador-label">Faturamento / Arrendamento</span>
+                            <div class="indicador-valor text-success mt-1">
+                                {{ dashboard.receita_empresa_mes | formato_brasileiro }}
+                            </div>
+                            <div class="indicador-secundario mt-2">
+                                Acumulado: <strong>{{ dashboard.receita_empresa_total | formato_brasileiro }}</strong>
+                            </div>
+                        </div>
+                        <div class="icone-indicador icone-verde">
+                            <i class="bi bi-cash-coin" aria-hidden="true"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DESPESAS + IMPOSTOS -->
+            <div class="col-12 col-md-4">
+                <div class="dashboard-card p-3">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="indicador-label">Despesas + Impostos</span>
+                            <div class="indicador-valor text-danger mt-1">
+                                {{ dashboard.despesa_empresa_mes | formato_brasileiro }}
+                            </div>
+                            <div class="indicador-secundario mt-2">
+                                Acumulado: <strong class="text-danger">{{ dashboard.despesa_empresa_total | formato_brasileiro }}</strong>
+                            </div>
+                        </div>
+                        <div class="icone-indicador icone-vermelho">
+                            <i class="bi bi-receipt" aria-hidden="true"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DISTRIBUIÇÃO DE LUCROS -->
+            <div class="col-12 col-md-4">
+                <div class="dashboard-card p-3">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="indicador-label">Distribuição de Lucros</span>
+                            <div class="indicador-valor text-primary mt-1">
+                                {{ dashboard.distribuicao_acionista_mes | formato_brasileiro }}
+                            </div>
+                            <div class="indicador-secundario mt-2">
+                                Acumulado: <strong class="text-primary">{{ dashboard.distribuicao_acionista_total | formato_brasileiro }}</strong>
+                            </div>
+                        </div>
+                        <div class="icone-indicador icone-azul">
+                            <i class="bi bi-wallet2" aria-hidden="true"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================================================= -->
         <!-- PAYBACK -->
-        <div class="dashboard-card payback-area p-4 mb-4">
+        <!-- ================================================= -->
+        <div class="dashboard-card payback-area p-4 mb-5">
             <div class="row align-items-center g-4">
+                <!-- GRÁFICO CIRCULAR -->
                 <div class="col-12 col-lg-4 text-center">
-                    <div class="medidor-circular" style="--valor: {{ dashboard.payback_percentual_visual }};">
+                    <div class="medidor-circular" style="--valor: {{ [dashboard.payback_percentual_visual | float, 100]|min }};">
                         <div class="medidor-conteudo">
                             <div class="medidor-percentual">
-                                {{ dashboard.payback_percentual | formato_brasileiro | replace('R$ ', '') }}%
+                                {{ "%.1f"|format(dashboard.payback_percentual) }}%
                             </div>
                             <div class="medidor-texto">Payback Realizado</div>
                         </div>
                     </div>
                 </div>
 
+                <!-- RESUMO -->
                 <div class="col-12 col-md-6 col-lg-4">
                     <div class="mb-3">
-                        <span class="badge bg-warning text-dark mb-2 fw-bold">Retorno do Investimento</span>
+                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle mb-1 fw-bold">
+                            Retorno do Investimento
+                        </span>
                         <h4 class="fw-bold mb-1">Evolução do Payback</h4>
-                        <p class="text-muted small mb-0">Acompanhamento do valor líquido recuperado sobre o aporte inicial.</p>
+                        <p class="text-muted small mb-0">Amortização do capital investido via lucros distribuídos.</p>
                     </div>
 
                     <div class="resumo-payback">
-                        <div class="indicador-label">Investimento Considerado</div>
+                        <div class="indicador-label">Investimento Total</div>
                         <div class="fs-6 fw-bold">{{ dashboard.investimento | formato_brasileiro }}</div>
                     </div>
 
                     <div class="resumo-payback">
-                        <div class="indicador-label">Receita Acumulada</div>
-                        <div class="fs-6 fw-bold valor-positivo">{{ dashboard.receita_total | formato_brasileiro }}</div>
+                        <div class="indicador-label">Distribuição Acumulada</div>
+                        <div class="fs-6 fw-bold text-success">{{ dashboard.distribuicao_acionista_total | formato_brasileiro }}</div>
                     </div>
 
                     <div class="resumo-payback">
-                        <div class="indicador-label">Valor Restante</div>
-                        <div class="fs-6 fw-bold text-warning">{{ dashboard.valor_restante_payback | formato_brasileiro }}</div>
+                        <div class="indicador-label">ROI Acumulado</div>
+                        <div class="fs-6 fw-bold text-primary">{{ "%.2f"|format(dashboard.roi_acumulado_percentual) }}%</div>
+                    </div>
+
+                    <div class="resumo-payback">
+                        <div class="indicador-label">Saldo a Recuperar</div>
+                        <div class="fs-6 fw-bold text-warning-emphasis">{{ dashboard.valor_restante_payback | formato_brasileiro }}</div>
                     </div>
                 </div>
 
+                <!-- ESTIMATIVAS -->
                 <div class="col-12 col-md-6 col-lg-4">
                     <div class="p-3 border rounded-3 bg-body-tertiary">
-                        <div class="indicador-label mb-1">Previsão de Conclusão</div>
+                        <span class="indicador-label d-block mb-1">Previsão de Conclusão</span>
+
                         {% if dashboard.previsao_payback %}
                             <div class="display-6 fw-bold text-primary">
                                 {{ dashboard.previsao_payback.strftime('%m/%Y') }}
                             </div>
+
                             {% if dashboard.meses_restantes_payback > 0 %}
                                 <div class="text-muted small mt-1">
-                                    Aproximadamente <strong>{{ dashboard.meses_restantes_payback }} meses</strong> restantes.
+                                    Restam aproximadamente <strong>{{ dashboard.meses_restantes_payback }} meses</strong>.
                                 </div>
                             {% else %}
                                 <div class="text-success small mt-1 fw-semibold">
-                                    <i class="bi bi-check-circle-fill me-1"></i> Investimento recuperado!
+                                    <i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i> Investimento 100% amortizado!
                                 </div>
                             {% endif %}
                         {% else %}
                             <div class="fs-6 fw-bold text-muted">Ainda não calculável</div>
-                            <div class="text-muted small mt-1">Exige histórico positivo de retorno mensal.</div>
+                            <div class="text-muted small mt-1">Exige histórico recorrente de lucros.</div>
                         {% endif %}
 
-                        <hr class="my-2">
+                        <hr class="my-3">
 
-                        <div class="indicador-label">
-                            Retorno Médio Mensal
-                        </div>
-
-                        <div class="fs-6 fw-bold">
+                        <span class="indicador-label d-block mb-1">Retorno Médio Mensal</span>
+                        <div class="fs-6 fw-bold text-body">
                             {{ dashboard.retorno_medio_mensal | formato_brasileiro }}
                         </div>
-
                         <div class="small text-success fw-semibold mt-1">
-                            {{ dashboard.retorno_medio_mensal_percentual | formato_brasileiro | replace('R$ ', '') }}%
-                            ao mês sobre o investimento
+                            {{ "%.2f"|format(dashboard.retorno_medio_mensal_percentual) }}% ao mês sobre o aporte
+                        </div>
+
+                        <hr class="my-3">
+
+                        <span class="indicador-label d-block mb-1">Distribuição no Mês</span>
+                        <div class="fs-6 fw-bold text-primary">
+                            {{ dashboard.distribuicao_acionista_mes | formato_brasileiro }}
+                        </div>
+                        <div class="small text-muted mt-1">
+                            ROI mensal: <strong>{{ "%.2f"|format(dashboard.roi_mes_percentual) }}%</strong>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- TEMPO REAL -->
+        <!-- ================================================= -->
+        <!-- GERAÇÃO & DESEMPENHO DA USINA -->
+        <!-- ================================================= -->
+        <div class="d-flex align-items-center gap-2 mb-3 titulo-secao">
+            <i class="bi bi-lightning-charge-fill fs-4 text-warning" aria-hidden="true"></i>
+            <div>
+                <h4 class="fw-bold mb-0">Dados de Geração</h4>
+                <div class="text-muted small">Monitoramento físico e operacional da usina</div>
+            </div>
+        </div>
+
         <div class="row g-3 mb-4">
+            <!-- GERAÇÃO ATUAL -->
             <div class="col-12 col-md-4">
                 <div class="dashboard-card p-3">
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
-                            <div class="indicador-label">Geração até Agora</div>
+                            <span class="indicador-label">Geração até Agora</span>
                             <div class="indicador-valor mt-1">
-                                {{ dashboard.geracao_ate_agora | formato_brasileiro | replace('R$ ', '') }} <span class="fs-6 font-monospace fw-normal text-muted">kWh</span>
+                                {{ "%.0f"|format(dashboard.geracao_ate_agora) }}
+                                <span class="fs-6 text-muted fw-normal">kWh</span>
                             </div>
                             <div class="indicador-secundario mt-2">
-                                Média diária: {{ dashboard.media_diaria | formato_brasileiro }} kWh
+                                Média diária: {{ "%.1f"|format(dashboard.media_diaria) }} kWh
                             </div>
                         </div>
                         <div class="icone-indicador icone-laranja">
-                            <i class="bi bi-lightning-charge-fill"></i>
+                            <i class="bi bi-lightning-charge-fill" aria-hidden="true"></i>
                         </div>
                     </div>
                 </div>
             </div>
 
+            <!-- PROJEÇÃO -->
             <div class="col-12 col-md-4">
                 <div class="dashboard-card p-3">
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
-                            <div class="indicador-label">Projeção do Mês</div>
-                            <div class="indicador-valor mt-1 text-success">
-                                {{ dashboard.geracao_prevista_mes | formato_brasileiro | replace('R$ ', '') }} <span class="fs-6 font-monospace fw-normal text-muted">kWh</span>
+                            <span class="indicador-label">Projeção do Mês</span>
+                            <div class="indicador-valor text-success mt-1">
+                                {{ "%.0f"|format(dashboard.geracao_prevista_mes) }}
+                                <span class="fs-6 text-muted fw-normal">kWh</span>
                             </div>
                             <div class="indicador-secundario mt-2">
-                                {{ dashboard.dias_com_dado }} de {{ dashboard.dias_no_mes }} dias registrados
+                                {{ dashboard.dias_com_dado }} de {{ dashboard.dias_no_mes }} dias computados
                             </div>
                         </div>
                         <div class="icone-indicador icone-verde">
-                            <i class="bi bi-graph-up-arrow"></i>
+                            <i class="bi bi-graph-up-arrow" aria-hidden="true"></i>
                         </div>
                     </div>
                 </div>
             </div>
 
+            <!-- PREVISÃO CADASTRADA -->
             <div class="col-12 col-md-4">
                 <div class="dashboard-card p-3">
                     <div class="d-flex justify-content-between align-items-start">
-
                         <div>
-                            <div class="indicador-label">
-                                Previsão Cadastrada para o Mês
+                            <span class="indicador-label">Previsão Contratada</span>
+                            <div class="indicador-valor text-warning-emphasis mt-1">
+                                {{ "%.0f"|format(dashboard.previsao_mensal) }}
+                                <span class="fs-6 text-muted fw-normal">kWh</span>
                             </div>
-
-                            <div class="indicador-valor mt-1 text-warning">
-                                {{ dashboard.previsao_mensal | formato_brasileiro | replace('R$ ', '') }}
-                                <span class="fs-6 font-monospace fw-normal text-muted">
-                                    kWh
-                                </span>
-                            </div>
-
                             <div class="indicador-secundario mt-2">
-
                                 {% if dashboard.desvio_geracao_percentual > 0 %}
-
-                                    Projeção
-                                    <strong class="text-success">
-                                        +{{ dashboard.desvio_geracao_percentual | formato_brasileiro | replace('R$ ', '') }}%
-                                    </strong>
-                                    acima da previsão
-
+                                    Projeção <strong class="text-success">+{{ "%.1f"|format(dashboard.desvio_geracao_percentual) }}%</strong> vs meta
                                 {% elif dashboard.desvio_geracao_percentual < 0 %}
-
-                                    Projeção
-                                    <strong class="text-danger">
-                                        {{ dashboard.desvio_geracao_percentual | formato_brasileiro | replace('R$ ', '') }}%
-                                    </strong>
-                                    abaixo da previsão
-
+                                    Projeção <strong class="text-danger">{{ "%.1f"|format(dashboard.desvio_geracao_percentual) }}%</strong> vs meta
                                 {% else %}
-
-                                    Projeção dentro da previsão cadastrada
-
+                                    Projeção alinhada à meta
                                 {% endif %}
-
                             </div>
                         </div>
-
                         <div class="icone-indicador icone-laranja">
-                            <i class="bi bi-bullseye"></i>
+                            <i class="bi bi-bullseye" aria-hidden="true"></i>
                         </div>
-
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- FATURAMENTO, RECEITA E DESPESAS -->
+        <!-- ================================================= -->
+        <!-- FINANCEIRO DO CONSÓRCIO -->
+        <!-- ================================================= -->
         <div class="row g-3 mb-4">
-
-            <div class="col-12 col-sm-6 col-xl">
+            <div class="col-12 col-sm-6 col-xl-3">
                 <div class="dashboard-card p-3">
-
-                    <div class="indicador-label">
-                        Faturamento Estimado
-                    </div>
-
+                    <span class="indicador-label">Faturamento Estimado</span>
                     <div class="indicador-valor mt-1 text-primary">
                         {{ dashboard.faturamento_estimado_mes | formato_brasileiro }}
                     </div>
-
                     <hr class="my-2">
-
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span class="indicador-secundario">
-                            Tarifa média:
-                        </span>
-
-                        <span class="fw-bold small">
-                            {{ dashboard.tarifa_media_estimada | formato_brasileiro }}/kWh
-                        </span>
+                    <div class="d-flex justify-content-between align-items-center small">
+                        <span class="indicador-secundario">Tarifa média:</span>
+                        <span class="fw-bold">{{ dashboard.tarifa_media_estimada | formato_brasileiro }}/kWh</span>
                     </div>
-
                 </div>
             </div>
-            <div class="col-12 col-sm-6 col-xl">
+
+            <div class="col-12 col-sm-6 col-xl-3">
                 <div class="dashboard-card p-3">
-                    <div class="indicador-label">Faturamento Bruto</div>
-                    <div class="indicador-valor valor-positivo mt-1">
+                    <span class="indicador-label">Faturamento Bruto</span>
+                    <div class="indicador-valor mt-1 text-success">
                         {{ dashboard.faturamento_bruto_mes | formato_brasileiro }}
                     </div>
                     <hr class="my-2">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span class="indicador-secundario">Previsão:</span>
-                        <span class="fw-bold text-primary small">{{ dashboard.faturamento_bruto_previsto_mes | formato_brasileiro }}</span>
+                    <div class="d-flex justify-content-between align-items-center small">
+                        <span class="indicador-secundario">Previsto:</span>
+                        <span class="fw-bold text-primary">{{ dashboard.faturamento_bruto_previsto_mes | formato_brasileiro }}</span>
                     </div>
                 </div>
             </div>
 
-            <div class="col-12 col-sm-6 col-xl">
+            <div class="col-12 col-sm-6 col-xl-3">
                 <div class="dashboard-card p-3">
-                    <div class="indicador-label">Receita Líquida</div>
-                    <div class="indicador-valor mt-1 {% if dashboard.receita_mes >= 0 %}valor-positivo{% else %}valor-negativo{% endif %}">
+                    <span class="indicador-label">Receita Líquida</span>
+                    <div class="indicador-valor mt-1 {% if dashboard.receita_mes >= 0 %}text-success{% else %}text-danger{% endif %}">
                         {{ dashboard.receita_mes | formato_brasileiro }}
                     </div>
                     <hr class="my-2">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span class="indicador-secundario">ROI Mês:</span>
-                        <span class="fw-bold small">{{ dashboard.roi_mes_percentual | formato_brasileiro | replace('R$ ', '') }}%</span>
+                    <div class="d-flex justify-content-between align-items-center small">
+                        <span class="indicador-secundario">Acumulada:</span>
+                        <span class="fw-bold text-success">{{ dashboard.receita_total | formato_brasileiro }}</span>
                     </div>
                 </div>
             </div>
 
-            <div class="col-12 col-sm-6 col-xl">
+            <div class="col-12 col-sm-6 col-xl-3">
                 <div class="dashboard-card p-3">
-                    <div class="indicador-label">Despesa Bruta</div>
-                    <div class="indicador-valor valor-negativo mt-1">
+                    <span class="indicador-label">Despesa Bruta</span>
+                    <div class="indicador-valor mt-1 text-danger">
                         {{ dashboard.despesa_bruta_mes | formato_brasileiro }}
                     </div>
                     <hr class="my-2">
-                    <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex justify-content-between align-items-center small">
                         <span class="indicador-secundario">Acumulada:</span>
-                        <span class="fw-bold text-danger small">{{ dashboard.despesa_bruta_total | formato_brasileiro }}</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-12 col-sm-6 col-xl">
-                <div class="dashboard-card p-3">
-                    <div class="indicador-label">Arrendamento</div>
-                    <div class="indicador-valor mt-1 text-secondary">
-                        {{ dashboard.arrendamento_mes | formato_brasileiro }}
-                    </div>
-                    <hr class="my-2">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span class="indicador-secundario">Acumulado:</span>
-                        <span class="fw-bold text-secondary small">{{ dashboard.arrendamento_total | formato_brasileiro }}</span>
+                        <span class="fw-bold text-danger">{{ dashboard.despesa_bruta_total | formato_brasileiro }}</span>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- ACUMULADOS -->
+        <!-- VISÃO CONSOLIDADA -->
         <div class="dashboard-card p-4">
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
                 <div>
-                    <h5 class="fw-bold mb-0">Visão Acumulada</h5>
-                    <div class="text-muted small">Histórico consolidade da usina</div>
+                    <h5 class="fw-bold mb-0">Visão Consolidada</h5>
+                    <div class="text-muted small">Volume total acumulado desde o início da operação</div>
                 </div>
-                <span class="badge bg-body-tertiary text-body border fw-normal">
-                    <i class="bi bi-arrow-repeat me-1"></i>Atualiza a cada 60s
+                <span class="badge bg-body-tertiary text-secondary border fw-normal">
+                    <i class="bi bi-clock-history me-1" aria-hidden="true"></i> Atualização automática a cada 60s
                 </span>
             </div>
 
-            <div class="row g-3">
-                <div class="col-12">
-                    <div class="p-3 border rounded-3 bg-body-tertiary">
-                        <div class="indicador-label">Geração Acumulada até o Período</div>
-                        <div class="fs-4 fw-bold text-success mt-1">
-                            {{ dashboard.geracao_acumulada | formato_brasileiro | replace('R$ ', '') }} <span class="fs-6 font-monospace text-muted">kWh</span>
-                        </div>
-                    </div>
+            <div class="p-3 border rounded-3 bg-body-tertiary">
+                <span class="indicador-label">Geração Acumulada Histórica</span>
+                <div class="fs-4 fw-bold text-success mt-1">
+                    {{ "%.0f"|format(dashboard.geracao_acumulada) }} <span class="fs-6 font-monospace text-muted fw-normal">kWh</span>
                 </div>
             </div>
         </div>
@@ -538,20 +600,45 @@
     {% else %}
 
         <div class="alert alert-warning d-flex align-items-center" role="alert">
-            <i class="bi bi-exclamation-triangle-fill fs-4 me-2"></i>
-            <div>Nenhuma usina está disponível para este usuário ou período selecionado.</div>
+            <i class="bi bi-exclamation-triangle-fill fs-4 me-2" aria-hidden="true"></i>
+            <div>
+                Nenhuma usina encontrada ou disponível para o período selecionado.
+            </div>
         </div>
 
     {% endif %}
 
 </div>
 
+<!-- ================================================= -->
+<!-- SCRIPTS (Atualização inteligente) -->
+<!-- ================================================= -->
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        const tempoAtualizacao = 60000;
-        window.setTimeout(function () {
-            window.location.reload();
-        }, tempoAtualizacao);
+        const INTERVALO_MS = 60000;
+        let timer = null;
+
+        function iniciarAutoReload() {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => {
+                // Apenas recarrega se o formulário não estiver com foco (evita limpar o que o usuário digita)
+                const formAtivo = document.querySelector('#filtroDashboardForm:focus-within');
+                if (!formAtivo && !document.hidden) {
+                    window.location.reload();
+                } else {
+                    iniciarAutoReload(); // Tenta novamente no próximo ciclo
+                }
+            }, INTERVALO_MS);
+        }
+
+        // Suspende o timer se a aba estiver oculta para economizar dados e render
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                iniciarAutoReload();
+            }
+        });
+
+        iniciarAutoReload();
     });
 </script>
 
