@@ -14026,6 +14026,18 @@ def relatorio_prestacao_direta():
         )
         .all()
     )
+    
+    # =====================================================
+    # SE O ACIONISTA TIVER APENAS UMA USINA,
+    # SELECIONA AUTOMATICAMENTE
+    # =====================================================
+
+    if (
+        current_user.perfil == 'acionista'
+        and not usina_id
+        and len(usinas) == 1
+    ):
+        usina_id = usinas[0].id
 
     # PROTEÇÃO CONTRA ALTERAÇÃO MANUAL DA URL
     if (
