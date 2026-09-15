@@ -11156,10 +11156,7 @@ def distribuicao_lucro_empresa(
     participacao_usuario = None
     acionista_vinculado = None
 
-    # ==========================================
     # RESTRIÇÃO PARA ACIONISTA
-    # ==========================================
-
     if current_user.perfil == 'acionista':
 
         participacao_usuario = (
@@ -11191,20 +11188,14 @@ def distribuicao_lucro_empresa(
         if not acionista_vinculado:
             abort(403)
 
-    # ==========================================
     # CÁLCULO DA DISTRIBUIÇÃO
-    # ==========================================
-
     resultado = calcular_distribuicao_lucro(
         empresa_id,
         mes,
         ano
     )
 
-    # ==========================================
     # FILTRA SOMENTE O ACIONISTA LOGADO
-    # ==========================================
-
     if current_user.perfil == 'acionista':
 
         resultado['distribuicoes'] = [
@@ -11221,7 +11212,8 @@ def distribuicao_lucro_empresa(
         'distribuicao_lucro_empresa.html',
         resultado=resultado,
         participacao_usuario=participacao_usuario,
-        acionista_vinculado=acionista_vinculado
+        acionista_vinculado=acionista_vinculado,
+        agora=datetime.now()
     )
 
 @app.route('/selecionar_distribuicao_lucro', methods=['GET', 'POST'])
