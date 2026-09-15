@@ -11207,13 +11207,17 @@ def distribuicao_lucro_empresa(
             if distribuicao.get('acionista_id')
             == acionista_vinculado.id
         ]
+        
+    agora = datetime.now(
+        ZoneInfo('America/Sao_Paulo')
+    )
 
     return render_template(
         'distribuicao_lucro_empresa.html',
         resultado=resultado,
         participacao_usuario=participacao_usuario,
         acionista_vinculado=acionista_vinculado,
-        agora=datetime.now()
+        agora=agora
     )
 
 @app.route('/selecionar_distribuicao_lucro', methods=['GET', 'POST'])
