@@ -10900,7 +10900,7 @@ def calcular_distribuicao_lucro(
             FinanceiroUsina.usina_id.in_(
                 usinas_ids
             ),
-            FinanceiroUsina.categoria_id == 14,
+            FinanceiroUsina.categoria_id == 5,
             FinanceiroUsina.data_pagamento.isnot(
                 None
             ),
