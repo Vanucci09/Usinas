@@ -383,7 +383,7 @@ class FundoReservaMovimento(db.Model):
     )
 
     descricao = db.Column(
-        db.String(255),
+        db.Text,
         nullable=True
     )
 
@@ -9373,6 +9373,573 @@ def financeiro():
         total_despesas=total_despesas
     )
     
+@app.route('/financeiro/fundo-reserva')
+@login_required
+def fundo_reserva():
+
+    if not current_user.pode_acessar_financeiro:
+        abort(403)
+
+    # ==========================================================
+    # FILTROS
+    # ==========================================================
+
+    usina_id = request.args.get(
+        'usina_id',
+        type=int
+    )
+
+    mes = request.args.get(
+        'mes',
+        type=int
+    )
+
+    ano = request.args.get(
+        'ano',
+        type=int
+    )
+
+    # ==========================================================
+    # USINAS
+    # ==========================================================
+
+    usinas = (
+        Usina.query
+        .filter(
+            Usina.fundo_reserva_percentual.isnot(None),
+            Usina.fundo_reserva_percentual > 0
+        )
+        .order_by(
+            Usina.nome.asc()
+        )
+        .all()
+    )
+
+    # ==========================================================
+    # QUERY DOS MOVIMENTOS
+    # ==========================================================
+
+    query = (
+        FundoReservaMovimento.query
+        .options(
+            joinedload(
+                FundoReservaMovimento.usina
+            ),
+            joinedload(
+                FundoReservaMovimento.financeiro_usina
+            )
+        )
+    )
+
+    if usina_id:
+
+        query = query.filter(
+            FundoReservaMovimento.usina_id
+            == usina_id
+        )
+
+    if mes:
+
+        query = query.filter(
+            db.extract(
+                'month',
+                FundoReservaMovimento.data
+            ) == mes
+        )
+
+    if ano:
+
+        query = query.filter(
+            db.extract(
+                'year',
+                FundoReservaMovimento.data
+            ) == ano
+        )
+
+    movimentos = (
+        query
+        .order_by(
+            FundoReservaMovimento.data.desc(),
+            FundoReservaMovimento.id.desc()
+        )
+        .all()
+    )
+
+    # ==========================================================
+    # TOTAIS DO PERÍODO FILTRADO
+    # ==========================================================
+
+    total_entradas = Decimal('0.00')
+    total_retiradas = Decimal('0.00')
+
+    for movimento in movimentos:
+
+        valor = Decimal(
+            str(
+                movimento.valor
+                or 0
+            )
+        )
+
+        if movimento.tipo == 'entrada':
+
+            total_entradas += valor
+
+        elif movimento.tipo == 'retirada':
+
+            total_retiradas += valor
+
+    resultado_periodo = (
+        total_entradas
+        - total_retiradas
+    )
+
+    # ==========================================================
+    # SALDO ATUAL DO FUNDO
+    #
+    # IMPORTANTE:
+    # O saldo atual não respeita mês/ano.
+    # Ele representa todo o histórico da usina selecionada.
+    # ==========================================================
+
+    saldo_query = (
+        db.session.query(
+            FundoReservaMovimento.tipo,
+            db.func.coalesce(
+                db.func.sum(
+                    FundoReservaMovimento.valor
+                ),
+                0
+            )
+        )
+    )
+
+    if usina_id:
+
+        saldo_query = saldo_query.filter(
+            FundoReservaMovimento.usina_id
+            == usina_id
+        )
+
+    saldos = (
+        saldo_query
+        .group_by(
+            FundoReservaMovimento.tipo
+        )
+        .all()
+    )
+
+    saldo_atual = Decimal('0.00')
+
+    for tipo_movimento, valor_total in saldos:
+
+        valor_total = Decimal(
+            str(
+                valor_total
+                or 0
+            )
+        )
+
+        if tipo_movimento == 'entrada':
+
+            saldo_atual += valor_total
+
+        elif tipo_movimento == 'retirada':
+
+            saldo_atual -= valor_total
+
+    # RETORNO
+    return render_template(
+        'fundo_reserva.html',
+        movimentos=movimentos,
+        usinas=usinas,
+        usina_id=usina_id,
+        mes=mes,
+        ano=ano,
+        total_entradas=total_entradas,
+        total_retiradas=total_retiradas,
+        resultado_periodo=resultado_periodo,
+        saldo_atual=saldo_atual
+    )
+    
+@app.route(
+    '/financeiro/fundo-reserva/retirada',
+    methods=['GET', 'POST']
+)
+@login_required
+def fundo_reserva_retirada():
+
+    if not current_user.pode_acessar_financeiro:
+        abort(403)
+
+    usinas = (
+        Usina.query
+        .filter(
+            Usina.fundo_reserva_percentual.isnot(None),
+            Usina.fundo_reserva_percentual > 0
+        )
+        .order_by(
+            Usina.nome.asc()
+        )
+        .all()
+    )
+
+    def converter_decimal(valor):
+
+        valor = str(valor or '').strip()
+
+        if not valor:
+            return Decimal('0.00')
+
+        valor = (
+            valor
+            .replace('R$', '')
+            .replace(' ', '')
+        )
+
+        if ',' in valor:
+            valor = (
+                valor
+                .replace('.', '')
+                .replace(',', '.')
+            )
+
+        return Decimal(valor)
+
+    if request.method == 'POST':
+
+        try:
+
+            # =================================================
+            # DADOS
+            # =================================================
+
+            usina_id = int(
+                request.form['usina_id']
+            )
+
+            data_retirada = request.form.get(
+                'data'
+            )
+
+            valor = converter_decimal(
+                request.form.get('valor')
+            )
+
+            descricao = (
+                request.form.get(
+                    'descricao',
+                    ''
+                )
+                .strip()
+            )
+
+            # =================================================
+            # VALIDAÇÕES
+            # =================================================
+
+            usina = db.session.get(
+                Usina,
+                usina_id
+            )
+
+            if not usina:
+                raise ValueError(
+                    'Usina não encontrada.'
+                )
+
+            if not data_retirada:
+                raise ValueError(
+                    'Informe a data da retirada.'
+                )
+
+            if valor <= 0:
+                raise ValueError(
+                    'O valor da retirada deve ser maior que zero.'
+                )
+
+            if not descricao:
+                raise ValueError(
+                    'Informe a descrição da retirada.'
+                )
+
+            # =================================================
+            # CALCULA SALDO DISPONÍVEL DA USINA
+            # =================================================
+
+            movimentos = (
+                FundoReservaMovimento.query
+                .filter(
+                    FundoReservaMovimento.usina_id
+                    == usina_id
+                )
+                .all()
+            )
+
+            saldo_disponivel = Decimal('0.00')
+
+            for movimento in movimentos:
+
+                valor_movimento = Decimal(
+                    str(
+                        movimento.valor
+                        or 0
+                    )
+                )
+
+                if movimento.tipo == 'entrada':
+                    saldo_disponivel += valor_movimento
+
+                elif movimento.tipo == 'retirada':
+                    saldo_disponivel -= valor_movimento
+
+            # =================================================
+            # VALIDA SALDO
+            # =================================================
+
+            if valor > saldo_disponivel:
+
+                raise ValueError(
+                    f'Saldo insuficiente no Fundo de Reserva. '
+                    f'Saldo disponível: '
+                    f'R$ {saldo_disponivel:,.2f}'
+                    .replace(',', 'X')
+                    .replace('.', ',')
+                    .replace('X', '.')
+                )
+
+            # =================================================
+            # CRIA RETIRADA
+            # =================================================
+
+            retirada = FundoReservaMovimento(
+                usina_id=usina_id,
+                financeiro_usina_id=None,
+                data=data_retirada,
+                tipo='retirada',
+                valor=valor,
+                descricao=descricao
+            )
+
+            db.session.add(
+                retirada
+            )
+
+            db.session.commit()
+
+            flash(
+                'Retirada realizada com sucesso!',
+                'success'
+            )
+
+            return redirect(
+                url_for(
+                    'fundo_reserva',
+                    usina_id=usina_id
+                )
+            )
+
+        except (
+            ValueError,
+            InvalidOperation
+        ) as e:
+
+            db.session.rollback()
+
+            flash(
+                str(e)
+                if str(e)
+                else 'Informe valores válidos.',
+                'danger'
+            )
+
+        except Exception as e:
+
+            db.session.rollback()
+
+            current_app.logger.exception(
+                'Erro ao realizar retirada do Fundo de Reserva'
+            )
+
+            flash(
+                f'Erro ao realizar retirada: {e}',
+                'danger'
+            )
+
+    return render_template(
+        'fundo_reserva_retirada.html',
+        usinas=usinas
+    )
+    
+@app.route(
+    '/financeiro/fundo-reserva/entrada',
+    methods=['GET', 'POST']
+)
+@login_required
+def fundo_reserva_entrada():
+
+    if not current_user.pode_acessar_financeiro:
+        abort(403)
+
+    usinas = (
+        Usina.query
+        .filter(
+            Usina.fundo_reserva_percentual.isnot(None),
+            Usina.fundo_reserva_percentual > 0
+        )
+        .order_by(
+            Usina.nome.asc()
+        )
+        .all()
+    )
+
+    def converter_decimal(valor):
+
+        valor = str(valor or '').strip()
+
+        if not valor:
+            return Decimal('0.00')
+
+        valor = (
+            valor
+            .replace('R$', '')
+            .replace(' ', '')
+        )
+
+        if ',' in valor:
+            valor = (
+                valor
+                .replace('.', '')
+                .replace(',', '.')
+            )
+
+        return Decimal(valor)
+
+    if request.method == 'POST':
+
+        try:
+
+            # =================================================
+            # DADOS
+            # =================================================
+
+            usina_id = int(
+                request.form['usina_id']
+            )
+
+            data_entrada = (
+                request.form.get('data')
+                or None
+            )
+
+            valor = converter_decimal(
+                request.form.get('valor')
+            )
+
+            descricao = (
+                request.form.get(
+                    'descricao',
+                    ''
+                )
+                .strip()
+            )
+
+            # =================================================
+            # VALIDAÇÕES
+            # =================================================
+
+            usina = db.session.get(
+                Usina,
+                usina_id
+            )
+
+            if not usina:
+                raise ValueError(
+                    'Usina não encontrada.'
+                )
+
+            if not data_entrada:
+                raise ValueError(
+                    'Informe a data da entrada.'
+                )
+
+            if valor <= 0:
+                raise ValueError(
+                    'O valor deve ser maior que zero.'
+                )
+
+            if not descricao:
+                raise ValueError(
+                    'Informe a descrição da entrada.'
+                )
+
+            # =================================================
+            # CRIA ENTRADA AVULSA
+            # =================================================
+
+            entrada = FundoReservaMovimento(
+                usina_id=usina_id,
+
+                # Entrada manual não pertence
+                # a uma receita do FinanceiroUsina
+                financeiro_usina_id=None,
+
+                data=data_entrada,
+                tipo='entrada',
+                valor=valor,
+                descricao=descricao
+            )
+
+            db.session.add(
+                entrada
+            )
+
+            db.session.commit()
+
+            flash(
+                'Valor adicionado ao Fundo de Reserva com sucesso!',
+                'success'
+            )
+
+            return redirect(
+                url_for(
+                    'fundo_reserva',
+                    usina_id=usina_id
+                )
+            )
+
+        except (
+            ValueError,
+            InvalidOperation
+        ) as e:
+
+            db.session.rollback()
+
+            flash(
+                str(e)
+                if str(e)
+                else 'Informe valores válidos.',
+                'danger'
+            )
+
+        except Exception as e:
+
+            db.session.rollback()
+
+            current_app.logger.exception(
+                'Erro ao adicionar valor ao Fundo de Reserva'
+            )
+
+            flash(
+                f'Erro ao adicionar valor: {e}',
+                'danger'
+            )
+
+    return render_template(
+        'fundo_reserva_entrada.html',
+        usinas=usinas
+    )
+    
 @app.route('/faturas/<int:fatura_id>/whatsapp', methods=['GET'])
 @login_required
 def enviar_whatsapp(fatura_id):
@@ -13469,6 +14036,7 @@ def receita_avulsa():
     )
 
     def converter_decimal(valor):
+
         valor = str(valor or '').strip()
 
         if not valor:
@@ -13494,12 +14062,12 @@ def receita_avulsa():
 
         try:
 
+            # DADOS DO FORMULÁRIO
             usina_id = int(
                 request.form['usina_id']
             )
 
             data = request.form['data']
-
             descricao = (
                 request.form['descricao']
                 .strip()
@@ -13507,6 +14075,10 @@ def receita_avulsa():
 
             valor = converter_decimal(
                 request.form['valor']
+            )
+
+            juros = converter_decimal(
+                request.form.get('juros')
             )
 
             referencia_mes = (
@@ -13538,12 +14110,47 @@ def receita_avulsa():
                 else None
             )
 
+            # VALIDAÇÕES
+            usina = db.session.get(
+                Usina,
+                usina_id
+            )
+
+            if not usina:
+                raise ValueError(
+                    'Usina não encontrada.'
+                )
+
+            # Se estiver sendo cadastrada como paga,
+            # obrigatoriamente precisa informar o banco.
+            conta = None
+
+            if data_pagamento:
+
+                if not caixa_banco_id:
+                    raise ValueError(
+                        'Selecione a conta bancária '
+                        'para a receita paga.'
+                    )
+
+                conta = db.session.get(
+                    CaixaBanco,
+                    caixa_banco_id
+                )
+
+                if not conta:
+                    raise ValueError(
+                        'Conta bancária não encontrada.'
+                    )
+
+            # CRIA RECEITA
             nova_receita = FinanceiroUsina(
                 usina_id=usina_id,
                 tipo='receita',
                 data=data,
                 descricao=descricao,
                 valor=valor,
+                juros=juros,
                 referencia_mes=referencia_mes,
                 referencia_ano=referencia_ano,
                 data_pagamento=data_pagamento,
@@ -13551,13 +14158,124 @@ def receita_avulsa():
                 caixa_banco_id=caixa_banco_id
             )
 
-            db.session.add(nova_receita)
+            db.session.add(
+                nova_receita
+            )
 
-            # Gera o ID antes do commit.
-            # Necessário para vincular os comprovantes à receita.
+            # Gera o ID antes do commit
             db.session.flush()
 
-            # SALVAR COMPROVANTES
+            # MOVIMENTO BANCÁRIO
+            if data_pagamento:
+
+                valor_movimento = (
+                    Decimal(
+                        str(
+                            valor
+                            or 0
+                        )
+                    )
+                    +
+                    Decimal(
+                        str(
+                            juros
+                            or 0
+                        )
+                    )
+                ).quantize(
+                    Decimal('0.01')
+                )
+
+                if valor_movimento > 0:
+
+                    movimento = MovimentoCaixaBanco(
+                        conta_id=conta.id,
+                        data=data_pagamento,
+                        tipo='entrada',
+                        descricao=descricao,
+                        valor=valor_movimento,
+                        origem='financeiro',
+                        referencia_id=nova_receita.id
+                    )
+
+                    db.session.add(
+                        movimento
+                    )
+
+                    saldo_atual = Decimal(
+                        str(
+                            conta.saldo_atual
+                            or 0
+                        )
+                    )
+
+                    conta.saldo_atual = (
+                        saldo_atual
+                        + valor_movimento
+                    )
+
+            # FUNDO DE RESERVA
+            if data_pagamento:
+
+                percentual_fundo = Decimal(
+                    str(
+                        usina.fundo_reserva_percentual
+                        or 0
+                    )
+                )
+
+                if percentual_fundo > 0:
+
+                    valor_com_juros = (
+                        Decimal(
+                            str(
+                                valor
+                                or 0
+                            )
+                        )
+                        +
+                        Decimal(
+                            str(
+                                juros
+                                or 0
+                            )
+                        )
+                    )
+
+                    valor_fundo = (
+                        valor_com_juros
+                        * (
+                            percentual_fundo
+                            / Decimal('100')
+                        )
+                    ).quantize(
+                        Decimal('0.01')
+                    )
+
+                    # Não grava R$ 0,00 devido à constraint
+                    # ck_fundo_reserva_valor (valor > 0)
+                    if valor_fundo > 0:
+
+                        movimento_fundo = (
+                            FundoReservaMovimento(
+                                usina_id=usina_id,
+                                financeiro_usina_id=nova_receita.id,
+                                data=data_pagamento,
+                                tipo='entrada',
+                                valor=valor_fundo,
+                                descricao=(
+                                    f'Reserva automática de '
+                                    f'{percentual_fundo}% - '
+                                    f'{descricao}'
+                                )
+                            )
+                        )
+
+                        db.session.add(
+                            movimento_fundo
+                        )
+
+            # COMPROVANTES
             novos = request.files.getlist(
                 'novos_comprovantes'
             )
@@ -13575,6 +14293,7 @@ def receita_avulsa():
                     arquivo
                 )
 
+            # COMMIT ÚNICO
             db.session.commit()
 
             flash(
@@ -13592,18 +14311,23 @@ def receita_avulsa():
         except (
             ValueError,
             InvalidOperation
-        ):
+        ) as e:
 
             db.session.rollback()
 
             flash(
-                "Informe valores numéricos válidos.",
+                str(e)
+                if str(e)
+                else "Informe valores numéricos válidos.",
                 "danger"
             )
 
         except Exception as e:
 
             db.session.rollback()
+            current_app.logger.exception(
+                'Erro ao cadastrar receita avulsa'
+            )
 
             flash(
                 f"Erro ao cadastrar receita: {e}",
@@ -13629,7 +14353,6 @@ def editar_receita_avulsa(id):
         abort(403)
 
     receita = FinanceiroUsina.query.get_or_404(id)
-
     if receita.tipo != 'receita':
         flash(
             "Registro não é do tipo receita.",
@@ -13660,7 +14383,6 @@ def editar_receita_avulsa(id):
     def converter_decimal(valor):
 
         valor = str(valor or '').strip()
-
         if not valor:
             return Decimal('0.00')
 
@@ -13679,27 +14401,17 @@ def editar_receita_avulsa(id):
             )
 
         return Decimal(valor)
-
     if request.method == 'POST':
 
         try:
-
-            # =================================================
             # GUARDA DADOS ANTIGOS
-            # =================================================
-
             usina_id_antiga = receita.usina_id
-
             conta_id_antiga = receita.caixa_banco_id
-
             data_pagamento_antiga = (
                 receita.data_pagamento
             )
 
-            # =================================================
             # NOVOS DADOS
-            # =================================================
-
             nova_usina_id = int(
                 request.form['usina_id']
             )
@@ -13723,23 +14435,16 @@ def editar_receita_avulsa(id):
                 or None
             )
 
-            # =================================================
             # ATUALIZA FINANCEIRO USINA
-            # =================================================
-
             receita.usina_id = nova_usina_id
-
             receita.data = request.form['data']
-
             receita.descricao = (
                 request.form['descricao']
                 .strip()
             )
 
             receita.valor = novo_valor
-
             receita.juros = novos_juros
-
             receita.referencia_mes = (
                 int(request.form['referencia_mes'])
                 if request.form.get('referencia_mes')
@@ -13766,10 +14471,7 @@ def editar_receita_avulsa(id):
                 nova_conta_id
             )
 
-            # =================================================
             # MOVIMENTO BANCÁRIO EXISTENTE
-            # =================================================
-
             movimento_banco = (
                 MovimentoCaixaBanco.query
                 .filter_by(
@@ -13786,12 +14488,8 @@ def editar_receita_avulsa(id):
                 Decimal('0.01')
             )
 
-            # =================================================
             # SE JÁ EXISTE MOVIMENTO BANCÁRIO
-            # =================================================
-
             if movimento_banco:
-
                 valor_movimento_antigo = Decimal(
                     str(
                         movimento_banco.valor
@@ -13806,10 +14504,7 @@ def editar_receita_avulsa(id):
                     )
                 )
 
-                # ---------------------------------------------
                 # CONTINUA PAGO
-                # ---------------------------------------------
-
                 if receita.data_pagamento:
 
                     if not nova_conta_id:
@@ -13828,10 +14523,7 @@ def editar_receita_avulsa(id):
                             'Conta bancária não encontrada.'
                         )
 
-                    # -----------------------------------------
                     # TROCOU DE CONTA BANCÁRIA
-                    # -----------------------------------------
-
                     if (
                         movimento_banco.conta_id
                         != nova_conta_id
@@ -13865,10 +14557,7 @@ def editar_receita_avulsa(id):
                             + novo_valor_movimento
                         )
 
-                    # -----------------------------------------
                     # MESMA CONTA
-                    # -----------------------------------------
-
                     else:
 
                         saldo_atual = Decimal(
@@ -13907,10 +14596,7 @@ def editar_receita_avulsa(id):
                         novo_valor_movimento
                     )
 
-                # ---------------------------------------------
                 # REMOVEU A DATA DE PAGAMENTO
-                # ---------------------------------------------
-
                 else:
 
                     # Desfaz entrada bancária
@@ -13932,10 +14618,7 @@ def editar_receita_avulsa(id):
                         movimento_banco
                     )
 
-            # =================================================
             # NÃO EXISTE MOVIMENTO, MAS AGORA ESTÁ PAGO
-            # =================================================
-
             elif receita.data_pagamento:
 
                 if not nova_conta_id:
@@ -13980,10 +14663,7 @@ def editar_receita_avulsa(id):
                     + novo_valor_movimento
                 )
 
-            # =================================================
             # FUNDO DE RESERVA
-            # =================================================
-
             movimento_fundo = (
                 FundoReservaMovimento.query
                 .filter_by(
@@ -14005,11 +14685,11 @@ def editar_receita_avulsa(id):
                 )
             )
 
-            # RECEITA CONTINUA PAGA
+            # RECEITA PAGA
             if receita.data_pagamento:
 
-                # Só mantém/cria fundo quando:
-                # percentual da usina > 0
+                # Toda receita participa do Fundo de Reserva
+                # quando a usina possuir percentual configurado.
 
                 if (
                     receita.tipo == 'receita'
@@ -14042,76 +14722,83 @@ def editar_receita_avulsa(id):
                         Decimal('0.01')
                     )
 
-                    # -----------------------------------------
-                    # JÁ EXISTIA
-                    # -----------------------------------------
+                    # VALOR DO FUNDO MAIOR QUE ZERO
+                    if novo_valor_fundo > 0:
+
+                        # MOVIMENTO JÁ EXISTE
+                        if movimento_fundo:
+
+                            movimento_fundo.usina_id = (
+                                receita.usina_id
+                            )
+
+                            movimento_fundo.data = (
+                                receita.data_pagamento
+                            )
+
+                            movimento_fundo.valor = (
+                                novo_valor_fundo
+                            )
+
+                            movimento_fundo.descricao = (
+                                f'Reserva automática de '
+                                f'{percentual_fundo}% - '
+                                f'{receita.descricao}'
+                            )
+
+                        # MOVIMENTO AINDA NÃO EXISTE
+                        else:
+
+                            movimento_fundo = (
+                                FundoReservaMovimento(
+                                    usina_id=receita.usina_id,
+                                    financeiro_usina_id=receita.id,
+                                    data=receita.data_pagamento,
+                                    tipo='entrada',
+                                    valor=novo_valor_fundo,
+                                    descricao=(
+                                        f'Reserva automática de '
+                                        f'{percentual_fundo}% - '
+                                        f'{receita.descricao}'
+                                    )
+                                )
+                            )
+
+                            db.session.add(
+                                movimento_fundo
+                            )
+
+                    # RESULTADO DO FUNDO = ZERO
+                    else:
+
+                        # Não pode existir movimento de R$ 0,00
+                        # por causa da constraint:
+                        # ck_fundo_reserva_valor (valor > 0)
+
+                        if movimento_fundo:
+
+                            db.session.delete(
+                                movimento_fundo
+                            )
+
+                # USINA NÃO POSSUI FUNDO
+                else:
 
                     if movimento_fundo:
 
-                        movimento_fundo.usina_id = (
-                            receita.usina_id
-                        )
-
-                        movimento_fundo.data = (
-                            receita.data_pagamento
-                        )
-
-                        movimento_fundo.valor = (
-                            novo_valor_fundo
-                        )
-
-                        movimento_fundo.descricao = (
-                            f'Reserva automática de '
-                            f'{percentual_fundo}% - '
-                            f'{receita.descricao}'
-                        )
-
-                    # -----------------------------------------
-                    # NÃO EXISTIA
-                    # -----------------------------------------
-
-                    elif novo_valor_fundo > 0:
-
-                        movimento_fundo = (
-                            FundoReservaMovimento(
-                                usina_id=receita.usina_id,
-                                financeiro_usina_id=receita.id,
-                                data=receita.data_pagamento,
-                                tipo='entrada',
-                                valor=novo_valor_fundo,
-                                descricao=(
-                                    f'Reserva automática de '
-                                    f'{percentual_fundo}% - '
-                                    f'{receita.descricao}'
-                                )
-                            )
-                        )
-
-                        db.session.add(
+                        db.session.delete(
                             movimento_fundo
                         )
 
-                # Usina não tem fundo ou categoria mudou
-                elif movimento_fundo:
+            # RECEITA NÃO ESTÁ MAIS PAGA
+            else:
 
+                if movimento_fundo:
                     db.session.delete(
                         movimento_fundo
                     )
 
-            # =================================================
-            # RECEITA DEIXOU DE ESTAR PAGA
-            # =================================================
-
-            elif movimento_fundo:
-
-                db.session.delete(
-                    movimento_fundo
-                )
-
-            # =================================================
             # NOVOS COMPROVANTES
-            # =================================================
-
             novos = request.files.getlist(
                 'novos_comprovantes'
             )
@@ -14126,10 +14813,7 @@ def editar_receita_avulsa(id):
                     arquivo
                 )
 
-            # =================================================
             # COMMIT ÚNICO
-            # =================================================
-
             db.session.commit()
 
             flash(
@@ -14148,7 +14832,6 @@ def editar_receita_avulsa(id):
         except (ValueError, InvalidOperation) as e:
 
             db.session.rollback()
-
             flash(
                 str(e)
                 if str(e)
@@ -14159,7 +14842,6 @@ def editar_receita_avulsa(id):
         except Exception as e:
 
             db.session.rollback()
-
             current_app.logger.exception(
                 'Erro ao editar receita avulsa'
             )
@@ -28789,11 +29471,8 @@ def dashboard_investidor():
 
     else:
 
-        # -------------------------------------------------
         # ADMIN / FINANCEIRO
         # Identifica a empresa vinculada à usina.
-        # -------------------------------------------------
-
         vinculo_empresa = (
             UsinaInvestidora.query
             .filter(
@@ -28955,11 +29634,8 @@ def dashboard_investidor():
         .scalar()
     )
 
-    # =====================================================
     # ARRENDAMENTO DO MÊS
     # Categoria 5, exibida separadamente
-    # =====================================================
-
     arrendamento_mes = para_decimal(
         db.session.query(
             func.coalesce(
@@ -28985,10 +29661,7 @@ def dashboard_investidor():
         - despesa_bruta_mes
     )
 
-    # =====================================================
     # VALORES ACUMULADOS ATÉ O FIM DO MÊS SELECIONADO
-    # =====================================================
-
     faturamento_bruto_total = para_decimal(
         db.session.query(
             func.coalesce(
@@ -29059,32 +29732,104 @@ def dashboard_investidor():
         - despesa_bruta_total
     )
     
-    # =====================================================
-    # FINANCEIRO DA EMPRESA INVESTIDORA
-    # =====================================================
+    # FUNDO DE RESERVA
+    fundo_entradas_mes = para_decimal(
+        db.session.query(
+            func.coalesce(
+                func.sum(
+                    FundoReservaMovimento.valor
+                ),
+                0
+            )
+        )
+        .filter(
+            FundoReservaMovimento.usina_id == usina.id,
+            FundoReservaMovimento.tipo == 'entrada',
+            FundoReservaMovimento.data >= data_inicio,
+            FundoReservaMovimento.data < data_fim
+        )
+        .scalar()
+    )
 
+    fundo_retiradas_mes = para_decimal(
+        db.session.query(
+            func.coalesce(
+                func.sum(
+                    FundoReservaMovimento.valor
+                ),
+                0
+            )
+        )
+        .filter(
+            FundoReservaMovimento.usina_id == usina.id,
+            FundoReservaMovimento.tipo == 'retirada',
+            FundoReservaMovimento.data >= data_inicio,
+            FundoReservaMovimento.data < data_fim
+        )
+        .scalar()
+    )
+
+    fundo_movimento_mes = (
+        fundo_entradas_mes
+        - fundo_retiradas_mes
+    )
+
+    # SALDO ACUMULADO DO FUNDO
+    # Até o final do mês selecionado
+    fundo_entradas_total = para_decimal(
+        db.session.query(
+            func.coalesce(
+                func.sum(
+                    FundoReservaMovimento.valor
+                ),
+                0
+            )
+        )
+        .filter(
+            FundoReservaMovimento.usina_id == usina.id,
+            FundoReservaMovimento.tipo == 'entrada',
+            FundoReservaMovimento.data < data_fim
+        )
+        .scalar()
+    )
+
+    fundo_retiradas_total = para_decimal(
+        db.session.query(
+            func.coalesce(
+                func.sum(
+                    FundoReservaMovimento.valor
+                ),
+                0
+            )
+        )
+        .filter(
+            FundoReservaMovimento.usina_id == usina.id,
+            FundoReservaMovimento.tipo == 'retirada',
+            FundoReservaMovimento.data < data_fim
+        )
+        .scalar()
+    )
+
+    saldo_fundo_reserva = (
+        fundo_entradas_total
+        - fundo_retiradas_total
+    )
+    
+    # FINANCEIRO DA EMPRESA INVESTIDORA
     receita_empresa_mes = Decimal('0')
     receita_empresa_total = Decimal('0')
-
     despesa_empresa_mes = Decimal('0')
     despesa_empresa_total = Decimal('0')
 
     if empresa_investidora:
 
-        # -------------------------------------------------
         # RECEITA DA EMPRESA
         # Receita da empresa = arrendamento pago pela usina
-        # -------------------------------------------------
-
         receita_empresa_mes = arrendamento_mes
-
         receita_empresa_total = arrendamento_total
 
-        # -------------------------------------------------
         # DESPESAS DA EMPRESA
         # Inclui despesas normais + impostos
-        # -------------------------------------------------
-
         despesa_empresa_mes = para_decimal(
             db.session.query(
                 func.coalesce(
@@ -29134,9 +29879,7 @@ def dashboard_investidor():
             .scalar()
         )
 
-    # =====================================================
     # TARIFA MÉDIA DOS CLIENTES ATIVOS
-    # =====================================================
     # Considera somente clientes ativos da usina.
     # Para cada cliente, utiliza o rateio ativo mais recente.
 
@@ -29195,9 +29938,7 @@ def dashboard_investidor():
                 tarifa
                 * percentual
             )
-
             soma_percentual_rateio += percentual
-
 
     tarifa_media_estimada = (
         soma_tarifa_ponderada
@@ -29214,9 +29955,7 @@ def dashboard_investidor():
         4
     )
 
-    # =====================================================
     # FATURAMENTO ESTIMADO
-    # =====================================================
     # Previsão contratada × tarifa média dos clientes ativos
 
     faturamento_estimado_geracao = (
@@ -29229,9 +29968,7 @@ def dashboard_investidor():
         geracao_projetada_mes * tarifa_media_estimada
     )
     
-    # =====================================================
     # DESVIO DA GERAÇÃO
-    # =====================================================
     # Compara a projeção do mês com a previsão cadastrada.
 
     desvio_geracao_kwh = (
@@ -29274,10 +30011,7 @@ def dashboard_investidor():
         - despesa_bruta_prevista_mes
     )
 
-    # =====================================================
     # VALORES PROPORCIONAIS AO ACIONISTA
-    # =====================================================
-
     investimento_total = para_decimal(
         usina.valor_investido
     )
@@ -29342,14 +30076,11 @@ def dashboard_investidor():
         * fator_participacao
     )
     
-    # =====================================================
     # DISTRIBUIÇÃO DE LUCROS DA EMPRESA
-    # =====================================================
     # Regra:
     # Distribuição =
     # Faturamento / Arrendamento
     # - (Despesas + Impostos)
-    # =====================================================
 
     lucro_liquido_empresa_mes = (
         receita_empresa_mes
@@ -29374,13 +30105,10 @@ def dashboard_investidor():
         Decimal('0')
     )
 
-    # =====================================================
     # PAYBACK E ROI
     # Base:
     # faturamento/arrendamento da empresa
     # menos despesas e impostos
-    # =====================================================
-
     retorno_empresa_mes = (
         receita_empresa_mes
         - despesa_empresa_mes
@@ -29397,10 +30125,7 @@ def dashboard_investidor():
         Decimal('0')
     )
 
-    # -----------------------------------------------------
     # PAYBACK
-    # -----------------------------------------------------
-
     payback_percentual = (
         retorno_empresa_total_payback
         / investimento_acionista
@@ -29423,10 +30148,7 @@ def dashboard_investidor():
         Decimal('0')
     )
 
-    # -----------------------------------------------------
     # ROI DO MÊS
-    # -----------------------------------------------------
-
     roi_mes_percentual = (
         retorno_empresa_mes
         / investimento_acionista
@@ -29435,10 +30157,7 @@ def dashboard_investidor():
         else Decimal('0')
     )
 
-    # -----------------------------------------------------
     # ROI ACUMULADO
-    # -----------------------------------------------------
-
     roi_acumulado_percentual = (
         retorno_empresa_total
         / investimento_acionista
@@ -29447,15 +30166,12 @@ def dashboard_investidor():
         else Decimal('0')
     )
 
-    # =====================================================
     # RETORNO MÉDIO DOS ÚLTIMOS 12 MESES
     # Base:
     # arrendamento recebido pela empresa
     # menos despesas + impostos
-    # =====================================================
 
     retornos_12_meses = []
-
     for deslocamento in range(-11, 1):
 
         data_referencia = adicionar_meses(
@@ -29486,11 +30202,8 @@ def dashboard_investidor():
             )
         )
 
-        # ---------------------------------------------
         # ARRENDAMENTO RECEBIDO NO MÊS
         # Categoria 5 da usina
-        # ---------------------------------------------
-
         arrendamento_referencia = para_decimal(
             db.session.query(
                 func.coalesce(
@@ -29511,10 +30224,7 @@ def dashboard_investidor():
             .scalar()
         )
 
-        # ---------------------------------------------
         # DESPESAS + IMPOSTOS DA EMPRESA NO MÊS
-        # ---------------------------------------------
-
         despesas_empresa_referencia = Decimal('0')
 
         if empresa_investidora:
@@ -29545,10 +30255,7 @@ def dashboard_investidor():
                 .scalar()
             )
 
-        # ---------------------------------------------
         # RETORNO LÍQUIDO DO MÊS
-        # ---------------------------------------------
-
         retorno_referencia = (
             arrendamento_referencia
             - despesas_empresa_referencia
@@ -29558,11 +30265,7 @@ def dashboard_investidor():
             retorno_referencia
         )
 
-
-    # =====================================================
     # MÉDIA MENSAL DO RETORNO
-    # =====================================================
-
     retorno_medio_mensal = (
         sum(
             retornos_12_meses,
@@ -29573,7 +30276,6 @@ def dashboard_investidor():
         else Decimal('0')
     )
 
-
     retorno_medio_mensal_percentual = (
         retorno_medio_mensal
         / investimento_acionista
@@ -29582,11 +30284,7 @@ def dashboard_investidor():
         else Decimal('0')
     )
 
-
-    # =====================================================
     # PREVISÃO DE CONCLUSÃO DO PAYBACK
-    # =====================================================
-
     meses_restantes_payback = None
     previsao_payback = None
 
@@ -29610,25 +30308,39 @@ def dashboard_investidor():
     elif valor_restante_payback <= 0:
 
         meses_restantes_payback = 0
-
         previsao_payback = (
             data_fim
             - timedelta(days=1)
         )
 
-    # =====================================================
     # DADOS DO DASHBOARD
-    # =====================================================
-
     dashboard = {
         'usina': usina,
         'ano': ano,
         'mes': mes,
         'empresa_investidora': empresa_investidora,
         
-        # =================================================
-        # DADOS DA EMPRESA INVESTIDORA
-        # =================================================
+        # DADOS DA EMPRESA INVESTIDORA        
+        # Fundo de Reserva
+        'fundo_entradas_mes': arredondar(
+            fundo_entradas_mes
+        ),
+
+        'fundo_retiradas_mes': arredondar(
+            fundo_retiradas_mes
+        ),
+
+        'fundo_movimento_mes': arredondar(
+            fundo_movimento_mes
+        ),
+
+        'saldo_fundo_reserva': arredondar(
+            saldo_fundo_reserva
+        ),
+
+        'fundo_reserva_percentual': arredondar(
+            usina.fundo_reserva_percentual or 0
+        ),
 
         'receita_empresa_mes': arredondar(
             receita_empresa_mes

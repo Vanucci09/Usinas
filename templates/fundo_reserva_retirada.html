@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+
+{% block title %}Nova Retirada - Fundo de Reserva{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-12 col-md-9 col-lg-7">
+
+      <!-- CABEÇALHO -->
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+          <h3 class="mb-1 text-dark fw-bold">
+            <i class="bi bi-dash-circle text-danger me-2"></i>Nova Retirada
+          </h3>
+          <p class="text-muted small mb-0">Registre uma saída de recursos do fundo de reserva da usina</p>
+        </div>
+        <a href="{{ url_for('fundo_reserva') }}" class="btn btn-outline-secondary btn-sm px-3">
+          <i class="bi bi-arrow-left me-1"></i> Voltar
+        </a>
+      </div>
+
+      <!-- CARD DO FORMULÁRIO -->
+      <div class="card border-0 shadow-sm">
+        <div class="card-body p-4">
+          <form method="POST" id="formRetirada">
+
+            <!-- USINA -->
+            <div class="mb-3">
+              <label class="form-label small fw-semibold text-secondary mb-1">
+                Usina <span class="text-danger">*</span>
+              </label>
+              <select name="usina_id" class="form-select" required>
+                <option value="" selected disabled>Selecione a usina...</option>
+                {% for usina in usinas %}
+                  <option value="{{ usina.id }}">
+                    {{ usina.nome }}{% if usina.fundo_reserva_percentual %} — Fundo {{ usina.fundo_reserva_percentual }}%{% endif %}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <!-- LINHA DUPLA: DATA E VALOR -->
+            <div class="row g-3 mb-3">
+              <div class="col-sm-6">
+                <label class="form-label small fw-semibold text-secondary mb-1">
+                  Data da Retirada <span class="text-danger">*</span>
+                </label>
+                <input 
+                  type="date" 
+                  name="data" 
+                  id="dataRetirada"
+                  class="form-control" 
+                  required
+                >
+              </div>
+
+              <div class="col-sm-6">
+                <label class="form-label small fw-semibold text-secondary mb-1">
+                  Valor da Retirada <span class="text-danger">*</span>
+                </label>
+                <div class="input-group">
+                  <span class="input-group-text bg-light text-muted">R$</span>
+                  <input 
+                    type="text" 
+                    name="valor" 
+                    id="inputValor"
+                    class="form-control fw-bold text-danger text-end" 
+                    placeholder="0,00" 
+                    required 
+                    autocomplete="off"
+                  >
+                </div>
+              </div>
+            </div>
+
+            <!-- MOTIVO / DESCRIÇÃO -->
+            <div class="mb-4">
+              <label class="form-label small fw-semibold text-secondary mb-1">
+                Descrição / Justificativa <span class="text-danger">*</span>
+              </label>
+              <textarea 
+                name="descricao" 
+                class="form-control" 
+                rows="3" 
+                placeholder="Informe o motivo detalhado desta retirada (ex: Manutenção corretiva de inversores, pagamento emergencial...)" 
+                required
+              ></textarea>
+            </div>
+
+            <!-- ALERTA INFORMATIVO -->
+            <div class="alert alert-light border small text-muted d-flex align-items-center mb-4 py-2 px-3">
+              <i class="bi bi-info-circle text-primary me-2 fs-5"></i>
+              <span>Esta operação será debitada instantaneamente do saldo consolidado do fundo.</span>
+            </div>
+
+            <!-- BOTÕES DE AÇÃO -->
+            <div class="d-flex gap-2">
+              <a href="{{ url_for('fundo_reserva') }}" class="btn btn-light border text-secondary flex-fill">
+                Cancelar
+              </a>
+              <button type="submit" class="btn btn-danger flex-fill shadow-sm">
+                <i class="bi bi-check2-circle me-1"></i> Confirmar Retirada
+              </button>
+            </div>
+
+          </form>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  // Preenche a data com o dia de hoje por padrão se estiver vazia
+  const inputData = document.getElementById('dataRetirada');
+  if (inputData && !inputData.value) {
+    inputData.value = new Date().toISOString().split('T')[0];
+  }
+
+  // Máscara dinâmica de moeda em Real (BRL)
+  const inputValor = document.getElementById('inputValor');
+  inputValor.addEventListener('input', function(e) {
+    let v = e.target.value.replace(/\D/g, '');
+    if (!v) {
+      e.target.value = '';
+      return;
+    }
+    v = (parseInt(v, 10) / 100).toFixed(2) + '';
+    v = v.replace('.', ',');
+    v = v.replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1.');
+    e.target.value = v;
+  });
+</script>
+{% endblock %}

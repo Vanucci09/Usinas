@@ -1,0 +1,192 @@
+{% extends 'base.html' %}
+
+{% block title %}Fundo de Reserva{% endblock %}
+
+{# Macro para formatar valores em Real sem poluir o markup #}
+{% macro moeda(valor) %}
+  R$ {{ "{:,.2f}".format(valor or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
+{% endmacro %}
+
+{% block content %}
+<div class="container-fluid py-3">
+
+  <!-- CABEÇALHO -->
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+    <div>
+      <h3 class="mb-1 text-dark fw-bold">
+        <i class="bi bi-piggy-bank text-primary me-2"></i>Fundo de Reserva
+      </h3>
+      <p class="text-muted small mb-0">Gestão e extrato de movimentações do fundo de reserva das usinas</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('fundo_reserva_entrada') }}" class="btn btn-success btn-sm px-3 shadow-sm">
+            <i class="bi bi-plus-circle me-1"></i> Adicionar Valor
+        </a>
+        <a href="{{ url_for('fundo_reserva_retirada') }}" class="btn btn-danger btn-sm px-3 shadow-sm">
+            <i class="bi bi-dash-circle me-1"></i> Nova Retirada
+        </a>
+        <a href="{{ url_for('financeiro') }}" class="btn btn-outline-secondary btn-sm px-3">
+            <i class="bi bi-arrow-left me-1"></i> Voltar ao Financeiro
+        </a>
+        </div>
+    </div>
+
+  <!-- FILTROS -->
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-3">
+      <form method="GET" class="row g-2 align-items-end">
+        <div class="col-12 col-md-4">
+          <label class="form-label small fw-semibold text-secondary mb-1">Usina</label>
+          <select name="usina_id" class="form-select form-select-sm">
+            <option value="">Todas as usinas</option>
+            {% for usina in usinas %}
+              <option value="{{ usina.id }}" {% if usina_id == usina.id %}selected{% endif %}>
+                {{ usina.nome }}{% if usina.fundo_reserva_percentual %} ({{ usina.fundo_reserva_percentual }}%){% endif %}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-6 col-md-3">
+          <label class="form-label small fw-semibold text-secondary mb-1">Mês</label>
+          <select name="mes" class="form-select form-select-sm">
+            <option value="">Todos</option>
+            {% for numero, nome in [
+              (1, 'Janeiro'), (2, 'Fevereiro'), (3, 'Março'), (4, 'Abril'),
+              (5, 'Maio'), (6, 'Junho'), (7, 'Julho'), (8, 'Agosto'),
+              (9, 'Setembro'), (10, 'Outubro'), (11, 'Novembro'), (12, 'Dezembro')
+            ] %}
+              <option value="{{ numero }}" {% if mes == numero %}selected{% endif %}>{{ nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-6 col-md-2">
+          <label class="form-label small fw-semibold text-secondary mb-1">Ano</label>
+          <input type="number" name="ano" class="form-control form-select-sm" value="{{ ano or '' }}" placeholder="Ex: 2026" min="2000" max="2100">
+        </div>
+
+        <div class="col-12 col-md-3 d-flex gap-2">
+          <button type="submit" class="btn btn-primary btn-sm flex-fill">
+            <i class="bi bi-funnel me-1"></i> Filtrar
+          </button>
+          <a href="{{ url_for('fundo_reserva') }}" class="btn btn-outline-secondary btn-sm" title="Limpar Filtros">
+            <i class="bi bi-arrow-counterclockwise"></i>
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- CARDS DE RESUMO -->
+  <div class="row g-3 mb-4">
+    <div class="col-sm-6 col-xl-3">
+      <div class="card border-0 shadow-sm h-100 border-start border-4 border-primary">
+        <div class="card-body p-3">
+          <span class="text-muted small fw-semibold">Saldo Atual Geral</span>
+          <h4 class="fw-bold mb-0 mt-1 text-dark">{{ moeda(saldo_atual) }}</h4>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-sm-6 col-xl-3">
+      <div class="card border-0 shadow-sm h-100 border-start border-4 border-success">
+        <div class="card-body p-3">
+          <span class="text-muted small fw-semibold">Entradas no Período</span>
+          <h4 class="fw-bold mb-0 mt-1 text-success">+ {{ moeda(total_entradas) }}</h4>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-sm-6 col-xl-3">
+      <div class="card border-0 shadow-sm h-100 border-start border-4 border-danger">
+        <div class="card-body p-3">
+          <span class="text-muted small fw-semibold">Retiradas no Período</span>
+          <h4 class="fw-bold mb-0 mt-1 text-danger">- {{ moeda(total_retiradas) }}</h4>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-sm-6 col-xl-3">
+      <div class="card border-0 shadow-sm h-100 border-start border-4 {% if resultado_periodo >= 0 %}border-info{% else %}border-warning{% endif %}">
+        <div class="card-body p-3">
+          <span class="text-muted small fw-semibold">Resultado no Período</span>
+          <h4 class="fw-bold mb-0 mt-1 {% if resultado_periodo >= 0 %}text-primary{% else %}text-danger{% endif %}">
+            {{ moeda(resultado_periodo) }}
+          </h4>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TABELA DE MOVIMENTAÇÕES -->
+  <!-- TABELA DE MOVIMENTAÇÕES -->
+  <div class="card border-0 shadow-sm">
+    <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+      <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-clock-history me-2 text-secondary"></i>Histórico de Movimentações</h6>
+      <span class="badge bg-light text-secondary border">{{ movimentos|length }} registros</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light text-secondary small text-uppercase">
+          <tr>
+            <th class="ps-3 text-nowrap" style="width: 110px;">Data</th>
+            <th class="text-nowrap" style="width: 130px;">Usina</th>
+            <th class="text-nowrap" style="width: 110px;">Tipo</th>
+            <th>Descrição</th>
+            <th style="min-width: 200px;">Ref. Receita</th>
+            <th class="text-end pe-3 text-nowrap" style="width: 130px;">Valor</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for movimento in movimentos %}
+            <tr>
+              <td class="ps-3 text-muted text-nowrap">
+                {{ movimento.data.strftime('%d/%m/%Y') if movimento.data else '-' }}
+              </td>
+              <td class="fw-medium text-dark text-nowrap">
+                {{ movimento.usina.nome if movimento.usina else '-' }}
+              </td>
+              <td class="text-nowrap">
+                {% if movimento.tipo == 'entrada' %}
+                  <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill">
+                    <i class="bi bi-arrow-down-left me-1"></i>Entrada
+                  </span>
+                {% else %}
+                  <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill">
+                    <i class="bi bi-arrow-up-right me-1"></i>Retirada
+                  </span>
+                {% endif %}
+              </td>
+              <td class="text-secondary">
+                {{ movimento.descricao or '-' }}
+              </td>
+              <td>
+                {% if movimento.financeiro_usina %}
+                  <span class="badge bg-light text-dark border me-1">#{{ movimento.financeiro_usina.id }}</span>
+                  <span class="small text-muted d-inline-block align-middle">
+                    {{ movimento.financeiro_usina.descricao }}
+                  </span>
+                {% else %}
+                  <span class="text-muted">-</span>
+                {% endif %}
+              </td>
+              <td class="text-end pe-3 fw-bold text-nowrap {% if movimento.tipo == 'entrada' %}text-success{% else %}text-danger{% endif %}">
+                {{ '+' if movimento.tipo == 'entrada' else '-' }} {{ moeda(movimento.valor) }}
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="6" class="text-center text-muted py-5">
+                <i class="bi bi-inbox fs-2 d-block mb-2 text-secondary opacity-50"></i>
+                Nenhuma movimentação encontrada para os filtros selecionados.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
