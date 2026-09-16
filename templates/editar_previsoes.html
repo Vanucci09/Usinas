@@ -77,24 +77,96 @@
                                 <input type="text" name="consorcio_endereco" class="form-control bg-light border-0" value="{{ usina.consorcio_endereco or '' }}">
                             </div>
 
-                            <div class="col-12 mt-4"><h6 class="text-primary fw-bold mb-0"><i class="bi bi-cash-coin me-1"></i> Marcos Financeiros & Saldo</h6></div>
-                            
-                            <div class="col-md-4">
-                                <label class="form-label small fw-semibold text-secondary">Data de Conexão à Rede</label>
-                                <input type="date" name="data_ligacao" class="form-control bg-light border-0" value="{{ usina.data_ligacao.strftime('%Y-%m-%d') if usina.data_ligacao }}">
+                            <div class="col-12 mt-4">
+                                <h6 class="text-primary fw-bold mb-0">
+                                    <i class="bi bi-cash-coin me-1"></i>
+                                    Marcos Financeiros & Saldo
+                                </h6>
                             </div>
-                            <div class="col-md-4">
-                                <label class="form-label small fw-semibold text-secondary">Capital Total Investido</label>
+
+                            <div class="col-md-3">
+                                <label class="form-label small fw-semibold text-secondary">
+                                    Data de Conexão à Rede
+                                </label>
+
+                                <input
+                                    type="date"
+                                    name="data_ligacao"
+                                    class="form-control bg-light border-0"
+                                    value="{{ usina.data_ligacao.strftime('%Y-%m-%d') if usina.data_ligacao }}"
+                                >
+                            </div>
+
+                            <div class="col-md-3">
+                                <label class="form-label small fw-semibold text-secondary">
+                                    Capital Total Investido
+                                </label>
+
                                 <div class="input-group">
-                                    <span class="input-group-text bg-light border-0 text-muted small fw-semibold">R$</span>
-                                    <input type="number" step="0.01" name="valor_investido" class="form-control bg-light border-0" value="{{ usina.valor_investido }}">
+                                    <span class="input-group-text bg-light border-0 text-muted small fw-semibold">
+                                        R$
+                                    </span>
+
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        name="valor_investido"
+                                        class="form-control bg-light border-0"
+                                        value="{{ usina.valor_investido }}"
+                                    >
                                 </div>
                             </div>
-                            <div class="col-md-4">
-                                <label class="form-label small fw-semibold text-secondary">Saldo Atual Acumulado</label>
+
+                            <div class="col-md-3">
+                                <label class="form-label small fw-semibold text-secondary">
+                                    Saldo Atual Acumulado
+                                </label>
+
                                 <div class="input-group">
-                                    <input type="text" name="saldo_kwh" class="form-control bg-light border-0 fw-bold text-success" value="{{ usina.saldo_kwh or '' }}" placeholder="0.00">
-                                    <span class="input-group-text bg-light border-0 text-muted small fw-semibold">kWh</span>
+                                    <input
+                                        type="text"
+                                        name="saldo_kwh"
+                                        class="form-control bg-light border-0 fw-bold text-success"
+                                        value="{{ usina.saldo_kwh or '' }}"
+                                        placeholder="0.00"
+                                    >
+
+                                    <span class="input-group-text bg-light border-0 text-muted small fw-semibold">
+                                        kWh
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="col-md-3">
+                                <label
+                                    for="fundo_reserva_percentual"
+                                    class="form-label small fw-semibold text-secondary"
+                                >
+                                    Fundo de Reserva
+                                </label>
+
+                                <div class="input-group">
+
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        max="100"
+                                        name="fundo_reserva_percentual"
+                                        id="fundo_reserva_percentual"
+                                        class="form-control bg-light border-0 fw-bold"
+                                        value="{{ usina.fundo_reserva_percentual if usina.fundo_reserva_percentual is not none else '' }}"
+                                        placeholder="Ex: 2.00"
+                                    >
+
+                                    <span class="input-group-text bg-light border-0 text-muted small fw-semibold">
+                                        %
+                                    </span>
+
+                                </div>
+
+                                <div class="form-text small">
+                                    Vazio = sem fundo de reserva.
                                 </div>
                             </div>
 

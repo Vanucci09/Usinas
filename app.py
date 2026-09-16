@@ -119,6 +119,11 @@ class Usina(db.Model):
         db.String(255),
         nullable=True
     )
+    
+    fundo_reserva_percentual = db.Column(
+        db.Numeric(5, 2),
+        nullable=True
+    )
 
     # percentuais (0.0 a 1.0)
     ficha_crop_padrao_top = db.Column(db.Float, nullable=False, default=0.37)
@@ -335,6 +340,77 @@ class FinanceiroUsina(db.Model):
         cascade='all, delete-orphan',
         passive_deletes=True,
         lazy='selectin'
+    )
+    
+    
+class FundoReservaMovimento(db.Model):
+    __tablename__ = 'fundo_reserva_movimentos'
+
+    id = db.Column(
+        db.Integer,
+        primary_key=True
+    )
+
+    usina_id = db.Column(
+        db.Integer,
+        db.ForeignKey('usinas.id'),
+        nullable=False,
+        index=True
+    )
+
+    financeiro_usina_id = db.Column(
+        db.Integer,
+        db.ForeignKey('financeiro_usina.id'),
+        nullable=True,
+        index=True
+    )
+
+    data = db.Column(
+        db.Date,
+        nullable=False,
+        default=date.today,
+        index=True
+    )
+
+    tipo = db.Column(
+        db.String(10),
+        nullable=False
+    )  # entrada | retirada
+
+    valor = db.Column(
+        db.Numeric(12, 2),
+        nullable=False
+    )
+
+    descricao = db.Column(
+        db.String(255),
+        nullable=True
+    )
+
+    criado_em = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow
+    )
+
+    usina = db.relationship(
+        'Usina',
+        backref=db.backref(
+            'movimentos_fundo_reserva',
+            lazy='dynamic',
+            cascade='all, delete-orphan'
+        )
+    )
+
+    financeiro_usina = db.relationship(
+        'FinanceiroUsina'
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            'financeiro_usina_id',
+            name='uq_fundo_reserva_financeiro'
+        ),
     )
     
 class FinanceiroUsinaAnexo(db.Model):
@@ -1641,6 +1717,20 @@ def cadastrar_usina():
 
         data_ligacao_str = request.form.get('data_ligacao')
         valor_investido_str = request.form.get('valor_investido')
+        fundo_reserva_str = request.form.get(
+            'fundo_reserva_percentual'
+        )
+
+        fundo_reserva_percentual = None
+
+        if fundo_reserva_str:
+            fundo_reserva_percentual = Decimal(
+                fundo_reserva_str.replace(',', '.')
+            )
+
+            if fundo_reserva_percentual <= 0:
+                fundo_reserva_percentual = None
+        
         ano_atual = date.today().year
 
         saldo_kwh_str = request.form.get('saldo_kwh')
@@ -1679,7 +1769,8 @@ def cadastrar_usina():
             valor_investido=valor_investido,
             saldo_kwh=saldo_kwh,
             tusd_fio_b=tusd_fio_b,          
-            boleto_proprio=boleto_proprio   
+            boleto_proprio=boleto_proprio,
+            fundo_reserva_percentual=fundo_reserva_percentual
         )
         db.session.add(nova_usina)
         db.session.commit()
@@ -6327,6 +6418,38 @@ def editar_previsoes(usina_id):
             saldo_kwh_str = request.form.get('saldo_kwh')
             if saldo_kwh_str is not None and str(saldo_kwh_str).strip() != "":
                 usina.saldo_kwh = float(str(saldo_kwh_str).replace(',', '.'))
+                
+            # Fundo de Reserva
+            fundo_reserva_str = request.form.get(
+                'fundo_reserva_percentual'
+            )
+
+            if (
+                fundo_reserva_str is None
+                or str(fundo_reserva_str).strip() == ''
+            ):
+                usina.fundo_reserva_percentual = None
+
+            else:
+                fundo_reserva_percentual = Decimal(
+                    str(fundo_reserva_str)
+                    .replace(',', '.')
+                    .strip()
+                )
+
+                if fundo_reserva_percentual <= 0:
+                    usina.fundo_reserva_percentual = None
+
+                elif fundo_reserva_percentual > 100:
+                    raise ValueError(
+                        'O percentual do Fundo de Reserva '
+                        'não pode ser maior que 100%.'
+                    )
+
+                else:
+                    usina.fundo_reserva_percentual = (
+                        fundo_reserva_percentual
+                    )
 
             # checkboxes hidden+checkbox
             tusd_vals = request.form.getlist('tusd_fio_b')
@@ -9444,8 +9567,10 @@ def imagem_para_base64(caminho):
 def atualizar_pagamento(id):
 
     financeiro = FinanceiroUsina.query.get_or_404(id)
+
     data_str = request.form.get('data_pagamento')
     juros_str = request.form.get('juros')
+
     conta_id = request.form.get(
         'conta_id',
         type=int
@@ -9461,6 +9586,7 @@ def atualizar_pagamento(id):
         if arquivo and arquivo.filename
     ]
 
+    # Impede nova baixa do mesmo lançamento
     if financeiro.data_pagamento:
 
         flash(
@@ -9473,8 +9599,11 @@ def atualizar_pagamento(id):
             or url_for('financeiro')
         )
 
+    arquivos_salvos = []
+
     try:
 
+        # VALIDAÇÕES
         if not conta_id:
 
             flash(
@@ -9528,6 +9657,7 @@ def atualizar_pagamento(id):
                 or url_for('financeiro')
             )
 
+        # BAIXA DO FINANCEIRO
         financeiro.caixa_banco_id = conta.id
 
         financeiro.data_pagamento = (
@@ -9552,7 +9682,7 @@ def atualizar_pagamento(id):
                 '0.00'
             )
 
-        # Evita movimentação duplicada
+        # MOVIMENTAÇÃO DA CONTA BANCÁRIA
         movimento_existente = (
             MovimentoCaixaBanco.query
             .filter_by(
@@ -9563,6 +9693,7 @@ def atualizar_pagamento(id):
         )
 
         if not movimento_existente:
+
             valor_movimento = Decimal(
                 str(
                     financeiro.valor
@@ -9570,7 +9701,9 @@ def atualizar_pagamento(id):
                 )
             )
 
+            # Juros de receita entram junto no banco
             if financeiro.tipo == 'receita':
+
                 valor_movimento += Decimal(
                     str(
                         financeiro.juros
@@ -9617,7 +9750,82 @@ def atualizar_pagamento(id):
                     - valor_movimento
                 )
 
-        # SALVAR COMPROVANTES
+        # =====================================================
+        # FUNDO DE RESERVA
+        # Percentual definido no cadastro da usina
+        # =====================================================
+
+        percentual_fundo = Decimal(
+            str(
+                financeiro.usina.fundo_reserva_percentual
+                or 0
+            )
+        )
+
+        if (
+            financeiro.tipo == 'receita'
+            and percentual_fundo > 0
+        ):
+
+            fundo_existente = (
+                FundoReservaMovimento.query
+                .filter_by(
+                    financeiro_usina_id=financeiro.id
+                )
+                .first()
+            )
+
+            if not fundo_existente:
+
+                valor_base = Decimal(
+                    str(
+                        financeiro.valor
+                        or 0
+                    )
+                )
+
+                juros_fundo = Decimal(
+                    str(
+                        financeiro.juros
+                        or 0
+                    )
+                )
+
+                valor_com_juros = (
+                    valor_base
+                    + juros_fundo
+                )
+
+                valor_fundo = (
+                    valor_com_juros
+                    * (
+                        percentual_fundo
+                        / Decimal('100')
+                    )
+                ).quantize(
+                    Decimal('0.01')
+                )
+
+                if valor_fundo > 0:
+
+                    movimento_fundo = FundoReservaMovimento(
+                        usina_id=financeiro.usina_id,
+                        financeiro_usina_id=financeiro.id,
+                        data=financeiro.data_pagamento,
+                        tipo='entrada',
+                        valor=valor_fundo,
+                        descricao=(
+                            f'Reserva automática de '
+                            f'{percentual_fundo}% - '
+                            f'{financeiro.descricao}'
+                        )
+                    )
+
+                    db.session.add(
+                        movimento_fundo
+                    )
+
+        # COMPROVANTES
         extensoes_permitidas = {
             'pdf',
             'png',
@@ -9641,8 +9849,6 @@ def atualizar_pagamento(id):
             pasta_lancamento,
             exist_ok=True
         )
-
-        arquivos_salvos = []
 
         for arquivo in comprovantes_validos:
 
@@ -9700,7 +9906,10 @@ def atualizar_pagamento(id):
                 'financeiro_usina',
                 str(financeiro.id),
                 nome_salvo
-            ).replace('\\', '/')
+            ).replace(
+                '\\',
+                '/'
+            )
 
             anexo = FinanceiroUsinaAnexo(
                 financeiro_usina_id=financeiro.id,
@@ -9714,6 +9923,7 @@ def atualizar_pagamento(id):
                 anexo
             )
 
+        # COMMIT ÚNICO
         db.session.commit()
 
         flash(
@@ -9723,16 +9933,15 @@ def atualizar_pagamento(id):
         )
 
     except Exception as e:
+
         db.session.rollback()
 
-        # Remove arquivos que foram gravados,
-        # caso o banco não consiga concluir.
-        for caminho in locals().get(
-            'arquivos_salvos',
-            []
-        ):
+        # Remove arquivos gravados caso
+        # a transação do banco falhe.
+        for caminho in arquivos_salvos:
 
             try:
+
                 if os.path.exists(caminho):
                     os.remove(caminho)
 
@@ -13449,6 +13658,7 @@ def editar_receita_avulsa(id):
     )
 
     def converter_decimal(valor):
+
         valor = str(valor or '').strip()
 
         if not valor:
@@ -13473,9 +13683,51 @@ def editar_receita_avulsa(id):
     if request.method == 'POST':
 
         try:
-            receita.usina_id = int(
+
+            # =================================================
+            # GUARDA DADOS ANTIGOS
+            # =================================================
+
+            usina_id_antiga = receita.usina_id
+
+            conta_id_antiga = receita.caixa_banco_id
+
+            data_pagamento_antiga = (
+                receita.data_pagamento
+            )
+
+            # =================================================
+            # NOVOS DADOS
+            # =================================================
+
+            nova_usina_id = int(
                 request.form['usina_id']
             )
+
+            novo_valor = converter_decimal(
+                request.form['valor']
+            )
+
+            novos_juros = converter_decimal(
+                request.form.get('juros')
+            )
+
+            nova_conta_id = (
+                int(request.form['caixa_banco_id'])
+                if request.form.get('caixa_banco_id')
+                else None
+            )
+
+            nova_data_pagamento = (
+                request.form.get('data_pagamento')
+                or None
+            )
+
+            # =================================================
+            # ATUALIZA FINANCEIRO USINA
+            # =================================================
+
+            receita.usina_id = nova_usina_id
 
             receita.data = request.form['data']
 
@@ -13484,13 +13736,9 @@ def editar_receita_avulsa(id):
                 .strip()
             )
 
-            receita.valor = converter_decimal(
-                request.form['valor']
-            )
+            receita.valor = novo_valor
 
-            receita.juros = converter_decimal(
-                request.form.get('juros')
-            )
+            receita.juros = novos_juros
 
             receita.referencia_mes = (
                 int(request.form['referencia_mes'])
@@ -13505,8 +13753,7 @@ def editar_receita_avulsa(id):
             )
 
             receita.data_pagamento = (
-                request.form.get('data_pagamento')
-                or None
+                nova_data_pagamento
             )
 
             receita.credor_id = (
@@ -13516,11 +13763,355 @@ def editar_receita_avulsa(id):
             )
 
             receita.caixa_banco_id = (
-                int(request.form['caixa_banco_id'])
-                if request.form.get('caixa_banco_id')
-                else None
+                nova_conta_id
             )
-            
+
+            # =================================================
+            # MOVIMENTO BANCÁRIO EXISTENTE
+            # =================================================
+
+            movimento_banco = (
+                MovimentoCaixaBanco.query
+                .filter_by(
+                    origem='financeiro',
+                    referencia_id=receita.id
+                )
+                .first()
+            )
+
+            novo_valor_movimento = (
+                Decimal(str(receita.valor or 0))
+                + Decimal(str(receita.juros or 0))
+            ).quantize(
+                Decimal('0.01')
+            )
+
+            # =================================================
+            # SE JÁ EXISTE MOVIMENTO BANCÁRIO
+            # =================================================
+
+            if movimento_banco:
+
+                valor_movimento_antigo = Decimal(
+                    str(
+                        movimento_banco.valor
+                        or 0
+                    )
+                )
+
+                conta_movimento_antiga = (
+                    db.session.get(
+                        CaixaBanco,
+                        movimento_banco.conta_id
+                    )
+                )
+
+                # ---------------------------------------------
+                # CONTINUA PAGO
+                # ---------------------------------------------
+
+                if receita.data_pagamento:
+
+                    if not nova_conta_id:
+                        raise ValueError(
+                            'Selecione a conta bancária '
+                            'para a receita paga.'
+                        )
+
+                    nova_conta = db.session.get(
+                        CaixaBanco,
+                        nova_conta_id
+                    )
+
+                    if not nova_conta:
+                        raise ValueError(
+                            'Conta bancária não encontrada.'
+                        )
+
+                    # -----------------------------------------
+                    # TROCOU DE CONTA BANCÁRIA
+                    # -----------------------------------------
+
+                    if (
+                        movimento_banco.conta_id
+                        != nova_conta_id
+                    ):
+
+                        # Retira o valor antigo da conta antiga
+                        if conta_movimento_antiga:
+
+                            saldo_antigo = Decimal(
+                                str(
+                                    conta_movimento_antiga.saldo_atual
+                                    or 0
+                                )
+                            )
+
+                            conta_movimento_antiga.saldo_atual = (
+                                saldo_antigo
+                                - valor_movimento_antigo
+                            )
+
+                        # Adiciona novo valor na nova conta
+                        saldo_nova_conta = Decimal(
+                            str(
+                                nova_conta.saldo_atual
+                                or 0
+                            )
+                        )
+
+                        nova_conta.saldo_atual = (
+                            saldo_nova_conta
+                            + novo_valor_movimento
+                        )
+
+                    # -----------------------------------------
+                    # MESMA CONTA
+                    # -----------------------------------------
+
+                    else:
+
+                        saldo_atual = Decimal(
+                            str(
+                                nova_conta.saldo_atual
+                                or 0
+                            )
+                        )
+
+                        diferenca = (
+                            novo_valor_movimento
+                            - valor_movimento_antigo
+                        )
+
+                        nova_conta.saldo_atual = (
+                            saldo_atual
+                            + diferenca
+                        )
+
+                    # Atualiza movimento
+                    movimento_banco.conta_id = (
+                        nova_conta_id
+                    )
+
+                    movimento_banco.data = (
+                        receita.data_pagamento
+                    )
+
+                    movimento_banco.tipo = 'entrada'
+
+                    movimento_banco.descricao = (
+                        receita.descricao
+                    )
+
+                    movimento_banco.valor = (
+                        novo_valor_movimento
+                    )
+
+                # ---------------------------------------------
+                # REMOVEU A DATA DE PAGAMENTO
+                # ---------------------------------------------
+
+                else:
+
+                    # Desfaz entrada bancária
+                    if conta_movimento_antiga:
+
+                        saldo_atual = Decimal(
+                            str(
+                                conta_movimento_antiga.saldo_atual
+                                or 0
+                            )
+                        )
+
+                        conta_movimento_antiga.saldo_atual = (
+                            saldo_atual
+                            - valor_movimento_antigo
+                        )
+
+                    db.session.delete(
+                        movimento_banco
+                    )
+
+            # =================================================
+            # NÃO EXISTE MOVIMENTO, MAS AGORA ESTÁ PAGO
+            # =================================================
+
+            elif receita.data_pagamento:
+
+                if not nova_conta_id:
+                    raise ValueError(
+                        'Selecione a conta bancária '
+                        'para a receita paga.'
+                    )
+
+                nova_conta = db.session.get(
+                    CaixaBanco,
+                    nova_conta_id
+                )
+
+                if not nova_conta:
+                    raise ValueError(
+                        'Conta bancária não encontrada.'
+                    )
+
+                novo_movimento = MovimentoCaixaBanco(
+                    conta_id=nova_conta.id,
+                    data=receita.data_pagamento,
+                    tipo='entrada',
+                    descricao=receita.descricao,
+                    valor=novo_valor_movimento,
+                    origem='financeiro',
+                    referencia_id=receita.id
+                )
+
+                db.session.add(
+                    novo_movimento
+                )
+
+                saldo_atual = Decimal(
+                    str(
+                        nova_conta.saldo_atual
+                        or 0
+                    )
+                )
+
+                nova_conta.saldo_atual = (
+                    saldo_atual
+                    + novo_valor_movimento
+                )
+
+            # =================================================
+            # FUNDO DE RESERVA
+            # =================================================
+
+            movimento_fundo = (
+                FundoReservaMovimento.query
+                .filter_by(
+                    financeiro_usina_id=receita.id,
+                    tipo='entrada'
+                )
+                .first()
+            )
+
+            usina_receita = db.session.get(
+                Usina,
+                receita.usina_id
+            )
+
+            percentual_fundo = Decimal(
+                str(
+                    usina_receita.fundo_reserva_percentual
+                    or 0
+                )
+            )
+
+            # RECEITA CONTINUA PAGA
+            if receita.data_pagamento:
+
+                # Só mantém/cria fundo quando:
+                # percentual da usina > 0
+
+                if (
+                    receita.tipo == 'receita'
+                    and percentual_fundo > 0
+                ):
+
+                    valor_com_juros = (
+                        Decimal(
+                            str(
+                                receita.valor
+                                or 0
+                            )
+                        )
+                        +
+                        Decimal(
+                            str(
+                                receita.juros
+                                or 0
+                            )
+                        )
+                    )
+
+                    novo_valor_fundo = (
+                        valor_com_juros
+                        * (
+                            percentual_fundo
+                            / Decimal('100')
+                        )
+                    ).quantize(
+                        Decimal('0.01')
+                    )
+
+                    # -----------------------------------------
+                    # JÁ EXISTIA
+                    # -----------------------------------------
+
+                    if movimento_fundo:
+
+                        movimento_fundo.usina_id = (
+                            receita.usina_id
+                        )
+
+                        movimento_fundo.data = (
+                            receita.data_pagamento
+                        )
+
+                        movimento_fundo.valor = (
+                            novo_valor_fundo
+                        )
+
+                        movimento_fundo.descricao = (
+                            f'Reserva automática de '
+                            f'{percentual_fundo}% - '
+                            f'{receita.descricao}'
+                        )
+
+                    # -----------------------------------------
+                    # NÃO EXISTIA
+                    # -----------------------------------------
+
+                    elif novo_valor_fundo > 0:
+
+                        movimento_fundo = (
+                            FundoReservaMovimento(
+                                usina_id=receita.usina_id,
+                                financeiro_usina_id=receita.id,
+                                data=receita.data_pagamento,
+                                tipo='entrada',
+                                valor=novo_valor_fundo,
+                                descricao=(
+                                    f'Reserva automática de '
+                                    f'{percentual_fundo}% - '
+                                    f'{receita.descricao}'
+                                )
+                            )
+                        )
+
+                        db.session.add(
+                            movimento_fundo
+                        )
+
+                # Usina não tem fundo ou categoria mudou
+                elif movimento_fundo:
+
+                    db.session.delete(
+                        movimento_fundo
+                    )
+
+            # =================================================
+            # RECEITA DEIXOU DE ESTAR PAGA
+            # =================================================
+
+            elif movimento_fundo:
+
+                db.session.delete(
+                    movimento_fundo
+                )
+
+            # =================================================
+            # NOVOS COMPROVANTES
+            # =================================================
+
             novos = request.files.getlist(
                 'novos_comprovantes'
             )
@@ -13535,10 +14126,15 @@ def editar_receita_avulsa(id):
                     arquivo
                 )
 
+            # =================================================
+            # COMMIT ÚNICO
+            # =================================================
+
             db.session.commit()
 
             flash(
-                "Receita atualizada com sucesso!",
+                "Receita, movimentação bancária e "
+                "Fundo de Reserva atualizados com sucesso!",
                 "success"
             )
 
@@ -13549,16 +14145,24 @@ def editar_receita_avulsa(id):
                 )
             )
 
-        except (ValueError, InvalidOperation):
+        except (ValueError, InvalidOperation) as e:
+
             db.session.rollback()
 
             flash(
-                "Informe valores numéricos válidos.",
+                str(e)
+                if str(e)
+                else "Informe valores numéricos válidos.",
                 "danger"
             )
 
         except Exception as e:
+
             db.session.rollback()
+
+            current_app.logger.exception(
+                'Erro ao editar receita avulsa'
+            )
 
             flash(
                 f"Erro ao atualizar receita: {e}",

@@ -79,22 +79,53 @@
 
                             <div class="col-12 mt-4"><h6 class="text-primary fw-bold mb-0">Financeiro & Prazos</h6></div>
                             
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label for="saldo_kwh" class="form-label small fw-semibold text-secondary">Saldo Atual Acumulado</label>
                                 <div class="input-group">
                                     <input type="number" step="0.01" class="form-control bg-light border-0" id="saldo_kwh" name="saldo_kwh" placeholder="0.00">
                                     <span class="input-group-text bg-light border-0 text-muted small fw-semibold">kWh</span>
                                 </div>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label for="data_ligacao" class="form-label small fw-semibold text-secondary">Data de Ligação (Início)</label>
                                 <input type="date" name="data_ligacao" id="data_ligacao" class="form-control bg-light border-0" required>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label for="valor_investido" class="form-label small fw-semibold text-secondary">Valor Investido</label>
                                 <div class="input-group">
                                     <span class="input-group-text bg-light border-0 text-muted small fw-semibold">R$</span>
                                     <input type="number" step="0.01" name="valor_investido" id="valor_investido" class="form-control bg-light border-0" placeholder="0,00" required>
+                                </div>                                
+                            </div>
+                            <div class="col-md-3">
+                                <label
+                                    for="fundo_reserva_percentual"
+                                    class="form-label small fw-semibold text-secondary"
+                                >
+                                    Fundo de Reserva
+                                </label>
+
+                                <div class="input-group">
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        max="100"
+                                        name="fundo_reserva_percentual"
+                                        id="fundo_reserva_percentual"
+                                        class="form-control bg-light border-0"
+                                        placeholder="Ex: 2.00"
+                                    >
+
+                                    <span
+                                        class="input-group-text bg-light border-0 text-muted small fw-semibold"
+                                    >
+                                        %
+                                    </span>
+                                </div>
+
+                                <div class="form-text">
+                                    Deixe vazio caso a usina não possua Fundo de Reserva.
                                 </div>
                             </div>
 
