@@ -120,7 +120,6 @@
   </div>
 
   <!-- TABELA DE MOVIMENTAÇÕES -->
-  <!-- TABELA DE MOVIMENTAÇÕES -->
   <div class="card border-0 shadow-sm">
     <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
       <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-clock-history me-2 text-secondary"></i>Histórico de Movimentações</h6>
@@ -134,7 +133,7 @@
             <th class="text-nowrap" style="width: 130px;">Usina</th>
             <th class="text-nowrap" style="width: 110px;">Tipo</th>
             <th>Descrição</th>
-            <th style="min-width: 200px;">Ref. Receita</th>
+            <th>Ref. Receita</th>
             <th class="text-end pe-3 text-nowrap" style="width: 130px;">Valor</th>
           </tr>
         </thead>
@@ -158,14 +157,14 @@
                   </span>
                 {% endif %}
               </td>
-              <td class="text-secondary">
-                {{ movimento.descricao or '-' }}
+              <td class="text-secondary" title="{{ movimento.descricao }}">
+                {{ (movimento.descricao.split('|')[0] | trim) if movimento.descricao else '-' }}
               </td>
               <td>
                 {% if movimento.financeiro_usina %}
                   <span class="badge bg-light text-dark border me-1">#{{ movimento.financeiro_usina.id }}</span>
-                  <span class="small text-muted d-inline-block align-middle">
-                    {{ movimento.financeiro_usina.descricao }}
+                  <span class="small text-muted d-inline-block align-middle" title="{{ movimento.financeiro_usina.descricao }}">
+                    {{ (movimento.financeiro_usina.descricao.split('|')[0] | trim) if movimento.financeiro_usina.descricao else '-' }}
                   </span>
                 {% else %}
                   <span class="text-muted">-</span>
