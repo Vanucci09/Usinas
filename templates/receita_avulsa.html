@@ -49,10 +49,23 @@
                 <!-- Seção 1: Origem e Destino -->
                 <div class="col-md-6">
                     <label class="form-label fw-bold">Usina <span class="text-danger">*</span></label>
-                    <select name="usina_id" class="form-select" required>
-                        <option value="">Selecione a usina...</option>
+                    <select
+                        name="usina_id"
+                        id="usina_id"
+                        class="form-select"
+                        required
+                    >
+                        <option value="">
+                            Selecione a usina...
+                        </option>
+
                         {% for usina in usinas %}
-                            <option value="{{ usina.id }}" {% if receita and receita.usina_id == usina.id %}selected{% endif %}>
+                            <option
+                                value="{{ usina.id }}"
+                                {% if receita and receita.usina_id == usina.id %}
+                                    selected
+                                {% endif %}
+                            >
                                 {{ usina.nome }}
                             </option>
                         {% endfor %}
@@ -111,15 +124,21 @@
                 </div>
 
                 <div class="col-md-4">
-                    <label class="form-label fw-semibold">Banco / Conta</label>
-                    <select name="caixa_banco_id" class="form-select">
-                        <option value="">Não informado</option>
-                        {% for banco in bancos %}
-                            <option value="{{ banco.id }}" {% if receita and receita.caixa_banco_id == banco.id %}selected{% endif %}>
-                                {{ banco.nome }}
-                            </option>
-                        {% endfor %}
+
+                    <label class="form-label fw-semibold">
+                        Banco / Conta
+                    </label>
+
+                    <select
+                        name="caixa_banco_id"
+                        id="caixa_banco_id"
+                        class="form-select"
+                    >
+                        <option value="">
+                            Selecione primeiro a usina...
+                        </option>
                     </select>
+
                 </div>
 
                 <div class="col-md-12">
@@ -233,15 +252,51 @@
 
                 <!-- Botões de Ação -->
                 <div class="col-12 text-end mt-4 pt-3 border-top">
+
                     <a
                         href="{{ next_url or url_for('receitas_avulsas') }}"
                         class="btn btn-outline-secondary me-2"
                     >
                         Cancelar
                     </a>
-                    <button type="submit" class="btn btn-success px-4">
-                        <i class="bi bi-check-circle me-1"></i> {% if receita %}Atualizar Receita{% else %}Salvar Receita{% endif %}
-                    </button>
+
+                    {% if receita %}
+
+                        <!-- EDIÇÃO -->
+                        <button
+                            type="submit"
+                            class="btn btn-success px-4"
+                        >
+                            <i class="bi bi-check-circle me-1"></i>
+                            Atualizar Receita
+                        </button>
+
+                    {% else %}
+
+                        <!-- NOVO CADASTRO: SALVA E VOLTA -->
+                        <button
+                            type="submit"
+                            name="acao"
+                            value="salvar_voltar"
+                            class="btn btn-primary px-4 me-2"
+                        >
+                            <i class="bi bi-check-circle me-1"></i>
+                            Salvar e Voltar
+                        </button>
+
+                        <!-- NOVO CADASTRO: SALVA E CONTINUA -->
+                        <button
+                            type="submit"
+                            name="acao"
+                            value="salvar_nova"
+                            class="btn btn-success px-4"
+                        >
+                            <i class="bi bi-plus-circle me-1"></i>
+                            Salvar e Criar Outra
+                        </button>
+
+                    {% endif %}
+
                 </div>
             </form>
         </div>
@@ -264,6 +319,68 @@ document.addEventListener('DOMContentLoaded', function() {
             e.target.value = value.replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, ".");
         });
     });
+});
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+
+    const usinaSelect = document.getElementById('usina_id');
+    const bancoSelect = document.getElementById('caixa_banco_id');
+
+    const bancosPorUsina = {{ bancos_por_usina | tojson }};
+
+    function carregarBancos() {
+
+        const usinaId = usinaSelect.value;
+
+        bancoSelect.innerHTML = '';
+
+        if (!usinaId) {
+
+            bancoSelect.innerHTML = `
+                <option value="">
+                    Selecione primeiro a usina...
+                </option>
+            `;
+
+            return;
+        }
+
+        const bancos = bancosPorUsina[usinaId] || [];
+
+        bancoSelect.innerHTML = `
+            <option value="">
+                Selecione a conta...
+            </option>
+        `;
+
+        bancos.forEach(function (banco) {
+
+            const option = document.createElement('option');
+
+            option.value = banco.id;
+            option.textContent = banco.nome;
+
+            bancoSelect.appendChild(option);
+        });
+
+        if (bancos.length === 0) {
+
+            bancoSelect.innerHTML = `
+                <option value="">
+                    Nenhuma conta vinculada à usina
+                </option>
+            `;
+        }
+    }
+
+    usinaSelect.addEventListener(
+        'change',
+        carregarBancos
+    );
+
+    carregarBancos();
+
 });
 </script>
 {% endblock %}

@@ -13555,7 +13555,7 @@ def baixar_fatura():
             if sucesso:
                 link = request.host_url.rstrip("/") + retorno
                 flash(Markup(
-                    f"✅ Fatura baixada com sucesso. "
+                    f"Fatura baixada com sucesso. "
                     f"<a href='{link}' target='_blank' rel='noopener'>Clique aqui para abrir o PDF</a>"
                 ))
             else:
@@ -14087,11 +14087,80 @@ def receita_avulsa():
         .all()
     )
 
-    bancos = (
-        CaixaBanco.query
-        .order_by(CaixaBanco.nome)
+    # EMPRESAS INVESTIDORAS VINCULADAS A CADA USINA
+    empresas_por_usina = {}
+
+    vinculos = (
+        UsinaInvestidora.query
         .all()
     )
+
+    for vinculo in vinculos:
+
+        empresas_por_usina.setdefault(
+            vinculo.usina_id,
+            []
+        ).append(
+            vinculo.empresa_id
+        )
+
+    # CONTAS BANCÁRIAS POR EMPRESA INVESTIDORA
+    contas_por_empresa = {}
+
+    contas = (
+        CaixaBanco.query
+        .filter(
+            CaixaBanco.empresa_investidora_id.isnot(
+                None
+            )
+        )
+        .order_by(
+            CaixaBanco.nome.asc()
+        )
+        .all()
+    )
+
+    for conta in contas:
+        contas_por_empresa.setdefault(
+            conta.empresa_investidora_id,
+            []
+        ).append(
+            conta
+        )
+
+    # MONTA CONTAS DISPONÍVEIS POR USINA
+    bancos_por_usina = {}
+
+    for usina in usinas:
+
+        contas_usina = []
+        contas_adicionadas = set()
+
+        empresas_ids = empresas_por_usina.get(
+            usina.id,
+            []
+        )
+
+        for empresa_investidora_id in empresas_ids:
+
+            contas_da_empresa = contas_por_empresa.get(
+                empresa_investidora_id,
+                []
+            )
+
+            for conta in contas_da_empresa:
+                if conta.id not in contas_adicionadas:
+
+                    contas_usina.append({
+                        'id': conta.id,
+                        'nome': conta.nome
+                    })
+
+                    contas_adicionadas.add(
+                        conta.id
+                    )
+
+        bancos_por_usina[usina.id] = contas_usina
 
     def converter_decimal(valor):
 
@@ -14119,6 +14188,11 @@ def receita_avulsa():
     if request.method == 'POST':
 
         try:
+
+            acao = request.form.get(
+                'acao',
+                'salvar_voltar'
+            )
 
             # DADOS DO FORMULÁRIO
             usina_id = int(
@@ -14199,6 +14273,33 @@ def receita_avulsa():
                 if not conta:
                     raise ValueError(
                         'Conta bancária não encontrada.'
+                    )
+
+                # Empresas investidoras vinculadas à usina
+                empresas_ids_usina = (
+                    db.session.query(
+                        UsinaInvestidora.empresa_id
+                    )
+                    .filter(
+                        UsinaInvestidora.usina_id
+                        == usina_id
+                    )
+                    .all()
+                )
+
+                empresas_ids_usina = [
+                    empresa_id
+                    for (empresa_id,) in empresas_ids_usina
+                ]
+
+                if (
+                    conta.empresa_investidora_id
+                    not in empresas_ids_usina
+                ):
+
+                    raise ValueError(
+                        'A conta bancária selecionada '
+                        'não está vinculada à usina.'
                     )
 
             # CRIA RECEITA
@@ -14359,6 +14460,12 @@ def receita_avulsa():
                 "success"
             )
 
+            if acao == 'salvar_nova':
+
+                return redirect(
+                    url_for('receita_avulsa')
+                )
+
             return redirect(
                 url_for('receitas_avulsas')
             )
@@ -14394,7 +14501,7 @@ def receita_avulsa():
         receita=None,
         usinas=usinas,
         credores=credores,
-        bancos=bancos
+        bancos_por_usina=bancos_por_usina
     )
 
 @app.route(
@@ -14435,11 +14542,80 @@ def editar_receita_avulsa(id):
         .all()
     )
 
-    bancos = (
-        CaixaBanco.query
-        .order_by(CaixaBanco.nome)
+    # EMPRESAS INVESTIDORAS VINCULADAS A CADA USINA
+    empresas_por_usina = {}
+    vinculos = (
+        UsinaInvestidora.query
         .all()
     )
+
+    for vinculo in vinculos:
+
+        empresas_por_usina.setdefault(
+            vinculo.usina_id,
+            []
+        ).append(
+            vinculo.empresa_id
+        )
+
+    # CONTAS BANCÁRIAS POR EMPRESA INVESTIDORA
+    contas_por_empresa = {}
+    contas = (
+        CaixaBanco.query
+        .filter(
+            CaixaBanco.empresa_investidora_id.isnot(
+                None
+            )
+        )
+        .order_by(
+            CaixaBanco.nome.asc()
+        )
+        .all()
+    )
+
+    for conta in contas:
+
+        contas_por_empresa.setdefault(
+            conta.empresa_investidora_id,
+            []
+        ).append(
+            conta
+        )
+
+    # CONTAS DISPONÍVEIS POR USINA
+    bancos_por_usina = {}
+
+    for usina in usinas:
+
+        contas_usina = []
+        contas_adicionadas = set()
+
+        empresas_ids = empresas_por_usina.get(
+            usina.id,
+            []
+        )
+
+        for empresa_investidora_id in empresas_ids:
+
+            contas_da_empresa = contas_por_empresa.get(
+                empresa_investidora_id,
+                []
+            )
+
+            for conta in contas_da_empresa:
+
+                if conta.id not in contas_adicionadas:
+
+                    contas_usina.append({
+                        'id': conta.id,
+                        'nome': conta.nome
+                    })
+
+                    contas_adicionadas.add(
+                        conta.id
+                    )
+
+        bancos_por_usina[usina.id] = contas_usina
 
     def converter_decimal(valor):
 
@@ -14465,13 +14641,6 @@ def editar_receita_avulsa(id):
     if request.method == 'POST':
 
         try:
-            # GUARDA DADOS ANTIGOS
-            usina_id_antiga = receita.usina_id
-            conta_id_antiga = receita.caixa_banco_id
-            data_pagamento_antiga = (
-                receita.data_pagamento
-            )
-
             # NOVOS DADOS
             nova_usina_id = int(
                 request.form['usina_id']
@@ -14583,6 +14752,31 @@ def editar_receita_avulsa(id):
                         raise ValueError(
                             'Conta bancária não encontrada.'
                         )
+                        
+                    empresas_ids_usina = (
+                        db.session.query(
+                            UsinaInvestidora.empresa_id
+                        )
+                        .filter(
+                            UsinaInvestidora.usina_id
+                            == nova_usina_id
+                        )
+                        .all()
+                    )
+
+                    empresas_ids_usina = [
+                        empresa_id
+                        for (empresa_id,) in empresas_ids_usina
+                    ]
+
+                    if (
+                        nova_conta.empresa_investidora_id
+                        not in empresas_ids_usina
+                    ):
+                        raise ValueError(
+                            'A conta bancária selecionada '
+                            'não está vinculada à usina.'
+                        )
 
                     # TROCOU DE CONTA BANCÁRIA
                     if (
@@ -14692,10 +14886,35 @@ def editar_receita_avulsa(id):
                     CaixaBanco,
                     nova_conta_id
                 )
-
+                
                 if not nova_conta:
                     raise ValueError(
                         'Conta bancária não encontrada.'
+                    )
+
+                empresas_ids_usina = (
+                    db.session.query(
+                        UsinaInvestidora.empresa_id
+                    )
+                    .filter(
+                        UsinaInvestidora.usina_id
+                        == nova_usina_id
+                    )
+                    .all()
+                )
+
+                empresas_ids_usina = [
+                    empresa_id
+                    for (empresa_id,) in empresas_ids_usina
+                ]
+
+                if (
+                    nova_conta.empresa_investidora_id
+                    not in empresas_ids_usina
+                ):
+                    raise ValueError(
+                        'A conta bancária selecionada '
+                        'não está vinculada à usina.'
                     )
 
                 novo_movimento = MovimentoCaixaBanco(
@@ -14915,7 +15134,7 @@ def editar_receita_avulsa(id):
         receita=receita,
         usinas=usinas,
         credores=credores,
-        bancos=bancos,
+        bancos_por_usina=bancos_por_usina,
         next_url=next_url
     )
     
