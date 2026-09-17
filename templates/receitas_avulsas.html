@@ -96,9 +96,31 @@
                             <td>{{ receita.data.strftime('%d/%m/%Y') }}</td>
                             <td class="fw-medium">{{ receita.usina.nome }}</td>
                             <td>{{ (receita.descricao or '').split('|')[0].strip() }}</td>
-                            <td class="text-end fw-bold text-success">
-                                R$ {{ receita.valor | formato_brasileiro }}
-                            </td>
+                            <td class="text-end">
+
+                            <div class="fw-bold text-success">
+                                {{ receita.valor | formato_brasileiro }}
+                            </div>
+
+                            {% if receita.juros and receita.juros > 0 %}
+                                <div class="small text-muted">
+                                    + {{ receita.juros | formato_brasileiro }}
+                                    juros
+                                </div>
+
+                                <div class="small fw-bold text-success">
+                                    Total:
+                                    {{
+                                        (
+                                            (receita.valor or 0)|float
+                                            +
+                                            (receita.juros or 0)|float
+                                        ) | formato_brasileiro
+                                    }}
+                                </div>
+                            {% endif %}
+
+                        </td>
                             <td>{{ receita.credor.nome if receita.credor else '-' }}</td>
                             <td class="text-center">
                                 {% if receita.referencia_mes and receita.referencia_ano %}
@@ -133,27 +155,117 @@
                                 </div>
 
                                 <!-- Modal Excluir -->
-                                <div class="modal fade" id="modalExcluir{{ receita.id }}" tabindex="-1" aria-hidden="true">
+                                <div
+                                    class="modal fade"
+                                    id="modalExcluir{{ receita.id }}"
+                                    tabindex="-1"
+                                    aria-hidden="true"
+                                >
                                     <div class="modal-dialog modal-dialog-centered">
                                         <div class="modal-content text-start">
+
                                             <div class="modal-header bg-danger text-white">
                                                 <h5 class="modal-title fs-6 fw-bold">
-                                                    <i class="bi bi-exclamation-triangle-fill me-2"></i>Confirmar Exclusão
+                                                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                                    Confirmar Exclusão
                                                 </h5>
-                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+
+                                                <button
+                                                    type="button"
+                                                    class="btn-close btn-close-white"
+                                                    data-bs-dismiss="modal"
+                                                    aria-label="Fechar"
+                                                ></button>
                                             </div>
+
                                             <div class="modal-body">
-                                                Tem certeza de que deseja excluir a receita 
-                                                <strong>{{ receita.descricao }}</strong> no valor de 
-                                                <strong>R$ {{ receita.valor | formato_brasileiro }}</strong> 
-                                                ({{ receita.data.strftime('%d/%m/%Y') }})?
+
+                                                <p class="mb-2">
+                                                    Tem certeza de que deseja excluir a receita
+                                                    <strong>{{ receita.descricao }}</strong>?
+                                                </p>
+
+                                                <div class="text-muted small mb-3">
+                                                    {{ receita.data.strftime('%d/%m/%Y') }}
+                                                </div>
+
+                                                <div class="p-3 bg-light rounded">
+
+                                                    <div class="d-flex justify-content-between mb-2">
+                                                        <span>Valor:</span>
+
+                                                        <strong>
+                                                            {{ receita.valor | formato_brasileiro }}
+                                                        </strong>
+                                                    </div>
+
+                                                    <div class="d-flex justify-content-between mb-2">
+                                                        <span>Juros / Acréscimos:</span>
+
+                                                        <strong>
+                                                            {{ (receita.juros or 0) | formato_brasileiro }}
+                                                        </strong>
+                                                    </div>
+
+                                                    <hr class="my-2">
+
+                                                    <div class="d-flex justify-content-between">
+                                                        <span class="fw-bold">
+                                                            Total:
+                                                        </span>
+
+                                                        <strong class="text-success">
+                                                            {{
+                                                                (
+                                                                    (receita.valor or 0)|float
+                                                                    +
+                                                                    (receita.juros or 0)|float
+                                                                ) | formato_brasileiro
+                                                            }}
+                                                        </strong>
+                                                    </div>
+
+                                                </div>
+
                                             </div>
+
                                             <div class="modal-footer">
-                                                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                                                <form method="POST" action="{{ url_for('excluir_receita_avulsa', id=receita.id) }}" class="d-inline">
-                                                    <button type="submit" class="btn btn-sm btn-danger">Sim, Excluir</button>
+
+                                                <button
+                                                    type="button"
+                                                    class="btn btn-sm btn-secondary"
+                                                    data-bs-dismiss="modal"
+                                                >
+                                                    Cancelar
+                                                </button>
+
+                                                <form
+                                                    method="POST"
+                                                    action="{{ url_for(
+                                                        'excluir_receita_avulsa',
+                                                        id=receita.id
+                                                    ) }}"
+                                                    class="m-0"
+                                                >
+
+                                                    <input
+                                                        type="hidden"
+                                                        name="next"
+                                                        value="{{ request.full_path }}"
+                                                    >
+
+                                                    <button
+                                                        type="submit"
+                                                        class="btn btn-sm btn-danger"
+                                                    >
+                                                        <i class="bi bi-trash me-1"></i>
+                                                        Excluir
+                                                    </button>
+
                                                 </form>
+
                                             </div>
+
                                         </div>
                                     </div>
                                 </div>

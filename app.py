@@ -14360,10 +14360,7 @@ def receita_avulsa():
             )
 
             return redirect(
-                url_for(
-                    'editar_receita_avulsa',
-                    id=nova_receita.id
-                )
+                url_for('receitas_avulsas')
             )
 
         except (
@@ -15031,18 +15028,40 @@ def receitas_avulsas():
         valor=valor
     )
 
-@app.route('/excluir_receita_avulsa/<int:id>', methods=['POST'])
+@app.route(
+    '/excluir_receita_avulsa/<int:id>',
+    methods=['POST']
+)
 @login_required
 def excluir_receita_avulsa(id):
+
+    next_url = request.form.get('next')
     receita = FinanceiroUsina.query.get_or_404(id)
+
     if receita.tipo != 'receita':
-        flash('Registro não é uma receita.', 'danger')
-        return redirect(url_for('receitas_avulsas'))
+
+        flash(
+            'Registro não é uma receita.',
+            'danger'
+        )
+
+        return redirect(
+            next_url
+            or url_for('receitas_avulsas')
+        )
 
     db.session.delete(receita)
     db.session.commit()
-    flash('Receita excluída com sucesso.', 'success')
-    return redirect(url_for('receitas_avulsas'))
+
+    flash(
+        'Receita excluída com sucesso.',
+        'success'
+    )
+
+    return redirect(
+        next_url
+        or url_for('receitas_avulsas')
+    )
 
 def calcular_distribuicao_direta(usina, valor_total):
     distribuicoes = []
@@ -29671,7 +29690,7 @@ def dashboard_investidor():
     )
 
     # DESPESA BRUTA DO MÊS
-    # Desconsidera categorias 5, 7, 12 e 14
+    # Considera todas as despesas pagas no período
     despesa_bruta_mes = para_decimal(
         db.session.query(
             func.coalesce(
@@ -29686,13 +29705,7 @@ def dashboard_investidor():
             FinanceiroUsina.tipo == 'despesa',
             FinanceiroUsina.data_pagamento.isnot(None),
             FinanceiroUsina.data_pagamento >= data_inicio,
-            FinanceiroUsina.data_pagamento < data_fim,
-            or_(
-                FinanceiroUsina.categoria_id.is_(None),
-                FinanceiroUsina.categoria_id.notin_(
-                    [5, 7, 12, 14]
-                )
-            )
+            FinanceiroUsina.data_pagamento < data_fim
         )
         .scalar()
     )
@@ -29760,13 +29773,7 @@ def dashboard_investidor():
             FinanceiroUsina.usina_id == usina.id,
             FinanceiroUsina.tipo == 'despesa',
             FinanceiroUsina.data_pagamento.isnot(None),
-            FinanceiroUsina.data_pagamento < data_fim,
-            or_(
-                FinanceiroUsina.categoria_id.is_(None),
-                FinanceiroUsina.categoria_id.notin_(
-                    [5, 7, 12, 14]
-                )
-            )
+            FinanceiroUsina.data_pagamento < data_fim
         )
         .scalar()
     )
