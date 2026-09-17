@@ -10607,6 +10607,17 @@ def editar_despesa(despesa_id):
             request.form['data'],
             '%Y-%m-%d'
         ).date()
+        
+        data_pagamento = request.form.get('data_pagamento')
+
+        despesa.data_pagamento = (
+            datetime.strptime(
+                data_pagamento,
+                '%Y-%m-%d'
+            ).date()
+            if data_pagamento
+            else None
+        )
 
         despesa.referencia_mes = int(
             request.form['referencia_mes']

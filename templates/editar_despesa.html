@@ -3,238 +3,181 @@
 {% block title %}Editar Despesa{% endblock %}
 
 {% block content %}
-
-<div class="container mt-5 p-4 bg-white shadow rounded">
-
-    <h2 class="text-primary mb-4 text-center">
-        Editar Despesa
-    </h2>
-
-    <form method="POST" enctype="multipart/form-data">
-
-        <!-- Mantém a URL/filtros da tela anterior -->
-        <input
-            type="hidden"
-            name="next"
-            value="{{ next_url or '' }}"
-        >
-
-        <div class="mb-3">
-            <label class="form-label">
-                Usina
-            </label>
-
-            <select
-                name="usina_id"
-                class="form-select"
-                required
-            >
-                {% for usina in usinas %}
-                    <option
-                        value="{{ usina.id }}"
-                        {% if despesa.usina_id == usina.id %}
-                            selected
-                        {% endif %}
-                    >
-                        {{ usina.nome }}
-                    </option>
-                {% endfor %}
-            </select>
+<div class="container my-5" style="max-width: 860px;">
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-primary text-white py-3">
+            <h4 class="card-title mb-0 text-center fw-semibold">Editar Despesa</h4>
         </div>
 
+        <div class="card-body p-4">
+            <form method="POST" enctype="multipart/form-data">
+                <!-- Preserva a URL/filtros da tela anterior -->
+                <input type="hidden" name="next" value="{{ next_url or '' }}">
 
-        <div class="mb-3">
-            <label class="form-label">
-                Categoria da Despesa
-            </label>
+                <!-- Seletores Principais -->
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label for="usina_id" class="form-label fw-medium">Usina <span class="text-danger">*</span></label>
+                        <select name="usina_id" id="usina_id" class="form-select" required>
+                            {% for usina in usinas %}
+                                <option value="{{ usina.id }}" {% if despesa.usina_id == usina.id %}selected{% endif %}>
+                                    {{ usina.nome }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
 
-            <select
-                name="categoria_id"
-                class="form-select"
-                required
-            >
-                {% for categoria in categorias %}
-                    <option
-                        value="{{ categoria.id }}"
-                        {% if despesa.categoria_id == categoria.id %}
-                            selected
-                        {% endif %}
-                    >
-                        {{ categoria.nome }}
-                    </option>
-                {% endfor %}
-            </select>
-        </div>
+                    <div class="col-md-4">
+                        <label for="categoria_id" class="form-label fw-medium">Categoria <span class="text-danger">*</span></label>
+                        <select name="categoria_id" id="categoria_id" class="form-select" required>
+                            {% for categoria in categorias %}
+                                <option value="{{ categoria.id }}" {% if despesa.categoria_id == categoria.id %}selected{% endif %}>
+                                    {{ categoria.nome }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
 
-
-        <div class="mb-3">
-            <label class="form-label">
-                Credor
-            </label>
-
-            <select
-                name="credor_id"
-                class="form-select"
-            >
-                <option value="">
-                    — Nenhum —
-                </option>
-
-                {% for credor in credores %}
-                    <option
-                        value="{{ credor.id }}"
-                        {% if despesa.credor_id == credor.id %}
-                            selected
-                        {% endif %}
-                    >
-                        {{ credor.nome }}
-                    </option>
-                {% endfor %}
-            </select>
-        </div>
-
-
-        <div class="mb-3">
-            <label class="form-label">
-                Valor (R$)
-            </label>
-
-            <input
-                type="text"
-                name="valor"
-                class="form-control"
-                required
-                value="{{ '%.2f'|format(despesa.valor) }}"
-            >
-        </div>
-
-
-        <div class="mb-3">
-            <label class="form-label">
-                Descrição
-            </label>
-
-            <input
-                type="text"
-                name="descricao"
-                class="form-control"
-                required
-                value="{{ despesa.descricao }}"
-            >
-        </div>
-
-
-        <div class="row">
-
-            <div class="col-md-4 mb-3">
-                <label class="form-label">
-                    Data
-                </label>
-
-                <input
-                    type="date"
-                    name="data"
-                    class="form-control"
-                    required
-                    value="{{ despesa.data.isoformat() }}"
-                >
-            </div>
-
-
-            <div class="col-md-4 mb-3">
-                <label class="form-label">
-                    Mês de Referência
-                </label>
-
-                <input
-                    type="number"
-                    name="referencia_mes"
-                    class="form-control"
-                    min="1"
-                    max="12"
-                    required
-                    value="{{ despesa.referencia_mes }}"
-                >
-            </div>
-
-
-            <div class="col-md-4 mb-3">
-                <label class="form-label">
-                    Ano de Referência
-                </label>
-
-                <input
-                    type="number"
-                    name="referencia_ano"
-                    class="form-control"
-                    min="2000"
-                    max="2100"
-                    required
-                    value="{{ despesa.referencia_ano }}"
-                >
-            </div>
-
-        </div>
-
-
-        <div class="mb-3">
-
-            <label class="form-label">
-                Comprovante (PDF, JPG ou PNG)
-            </label>
-
-            {% if despesa.comprovante_arquivo %}
-
-                <div class="mb-2">
-
-                    <strong>
-                        Atual:
-                    </strong>
-
-                    <a
-                        href="{{ url_for(
-                            'visualizar_comprovante',
-                            nome_arquivo=despesa.comprovante_arquivo
-                        ) }}"
-                        target="_blank"
-                    >
-                        {{ despesa.comprovante_arquivo }}
-                    </a>
-
+                    <div class="col-md-4">
+                        <label for="credor_id" class="form-label fw-medium">Credor</label>
+                        <select name="credor_id" id="credor_id" class="form-select">
+                            <option value="">— Nenhum —</option>
+                            {% for credor in credores %}
+                                <option value="{{ credor.id }}" {% if despesa.credor_id == credor.id %}selected{% endif %}>
+                                    {{ credor.nome }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
                 </div>
 
-            {% endif %}
+                <!-- Valor e Descrição -->
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label for="valor" class="form-label fw-medium">Valor <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text">R$</span>
+                            <input
+                                type="text"
+                                id="valor"
+                                name="valor"
+                                class="form-control"
+                                required
+                                value="{{ '%.2f'|format(despesa.valor) }}"
+                            >
+                        </div>
+                    </div>
 
-            <input
-                type="file"
-                name="comprovante"
-                accept=".pdf,.jpg,.jpeg,.png"
-                class="form-control"
-            >
+                    <div class="col-md-8">
+                        <label for="descricao" class="form-label fw-medium">Descrição <span class="text-danger">*</span></label>
+                        <input
+                            type="text"
+                            id="descricao"
+                            name="descricao"
+                            class="form-control"
+                            required
+                            value="{{ despesa.descricao }}"
+                        >
+                    </div>
+                </div>
 
+                <!-- Datas e Período de Referência -->
+                <div class="row g-3 mb-4">
+                    <div class="col-sm-6 col-md-3">
+                        <label for="data" class="form-label fw-medium">Data Emissão <span class="text-danger">*</span></label>
+                        <input
+                            type="date"
+                            id="data"
+                            name="data"
+                            class="form-control"
+                            required
+                            value="{{ despesa.data.isoformat() if despesa.data else '' }}"
+                        >
+                    </div>
+
+                    <div class="col-sm-6 col-md-3">
+                        <label for="data_pagamento" class="form-label fw-medium">Data Pagamento</label>
+                        <input
+                            type="date"
+                            id="data_pagamento"
+                            name="data_pagamento"
+                            class="form-control"
+                            value="{{ despesa.data_pagamento.isoformat() if despesa.data_pagamento else '' }}"
+                        >
+                    </div>
+
+                    <div class="col-sm-6 col-md-3">
+                        <label for="referencia_mes" class="form-label fw-medium">Mês Ref. <span class="text-danger">*</span></label>
+                        <input
+                            type="number"
+                            id="referencia_mes"
+                            name="referencia_mes"
+                            class="form-control"
+                            min="1"
+                            max="12"
+                            required
+                            value="{{ despesa.referencia_mes }}"
+                        >
+                    </div>
+
+                    <div class="col-sm-6 col-md-3">
+                        <label for="referencia_ano" class="form-label fw-medium">Ano Ref. <span class="text-danger">*</span></label>
+                        <input
+                            type="number"
+                            id="referencia_ano"
+                            name="referencia_ano"
+                            class="form-control"
+                            min="2000"
+                            max="2100"
+                            required
+                            value="{{ despesa.referencia_ano }}"
+                        >
+                    </div>
+                </div>
+
+                <!-- Comprovante -->
+                <div class="mb-4">
+                    <label for="comprovante" class="form-label fw-medium">Comprovante</label>
+                    
+                    {% if despesa.comprovante_arquivo %}
+                        <div class="p-2 mb-2 bg-light border rounded d-flex align-items-center justify-content-between">
+                            <span class="small text-truncate me-2">
+                                <strong>Arquivo anexado:</strong> {{ despesa.comprovante_arquivo }}
+                            </span>
+                            <a
+                                href="{{ url_for('visualizar_comprovante', nome_arquivo=despesa.comprovante_arquivo) }}"
+                                target="_blank"
+                                class="btn btn-sm btn-outline-primary text-nowrap"
+                            >
+                                Abrir Atual
+                            </a>
+                        </div>
+                    {% endif %}
+
+                    <input
+                        type="file"
+                        id="comprovante"
+                        name="comprovante"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        class="form-control"
+                    >
+                    <div class="form-text">Envie um novo arquivo apenas se desejar substituir o atual (PDF, JPG ou PNG).</div>
+                </div>
+
+                <!-- Botões de Ação -->
+                <div class="d-flex justify-content-end gap-2 pt-2 border-top">
+                    <a
+                        href="{{ next_url or url_for('listar_despesas') }}"
+                        class="btn btn-outline-secondary px-4"
+                    >
+                        Cancelar
+                    </a>
+                    <button type="submit" class="btn btn-primary px-4">
+                        Salvar Alterações
+                    </button>
+                </div>
+            </form>
         </div>
-
-
-        <div class="text-center">
-
-            <button
-                type="submit"
-                class="btn btn-primary"
-            >
-                Salvar Alterações
-            </button>
-
-            <a
-                href="{{ next_url or url_for('listar_despesas') }}"
-                class="btn btn-secondary"
-            >
-                Cancelar
-            </a>
-
-        </div>
-
-    </form>
-
+    </div>
 </div>
-
 {% endblock %}
