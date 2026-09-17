@@ -1,80 +1,240 @@
 {% extends 'base.html' %}
 
-{% block title %}Registrar Despesa{% endblock %}
+{% block title %}Editar Despesa{% endblock %}
 
 {% block content %}
 
 <div class="container mt-5 p-4 bg-white shadow rounded">
-    <h2 class="text-primary mb-4 text-center">Editar Despesa</h2>
+
+    <h2 class="text-primary mb-4 text-center">
+        Editar Despesa
+    </h2>
 
     <form method="POST" enctype="multipart/form-data">
+
+        <!-- Mantém a URL/filtros da tela anterior -->
+        <input
+            type="hidden"
+            name="next"
+            value="{{ next_url or '' }}"
+        >
+
         <div class="mb-3">
-            <label class="form-label">Usina</label>
-            <select name="usina_id" class="form-select" required>
+            <label class="form-label">
+                Usina
+            </label>
+
+            <select
+                name="usina_id"
+                class="form-select"
+                required
+            >
                 {% for usina in usinas %}
-                    <option value="{{ usina.id }}" {% if despesa.usina_id == usina.id %}selected{% endif %}>{{ usina.nome }}</option>
+                    <option
+                        value="{{ usina.id }}"
+                        {% if despesa.usina_id == usina.id %}
+                            selected
+                        {% endif %}
+                    >
+                        {{ usina.nome }}
+                    </option>
                 {% endfor %}
             </select>
         </div>
 
+
         <div class="mb-3">
-            <label class="form-label">Categoria da Despesa</label>
-            <select name="categoria_id" class="form-select" required>
+            <label class="form-label">
+                Categoria da Despesa
+            </label>
+
+            <select
+                name="categoria_id"
+                class="form-select"
+                required
+            >
                 {% for categoria in categorias %}
-                    <option value="{{ categoria.id }}" {% if despesa.categoria_id == categoria.id %}selected{% endif %}>{{ categoria.nome }}</option>
+                    <option
+                        value="{{ categoria.id }}"
+                        {% if despesa.categoria_id == categoria.id %}
+                            selected
+                        {% endif %}
+                    >
+                        {{ categoria.nome }}
+                    </option>
                 {% endfor %}
             </select>
         </div>
 
+
         <div class="mb-3">
-            <label class="form-label">Credor</label>
-            <select name="credor_id" class="form-select">
-                <option value="">— Nenhum —</option>
+            <label class="form-label">
+                Credor
+            </label>
+
+            <select
+                name="credor_id"
+                class="form-select"
+            >
+                <option value="">
+                    — Nenhum —
+                </option>
+
                 {% for credor in credores %}
-                    <option value="{{ credor.id }}" {% if despesa.credor_id == credor.id %}selected{% endif %}>{{ credor.nome }}</option>
+                    <option
+                        value="{{ credor.id }}"
+                        {% if despesa.credor_id == credor.id %}
+                            selected
+                        {% endif %}
+                    >
+                        {{ credor.nome }}
+                    </option>
                 {% endfor %}
             </select>
         </div>
 
-        <div class="mb-3">
-            <label class="form-label">Valor (R$)</label>
-            <input type="text" name="valor" class="form-control" required value="{{ '%.2f'|format(despesa.valor) }}">
-        </div>
 
         <div class="mb-3">
-            <label class="form-label">Descrição</label>
-            <input type="text" name="descricao" class="form-control" required value="{{ despesa.descricao }}">
+            <label class="form-label">
+                Valor (R$)
+            </label>
+
+            <input
+                type="text"
+                name="valor"
+                class="form-control"
+                required
+                value="{{ '%.2f'|format(despesa.valor) }}"
+            >
         </div>
+
+
+        <div class="mb-3">
+            <label class="form-label">
+                Descrição
+            </label>
+
+            <input
+                type="text"
+                name="descricao"
+                class="form-control"
+                required
+                value="{{ despesa.descricao }}"
+            >
+        </div>
+
 
         <div class="row">
+
             <div class="col-md-4 mb-3">
-                <label class="form-label">Data</label>
-                <input type="date" name="data" class="form-control" required value="{{ despesa.data.isoformat() }}">
+                <label class="form-label">
+                    Data
+                </label>
+
+                <input
+                    type="date"
+                    name="data"
+                    class="form-control"
+                    required
+                    value="{{ despesa.data.isoformat() }}"
+                >
             </div>
+
+
             <div class="col-md-4 mb-3">
-                <label class="form-label">Mês de Referência</label>
-                <input type="number" name="referencia_mes" class="form-control" min="1" max="12" required value="{{ despesa.referencia_mes }}">
+                <label class="form-label">
+                    Mês de Referência
+                </label>
+
+                <input
+                    type="number"
+                    name="referencia_mes"
+                    class="form-control"
+                    min="1"
+                    max="12"
+                    required
+                    value="{{ despesa.referencia_mes }}"
+                >
             </div>
+
+
             <div class="col-md-4 mb-3">
-                <label class="form-label">Ano de Referência</label>
-                <input type="number" name="referencia_ano" class="form-control" min="2000" max="2100" required value="{{ despesa.referencia_ano }}">
+                <label class="form-label">
+                    Ano de Referência
+                </label>
+
+                <input
+                    type="number"
+                    name="referencia_ano"
+                    class="form-control"
+                    min="2000"
+                    max="2100"
+                    required
+                    value="{{ despesa.referencia_ano }}"
+                >
             </div>
+
         </div>
+
 
         <div class="mb-3">
-            <label class="form-label">Comprovante (PDF, JPG ou PNG)</label>
+
+            <label class="form-label">
+                Comprovante (PDF, JPG ou PNG)
+            </label>
+
             {% if despesa.comprovante_arquivo %}
+
                 <div class="mb-2">
-                    <strong>Atual:</strong> <a href="{{ url_for('visualizar_comprovante', nome_arquivo=despesa.comprovante_arquivo) }}" target="_blank">{{ despesa.comprovante_arquivo }}</a>
+
+                    <strong>
+                        Atual:
+                    </strong>
+
+                    <a
+                        href="{{ url_for(
+                            'visualizar_comprovante',
+                            nome_arquivo=despesa.comprovante_arquivo
+                        ) }}"
+                        target="_blank"
+                    >
+                        {{ despesa.comprovante_arquivo }}
+                    </a>
+
                 </div>
+
             {% endif %}
-            <input type="file" name="comprovante" accept=".pdf,.jpg,.jpeg,.png" class="form-control">
+
+            <input
+                type="file"
+                name="comprovante"
+                accept=".pdf,.jpg,.jpeg,.png"
+                class="form-control"
+            >
+
         </div>
 
+
         <div class="text-center">
-            <button type="submit" class="btn btn-primary">Salvar Alterações</button>
-            <a href="{{ url_for('listar_despesas') }}" class="btn btn-secondary">Cancelar</a>
+
+            <button
+                type="submit"
+                class="btn btn-primary"
+            >
+                Salvar Alterações
+            </button>
+
+            <a
+                href="{{ next_url or url_for('listar_despesas') }}"
+                class="btn btn-secondary"
+            >
+                Cancelar
+            </a>
+
         </div>
+
     </form>
+
 </div>
+
 {% endblock %}

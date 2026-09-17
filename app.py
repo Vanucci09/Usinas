@@ -10532,58 +10532,162 @@ def atualizar_pagamento(id):
 def extensao_permitida(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-@app.route('/editar_despesa/<int:despesa_id>', methods=['GET', 'POST'])
+@app.route(
+    '/editar_despesa/<int:despesa_id>',
+    methods=['GET', 'POST']
+)
 @login_required
 def editar_despesa(despesa_id):
+
     if not current_user.pode_acessar_financeiro:
         abort(403)
 
-    despesa = FinanceiroUsina.query.get_or_404(despesa_id)
-    usinas = Usina.query.order_by(Usina.nome).all()
-    categorias = CategoriaDespesa.query.order_by(CategoriaDespesa.nome).all()
-    credores = Credor.query.order_by(Credor.nome).all()
+    despesa = FinanceiroUsina.query.get_or_404(
+        despesa_id
+    )
+
+    usinas = (
+        Usina.query
+        .order_by(Usina.nome)
+        .all()
+    )
+
+    categorias = (
+        CategoriaDespesa.query
+        .order_by(CategoriaDespesa.nome)
+        .all()
+    )
+
+    credores = (
+        Credor.query
+        .order_by(Credor.nome)
+        .all()
+    )
+
+    # URL de onde o usuário veio.
+    # No GET vem pela query string.
+    # No POST vem pelo input hidden do formulário.
+    next_url = (
+        request.args.get('next')
+        or request.form.get('next')
+    )
 
     if request.method == 'POST':
-        despesa.usina_id = int(request.form['usina_id'])
-        despesa.categoria_id = int(request.form['categoria_id'])
-        cid = request.form.get('credor_id')
-        despesa.credor_id = int(cid) if cid else None
-        despesa.descricao = request.form['descricao']
-        despesa.valor = float(request.form['valor'].replace(',', '.'))
-        despesa.data = datetime.strptime(request.form['data'], '%Y-%m-%d').date()
-        despesa.referencia_mes = int(request.form['referencia_mes'])
-        despesa.referencia_ano = int(request.form['referencia_ano'])
 
-        # ✔️ Verifica e processa novo comprovante
+        despesa.usina_id = int(
+            request.form['usina_id']
+        )
+
+        despesa.categoria_id = int(
+            request.form['categoria_id']
+        )
+
+        cid = request.form.get(
+            'credor_id'
+        )
+
+        despesa.credor_id = (
+            int(cid)
+            if cid
+            else None
+        )
+
+        despesa.descricao = request.form[
+            'descricao'
+        ]
+
+        despesa.valor = float(
+            request.form['valor'].replace(
+                ',',
+                '.'
+            )
+        )
+
+        despesa.data = datetime.strptime(
+            request.form['data'],
+            '%Y-%m-%d'
+        ).date()
+
+        despesa.referencia_mes = int(
+            request.form['referencia_mes']
+        )
+
+        despesa.referencia_ano = int(
+            request.form['referencia_ano']
+        )
+
+        # Verifica e processa novo comprovante
         if 'comprovante' in request.files:
-            comprovante = request.files['comprovante']
-            if comprovante and comprovante.filename:
-                # Remove comprovante antigo, se houver
+
+            comprovante = request.files[
+                'comprovante'
+            ]
+
+            if (
+                comprovante
+                and comprovante.filename
+            ):
+
+                # Remove comprovante antigo
                 if despesa.comprovante_arquivo:
-                    antigo_path = os.path.join(app.config['UPLOAD_FOLDER'], despesa.comprovante_arquivo)
-                    if os.path.exists(antigo_path):
-                        os.remove(antigo_path)
 
-                # Gera novo nome com timestamp
-                extensao = secure_filename(comprovante.filename).rsplit('.', 1)[-1].lower()
-                nome_arquivo = f"comprovante_{despesa.id}_{datetime.now().strftime('%Y%m%d%H%M%S')}.{extensao}"
+                    antigo_path = os.path.join(
+                        app.config['UPLOAD_FOLDER'],
+                        despesa.comprovante_arquivo
+                    )
 
-                # Salva o novo arquivo
-                caminho_final = os.path.join(app.config['UPLOAD_FOLDER'], nome_arquivo)
-                comprovante.save(caminho_final)
+                    if os.path.exists(
+                        antigo_path
+                    ):
+                        os.remove(
+                            antigo_path
+                        )
 
-                # Atualiza no banco
-                despesa.comprovante_arquivo = nome_arquivo
+                # Gera novo nome
+                extensao = (
+                    secure_filename(
+                        comprovante.filename
+                    )
+                    .rsplit('.', 1)[-1]
+                    .lower()
+                )
+
+                nome_arquivo = (
+                    f"comprovante_{despesa.id}_"
+                    f"{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                    f".{extensao}"
+                )
+
+                # Salva novo arquivo
+                caminho_final = os.path.join(
+                    app.config['UPLOAD_FOLDER'],
+                    nome_arquivo
+                )
+
+                comprovante.save(
+                    caminho_final
+                )
+
+                despesa.comprovante_arquivo = (
+                    nome_arquivo
+                )
 
         db.session.commit()
-        return redirect(url_for('listar_despesas'))
+
+        # Retorna para a listagem mantendo
+        # os filtros utilizados anteriormente.
+        return redirect(
+            next_url
+            or url_for('listar_despesas')
+        )
 
     return render_template(
         'editar_despesa.html',
         despesa=despesa,
         usinas=usinas,
         categorias=categorias,
-        credores=credores
+        credores=credores,
+        next_url=next_url
     )
 
 @app.route('/listar_despesas', methods=['GET'])

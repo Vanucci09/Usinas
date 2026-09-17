@@ -57,8 +57,13 @@
                     <td>{{ '%02d'|format(despesa.referencia_mes) }}/{{ despesa.referencia_ano }}</td>
                     <td>
                         <div class="d-flex flex-wrap justify-content-center gap-1 acoes-btns">
-                            <a href="{{ url_for('editar_despesa', despesa_id=despesa.id) }}"
-                               class="btn btn-sm btn-outline-warning" title="Editar">
+                            <a href="{{ url_for(
+                                    'editar_despesa',
+                                    despesa_id=despesa.id,
+                                    next=request.full_path
+                                ) }}"
+                            class="btn btn-sm btn-outline-warning"
+                            title="Editar">
                                 <i class="bi bi-pencil-fill"></i>
                             </a>
 
