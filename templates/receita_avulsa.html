@@ -322,65 +322,140 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 <script>
-document.addEventListener('DOMContentLoaded', function () {
+document.addEventListener(
+    'DOMContentLoaded',
+    function () {
 
-    const usinaSelect = document.getElementById('usina_id');
-    const bancoSelect = document.getElementById('caixa_banco_id');
+        const usinaSelect =
+            document.getElementById('usina_id');
 
-    const bancosPorUsina = {{ bancos_por_usina | tojson }};
+        const bancoSelect =
+            document.getElementById('caixa_banco_id');
 
-    function carregarBancos() {
+        const bancosPorUsina =
+            {{ bancos_por_usina | tojson }};
 
-        const usinaId = usinaSelect.value;
+        // Banco já salvo na receita
+        const bancoSelecionadoInicial =
+            {% if receita and receita.caixa_banco_id %}
+                {{ receita.caixa_banco_id }}
+            {% else %}
+                null
+            {% endif %};
 
-        bancoSelect.innerHTML = '';
 
-        if (!usinaId) {
+        function carregarBancos(
+            manterBancoAtual = false
+        ) {
 
-            bancoSelect.innerHTML = `
-                <option value="">
-                    Selecione primeiro a usina...
-                </option>
-            `;
+            const usinaId =
+                usinaSelect.value;
 
-            return;
+            bancoSelect.innerHTML = '';
+
+            if (!usinaId) {
+
+                bancoSelect.innerHTML = `
+                    <option value="">
+                        Selecione primeiro a usina...
+                    </option>
+                `;
+
+                return;
+            }
+
+
+            const bancos =
+                bancosPorUsina[usinaId] || [];
+
+
+            if (bancos.length === 0) {
+
+                bancoSelect.innerHTML = `
+                    <option value="">
+                        Nenhuma conta vinculada à usina
+                    </option>
+                `;
+
+                return;
+            }
+
+
+            // Opção vazia
+            const optionVazia =
+                document.createElement('option');
+
+            optionVazia.value = '';
+            optionVazia.textContent =
+                'Selecione a conta...';
+
+            bancoSelect.appendChild(
+                optionVazia
+            );
+
+
+            bancos.forEach(
+                function (banco) {
+
+                    const option =
+                        document.createElement(
+                            'option'
+                        );
+
+                    option.value =
+                        banco.id;
+
+                    option.textContent =
+                        banco.nome;
+
+
+                    // Na abertura da edição,
+                    // seleciona o banco já salvo
+                    if (
+                        manterBancoAtual
+                        &&
+                        bancoSelecionadoInicial !== null
+                        &&
+                        Number(banco.id)
+                        ===
+                        Number(
+                            bancoSelecionadoInicial
+                        )
+                    ) {
+
+                        option.selected = true;
+
+                    }
+
+
+                    bancoSelect.appendChild(
+                        option
+                    );
+
+                }
+            );
+
         }
 
-        const bancos = bancosPorUsina[usinaId] || [];
 
-        bancoSelect.innerHTML = `
-            <option value="">
-                Selecione a conta...
-            </option>
-        `;
+        // Quando trocar a usina,
+        // limpa o banco antigo e mostra
+        // somente os bancos da nova usina
+        usinaSelect.addEventListener(
+            'change',
+            function () {
 
-        bancos.forEach(function (banco) {
+                carregarBancos(false);
 
-            const option = document.createElement('option');
+            }
+        );
 
-            option.value = banco.id;
-            option.textContent = banco.nome;
 
-            bancoSelect.appendChild(option);
-        });
+        // Ao abrir a página de edição,
+        // carrega e seleciona o banco salvo
+        carregarBancos(true);
 
-        if (bancos.length === 0) {
-
-            bancoSelect.innerHTML = `
-                <option value="">
-                    Nenhuma conta vinculada à usina
-                </option>
-            `;
-        }
     }
-
-    usinaSelect.addEventListener(
-        'change',
-        carregarBancos
-    );
-
-    carregarBancos();
-
-});
+);
 </script>
 {% endblock %}
