@@ -111,9 +111,15 @@
                             </td>
                             <td class="text-center">
                                 <div class="btn-group btn-group-sm" role="group">
-                                    <a href="{{ url_for('editar_receita_avulsa', id=receita.id) }}"
-                                       class="btn btn-outline-primary"
-                                       title="Editar">
+                                    <a
+                                        href="{{ url_for(
+                                            'editar_receita_avulsa',
+                                            id=receita.id,
+                                            next=request.full_path
+                                        ) }}"
+                                        class="btn btn-outline-primary"
+                                        title="Editar"
+                                    >
                                         <i class="bi bi-pencil-square"></i>
                                     </a>
 

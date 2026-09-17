@@ -13,8 +13,12 @@
                 <i class="bi bi-journal-plus me-2"></i>
                 {% if receita %}Editar Receita{% else %}Cadastrar Receita Avulsa{% endif %}
             </h5>
-            <a href="{{ url_for('receitas_avulsas') }}" class="btn btn-sm btn-light fw-semibold">
-                <i class="bi bi-arrow-left me-1"></i> Voltar
+            <a
+                href="{{ next_url or url_for('receitas_avulsas') }}"
+                class="btn btn-sm btn-light fw-semibold"
+            >
+                <i class="bi bi-arrow-left me-1"></i>
+                Voltar
             </a>
         </div>
 
@@ -36,6 +40,12 @@
                 method="POST"
                 enctype="multipart/form-data"
                 class="row g-3">
+
+                <input
+                    type="hidden"
+                    name="next"
+                    value="{{ next_url or '' }}"
+                >
                 <!-- Seção 1: Origem e Destino -->
                 <div class="col-md-6">
                     <label class="form-label fw-bold">Usina <span class="text-danger">*</span></label>
@@ -223,7 +233,12 @@
 
                 <!-- Botões de Ação -->
                 <div class="col-12 text-end mt-4 pt-3 border-top">
-                    <a href="{{ url_for('receitas_avulsas') }}" class="btn btn-outline-secondary me-2">Cancelar</a>
+                    <a
+                        href="{{ next_url or url_for('receitas_avulsas') }}"
+                        class="btn btn-outline-secondary me-2"
+                    >
+                        Cancelar
+                    </a>
                     <button type="submit" class="btn btn-success px-4">
                         <i class="bi bi-check-circle me-1"></i> {% if receita %}Atualizar Receita{% else %}Salvar Receita{% endif %}
                     </button>

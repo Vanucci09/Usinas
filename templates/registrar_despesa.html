@@ -3,82 +3,171 @@
 {% block title %}Registrar Despesa{% endblock %}
 
 {% block content %}
-<div class="container p-4 bg-white shadow rounded">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="text-primary m-0">Registrar Despesa</h2>
-        <a href="{{ url_for('listar_despesas') }}" class="btn btn-outline-primary">Listar Despesas</a>
-    </div>
-
-    {% if mensagem %}
-        <div class="alert alert-info text-center">{{ mensagem }}</div>
-    {% endif %}
-
-    <form method="POST" enctype="multipart/form-data">
-        <div class="mb-3">
-            <label class="form-label">Usina</label>
-            <select name="usina_id" class="form-select" required>
-                <option value="" disabled selected>Selecione a usina</option>
-                {% for usina in usinas %}
-                    <option value="{{ usina.id }}">{{ usina.nome }}</option>
-                {% endfor %}
-            </select>
+<div class="container my-5" style="max-width: 860px;">
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-primary text-white py-3 d-flex justify-content-between align-items-center">
+            <h4 class="card-title mb-0 fw-semibold">Registrar Despesa</h4>
+            <a href="{{ url_for('listar_despesas') }}" class="btn btn-sm btn-light text-primary fw-medium">
+                <i class="bi bi-list-ul me-1"></i> Listar Despesas
+            </a>
         </div>
 
-        <div class="mb-3">
-            <label class="form-label">Categoria da Despesa</label>
-            <select name="categoria_id" class="form-select" required>
-                <option value="" disabled selected>Selecione uma categoria</option>
-                {% for categoria in categorias %}
-                    <option value="{{ categoria.id }}">{{ categoria.nome }}</option>
-                {% endfor %}
-            </select>
-        </div>
+        <div class="card-body p-4">
+            {% if mensagem %}
+                <div class="alert alert-info alert-dismissible fade show text-center" role="alert">
+                    {{ mensagem }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+                </div>
+            {% endif %}
 
-        <div class="mb-3">
-            <label class="form-label">Valor (R$)</label>
-            <input type="text" name="valor" class="form-control" required placeholder="Ex: 1500,00">
-        </div>
+            <form method="POST" enctype="multipart/form-data">
+                <!-- Redirecionamento dinâmico após salvar -->
+                <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
 
-        <div class="mb-3">
-            <label class="form-label">Descrição</label>
-            <input type="text" name="descricao" class="form-control" required placeholder="Ex: Pagamento de manutenção">
-        </div>
+                <!-- Seletores Principais -->
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label for="usina_id" class="form-label fw-medium">Usina <span class="text-danger">*</span></label>
+                        <select name="usina_id" id="usina_id" class="form-select" required>
+                            <option value="" disabled selected>Selecione a usina</option>
+                            {% for usina in usinas %}
+                                <option value="{{ usina.id }}">{{ usina.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
 
-        <div class="row">
-            <div class="col-md-4 mb-3">
-                <label class="form-label">Data</label>
-                <input type="date" name="data" class="form-control" required value="{{ data_hoje }}" readonly>
-            </div>
-            <div class="col-md-4 mb-3">
-                <label class="form-label">Mês de Referência</label>
-                <input type="number" name="referencia_mes" class="form-control" min="1" max="12" required>
-            </div>
-            <div class="col-md-4 mb-3">
-                <label class="form-label">Ano de Referência</label>
-                <input type="number" name="referencia_ano" class="form-control" min="2000" max="2100" required>
-            </div>
-        </div>
-        <div class="mb-3">
-            <label for="credor_id" class="form-label">Credor</label>
-            <select id="credor_id" name="credor_id" class="form-select">
-                <option value="">— Nenhum —</option>
-                {% for credor in credores %}
-                <option value="{{ credor.id }}">{{ credor.nome }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="mb-3">
-            <label class="form-label">Documento Comprovante (PDF, JPG, PNG)</label>
-            <input type="file" name="arquivo" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
-        </div>
+                    <div class="col-md-4">
+                        <label for="categoria_id" class="form-label fw-medium">Categoria <span class="text-danger">*</span></label>
+                        <select name="categoria_id" id="categoria_id" class="form-select" required>
+                            <option value="" disabled selected>Selecione uma categoria</option>
+                            {% for categoria in categorias %}
+                                <option value="{{ categoria.id }}">{{ categoria.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
 
-        <div class="text-center">
-            <button type="submit" class="btn btn-success">Salvar Despesa</button>
-        </div>
-    </form>
+                    <div class="col-md-4">
+                        <label for="credor_id" class="form-label fw-medium">Credor</label>
+                        <select name="credor_id" id="credor_id" class="form-select">
+                            <option value="">— Nenhum —</option>
+                            {% for credor in credores %}
+                                <option value="{{ credor.id }}">{{ credor.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
 
-    <div class="text-center mt-4">
-        <a href="{{ url_for('index') }}?aba=financeiro" class="btn btn-secondary">Voltar</a>
+                <!-- Valor e Descrição -->
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label for="valor" class="form-label fw-medium">Valor <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text">R$</span>
+                            <input
+                                type="text"
+                                id="valor"
+                                name="valor"
+                                class="form-control"
+                                required
+                                placeholder="0,00"
+                            >
+                        </div>
+                    </div>
+
+                    <div class="col-md-8">
+                        <label for="descricao" class="form-label fw-medium">Descrição <span class="text-danger">*</span></label>
+                        <input
+                            type="text"
+                            id="descricao"
+                            name="descricao"
+                            class="form-control"
+                            required
+                            placeholder="Ex: Manutenção preventiva dos inversores"
+                        >
+                    </div>
+                </div>
+
+                <!-- Datas e Período de Referência -->
+                <div class="row g-3 mb-3">
+                    <div class="col-sm-6 col-md-3">
+                        <label for="data" class="form-label fw-medium">Data Emissão <span class="text-danger">*</span></label>
+                        <input
+                            type="date"
+                            id="data"
+                            name="data"
+                            class="form-control bg-light"
+                            required
+                            value="{{ data_hoje }}"
+                            readonly
+                        >
+                    </div>
+
+                    <div class="col-sm-6 col-md-3">
+                        <label for="data_pagamento" class="form-label fw-medium">Data Pagamento</label>
+                        <input
+                            type="date"
+                            id="data_pagamento"
+                            name="data_pagamento"
+                            class="form-control"
+                        >
+                    </div>
+
+                    <div class="col-sm-6 col-md-3">
+                        <label for="referencia_mes" class="form-label fw-medium">Mês Ref. <span class="text-danger">*</span></label>
+                        <input
+                            type="number"
+                            id="referencia_mes"
+                            name="referencia_mes"
+                            class="form-control"
+                            min="1"
+                            max="12"
+                            required
+                            placeholder="MM"
+                        >
+                    </div>
+
+                    <div class="col-sm-6 col-md-3">
+                        <label for="referencia_ano" class="form-label fw-medium">Ano Ref. <span class="text-danger">*</span></label>
+                        <input
+                            type="number"
+                            id="referencia_ano"
+                            name="referencia_ano"
+                            class="form-control"
+                            min="2000"
+                            max="2100"
+                            required
+                            placeholder="AAAA"
+                        >
+                    </div>
+                </div>
+
+                <!-- Comprovante -->
+                <div class="mb-4">
+                    <label for="arquivo" class="form-label fw-medium">Comprovante</label>
+                    <input
+                        type="file"
+                        id="arquivo"
+                        name="arquivo"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        class="form-control"
+                    >
+                    <div class="form-text">Formatos aceitos: PDF, JPG, JPEG ou PNG.</div>
+                </div>
+
+                <!-- Botões de Ação -->
+                <div class="d-flex justify-content-end gap-2 pt-3 border-top">
+                    <a
+                        href="{{ request.args.get('next') or url_for('index', aba='financeiro') }}"
+                        class="btn btn-outline-secondary px-4"
+                    >
+                        Cancelar
+                    </a>
+                    <button type="submit" class="btn btn-success px-4">
+                        <i class="bi bi-check-lg me-1"></i> Salvar Despesa
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 {% endblock %}

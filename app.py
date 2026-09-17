@@ -9380,10 +9380,7 @@ def fundo_reserva():
     if not current_user.pode_acessar_financeiro:
         abort(403)
 
-    # ==========================================================
     # FILTROS
-    # ==========================================================
-
     usina_id = request.args.get(
         'usina_id',
         type=int
@@ -9399,10 +9396,7 @@ def fundo_reserva():
         type=int
     )
 
-    # ==========================================================
     # USINAS
-    # ==========================================================
-
     usinas = (
         Usina.query
         .filter(
@@ -9415,10 +9409,7 @@ def fundo_reserva():
         .all()
     )
 
-    # ==========================================================
     # QUERY DOS MOVIMENTOS
-    # ==========================================================
-
     query = (
         FundoReservaMovimento.query
         .options(
@@ -9432,14 +9423,12 @@ def fundo_reserva():
     )
 
     if usina_id:
-
         query = query.filter(
             FundoReservaMovimento.usina_id
             == usina_id
         )
 
     if mes:
-
         query = query.filter(
             db.extract(
                 'month',
@@ -9448,7 +9437,6 @@ def fundo_reserva():
         )
 
     if ano:
-
         query = query.filter(
             db.extract(
                 'year',
@@ -9465,15 +9453,11 @@ def fundo_reserva():
         .all()
     )
 
-    # ==========================================================
     # TOTAIS DO PERÍODO FILTRADO
-    # ==========================================================
-
     total_entradas = Decimal('0.00')
     total_retiradas = Decimal('0.00')
 
     for movimento in movimentos:
-
         valor = Decimal(
             str(
                 movimento.valor
@@ -9482,11 +9466,9 @@ def fundo_reserva():
         )
 
         if movimento.tipo == 'entrada':
-
             total_entradas += valor
 
         elif movimento.tipo == 'retirada':
-
             total_retiradas += valor
 
     resultado_periodo = (
@@ -9494,14 +9476,10 @@ def fundo_reserva():
         - total_retiradas
     )
 
-    # ==========================================================
     # SALDO ATUAL DO FUNDO
-    #
     # IMPORTANTE:
     # O saldo atual não respeita mês/ano.
     # Ele representa todo o histórico da usina selecionada.
-    # ==========================================================
-
     saldo_query = (
         db.session.query(
             FundoReservaMovimento.tipo,
@@ -9530,9 +9508,7 @@ def fundo_reserva():
     )
 
     saldo_atual = Decimal('0.00')
-
     for tipo_movimento, valor_total in saldos:
-
         valor_total = Decimal(
             str(
                 valor_total
@@ -9541,11 +9517,9 @@ def fundo_reserva():
         )
 
         if tipo_movimento == 'entrada':
-
             saldo_atual += valor_total
 
         elif tipo_movimento == 'retirada':
-
             saldo_atual -= valor_total
 
     # RETORNO
@@ -9585,7 +9559,6 @@ def fundo_reserva_retirada():
     )
 
     def converter_decimal(valor):
-
         valor = str(valor or '').strip()
 
         if not valor:
@@ -9607,13 +9580,9 @@ def fundo_reserva_retirada():
         return Decimal(valor)
 
     if request.method == 'POST':
-
         try:
 
-            # =================================================
             # DADOS
-            # =================================================
-
             usina_id = int(
                 request.form['usina_id']
             )
@@ -9634,10 +9603,7 @@ def fundo_reserva_retirada():
                 .strip()
             )
 
-            # =================================================
             # VALIDAÇÕES
-            # =================================================
-
             usina = db.session.get(
                 Usina,
                 usina_id
@@ -9663,10 +9629,7 @@ def fundo_reserva_retirada():
                     'Informe a descrição da retirada.'
                 )
 
-            # =================================================
             # CALCULA SALDO DISPONÍVEL DA USINA
-            # =================================================
-
             movimentos = (
                 FundoReservaMovimento.query
                 .filter(
@@ -9677,7 +9640,6 @@ def fundo_reserva_retirada():
             )
 
             saldo_disponivel = Decimal('0.00')
-
             for movimento in movimentos:
 
                 valor_movimento = Decimal(
@@ -9693,10 +9655,7 @@ def fundo_reserva_retirada():
                 elif movimento.tipo == 'retirada':
                     saldo_disponivel -= valor_movimento
 
-            # =================================================
             # VALIDA SALDO
-            # =================================================
-
             if valor > saldo_disponivel:
 
                 raise ValueError(
@@ -9708,10 +9667,7 @@ def fundo_reserva_retirada():
                     .replace('X', '.')
                 )
 
-            # =================================================
             # CRIA RETIRADA
-            # =================================================
-
             retirada = FundoReservaMovimento(
                 usina_id=usina_id,
                 financeiro_usina_id=None,
@@ -9756,7 +9712,6 @@ def fundo_reserva_retirada():
         except Exception as e:
 
             db.session.rollback()
-
             current_app.logger.exception(
                 'Erro ao realizar retirada do Fundo de Reserva'
             )
@@ -10187,18 +10142,6 @@ def atualizar_pagamento(id):
 
             flash(
                 'Informe a data do pagamento.',
-                'warning'
-            )
-
-            return redirect(
-                request.referrer
-                or url_for('financeiro')
-            )
-
-        if not comprovantes_validos:
-
-            flash(
-                'Inclua pelo menos um comprovante.',
                 'warning'
             )
 
@@ -14463,6 +14406,11 @@ def receita_avulsa():
 )
 @login_required
 def editar_receita_avulsa(id):
+    
+    next_url = (
+        request.args.get('next')
+        or request.form.get('next')
+    )
 
     if not current_user.pode_acessar_financeiro:
         abort(403)
@@ -14474,7 +14422,8 @@ def editar_receita_avulsa(id):
             "danger"
         )
         return redirect(
-            url_for('receitas_avulsas')
+            next_url
+            or url_for('receitas_avulsas')
         )
 
     usinas = (
@@ -14938,10 +14887,8 @@ def editar_receita_avulsa(id):
             )
 
             return redirect(
-                url_for(
-                    'editar_receita_avulsa',
-                    id=receita.id
-                )
+                next_url
+                or url_for('receitas_avulsas')
             )
 
         except (ValueError, InvalidOperation) as e:
@@ -14971,7 +14918,8 @@ def editar_receita_avulsa(id):
         receita=receita,
         usinas=usinas,
         credores=credores,
-        bancos=bancos
+        bancos=bancos,
+        next_url=next_url
     )
     
 @app.route(
