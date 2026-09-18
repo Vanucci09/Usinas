@@ -141,6 +141,35 @@
                     </div>
                 </div>
 
+                <div class="row g-3 mb-3">
+
+                <div class="col-md-6">
+
+                    <label
+                        for="caixa_banco_id"
+                        class="form-label fw-medium"
+                    >
+                        Conta Bancária
+                    </label>
+
+                    <select
+                        name="caixa_banco_id"
+                        id="caixa_banco_id"
+                        class="form-select"
+                    >
+                        <option value="">
+                            Selecione primeiro a usina...
+                        </option>
+                    </select>
+
+                    <div class="form-text">
+                        Obrigatória quando houver data de pagamento.
+                    </div>
+
+                </div>
+
+            </div>
+
                 <!-- Comprovante -->
                 <div class="mb-4">
                     <label for="arquivo" class="form-label fw-medium">Comprovante</label>
@@ -170,4 +199,95 @@
         </div>
     </div>
 </div>
+<script>
+document.addEventListener(
+    'DOMContentLoaded',
+    function () {
+
+        const usinaSelect =
+            document.getElementById('usina_id');
+
+        const bancoSelect =
+            document.getElementById('caixa_banco_id');
+
+        const bancosPorUsina =
+            {{ bancos_por_usina | tojson }};
+
+
+        function carregarBancos() {
+
+            const usinaId =
+                usinaSelect.value;
+
+            bancoSelect.innerHTML = '';
+
+            if (!usinaId) {
+
+                bancoSelect.innerHTML = `
+                    <option value="">
+                        Selecione primeiro a usina...
+                    </option>
+                `;
+
+                return;
+            }
+
+
+            const bancos =
+                bancosPorUsina[usinaId] || [];
+
+
+            if (bancos.length === 0) {
+
+                bancoSelect.innerHTML = `
+                    <option value="">
+                        Nenhuma conta vinculada à usina
+                    </option>
+                `;
+
+                return;
+            }
+
+
+            const opcaoInicial =
+                document.createElement('option');
+
+            opcaoInicial.value = '';
+            opcaoInicial.textContent =
+                'Selecione a conta...';
+
+            bancoSelect.appendChild(
+                opcaoInicial
+            );
+
+
+            bancos.forEach(
+                function (banco) {
+
+                    const option =
+                        document.createElement(
+                            'option'
+                        );
+
+                    option.value = banco.id;
+                    option.textContent = banco.nome;
+
+                    bancoSelect.appendChild(
+                        option
+                    );
+                }
+            );
+        }
+
+
+        usinaSelect.addEventListener(
+            'change',
+            carregarBancos
+        );
+
+        carregarBancos();
+
+    }
+);
+</script>
 {% endblock %}
