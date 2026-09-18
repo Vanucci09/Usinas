@@ -232,7 +232,6 @@ document.addEventListener(
                 return;
             }
 
-
             const bancos =
                 bancosPorUsina[usinaId] || [];
 
@@ -248,7 +247,6 @@ document.addEventListener(
                 return;
             }
 
-
             const opcaoInicial =
                 document.createElement('option');
 
@@ -259,7 +257,6 @@ document.addEventListener(
             bancoSelect.appendChild(
                 opcaoInicial
             );
-
 
             bancos.forEach(
                 function (banco) {
@@ -278,7 +275,6 @@ document.addEventListener(
                 }
             );
         }
-
 
         usinaSelect.addEventListener(
             'change',

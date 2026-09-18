@@ -10870,6 +10870,9 @@ def editar_despesa(despesa_id):
         despesa_id
     )
 
+    if despesa.tipo != 'despesa':
+        abort(404)
+
     usinas = (
         Usina.query
         .order_by(Usina.nome)
@@ -10888,140 +10891,535 @@ def editar_despesa(despesa_id):
         .all()
     )
 
-    # URL de onde o usuário veio.
-    # No GET vem pela query string.
-    # No POST vem pelo input hidden do formulário.
     next_url = (
         request.args.get('next')
         or request.form.get('next')
     )
 
-    if request.method == 'POST':
+    # EMPRESAS INVESTIDORAS VINCULADAS ÀS USINAS
+    empresas_por_usina = {}
+    vinculos = (
+        UsinaInvestidora.query
+        .all()
+    )
 
-        despesa.usina_id = int(
-            request.form['usina_id']
+    for vinculo in vinculos:
+        empresas_por_usina.setdefault(
+            vinculo.usina_id,
+            []
+        ).append(
+            vinculo.empresa_id
         )
 
-        despesa.categoria_id = int(
-            request.form['categoria_id']
-        )
-
-        cid = request.form.get(
-            'credor_id'
-        )
-
-        despesa.credor_id = (
-            int(cid)
-            if cid
-            else None
-        )
-
-        despesa.descricao = request.form[
-            'descricao'
-        ]
-
-        despesa.valor = float(
-            request.form['valor'].replace(
-                ',',
-                '.'
+    # CONTAS BANCÁRIAS POR EMPRESA INVESTIDORA
+    contas_por_empresa = {}
+    contas = (
+        CaixaBanco.query
+        .filter(
+            CaixaBanco.empresa_investidora_id.isnot(
+                None
             )
         )
+        .order_by(
+            CaixaBanco.nome.asc()
+        )
+        .all()
+    )
 
-        despesa.data = datetime.strptime(
-            request.form['data'],
-            '%Y-%m-%d'
-        ).date()
-        
-        data_pagamento = request.form.get('data_pagamento')
-
-        despesa.data_pagamento = (
-            datetime.strptime(
-                data_pagamento,
-                '%Y-%m-%d'
-            ).date()
-            if data_pagamento
-            else None
+    for conta in contas:
+        contas_por_empresa.setdefault(
+            conta.empresa_investidora_id,
+            []
+        ).append(
+            conta
         )
 
-        despesa.referencia_mes = int(
-            request.form['referencia_mes']
+    # CONTAS DISPONÍVEIS POR USINA
+    bancos_por_usina = {}
+    for usina in usinas:
+
+        contas_usina = []
+        contas_adicionadas = set()
+
+        empresas_ids = empresas_por_usina.get(
+            usina.id,
+            []
         )
 
-        despesa.referencia_ano = int(
-            request.form['referencia_ano']
-        )
+        for empresa_id in empresas_ids:
 
-        # Verifica e processa novo comprovante
-        if 'comprovante' in request.files:
-
-            comprovante = request.files[
-                'comprovante'
-            ]
-
-            if (
-                comprovante
-                and comprovante.filename
+            for conta in contas_por_empresa.get(
+                empresa_id,
+                []
             ):
 
-                # Remove comprovante antigo
-                if despesa.comprovante_arquivo:
+                if conta.id not in contas_adicionadas:
+                    contas_usina.append({
+                        'id': conta.id,
+                        'nome': conta.nome
+                    })
 
-                    antigo_path = os.path.join(
-                        app.config['UPLOAD_FOLDER'],
-                        despesa.comprovante_arquivo
+                    contas_adicionadas.add(
+                        conta.id
                     )
 
-                    if os.path.exists(
-                        antigo_path
-                    ):
-                        os.remove(
-                            antigo_path
-                        )
+        bancos_por_usina[usina.id] = contas_usina
 
-                # Gera novo nome
-                extensao = (
-                    secure_filename(
-                        comprovante.filename
-                    )
-                    .rsplit('.', 1)[-1]
-                    .lower()
-                )
+    # CONVERSÃO DE VALORES
+    def converter_decimal(valor):
 
-                nome_arquivo = (
-                    f"comprovante_{despesa.id}_"
-                    f"{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                    f".{extensao}"
-                )
+        valor = str(
+            valor or ''
+        ).strip()
 
-                # Salva novo arquivo
-                caminho_final = os.path.join(
-                    app.config['UPLOAD_FOLDER'],
-                    nome_arquivo
-                )
+        if not valor:
+            return Decimal('0.00')
 
-                comprovante.save(
-                    caminho_final
-                )
-
-                despesa.comprovante_arquivo = (
-                    nome_arquivo
-                )
-
-        db.session.commit()
-
-        # Retorna para a listagem mantendo
-        # os filtros utilizados anteriormente.
-        return redirect(
-            next_url
-            or url_for('listar_despesas')
+        valor = (
+            valor
+            .replace('R$', '')
+            .replace(' ', '')
         )
 
+        if ',' in valor:
+            valor = (
+                valor
+                .replace('.', '')
+                .replace(',', '.')
+            )
+
+        return Decimal(valor).quantize(
+            Decimal('0.01')
+        )
+
+    # POST
+    if request.method == 'POST':
+
+        try:
+            nova_usina_id = int(
+                request.form['usina_id']
+            )
+
+            nova_categoria_id = int(
+                request.form['categoria_id']
+            )
+
+            credor_id = request.form.get(
+                'credor_id'
+            )
+
+            novo_credor_id = (
+                int(credor_id)
+                if credor_id
+                else None
+            )
+
+            nova_descricao = (
+                request.form['descricao']
+                .strip()
+            )
+
+            novo_valor = converter_decimal(
+                request.form['valor']
+            )
+
+            if novo_valor <= 0:
+                raise ValueError(
+                    'Informe um valor maior que zero.'
+                )
+
+            nova_data = datetime.strptime(
+                request.form['data'],
+                '%Y-%m-%d'
+            ).date()
+
+            data_pagamento_form = (
+                request.form.get(
+                    'data_pagamento'
+                )
+            )
+
+            nova_data_pagamento = (
+                datetime.strptime(
+                    data_pagamento_form,
+                    '%Y-%m-%d'
+                ).date()
+                if data_pagamento_form
+                else None
+            )
+
+            nova_conta_id = (
+                int(
+                    request.form[
+                        'caixa_banco_id'
+                    ]
+                )
+                if request.form.get(
+                    'caixa_banco_id'
+                )
+                else None
+            )
+
+            nova_referencia_mes = int(
+                request.form[
+                    'referencia_mes'
+                ]
+            )
+
+            nova_referencia_ano = int(
+                request.form[
+                    'referencia_ano'
+                ]
+            )
+
+            # SE NÃO ESTÁ PAGA, NÃO MANTÉM CONTA
+            if not nova_data_pagamento:
+                nova_conta_id = None
+
+            # VALIDA CONTA BANCÁRIA
+            nova_conta = None
+            if nova_data_pagamento:
+
+                if not nova_conta_id:
+                    raise ValueError(
+                        'Selecione a conta bancária '
+                        'para a despesa paga.'
+                    )
+
+                nova_conta = db.session.get(
+                    CaixaBanco,
+                    nova_conta_id
+                )
+
+                if not nova_conta:
+                    raise ValueError(
+                        'Conta bancária não encontrada.'
+                    )
+
+                empresas_ids_usina = (
+                    db.session.query(
+                        UsinaInvestidora.empresa_id
+                    )
+                    .filter(
+                        UsinaInvestidora.usina_id
+                        == nova_usina_id
+                    )
+                    .all()
+                )
+
+                empresas_ids_usina = [
+                    empresa_id
+                    for (empresa_id,)
+                    in empresas_ids_usina
+                ]
+
+                if (
+                    nova_conta.empresa_investidora_id
+                    not in empresas_ids_usina
+                ):
+                    raise ValueError(
+                        'A conta bancária selecionada '
+                        'não está vinculada à usina.'
+                    )
+
+            # PROCURA MOVIMENTO BANCÁRIO EXISTENTE
+            movimento_banco = (
+                MovimentoCaixaBanco.query
+                .filter_by(
+                    origem='financeiro',
+                    referencia_id=despesa.id
+                )
+                .first()
+            )
+
+            # ATUALIZA FINANCEIRO USINA
+            despesa.usina_id = nova_usina_id
+            despesa.categoria_id = nova_categoria_id
+            despesa.credor_id = novo_credor_id
+            despesa.descricao = nova_descricao
+            despesa.valor = novo_valor
+            despesa.data = nova_data
+
+            despesa.data_pagamento = (
+                nova_data_pagamento
+            )
+
+            despesa.caixa_banco_id = (
+                nova_conta_id
+            )
+
+            despesa.referencia_mes = (
+                nova_referencia_mes
+            )
+
+            despesa.referencia_ano = (
+                nova_referencia_ano
+            )
+
+            # MOVIMENTO JÁ EXISTE
+            if movimento_banco:
+
+                valor_antigo = Decimal(
+                    str(
+                        movimento_banco.valor
+                        or 0
+                    )
+                ).quantize(
+                    Decimal('0.01')
+                )
+
+                conta_antiga = db.session.get(
+                    CaixaBanco,
+                    movimento_banco.conta_id
+                )
+
+                # CONTINUA PAGA
+                if nova_data_pagamento:
+
+                    # Trocou de conta
+                    if (
+                        movimento_banco.conta_id
+                        != nova_conta_id
+                    ):
+
+                        # Devolve valor para conta antiga
+                        if conta_antiga:
+
+                            saldo_antigo = Decimal(
+                                str(
+                                    conta_antiga.saldo_atual
+                                    or 0
+                                )
+                            )
+
+                            conta_antiga.saldo_atual = (
+                                saldo_antigo
+                                + valor_antigo
+                            )
+
+                        # Retira novo valor da nova conta
+                        saldo_novo = Decimal(
+                            str(
+                                nova_conta.saldo_atual
+                                or 0
+                            )
+                        )
+
+                        nova_conta.saldo_atual = (
+                            saldo_novo
+                            - novo_valor
+                        )
+
+                    # CONTINUA NA MESMA CONTA
+                    else:
+
+                        saldo_atual = Decimal(
+                            str(
+                                nova_conta.saldo_atual
+                                or 0
+                            )
+                        )
+
+                        diferenca = (
+                            novo_valor
+                            - valor_antigo
+                        )
+
+                        # Como é despesa:
+                        # aumento do valor diminui saldo;
+                        # redução aumenta saldo.
+                        nova_conta.saldo_atual = (
+                            saldo_atual
+                            - diferenca
+                        )
+
+                    # Atualiza movimento
+                    movimento_banco.conta_id = (
+                        nova_conta_id
+                    )
+
+                    movimento_banco.data = (
+                        nova_data_pagamento
+                    )
+
+                    movimento_banco.tipo = 'saida'
+
+                    movimento_banco.descricao = (
+                        nova_descricao
+                    )
+
+                    movimento_banco.valor = (
+                        novo_valor
+                    )
+
+                # ERA PAGA E AGORA NÃO É MAIS
+                else:
+
+                    # Devolve o valor para a conta
+                    if conta_antiga:
+
+                        saldo_atual = Decimal(
+                            str(
+                                conta_antiga.saldo_atual
+                                or 0
+                            )
+                        )
+
+                        conta_antiga.saldo_atual = (
+                            saldo_atual
+                            + valor_antigo
+                        )
+
+                    db.session.delete(
+                        movimento_banco
+                    )
+
+            # NÃO EXISTIA MOVIMENTO E AGORA ESTÁ PAGA
+            elif nova_data_pagamento:
+
+                movimento_banco = (
+                    MovimentoCaixaBanco(
+                        conta_id=nova_conta.id,
+                        data=nova_data_pagamento,
+                        tipo='saida',
+                        descricao=nova_descricao,
+                        valor=novo_valor,
+                        origem='financeiro',
+                        referencia_id=despesa.id
+                    )
+                )
+
+                db.session.add(
+                    movimento_banco
+                )
+
+                saldo_atual = Decimal(
+                    str(
+                        nova_conta.saldo_atual
+                        or 0
+                    )
+                )
+
+                nova_conta.saldo_atual = (
+                    saldo_atual
+                    - novo_valor
+                )
+
+            # NOVO COMPROVANTE
+            if 'comprovante' in request.files:
+
+                comprovante = request.files[
+                    'comprovante'
+                ]
+
+                if (
+                    comprovante
+                    and comprovante.filename
+                ):
+
+                    if not allowed_file(
+                        comprovante.filename
+                    ):
+                        raise ValueError(
+                            'Formato de comprovante '
+                            'não permitido.'
+                        )
+
+                    # Remove comprovante antigo
+                    if despesa.comprovante_arquivo:
+
+                        antigo_path = os.path.join(
+                            app.config[
+                                'UPLOAD_FOLDER'
+                            ],
+                            despesa.comprovante_arquivo
+                        )
+
+                        if os.path.exists(
+                            antigo_path
+                        ):
+                            os.remove(
+                                antigo_path
+                            )
+
+
+                    extensao = (
+                        secure_filename(
+                            comprovante.filename
+                        )
+                        .rsplit('.', 1)[-1]
+                        .lower()
+                    )
+
+                    nome_arquivo = (
+                        f"comprovante_{despesa.id}_"
+                        f"{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                        f".{extensao}"
+                    )
+
+                    caminho_final = os.path.join(
+                        app.config[
+                            'UPLOAD_FOLDER'
+                        ],
+                        nome_arquivo
+                    )
+
+                    comprovante.save(
+                        caminho_final
+                    )
+
+                    despesa.comprovante_arquivo = (
+                        nome_arquivo
+                    )
+
+            # COMMIT
+            db.session.commit()
+            flash(
+                'Despesa atualizada com sucesso.',
+                'success'
+            )
+
+            return redirect(
+                next_url
+                or url_for(
+                    'listar_despesas'
+                )
+            )
+
+        except (
+            ValueError,
+            InvalidOperation
+        ) as e:
+
+            db.session.rollback()
+
+            flash(
+                str(e)
+                if str(e)
+                else 'Informe os dados corretamente.',
+                'danger'
+            )
+
+        except Exception as e:
+
+            db.session.rollback()
+            current_app.logger.exception(
+                'Erro ao editar despesa'
+            )
+
+            flash(
+                f'Erro ao atualizar despesa: {e}',
+                'danger'
+            )
+
+    # GET
     return render_template(
         'editar_despesa.html',
         despesa=despesa,
         usinas=usinas,
         categorias=categorias,
         credores=credores,
+        bancos_por_usina=bancos_por_usina,
         next_url=next_url
     )
 
