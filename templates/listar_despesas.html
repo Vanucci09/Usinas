@@ -7,8 +7,10 @@
     <!-- Cabeçalho e Botão de Ação -->
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
         <div>
-            <h2 class="h3 fw-bold text-primary mb-1">Despesas Registradas</h2>
-            <p class="text-muted small mb-0">Gerencie, filtre e visualize os lançamentos financeiros.</p>
+            <h2 class="h3 fw-bold text-primary mb-1">
+                <i class="bi bi-wallet2 me-2"></i>Despesas Registradas
+            </h2>
+            <p class="text-muted small mb-0">Gerencie, filtre e acompanhe os lançamentos de saída.</p>
         </div>
         <div class="d-flex gap-2">
             <a href="{{ url_for('index') }}?aba=financeiro" class="btn btn-outline-secondary">
@@ -20,10 +22,10 @@
         </div>
     </div>
 
-    <!-- Filtros em Card -->
+    <!-- Card de Filtros -->
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body p-3 p-md-4">
-            <form method="get" class="row g-3 align-items-end">
+            <form method="GET" class="row g-3 align-items-end">
                 <div class="col-md-4 col-lg-4">
                     <label for="usina_id" class="form-label small fw-semibold text-secondary">Usina</label>
                     <select name="usina_id" id="usina_id" class="form-select">
@@ -60,46 +62,51 @@
         </div>
     </div>
 
-    <!-- Tabela em Card -->
+    <!-- Card da Tabela -->
     <div class="card border-0 shadow-sm">
         <div class="card-body p-3 p-md-4">
+            {% if despesas %}
             <div class="table-responsive">
                 <table id="despesas-table" class="table table-hover align-middle w-100 mb-0">
                     <thead class="table-light">
                         <tr>
-                            <th class="text-center" style="width: 60px;">ID</th>
+                            <th class="text-center" style="width: 70px;">ID</th>
+                            <th class="text-center" style="width: 105px;">Data</th>
                             <th>Usina</th>
                             <th>Categoria</th>
                             <th>Descrição</th>
-                            <th class="text-end">Valor</th>
-                            <th class="text-center">Data</th>
-                            <th class="text-center">Ref. (Mês/Ano)</th>
-                            <th class="text-center" style="width: 110px;">Ações</th>
+                            <th class="text-end" style="width: 140px;">Valor</th>
+                            <th class="text-center" style="width: 110px;">Ref.</th>
+                            <th class="text-center" style="width: 120px;">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for despesa in despesas %}
                         <tr>
                             <td class="text-center fw-semibold text-muted">#{{ despesa.id }}</td>
-                            <td class="fw-medium text-dark">{{ usinas.get(despesa.usina_id, '—') }}</td>
+                            <td class="text-center text-nowrap text-secondary" data-order="{{ despesa.data.strftime('%Y-%m-%d') if despesa.data is not string and despesa.data else despesa.data }}">
+                                {{ despesa.data.strftime('%d/%m/%Y') if despesa.data is not string and despesa.data else despesa.data }}
+                            </td>
+                            <td class="fw-medium text-dark">{{ usinas.get(despesa.usina_id, '—') if usinas is mapping else (despesa.usina.nome if despesa.usina else '—') }}</td>
                             <td>
                                 <span class="badge bg-light text-dark border">
-                                    {{ categorias.get(despesa.categoria_id, 'Geral') }}
+                                    {{ categorias.get(despesa.categoria_id, 'Geral') if categorias is mapping else (despesa.categoria.nome if despesa.categoria else 'Geral') }}
                                 </span>
                             </td>
                             <td class="text-truncate" style="max-width: 250px;" title="{{ despesa.descricao }}">
                                 {{ despesa.descricao }}
                             </td>
-                            <td class="text-end text-nowrap fw-semibold text-danger">
-                                R$ {{ '%.2f'|format(despesa.valor) }}
-                            </td>
-                            <td class="text-center text-nowrap text-secondary">
-                                {{ despesa.data.strftime('%d/%m/%Y') if despesa.data is not string and despesa.data else despesa.data }}
+                            <td class="text-end text-nowrap fw-semibold text-danger" data-order="{{ despesa.valor or 0 }}">
+                                R$ {{ ('{:,.2f}'.format(despesa.valor or 0)).replace(',', 'X').replace('.', ',').replace('X', '.') }}
                             </td>
                             <td class="text-center text-nowrap">
-                                <span class="badge bg-secondary-subtle text-secondary-emphasis">
-                                    {{ '%02d'|format(despesa.referencia_mes) }}/{{ despesa.referencia_ano }}
-                                </span>
+                                {% if despesa.referencia_mes and despesa.referencia_ano %}
+                                    <span class="badge bg-secondary-subtle text-secondary-emphasis">
+                                        {{ '%02d/%d'|format(despesa.referencia_mes, despesa.referencia_ano) }}
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
                             </td>
                             <td>
                                 <div class="d-flex justify-content-center align-items-center gap-1">
@@ -118,26 +125,67 @@
                                         <i class="bi bi-pencil"></i>
                                     </a>
 
-                                    <form method="POST"
-                                          action="{{ url_for('excluir_despesa', despesa_id=despesa.id) }}"
-                                          class="d-inline"
-                                          onsubmit="return confirm('Confirma a exclusão da despesa #{{ despesa.id }}?');">
-                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir">
-                                            <i class="bi bi-trash3"></i>
-                                        </button>
-                                    </form>
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-danger"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#modalExcluirDespesa{{ despesa.id }}"
+                                            title="Excluir">
+                                        <i class="bi bi-trash3"></i>
+                                    </button>
                                 </div>
+
+                                <!-- Modal de Exclusão -->
+                                <div class="modal fade" id="modalExcluirDespesa{{ despesa.id }}" tabindex="-1" aria-hidden="true">
+                                    <div class="modal-dialog modal-dialog-centered">
+                                        <div class="modal-content text-start">
+                                            <div class="modal-header bg-danger text-white">
+                                                <h5 class="modal-title fs-6 fw-bold">
+                                                    <i class="bi bi-exclamation-triangle-fill me-2"></i>Confirmar Exclusão
+                                                </h5>
+                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <p class="mb-2">Tem certeza de que deseja excluir o lançamento <strong>#{{ despesa.id }} - {{ despesa.descricao }}</strong>?</p>
+                                                <div class="p-3 bg-light rounded small">
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span>Valor:</span>
+                                                        <strong class="text-danger">R$ {{ ('{:,.2f}'.format(despesa.valor or 0)).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong>
+                                                    </div>
+                                                    <div class="d-flex justify-content-between">
+                                                        <span>Data:</span>
+                                                        <strong>{{ despesa.data.strftime('%d/%m/%Y') if despesa.data is not string and despesa.data else despesa.data }}</strong>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                                <form method="POST" action="{{ url_for('excluir_despesa', despesa_id=despesa.id) }}" class="m-0">
+                                                    <input type="hidden" name="next" value="{{ request.full_path }}">
+                                                    <button type="submit" class="btn btn-sm btn-danger">
+                                                        <i class="bi bi-trash3 me-1"></i> Excluir
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- /Modal -->
                             </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-inbox text-muted display-4"></i>
+                <p class="text-muted mt-3 mb-0">Nenhuma despesa encontrada para os parâmetros informados.</p>
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>
 
-<!-- Estilo dos Botões de Ação -->
 <style>
     .table td, .table th {
         vertical-align: middle;
@@ -152,7 +200,6 @@
     }
 </style>
 
-<!-- DataTables com Suporte Nativo ao Bootstrap 5 -->
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
 <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
@@ -163,9 +210,9 @@
         $('#despesas-table').DataTable({
             language: { url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json' },
             pageLength: 25,
-            order: [[0, 'desc']], // Mais recentes primeiro
+            order: [[1, 'desc']], // Ordena por data decrescente
             columnDefs: [
-                { orderable: false, targets: [7] } // Desativa ordenação na coluna de Ações
+                { orderable: false, targets: [7] } // Desativa ordenação nas Ações
             ]
         });
     });
